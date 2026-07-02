@@ -138,8 +138,8 @@
 
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Final Deadline</label>
-                    <input type="date" id="final_deadline" name="final_deadline" class="form-input"
+                    <label class="form-label">Final Deadline <span style="color:var(--rose)">*</span></label>
+                    <input type="date" id="final_deadline" name="final_deadline" class="form-input" required
                         value="{{ draft.design_needed_by.isoformat() if draft and draft.design_needed_by else '' }}">
                 </div>
             </div>

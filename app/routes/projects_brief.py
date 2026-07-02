@@ -27,7 +27,7 @@ brief_bp = Blueprint('brief', __name__)
 @role_required('admin', 'cs', 'management')
 def create():
     cs_users = User.query.filter(
-        User.role.in_(['cs', 'admin'])
+        User.role.in_(['cs', 'admin', 'management'])
     ).order_by(User.name).all()
 
     clients = Client.query.order_by(Client.name).all()
@@ -82,7 +82,7 @@ def edit_project(project_id):
     if current_user.role == 'cs' and project.cs_lead_id != current_user.id:
         abort(403)
 
-    cs_users = User.query.filter(User.role.in_(['cs', 'admin'])).order_by(User.name).all()
+    cs_users = User.query.filter(User.role.in_(['cs', 'admin', 'management'])).order_by(User.name).all()
     clients = Client.query.order_by(Client.name).all()
 
     customers_raw = {

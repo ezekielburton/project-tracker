@@ -25,6 +25,11 @@
             <h2 class="dashboard-section-title">My Projects</h2>
 
             {% if projects %}
+            <div class="deadline-sort-wrap" data-tbody="cs-my-projects-tbody" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                <span style="font-size:0.75rem;color:var(--grey-dark);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;">Sort by</span>
+                <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
+                <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
+            </div>
             <div class="table-wrapper">
                 <table class="data-table data-table--with-chevron">
                     <thead>
@@ -33,6 +38,7 @@
                             <th>Project Name</th>
                             <th>Job Number</th>
                             <th>Type</th>
+                            <th>First Output Deadline</th>
                             <th>Final Deadline</th>
                             <th>Teams</th>
                             <th>Assigned Designers</th>
@@ -41,7 +47,7 @@
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="cs-my-projects-tbody">
                         {% for project in projects %}
                         {% set is_overdue = project.design_needed_by and project.design_needed_by < today %}
                         {# _dfp: sorted designer user IDs — fingerprint for polling.js assignment-change detection #}
@@ -50,12 +56,15 @@
                             class="expandable-row {% if is_overdue %}overdue{% endif %}"
                             data-expand="{{ project.id }}"
                             data-project-id="{{ project.id }}"
-                            data-fp="{{ _dfp }}">
+                            data-fp="{{ _dfp }}"
+                            data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
+                            data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                             {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                             <td class="chevron-cell"><span class="chevron-icon">▶</span></td>
                             <td>{{ project.name }}</td>
                             <td class="mono">{{ project.job_number }}</td>
                             <td>{{ 'C&CM' if project.brief_type == 'ccm' else 'Standard' }}</td>
+                            <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
                             <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if project.execution_date
                                 else '—' }}</td>
                             <td>
@@ -89,7 +98,7 @@
                                     class="btn btn--secondary sidebar-item--nav">View Details</a></td>
                             </tr>
                             <tr class="expansion-row hidden" id="expand_{{ project.id }}">
-                                <td colspan="10">
+                                <td colspan="11">
                                     <table class="customer-sub-table">
                                         <thead>
                                             <tr>
@@ -139,11 +148,14 @@
                             <tr class="clickable {% if is_overdue %}overdue{% endif %}"
                                 data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                                 data-project-id="{{ project.id }}"
-                                data-fp="{{ _dfp }}">
+                                data-fp="{{ _dfp }}"
+                                data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
+                                data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                                 <td class="chevron-cell"></td>
                                 <td>{{ project.name }}</td>
                                 <td class="mono">{{ project.job_number }}</td>
                                 <td>{{ 'C&CM' if project.brief_type == 'ccm' else 'Standard' }}</td>
+                                <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
                                 <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if
                                     project.execution_date else '—' }}</td>
                                 <td>
@@ -207,6 +219,11 @@
             </div>
     
             {% if all_projects %}
+            <div class="deadline-sort-wrap" data-tbody="cs-all-projects-tbody" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                <span style="font-size:0.75rem;color:var(--grey-dark);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;">Sort by</span>
+                <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
+                <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
+            </div>
             <div class="table-wrapper">
                 <table class="data-table data-table--with-chevron">
                     <thead>
@@ -214,6 +231,7 @@
                             <th></th>
                             <th>Project Name</th>
                             <th>Job Number</th>
+                            <th>First Output Deadline</th>
                             <th>Final Deadline</th>
                             <th>Teams</th>
                             <th>Assigned Designers</th>
@@ -222,7 +240,7 @@
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="cs-all-projects-tbody">
                         {% for project in all_projects %}
                         {% set is_overdue = project.design_needed_by and project.design_needed_by < today %}
                         {% set designer_names=project.assigned_designers | map(attribute='designer.name') | join(',') %}
@@ -233,11 +251,14 @@
                             data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                             data-status="{{ project.project_status }}" data-designers="{{ designer_names }}"
                             data-project-id="{{ project.id }}"
-                            data-fp="{{ _dfp }}">
+                            data-fp="{{ _dfp }}"
+                            data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
+                            data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                             {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                             <td class="chevron-cell"><span class="chevron-icon">▶</span></td>
                             <td>{{ project.name }}</td>
                             <td class="mono">{{ project.job_number }}</td>
+                            <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
                             <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if project.execution_date else
                                 '—' }}</td>
                             <td>
@@ -326,10 +347,13 @@
                                 data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                                 data-status="{{ project.project_status }}" data-designers="{{ designer_names }}"
                                 data-project-id="{{ project.id }}"
-                                data-fp="{{ _dfp }}">
+                                data-fp="{{ _dfp }}"
+                                data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
+                                data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                                 <td class="chevron-cell"></td>
                                 <td>{{ project.name }}</td>
                                 <td class="mono">{{ project.job_number }}</td>
+                                <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
                                 <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if project.execution_date
                                     else '—' }}</td>
                                 <td>

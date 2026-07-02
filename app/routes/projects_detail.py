@@ -170,7 +170,7 @@ def detail(project_id):
 
     # CS users available to be added (exclude lead and already-added)
     available_cs_users = User.query.filter(
-        User.role == 'cs',
+        User.role.in_(['cs', 'admin', 'management']),
         User.id != project.cs_lead_id,
         ~User.id.in_(secondary_cs_ids) if secondary_cs_ids else True
     ).order_by(User.name).all()
@@ -427,6 +427,7 @@ def set_project_status(project_id):
     new_status = data.get('status')
 
     VALID = ['briefed', 'in_queue', 'in_progress', 'submitted',
+             'internal_review', 'internal_revision', 'submitted_to_client',
              'revision_in_queue', 'revision_in_progress', 'approved', 'on_hold']
     if new_status not in VALID:
         return jsonify({'error': 'Invalid status'}), 400

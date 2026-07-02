@@ -2190,3 +2190,53 @@ function syncTableScrollers(viewEl) {
         }
 
     } // end sectionBasics wrapper
+
+// ── Dashboard deadline sort toggle ────────────────────────────────────────────
+// Sorts project table rows by first-output-deadline or final-deadline.
+// Rows are identified by data-project-id. CCM expandable rows carry a paired
+// expansion-row sibling that must travel with them when re-ordering.
+(function () {
+    function sortTableBy(tbody, field) {
+        var children = Array.from(tbody.rows);
+        var groups = [];
+        var i = 0;
+        while (i < children.length) {
+            var row = children[i];
+            if (row.dataset.projectId) {
+                var group = [row];
+                var next = children[i + 1];
+                if (next && next.classList.contains('expansion-row')) {
+                    group.push(next);
+                    i += 2;
+                } else {
+                    i++;
+                }
+                groups.push(group);
+            } else {
+                i++;
+            }
+        }
+        groups.sort(function (a, b) {
+            var aVal = a[0].dataset[field] || '9999-12-31';
+            var bVal = b[0].dataset[field] || '9999-12-31';
+            return aVal.localeCompare(bVal);
+        });
+        groups.forEach(function (group) {
+            group.forEach(function (row) { tbody.appendChild(row); });
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-deadline-sort]');
+        if (!btn) return;
+        var wrap = btn.closest('.deadline-sort-wrap');
+        if (!wrap) return;
+        var tbody = document.getElementById(wrap.dataset.tbody);
+        if (!tbody) return;
+        wrap.querySelectorAll('[data-deadline-sort]').forEach(function (b) {
+            b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        sortTableBy(tbody, btn.dataset.deadlineSort);
+    });
+}());

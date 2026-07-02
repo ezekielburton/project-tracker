@@ -52,7 +52,7 @@ def cs_dashboard():
         my_projects = Project.query.filter(
             Project.project_status != 'draft',
             Project.project_status != 'approved'
-        ).order_by(Project.design_needed_by.asc()).all()
+        ).order_by(Project.first_output_deadline.asc()).all()
     else:
         # Include projects where the user is CS lead OR a secondary CS
         secondary_project_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(
@@ -65,7 +65,7 @@ def cs_dashboard():
             ),
             Project.project_status != 'draft',
             Project.project_status != 'approved'
-        ).order_by(Project.design_needed_by.asc()).all()
+        ).order_by(Project.first_output_deadline.asc()).all()
 
     if effective_user.role == 'admin':
         all_projects = my_projects
@@ -74,7 +74,7 @@ def cs_dashboard():
             Project.project_status != 'draft',
             Project.project_status != 'approved'
         ).order_by (
-            Project.design_needed_by.asc()
+            Project.first_output_deadline.asc()
         ).all()
         
 
@@ -121,7 +121,7 @@ def designer_dashboard():
         Project.id.in_(assigned_subquery),
         Project.project_status != 'draft',
         Project.project_status != 'approved'
-    ).order_by(Project.design_needed_by.asc()).all()
+    ).order_by(Project.first_output_deadline.asc()).all()
 
     active_count = len(my_projects)
     due_today = sum(1 for p in my_projects if p.design_needed_by == today)
@@ -135,7 +135,7 @@ def designer_dashboard():
             Project.design_teams_requested.contains(team),
             Project.project_status != 'draft',
             Project.project_status != 'approved'
-        ).order_by(Project.design_needed_by.asc()).all()
+        ).order_by(Project.first_output_deadline.asc()).all()
 
         designers_in_team = User.query.filter(
             User.team == team,
@@ -212,7 +212,7 @@ def team_lead_dashboard():
         Project.design_teams_requested.contains(team),
         Project.project_status != 'draft',
         Project.project_status != 'approved'
-    ).order_by(Project.design_needed_by.asc()).all()
+    ).order_by(Project.first_output_deadline.asc()).all()
 
     team_active = len(team_projects)
     team_due_today = sum(1 for p in team_projects if p.design_needed_by == today)
@@ -249,7 +249,7 @@ def team_lead_dashboard():
         Project.project_status != 'draft',
         Project.project_status != 'approved'
 
-    ).order_by(Project.design_needed_by.asc()).all()
+    ).order_by(Project.first_output_deadline.asc()).all()
 
 
     personal_active = len(personal_projects)
