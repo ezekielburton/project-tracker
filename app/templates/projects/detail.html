@@ -80,7 +80,7 @@
                                 class="secondary-cs-form" style="display:inline;">
                                 <button type="submit" class="btn-danger-sm"
                                     data-action="confirm-submit"
-                                    data-confirm-message="{{ 'Remove ' ~ a.user.name ~ ' as secondary CS?' | tojson }}">Remove</button>
+                                    data-confirm-message="Remove {{ a.user.name }} as secondary CS?">Remove</button>
                             </form>
                             {% endif %}
                         </div>
@@ -2038,6 +2038,18 @@
         <div class="modal-actions">
             <button type="button" class="btn-secondary" data-action="close-flag-modal">Cancel</button>
             <button type="button" class="btn-brief-flag-submit" data-action="submit-flag">Submit Flag</button>
+        </div>
+    </div>
+</div>
+
+<!-- Remove secondary CS confirmation modal -->
+<div id="remove-cs-modal" class="modal-overlay hidden" data-action="close-remove-cs-overlay">
+    <div class="modal-box">
+        <h3 class="modal-title">Remove secondary CS?</h3>
+        <p id="remove-cs-body" style="margin:0.5rem 0 1.25rem;color:var(--grey-dark);font-size:0.9rem;"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-action="close-remove-cs-modal">Cancel</button>
+            <button type="button" class="btn-danger" data-action="confirm-remove-cs">Remove</button>
         </div>
     </div>
 </div>

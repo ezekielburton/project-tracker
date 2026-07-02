@@ -871,6 +871,22 @@ if (ckvStartRevisionBtn) {
     // lead-takeover-confirm is wired in detail.html's _wireDetailPage so it
     // re-attaches correctly after SPA navigation.
 
+    // ── Remove Secondary CS Modal ─────────────────────────────────────────────────
+    // Stores the form to submit on confirm; nullified on close (CLAUDE.md pattern).
+
+    var _pendingRemoveForm = null;
+
+    function openRemoveCSModal(form, msg) {
+        _pendingRemoveForm = form;
+        document.getElementById('remove-cs-body').textContent = msg;
+        document.getElementById('remove-cs-modal').classList.remove('hidden');
+    }
+
+    function closeRemoveCSModal() {
+        document.getElementById('remove-cs-modal').classList.add('hidden');
+        _pendingRemoveForm = null;
+    }
+
 
     // ── POSM Parallel Channel Submission ─────────────────────────────────────────
     // Handles the pill-tab UI for Gulf C&CM POSM projects.
@@ -1352,10 +1368,28 @@ document.addEventListener('click', function (e) {
     var confirmSubmitBtn = e.target.closest('[data-action="confirm-submit"]');
     if (confirmSubmitBtn) {
         e.preventDefault();
-        var msg = JSON.parse(confirmSubmitBtn.dataset.confirmMessage);
-        if (confirm(msg)) {
-            var f = confirmSubmitBtn.closest('form');
-            if (f.requestSubmit) { f.requestSubmit(); } else { f.submit(); }
+        // Plain string read — no JSON.parse. Jinja auto-escapes the name in the
+        // HTML attribute, and the browser un-escapes it when we read dataset.*
+        openRemoveCSModal(confirmSubmitBtn.closest('form'), confirmSubmitBtn.dataset.confirmMessage);
+        return;
+    }
+
+    // ── Remove CS modal: cancel ────────────────────────────────────────────────
+    if (e.target.closest('[data-action="close-remove-cs-modal"]')) {
+        closeRemoveCSModal();
+        return;
+    }
+
+    // ── Remove CS modal: backdrop click ───────────────────────────────────────
+    var removeCsOverlay = e.target.closest('[data-action="close-remove-cs-overlay"]');
+    if (removeCsOverlay && e.target === removeCsOverlay) { closeRemoveCSModal(); return; }
+
+    // ── Remove CS modal: confirm ──────────────────────────────────────────────
+    if (e.target.closest('[data-action="confirm-remove-cs"]')) {
+        var pendingForm = _pendingRemoveForm;   // save first — closeRemoveCSModal nullifies the ref
+        closeRemoveCSModal();
+        if (pendingForm) {
+            if (pendingForm.requestSubmit) { pendingForm.requestSubmit(); } else { pendingForm.submit(); }
         }
         return;
     }
