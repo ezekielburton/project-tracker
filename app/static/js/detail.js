@@ -1342,11 +1342,21 @@ document.addEventListener('click', function (e) {
     // Used for the secondary-CS remove button (type="submit"). We intercept the
     // click, ask for confirmation, then submit the parent form only if confirmed.
     // data-confirm-message is tojson-encoded so names with quotes survive.
+    //
+    // WHY requestSubmit() instead of dispatchEvent(new Event('submit')):
+    // dispatchEvent fires the JS event but browsers do NOT submit the form as a
+    // result of a synthetic event — only real user actions or form.requestSubmit()
+    // trigger actual submission. requestSubmit() also fires submit listeners so any
+    // other handlers get a chance to run; we fall back to form.submit() for older
+    // browsers that don't support it.
     var confirmSubmitBtn = e.target.closest('[data-action="confirm-submit"]');
     if (confirmSubmitBtn) {
         e.preventDefault();
         var msg = JSON.parse(confirmSubmitBtn.dataset.confirmMessage);
-        if (confirm(msg)) { confirmSubmitBtn.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }
+        if (confirm(msg)) {
+            var f = confirmSubmitBtn.closest('form');
+            if (f.requestSubmit) { f.requestSubmit(); } else { f.submit(); }
+        }
         return;
     }
 });

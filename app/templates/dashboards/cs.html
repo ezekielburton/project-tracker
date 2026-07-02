@@ -43,9 +43,15 @@
                     </thead>
                     <tbody>
                         {% for project in projects %}
-                        {% set is_overdue = project.design_needed_by and project.design_needed_by < today %} {% if
-                            project.brief_type=='ccm' and project.project_customers %} <tr
-                            class="expandable-row {% if is_overdue %}overdue{% endif %}" data-expand="{{ project.id }}">
+                        {% set is_overdue = project.design_needed_by and project.design_needed_by < today %}
+                        {# _dfp: sorted designer user IDs — fingerprint for polling.js assignment-change detection #}
+                        {% set _dfp = project.assigned_designers | map(attribute='user_id') | sort | join(',') %}
+                        {% if project.brief_type=='ccm' and project.project_customers %} <tr
+                            class="expandable-row {% if is_overdue %}overdue{% endif %}"
+                            data-expand="{{ project.id }}"
+                            data-project-id="{{ project.id }}"
+                            data-fp="{{ _dfp }}">
+                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                             <td class="chevron-cell"><span class="chevron-icon">▶</span></td>
                             <td>{{ project.name }}</td>
                             <td class="mono">{{ project.job_number }}</td>
@@ -74,7 +80,9 @@
                             </td>
                             <td>
                                 {# Status is read-only for CS — shown as a static label, not an editable dropdown #}
-                                <span class="status-badge s-{{ project.project_status }}">{{ project.project_status |
+                                {# data-status: holds the raw value so polling.js can compare without parsing the text #}
+                                <span class="status-badge s-{{ project.project_status }}"
+                                      data-status="{{ project.project_status }}">{{ project.project_status |
                                     replace('_', ' ') | title }}</span>
                             </td>
                             <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
@@ -127,8 +135,11 @@
                                 </td>
                             </tr>
                             {% else %}
+                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                             <tr class="clickable {% if is_overdue %}overdue{% endif %}"
-                                data-href="{{ url_for('project_detail.detail', project_id=project.id) }}">
+                                data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
+                                data-project-id="{{ project.id }}"
+                                data-fp="{{ _dfp }}">
                                 <td class="chevron-cell"></td>
                                 <td>{{ project.name }}</td>
                                 <td class="mono">{{ project.job_number }}</td>
@@ -157,7 +168,9 @@
                                 </td>
                                 <td>
                                     {# Status is read-only for CS — shown as a static label, not an editable dropdown #}
-                                    <span class="status-badge s-{{ project.project_status }}">{{ project.project_status
+                                    {# data-status: holds the raw value so polling.js can compare without parsing the text #}
+                                    <span class="status-badge s-{{ project.project_status }}"
+                                          data-status="{{ project.project_status }}">{{ project.project_status
                                         | replace('_', ' ') | title }}</span>
                                 </td>
                                 <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
@@ -211,12 +224,17 @@
                     </thead>
                     <tbody>
                         {% for project in all_projects %}
-                        {% set is_overdue = project.design_needed_by and project.design_needed_by < today %} {% set
-                            designer_names=project.assigned_designers | map(attribute='designer.name' ) | join(',') %} {% if
-                            project.brief_type=='ccm' and project.project_customers %} <tr
+                        {% set is_overdue = project.design_needed_by and project.design_needed_by < today %}
+                        {% set designer_names=project.assigned_designers | map(attribute='designer.name') | join(',') %}
+                        {# _dfp: sorted designer user IDs — fingerprint for polling.js assignment-change detection #}
+                        {% set _dfp = project.assigned_designers | map(attribute='user_id') | sort | join(',') %}
+                        {% if project.brief_type=='ccm' and project.project_customers %} <tr
                             class="expandable-row {% if is_overdue %}overdue{% endif %}" data-expand="{{ project.id }}"
                             data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
-                            data-status="{{ project.project_status }}" data-designers="{{ designer_names }}">
+                            data-status="{{ project.project_status }}" data-designers="{{ designer_names }}"
+                            data-project-id="{{ project.id }}"
+                            data-fp="{{ _dfp }}">
+                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                             <td class="chevron-cell"><span class="chevron-icon">▶</span></td>
                             <td>{{ project.name }}</td>
                             <td class="mono">{{ project.job_number }}</td>
@@ -243,7 +261,9 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="status-badge s-{{ project.project_status }}">{{ project.project_status |
+                                {# data-status: holds the raw value so polling.js can compare without parsing the text #}
+                                <span class="status-badge s-{{ project.project_status }}"
+                                      data-status="{{ project.project_status }}">{{ project.project_status |
                                     replace('_', ' ') | title }}</span>
                             </td>
                             <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
@@ -300,10 +320,13 @@
                             </tr>
     
                             {% else %}
+                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                             <tr class="clickable {% if is_overdue %}overdue{% endif %}"
                                 data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                                 data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
-                                data-status="{{ project.project_status }}" data-designers="{{ designer_names }}">
+                                data-status="{{ project.project_status }}" data-designers="{{ designer_names }}"
+                                data-project-id="{{ project.id }}"
+                                data-fp="{{ _dfp }}">
                                 <td class="chevron-cell"></td>
                                 <td>{{ project.name }}</td>
                                 <td class="mono">{{ project.job_number }}</td>
@@ -330,7 +353,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <span class="status-badge s-{{ project.project_status }}">{{ project.project_status |
+                                    {# data-status: holds the raw value so polling.js can compare without parsing the text #}
+                                    <span class="status-badge s-{{ project.project_status }}"
+                                          data-status="{{ project.project_status }}">{{ project.project_status |
                                         replace('_', ' ') | title }}</span>
                                 </td>
                                 <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"

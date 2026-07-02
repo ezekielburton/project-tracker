@@ -17,11 +17,11 @@ Planned update - Requires network provider visit:
 
 Adjustments:
 
-- SECURITY: Nginx is now serving all static files (CSS, JS, images) directly from disk — no more bouncing through the app server for every stylesheet. Pages should feel snappier as a result.
+- SECURITY: Nginx is now serving all static files directly from disk. Pages should feel snappier as a result.
 
 - Added button to open a project folder on the file storage.
-- Added autogeneration of closeout report folder on the file storage.
-- Reference files and submitted decks are now retrieved from the File Storage, rather than from the server storage.
+- Added auto generation of closeout report folder on the file storage.
+- Reference files and submitted decks are now retrieved from the File Storage, rather than from the app storage.
 - Updated login session to persist for 30 days before needing to login again.
 - Changing password will show a warning that you will be logged out and need to log in again.
 
@@ -31,6 +31,7 @@ Bug Fixes:
 - Fixed NAS requests hanging the server.
 - CS can no longer adjust deliverable status (it's automated)
 - Approved projects are now properly locked.
+- Fixed larger files failing to upload on submissions
 
 ================================================================================
 v1.3 Backend Overhaul, App Update Blog + More - Long Term Sustainability — 27 JUNE 2026

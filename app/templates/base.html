@@ -777,6 +777,10 @@
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+    {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
+    {% if current_user.is_authenticated %}
+    <script src="{{ url_for('static', filename='js/polling.js') }}"></script>
+    {% endif %}
 
 </body>
 

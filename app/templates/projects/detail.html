@@ -50,7 +50,9 @@
     </div>
     {% endif %}
 
-    <div class="detail-grid" id="section-assignments">
+    {# data-fp: fingerprint of full project state at render time.
+       polling.js compares this against /api/projects/<id>/poll — if changed, reloads the page. #}
+    <div class="detail-grid" id="section-assignments" data-fp="{{ project_fp }}">
 
         <div class="detail-card">
             <h2 class="detail-card-title">Project Information</h2>
@@ -78,7 +80,7 @@
                                 class="secondary-cs-form" style="display:inline;">
                                 <button type="submit" class="btn-danger-sm"
                                     data-action="confirm-submit"
-                                    data-confirm-message="{{ 'Remove ' ~ a.user.name ~ ' as secondary CS?' | tojson }}">×</button>
+                                    data-confirm-message="{{ 'Remove ' ~ a.user.name ~ ' as secondary CS?' | tojson }}">Remove</button>
                             </form>
                             {% endif %}
                         </div>
@@ -146,7 +148,10 @@
                 {% else %}
                 <div class="detail-field">
                     <span class="detail-label">Project Status</span>
-                    <span class="status-badge s-{{ project.project_status }}">{{ project.project_status | replace('_', '
+                    {# data-detail-status: used by polling.js to detect and patch status changes live #}
+                    {# Uses data-detail-status (not data-status) to avoid colliding with dashboard table rows #}
+                    <span class="status-badge s-{{ project.project_status }}"
+                          data-detail-status="{{ project.project_status }}">{{ project.project_status | replace('_', '
                         ') | title }}</span>
                 </div>
                 {% endif %}

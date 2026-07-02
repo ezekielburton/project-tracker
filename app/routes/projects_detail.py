@@ -23,6 +23,9 @@ from app.notifications import (
     notify_lead_designers_of_project_started
 )
 from app.utils import log_activity
+# Import fingerprint helper so the initial page load stores the same value
+# that the poll endpoint will return — ensures JS can compare apples to apples
+from app.routes.api import _detail_fingerprint
 
 detail_bp = Blueprint('project_detail', __name__)
 
@@ -369,6 +372,12 @@ def detail(project_id):
             ).order_by(ProjectRevision.sent_at.desc()).first()
             if project.brief_type == 'ccm' else None
         ),
+
+        # Fingerprint of the full project state at render time.
+        # Stored as data-fp on #section-assignments in the template.
+        # polling.js compares this against the poll endpoint's response —
+        # if they differ, it reloads the page to pick up the change.
+        project_fp=_detail_fingerprint(project),
 
         # Total revision count across C&KV + all POSM channels for CCM projects.
         # We count ProjectRevision rows directly — each revision (C&KV or channel)
