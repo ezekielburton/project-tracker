@@ -3,6 +3,25 @@ VITAMIN HELIX — CHANGELOG
 ===============================================================================
 Migrations: python add_notification_link.py
 
+
+
+
+================================================================================
+v2.1 Live app updates, deliverable view & bug fixes
+================================================================================
+New Features:
+
+- Everything in the app now updates live, no need for refreshing the page.
+
+Adjustments:
+- Projects now sort by deadline in order and you can choose which deadline type you want to sort by
+- Management can now be set as secondary CS
+
+Bug Fixes:
+
+- Fixed projects getting stuck in internal review stage
+
+
 ================================================================================
 v2.0 NAS Integration, Internal Routing, Security update
 ================================================================================

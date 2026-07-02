@@ -139,6 +139,8 @@
                             %}selected{% endif %}>Revision in Progress</option>
                         <option value="approved" {% if project.project_status=='approved' %}selected{% endif %}>Approved
                         </option>
+                        <option value="awaiting_posm_details" {% if project.project_status=='awaiting_posm_details' %}selected{% endif %} {% if project.project_status != 'awaiting_posm_details' %}disabled{% endif %}>
+                            Awaiting POSM Details</option>
                         {# on_hold is set via the hold button only — disabled here to prevent bypassing held_from_status
                         logic #}
                         <option value="on_hold" {% if project.project_status=='on_hold' %}selected{% endif %} disabled>
@@ -2042,6 +2044,27 @@
     </div>
 </div>
 
+<!-- POSM prompt modal — shown after C&KV approved on a no-customer C&CM brief -->
+<div id="posm-prompt-modal" class="modal-overlay hidden" data-action="close-posm-prompt-overlay">
+    <div class="modal-box">
+        <h3 class="modal-title">Concept &amp; KV Approved</h3>
+        <p style="margin:0.5rem 0 1.5rem;color:var(--grey-dark);font-size:0.9rem;">
+            Do you want to add POSM to this project? Otherwise, the project status will become <strong>Approved</strong> and this project will be locked.
+        </p>
+        <div class="modal-actions" style="flex-direction:column;gap:0.6rem;align-items:stretch;">
+            <button type="button" class="btn-primary" data-action="posm-prompt-add">
+                Yes — Add POSM
+            </button>
+            <button type="button" class="btn-secondary" data-action="posm-prompt-pause" style="justify-content:center;">
+                Pause — Awaiting POSM Details
+            </button>
+            <button type="button" class="btn-danger" data-action="posm-prompt-approve">
+                No — Approve &amp; Lock Project
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Remove secondary CS confirmation modal -->
 <div id="remove-cs-modal" class="modal-overlay hidden" data-action="close-remove-cs-overlay">
     <div class="modal-box">
@@ -2223,9 +2246,22 @@
         if (ckvSection) ckvSection.classList.remove('hidden');
     }
 
-    // ── Approve Concept & KV (POSM-parallel) ─────────────────────────────────
+    // ── Approve Concept & KV ─────────────────────────────────────────────────
+    var _posmPromptProjectId = null;
+
+    function openPosmPromptModal(projectId) {
+        _posmPromptProjectId = projectId;
+        document.getElementById('posm-prompt-modal').classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
+    }
+
+    function closePosmPromptModal() {
+        document.getElementById('posm-prompt-modal').classList.add('hidden');
+        _posmPromptProjectId = null;
+        if (window.helixPolling) window.helixPolling.resume();
+    }
+
     function approveCKV(projectId) {
-        if (!confirm('Approve Concept & KV?\n\nThis sets C&KV to approved. If all POSM channels are also approved, the project will be fully approved. This cannot be undone.')) return;
         fetch('/projects/' + projectId + '/concept-kv/approve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -2233,9 +2269,36 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (data.success) {
-                window.location.reload();
+                if (data.show_posm_prompt) {
+                    openPosmPromptModal(projectId);
+                } else {
+                    window.location.reload();
+                }
             } else {
                 showToast(data.error || 'Could not approve Concept & KV.', 'error');
+            }
+        })
+        .catch(function () { showToast('Something went wrong.', 'error'); });
+    }
+
+    function sendPosmPromptResponse(action) {
+        var projectId = _posmPromptProjectId;
+        closePosmPromptModal();
+        fetch('/projects/' + projectId + '/posm-prompt-response', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.success) {
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                showToast(data.error || 'Something went wrong.', 'error');
             }
         })
         .catch(function () { showToast('Something went wrong.', 'error'); });

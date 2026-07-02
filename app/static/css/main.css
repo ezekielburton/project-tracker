@@ -3212,6 +3212,12 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     border-color: #D9A2A8;
 }
 
+.status-badge.s-awaiting_posm_details {
+    background-color: #fef3e2;
+    color: #92510a;
+    border-color: #f5c07a;
+}
+
 /* ── Hold / Resume buttons ───────────────────────────── */
 .btn-hold {
     display: inline-flex;
@@ -5098,6 +5104,12 @@ select.s-internal_revision {
     background-color: color-mix(in srgb, var(--rose) 15%, transparent);
     border-color: var(--rose);
     color: #a05060;
+}
+
+select.s-awaiting_posm_details {
+    background-color: #fef3e2;
+    color: #92510a;
+    border-color: #f5c07a;
 }
 
 /* Badge in the submission card title to show current state at a glance */

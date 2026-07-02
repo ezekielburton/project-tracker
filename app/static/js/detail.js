@@ -55,7 +55,8 @@
         var classes = [
             's-briefed', 's-in_queue', 's-in_progress', 's-submitted',
             's-internal_review', 's-internal_revision', 's-submitted_to_client',
-            's-revision_in_queue', 's-revision_in_progress', 's-approved', 's-on_hold'
+            's-revision_in_queue', 's-revision_in_progress', 's-approved', 's-on_hold',
+            's-awaiting_posm_details'
         ];
         select.classList.remove.apply(select.classList, classes);
         select.classList.add('s-' + status);
@@ -1341,6 +1342,21 @@ document.addEventListener('click', function (e) {
     if (approveCkvBtn) {
         approveCKV(parseInt(approveCkvBtn.dataset.projectId));
         return;
+    }
+
+    // ── POSM prompt modal actions ────────────────────────────────────────────
+    if (e.target.closest('[data-action="close-posm-prompt-overlay"]') &&
+        e.target === e.target.closest('[data-action="close-posm-prompt-overlay"]')) {
+        closePosmPromptModal(); return;
+    }
+    if (e.target.closest('[data-action="posm-prompt-add"]')) {
+        sendPosmPromptResponse('add_posm'); return;
+    }
+    if (e.target.closest('[data-action="posm-prompt-pause"]')) {
+        sendPosmPromptResponse('pause'); return;
+    }
+    if (e.target.closest('[data-action="posm-prompt-approve"]')) {
+        sendPosmPromptResponse('approve'); return;
     }
 
     // ── POSM submission history toggle ────────────────────────────────────────

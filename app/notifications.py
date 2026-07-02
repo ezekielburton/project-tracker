@@ -523,6 +523,39 @@ def notify_of_submission_to_client(project, triggered_by):
         )
 
 
+def notify_of_ckv_posm_pending(project, triggered_by):
+    """
+    Notify secondary CS and designers when C&KV is approved on a C&KV-only brief
+    and the CS has chosen to add POSM — project is back in progress.
+    """
+    message = f'"{project.name}" — Concept & KV approved. Project is back in progress to add POSM details.'
+
+    recipients = []
+    recipient_ids = set()
+
+    for secondary in _get_secondary_cs(project):
+        if secondary.id not in recipient_ids:
+            recipients.append(secondary)
+            recipient_ids.add(secondary.id)
+
+    for designer in _get_project_designers(project):
+        if designer.id not in recipient_ids:
+            recipients.append(designer)
+            recipient_ids.add(designer.id)
+
+    for recipient in recipients:
+        if recipient.id == triggered_by.id:
+            continue
+        create_notification(
+            recipient=recipient,
+            message=message,
+            notification_type='project_updated',
+            project=project,
+            triggered_by=triggered_by,
+            pref_key='project_updated'
+        )
+
+
 def notify_of_project_approved(project, triggered_by):
     """
     Notify management, admin, project designers, and secondary CS when a project

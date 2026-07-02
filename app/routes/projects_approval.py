@@ -1,11 +1,11 @@
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, url_for
 from flask_login import login_required, current_user
 from app import db
 from app.models import (Project, User, ProjectCustomer, Deliverable,
                         ProjectSubmission, ProjectPosmChannel)
 from app.decorators import role_required
-from app.notifications import notify_of_project_approved, create_notification
+from app.notifications import notify_of_project_approved, notify_of_ckv_posm_pending, create_notification
 from app.utils import log_activity
 
 approval_bp = Blueprint('approval', __name__)
@@ -187,18 +187,18 @@ def approve_submission(project_id):
 @login_required
 @role_required('admin', 'cs', 'management')
 def approve_concept_kv(project_id):
-    """Approve the Concept & KV channel independently during a POSM-parallel project.
+    """Approve the Concept & KV channel.
 
-    Sets concept_status and kv_status to 'approved', then checks whether all
-    POSM channels are also approved -- if so, cascades to project-level approval."""
+    Two paths:
+    - If the project has no customers/regions (C&KV-only brief): approves C&KV pill,
+      then returns show_posm_prompt=True so the UI can ask whether to add POSM.
+    - If POSM channels already exist: approves C&KV and cascades to full project
+      approval if all channels are also done."""
     from datetime import datetime as dt
     from app.models import ProjectPosmChannel
     from app.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
-
-    if not project.posm_channels:
-        return jsonify({'success': False, 'error': 'Concept & KV is only approved independently on projects with POSM channels'}), 400
 
     if (not project.has_concept and not project.has_kv):
         return jsonify({'success': False, 'error': 'This project has no Concept or KV'}), 400
@@ -213,7 +213,20 @@ def approve_concept_kv(project_id):
     if project.has_kv:
         project.kv_status = 'approved'
 
-    # Cascade: if all POSM channels are also approved, approve the whole project
+    # ── No customers/regions: C&KV-only brief ────────────────────────────────
+    # Approve the pill but don't lock the project — return a prompt so CS can
+    # decide whether to add POSM, pause, or fully approve.
+    if not project.project_customers:
+        db.session.commit()
+        log_activity(
+            'concept_kv_approved',
+            f'Concept & KV approved for "{project.name}" by {current_user.name}',
+            user=current_user, entity_type='project',
+            entity_name=project.name, entity_id=project.id
+        )
+        return jsonify({'success': True, 'show_posm_prompt': True})
+
+    # ── POSM channels present: cascade if all channels are now approved ───────
     all_channels = ProjectPosmChannel.query.filter_by(project_id=project_id).all()
     if all_channels and all(c.status == 'approved' for c in all_channels):
         project.project_status = 'approved'
@@ -230,3 +243,58 @@ def approve_concept_kv(project_id):
     )
 
     return jsonify({'success': True})
+
+
+@approval_bp.route('/projects/<int:project_id>/posm-prompt-response', methods=['POST'])
+@login_required
+@role_required('admin', 'cs', 'management')
+def posm_prompt_response(project_id):
+    """Handle the three choices shown after C&KV-only approval:
+    - add_posm : set project back to in_progress so CS can add regions/customers
+    - pause    : set project to awaiting_posm_details
+    - approve  : fully approve the project now"""
+    project = Project.query.get_or_404(project_id)
+    data = request.get_json()
+    action = data.get('action')
+
+    if action not in ('add_posm', 'pause', 'approve'):
+        return jsonify({'success': False, 'error': 'Invalid action'}), 400
+
+    now = datetime.utcnow()
+
+    if action == 'add_posm':
+        project.project_status = 'in_progress'
+        db.session.commit()
+        log_activity(
+            'posm_pending',
+            f'"{project.name}" returned to In Progress to add POSM — requested by {current_user.name}',
+            user=current_user, entity_type='project',
+            entity_name=project.name, entity_id=project.id
+        )
+        notify_of_ckv_posm_pending(project, triggered_by=current_user)
+        return jsonify({'success': True, 'redirect': url_for('project_detail.detail', project_id=project.id)})
+
+    elif action == 'pause':
+        project.project_status = 'awaiting_posm_details'
+        db.session.commit()
+        log_activity(
+            'posm_pending',
+            f'"{project.name}" paused — awaiting POSM details. Set by {current_user.name}',
+            user=current_user, entity_type='project',
+            entity_name=project.name, entity_id=project.id
+        )
+        return jsonify({'success': True})
+
+    else:  # approve
+        project.project_status = 'approved'
+        project.approved_at = now
+        project.approved_by_id = current_user.id
+        db.session.commit()
+        log_activity(
+            'project_approved',
+            f'"{project.name}" approved by {current_user.name}',
+            user=current_user, entity_type='project',
+            entity_name=project.name, entity_id=project.id
+        )
+        notify_of_project_approved(project, triggered_by=current_user)
+        return jsonify({'success': True})

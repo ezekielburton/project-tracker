@@ -428,7 +428,8 @@ def set_project_status(project_id):
 
     VALID = ['briefed', 'in_queue', 'in_progress', 'submitted',
              'internal_review', 'internal_revision', 'submitted_to_client',
-             'revision_in_queue', 'revision_in_progress', 'approved', 'on_hold']
+             'revision_in_queue', 'revision_in_progress', 'approved', 'on_hold',
+             'awaiting_posm_details']
     if new_status not in VALID:
         return jsonify({'error': 'Invalid status'}), 400
 
