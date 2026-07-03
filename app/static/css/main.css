@@ -1207,7 +1207,8 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     overflow-x: auto;
-    overflow-y: clip; /* clip, not hidden — avoids creating a sticky-containing block so thead th can stick to the page scroll */
+    overflow-y: auto; /* auto so the wrapper itself scrolls vertically — required for position:sticky on thead th to work */
+    max-height: 65vh;  /* cap height so there's actually something to scroll; sticky only works when the scroll container scrolls */
     -webkit-overflow-scrolling: touch;
 }
 
@@ -1225,6 +1226,8 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 
 .view-scroll .table-wrapper {
     overflow-x: visible;
+    overflow-y: visible; /* these tables are short per-month slices; no sticky or max-height needed */
+    max-height: none;
     box-shadow: none;
     border-radius: 0;
 }
