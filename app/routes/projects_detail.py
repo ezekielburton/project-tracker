@@ -419,7 +419,7 @@ def update_status(project_id):
 
 @detail_bp.route('/projects/<int:project_id>/set-status', methods=['POST'])
 @login_required
-@role_required('admin', 'cs', 'designer', 'team_lead')
+@role_required('admin', 'cs', 'management', 'designer', 'team_lead')
 def set_project_status(project_id):
     from app.utils import log_activity
     project = Project.query.get_or_404(project_id)
@@ -491,7 +491,7 @@ def toggle_hold(project_id):
 
 @detail_bp.route('/projects/<int:project_id>/customer/<int:pc_id>/set-status', methods=['POST'])
 @login_required
-@role_required('admin', 'cs', 'designer', 'team_lead')
+@role_required('admin', 'cs', 'management', 'designer', 'team_lead')
 def set_customer_status(project_id, pc_id):
     from app.utils import log_activity
     from app.models import ProjectCustomer
@@ -575,7 +575,7 @@ def remove_customer(project_id, pc_id):
 
 @detail_bp.route('/projects/<int:project_id>/customer/<int:pc_id>/cancel', methods=['POST'])
 @login_required
-@role_required('admin', 'cs')
+@role_required('admin', 'cs', 'management')
 def cancel_customer(project_id, pc_id):
     from app.utils import log_activity
     from app.notifications import create_notification
@@ -621,7 +621,7 @@ def cancel_customer(project_id, pc_id):
 
 @detail_bp.route('/projects/<int:project_id>/deliverable/<int:d_id>/set-status', methods=['POST'])
 @login_required
-@role_required('admin', 'cs', 'designer', 'team_lead')
+@role_required('admin', 'cs', 'management', 'designer', 'team_lead')
 def set_deliverable_status(project_id, d_id):
     from app.utils import log_activity
     from app.models import Deliverable
@@ -1128,7 +1128,7 @@ def update_secondary_cs_regions(project_id):
 
 @detail_bp.route('/projects/<int:project_id>/assign-concept-kv', methods=['POST'])
 @login_required
-@role_required('admin', 'team_lead', 'cs', 'designer')
+@role_required('admin', 'team_lead', 'cs', 'management', 'designer')
 def assign_concept_kv(project_id):
     project = Project.query.get_or_404(project_id)
 
@@ -1162,7 +1162,7 @@ def assign_concept_kv(project_id):
 
 @detail_bp.route('/projects/<int:project_id>/standard-deliverables/add', methods=['POST'])
 @login_required
-@role_required('admin', 'cs', 'designer', 'team_lead')
+@role_required('admin', 'cs', 'management', 'designer', 'team_lead')
 def add_standard_deliverable(project_id):
     project = Project.query.get_or_404(project_id)
     data = request.get_json()

@@ -608,8 +608,8 @@ def delete_design_direction(dir_id):
 @admin_bp.route('/admin/api/design-types/quick-add', methods=['POST'])
 @login_required
 def quick_add_design_type():
-    """CS and admin can quickly add a design type from the brief form."""
-    if current_user.role not in ('admin', 'cs'):
+    """CS, management and admin can quickly add a design type from the brief form."""
+    if current_user.role not in ('admin', 'cs', 'management'):
         return jsonify({'error': 'Forbidden'}), 403
     data = request.get_json()
     name = (data.get('name') or '').strip()
@@ -626,8 +626,8 @@ def quick_add_design_type():
 @admin_bp.route('/admin/api/design-directions/quick-add', methods=['POST'])
 @login_required
 def quick_add_design_direction():
-    """CS and admin can quickly add a design direction from the brief form."""
-    if current_user.role not in ('admin', 'cs'):
+    """CS, management and admin can quickly add a design direction from the brief form."""
+    if current_user.role not in ('admin', 'cs', 'management'):
         return jsonify({'error': 'Forbidden'}), 403
     data = request.get_json()
     name = (data.get('name') or '').strip()
