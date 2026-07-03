@@ -1,0 +1,263 @@
+/* Achievement card styling (Phase 4). Sits inside .profile-achievements-card
+   (defined in profile.css) — this file only styles what's INSIDE that card:
+   the tab toggle, tile rows, individual tiles, the show more/less button,
+   and the expandable category checklist with progress bars. */
+
+/* ── Recent / Pinned tabs ─────────────────────────────────────────────── */
+.achievement-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.75rem 0 1rem;
+}
+
+/* Reuses the same visual language as .team-tag-btn (CLAUDE.md's documented
+   JS-toggled pill pattern) rather than inventing a new tab style — quiet
+   background when inactive, filled when active. */
+.achievement-tab-btn {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    border: 1.5px solid var(--sandstone);
+    background: var(--white);
+    color: var(--grey-dark);
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.achievement-tab-btn.active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
+
+/* ── Tile row (Recent tab, Pinned tab, and other-user's pinned view) ────── */
+.achievement-tile-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+}
+
+.achievement-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 110px;
+    padding: 0.85rem 0.6rem;
+    background: var(--white);
+    border: 1px solid var(--sandstone);
+    border-radius: 10px;
+}
+
+.achievement-tile-badge {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.achievement-badge-img {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.achievement-badge-fallback {
+    font-size: 1.75rem;
+}
+
+/* Shared "animated" treatment for badge_type == 'animated' — a subtle,
+   continuous shine/pulse rather than a per-achievement custom animation.
+   Keeps the admin panel (Phase 7) to a simple toggle instead of requiring
+   a bespoke animation asset per achievement. */
+.achievement-badge-img--animated {
+    animation: achievement-badge-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes achievement-badge-pulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(242, 127, 85, 0)); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 6px rgba(242, 127, 85, 0.5)); }
+}
+
+.achievement-tile-name {
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.achievement-tile-date {
+    font-size: 0.7rem;
+    color: var(--grey-dark);
+    margin-top: 0.2rem;
+}
+
+/* ── Show more / Show less ───────────────────────────────────────────── */
+.achievement-show-more-btn {
+    display: block;
+    margin: 1rem auto 0;
+    background: none;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--tangerine);
+    cursor: pointer;
+}
+
+.achievement-show-more-btn:hover {
+    text-decoration: underline;
+}
+
+/* ── Full checklist (own profile, expanded) ──────────────────────────── */
+.achievement-checklist {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sandstone);
+}
+
+.achievement-category-group {
+    margin-bottom: 1.25rem;
+}
+
+.achievement-category-group:last-child {
+    margin-bottom: 0;
+}
+
+.achievement-category-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    margin: 0 0 0.6rem;
+    /* Category headings are a sub-heading inside an already-quiet card —
+       CLAUDE.md's global h1-h6 uppercase rule is too heavy here. */
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: var(--font-body);
+    font-weight: 700;
+}
+
+.achievement-checklist-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.achievement-checklist-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    background: var(--white);
+    border: 1px solid var(--sandstone);
+    border-radius: 8px;
+    padding: 0.6rem 0.85rem;
+}
+
+/* Locked (hidden + unearned) rows are dimmed so the ??? entries read as
+   "not yet available" rather than looking like a rendering bug. */
+.achievement-checklist-row--locked {
+    opacity: 0.55;
+}
+
+.achievement-checklist-badge {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.achievement-checklist-badge .achievement-badge-img {
+    width: 36px;
+    height: 36px;
+}
+
+.achievement-lock-icon {
+    font-size: 1.1rem;
+}
+
+.achievement-checklist-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.achievement-checklist-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+}
+
+.achievement-progress-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--sandstone);
+    overflow: hidden;
+}
+
+.achievement-progress-fill {
+    height: 100%;
+    background: var(--pine);
+    border-radius: 999px;
+    transition: width 0.2s ease;
+}
+
+.achievement-progress-label {
+    font-size: 0.7rem;
+    color: var(--grey-dark);
+    margin-top: 0.25rem;
+}
+
+/* ── Pinned Achievements drag UI (Account page, Phase 5) ────────────────
+   Two side-by-side lists ("Earned" / "Pinned"), dragged between via
+   SortableJS. Kept in achievements.css rather than a new file since it's
+   achievement-domain styling, even though it renders on the Account page
+   rather than the profile page. */
+.achievement-pin-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.achievement-pin-column-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--grey-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 0.5rem;
+}
+
+.achievement-pin-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    min-height: 60px;
+    /* so an empty list still has a droppable target area */
+    background: color-mix(in srgb, var(--sandstone) 40%, white);
+    border: 1px dashed var(--sandstone);
+    border-radius: 8px;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.achievement-pin-item {
+    background: var(--white);
+    border: 1px solid var(--sandstone);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    cursor: grab;
+}
+
+/* SortableJS applies this class to the element being dragged */
+.achievement-pin-item.sortable-ghost {
+    opacity: 0.4;
+}

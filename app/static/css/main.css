@@ -1024,6 +1024,22 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     opacity: 1;
 }
 
+/* Disabled state — currently only used for the read-only Role/Fun Title
+   fields on the profile Edit Details popup, but written as a shared rule
+   (not scoped to profile.css) so any future disabled .form-input anywhere
+   in the app automatically looks non-interactive instead of indistinguishable
+   from an editable field. */
+.form-input:disabled,
+.form-group input:disabled,
+.form-group select:disabled,
+.form-group textarea:disabled {
+    background-color: var(--sandstone);
+    border-color: var(--grey-light);
+    color: var(--grey-dark);
+    cursor: not-allowed;
+    opacity: 1; /* override browser default dimming so our own colours win */
+}
+
 /* Custom arrow for select elements */
 select.form-input,
 .form-group select {
@@ -3541,8 +3557,115 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     color: var(--rose);
 }
 
+.posm-pill-approved-at {
+    font-size: 0.65rem;
+    font-family: var(--font-mono);
+    opacity: 0.75;
+    margin-top: 0.1rem;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
 .posm-channel-section {
     /* sections are block-level; hidden class removes display */
+}
+
+/* ── Card-row table variant (Deliverable View) ────────────── */
+.table-wrapper--card {
+    background: transparent;
+    box-shadow: none;
+}
+
+.data-table--card-rows {
+    border-collapse: separate;
+    border-spacing: 0 6px;
+}
+
+/* Remove the default tr bottom-border */
+.data-table--card-rows tbody tr {
+    border-bottom: none;
+}
+
+/* Header — faded tangerine.
+   #F3B297 = rgba(242,127,85,0.55) pre-composited over sandstone (#F5F0E8).
+   Using an opaque value on every th (not rgba) so sticky and non-sticky cells
+   look identical regardless of what parent background sits behind the table. */
+.data-table--card-rows thead {
+    border-bottom: none;
+    border-radius: 8px;
+}
+
+.data-table--card-rows thead th,
+.data-table--card-rows thead th:first-child {
+    background-color: #F3B297 !important;
+    color: var(--white);
+}
+
+/* Each cell carries the card shadow, no borders */
+.data-table--card-rows tbody td {
+    background: var(--white);
+    border: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* Override the base sticky-cell white background */
+.data-table--card-rows tbody td:first-child {
+    background: var(--white);
+    border-radius: 10px 0 0 10px;
+}
+
+.data-table--card-rows tbody td:last-child {
+    border-radius: 0 10px 10px 0;
+}
+
+/* Expansion rows — transparent, no shadow; they hang below their parent card */
+.data-table--card-rows tbody tr.expansion-row td {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+/* Overdue */
+.data-table--card-rows tbody tr.overdue td,
+.data-table--card-rows tbody tr.overdue td:first-child {
+    background: #F9ECED;
+}
+.data-table--card-rows tbody tr.overdue:hover td,
+.data-table--card-rows tbody tr.overdue:hover td:first-child {
+    background: #F4E0E2;
+}
+
+/* ── Section header row (title + set-default button) ─────── */
+.section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.btn-set-default {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--tangerine);
+    background: rgba(242, 127, 85, 0.08);
+    border: 1.5px solid rgba(242, 127, 85, 0.4);
+    border-radius: 20px;
+    padding: 0.3rem 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-set-default:hover {
+    background: rgba(242, 127, 85, 0.18);
+    border-color: var(--tangerine);
+}
+
+.btn-set-default.is-default {
+    background: var(--tangerine);
+    color: var(--white);
+    border-color: var(--tangerine);
 }
 
 /* ── On Hold banner ──────────────────────────────────── */

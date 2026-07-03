@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import BlogPost, BlogComment, User
 from app.utils import get_actor
+from app.achievements import check_achievements
 from datetime import datetime
 import json
 
@@ -58,6 +59,7 @@ def add_comment(post_id):
     )
     db.session.add(comment)
     db.session.commit()
+    check_achievements(actor, 'blog_comment')
 
     return jsonify({
         'success': True,

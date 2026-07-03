@@ -2,8 +2,8 @@ from flask import Blueprint, render_template, redirect, url_for, request, jsonif
 from flask_login import login_required, current_user
 from datetime import date, timedelta
 from app import db
-from sqlalchemy import func
-from app.models import Project, ProjectDesigner, User, ProjectSecondaryCS
+from sqlalchemy import func, nullslast
+from app.models import Project, ProjectDesigner, User, ProjectSecondaryCS, Deliverable
 
 main = Blueprint('main', __name__)
 
@@ -87,6 +87,21 @@ def cs_dashboard():
         User.role.in_(['cs', 'admin'])
     ).order_by(User.name).all()
 
+    # ── Deliverable view — all deliverables across active projects, earliest deadline first
+    all_deliverables = (
+        Deliverable.query
+        .join(Project, Project.id == Deliverable.project_id)
+        .filter(
+            Project.project_status != 'draft',
+            Project.project_status != 'approved'
+        )
+        .order_by(
+            nullslast(Deliverable.design_deadline),
+            nullslast(Deliverable.design_deadline_time)
+        )
+        .all()
+    )
+
     return render_template(
     'dashboards/cs.html',
     projects=my_projects,
@@ -94,7 +109,8 @@ def cs_dashboard():
     approved_projects=approved_projects,
     cs_users=cs_users,
     today=today,
-    effective_role=effective_user.role
+    effective_role=effective_user.role,
+    all_deliverables=all_deliverables
 )
 
 
@@ -168,6 +184,23 @@ def designer_dashboard():
         project_status='approved'
     ).order_by(Project.approved_at.desc()).all()
 
+    # ── Deliverable view — only projects this designer is assigned to ──
+    my_deliverables = (
+        Deliverable.query
+        .join(Project, Project.id == Deliverable.project_id)
+        .filter(
+            Project.project_status != 'draft',
+            Project.project_status != 'approved',
+            Project.id.in_(assigned_subquery),
+            Deliverable.teams.contains(team)
+        )
+        .order_by(
+            nullslast(Deliverable.design_deadline),
+            nullslast(Deliverable.design_deadline_time)
+        )
+        .all()
+    ) if team else []
+
     return render_template(
         'dashboards/designer.html',
         projects=my_projects,
@@ -180,6 +213,7 @@ def designer_dashboard():
         team_due_today=team_due_today,
         team_due_tomorrow=team_due_tomorrow,
         approved_projects=approved_projects,
+        my_deliverables=my_deliverables,
         today=today
     )
 
@@ -205,6 +239,7 @@ def team_lead_dashboard():
             team_due_tomorrow=0, team_workload=[],
             personal_projects=[], personal_active=0,
             personal_due_today=0, personal_due_tomorrow=0,
+            my_deliverables=[], approved_projects=[],
             today=today
         )
 
@@ -261,6 +296,23 @@ def team_lead_dashboard():
         project_status='approved'
     ).order_by(Project.approved_at.desc()).all()
 
+    # ── Deliverable view — only projects this team lead is personally assigned to ──
+    my_deliverables = (
+        Deliverable.query
+        .join(Project, Project.id == Deliverable.project_id)
+        .filter(
+            Project.project_status != 'draft',
+            Project.project_status != 'approved',
+            Project.id.in_(personal_subquery),
+            Deliverable.teams.contains(team)
+        )
+        .order_by(
+            nullslast(Deliverable.design_deadline),
+            nullslast(Deliverable.design_deadline_time)
+        )
+        .all()
+    )
+
     return render_template(
         'dashboards/team_lead.html',
         team_projects=team_projects,
@@ -273,6 +325,7 @@ def team_lead_dashboard():
         personal_due_today=personal_due_today,
         personal_due_tomorrow=personal_due_tomorrow,
         approved_projects=approved_projects,
+        my_deliverables=my_deliverables,
         today=today
     )
 

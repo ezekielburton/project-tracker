@@ -944,9 +944,12 @@ def assign_lead(project_id):
     if not team:
         return jsonify({'success': False, 'error': 'Team is required.'}), 400
 
-    # Role guard: designers can only assign for their own team
-    actor = current_user
-    if actor.role == 'designer' and actor.team != team:
+    # ── Emulation-aware actor ──────────────────────────────────────────────
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    # Role guard: designers/team leads can only assign for their own team
+    if actor.role in ('designer', 'team_lead') and actor.team != team:
         return jsonify({'success': False, 'error': 'You can only assign yourself to your own team.'}), 403
 
     # Get current lead for this team (if any)
@@ -963,6 +966,7 @@ def assign_lead(project_id):
         if not new_designer:
             return jsonify({'success': False, 'error': 'Designer not found.'}), 404
         db.session.delete(current_assignment)
+        db.session.flush()  # force DELETE before INSERT to avoid UniqueViolation
         db.session.add(ProjectDesigner(project_id=project.id, user_id=new_designer.id, team=team))
         db.session.commit()
         notify_cs_of_lead_change(project, new_designer, team, triggered_by=actor, previous_designer=previous_designer)
@@ -973,6 +977,7 @@ def assign_lead(project_id):
         # Self-assign or immediate takeover
         if current_assignment:
             db.session.delete(current_assignment)
+            db.session.flush()  # force DELETE before INSERT to avoid UniqueViolation
         db.session.add(ProjectDesigner(project_id=project.id, user_id=actor.id, team=team))
         db.session.commit()
         notify_cs_of_lead_change(project, actor, team, triggered_by=actor, previous_designer=previous_designer)

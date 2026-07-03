@@ -790,11 +790,13 @@ if (ckvStartRevisionBtn) {
                 : '';
         }
         document.getElementById('start-project-modal').classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
     }
 
     function closeStartProjectModal() {
         document.getElementById('start-project-modal').classList.add('hidden');
         _startProjectId = null;
+        if (window.helixPolling) window.helixPolling.resume();
     }
 
     // start-project-confirm is wired in detail.html's _wireDetailPage so it
@@ -828,8 +830,8 @@ if (ckvStartRevisionBtn) {
         document.getElementById('transfer-trigger-' + teamLower).classList.remove('hidden');
     }
 
-    function confirmTransfer(teamLower, projectId) {
-        var select = document.getElementById('transfer-select-' + teamLower);
+    function confirmTransfer(team, projectId) {
+        var select = document.getElementById('transfer-select-' + team.toLowerCase());
         var newDesignerId = select ? select.value : '';
         if (!newDesignerId) {
             showToast('Please select a designer to transfer to.', 'warning');
@@ -838,7 +840,7 @@ if (ckvStartRevisionBtn) {
         fetch('/projects/' + projectId + '/assign-lead', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ team: teamLower, new_designer_id: parseInt(newDesignerId) })
+            body: JSON.stringify({ team: team, new_designer_id: parseInt(newDesignerId) })
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
@@ -861,12 +863,14 @@ if (ckvStartRevisionBtn) {
             'You\'ll replace ' + previousLeadName + ' as the ' + team +
             ' lead on this project. They\'ll be notified.';
         document.getElementById('lead-takeover-modal').classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
     }
 
     function closeTakeoverModal() {
         document.getElementById('lead-takeover-modal').classList.add('hidden');
         _takeoverTeam = null;
         _takeoverProjectId = null;
+        if (window.helixPolling) window.helixPolling.resume();
     }
 
     // lead-takeover-confirm is wired in detail.html's _wireDetailPage so it
@@ -881,11 +885,13 @@ if (ckvStartRevisionBtn) {
         _pendingRemoveForm = form;
         document.getElementById('remove-cs-body').textContent = msg;
         document.getElementById('remove-cs-modal').classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
     }
 
     function closeRemoveCSModal() {
         document.getElementById('remove-cs-modal').classList.add('hidden');
         _pendingRemoveForm = null;
+        if (window.helixPolling) window.helixPolling.resume();
     }
 
 
@@ -1306,12 +1312,13 @@ document.addEventListener('click', function (e) {
     if (cancelTransferBtn) { cancelTransfer(cancelTransferBtn.dataset.team); return; }
 
     // ── Lead takeover modal: open ─────────────────────────────────────────────
-    // data-current-owner is tojson-encoded so names with apostrophes work safely.
+    // data-current-owner is HTML-escaped (| e) so the browser decodes entities
+    // and dataset.currentOwner gives the plain string — no JSON.parse needed.
     var takeoverBtn = e.target.closest('[data-action="open-takeover-modal"]');
     if (takeoverBtn) {
         openTakeoverModal(
             takeoverBtn.dataset.team,
-            JSON.parse(takeoverBtn.dataset.currentOwner),
+            takeoverBtn.dataset.currentOwner,
             parseInt(takeoverBtn.dataset.projectId)
         );
         return;

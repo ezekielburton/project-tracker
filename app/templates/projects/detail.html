@@ -280,7 +280,7 @@
                                 <button class="btn-secondary btn-sm"
                                     data-action="open-takeover-modal"
                                     data-team="{{ team_name }}"
-                                    data-current-owner="{{ assignment.designer.name | tojson }}"
+                                    data-current-owner="{{ assignment.designer.name | e }}"
                                     data-project-id="{{ project.id }}">
                                     Transfer Ownership
                                 </button>
@@ -915,6 +915,9 @@
                 <span class="posm-pill-status posm-pill-status--{{ project.concept_status or 'in_queue' }}">
                     {{ _ckv_sl.get(project.concept_status or 'in_queue', project.concept_status or 'Not Started') }}
                 </span>
+                {% if project.concept_status == 'approved' and project.concept_approved_at %}
+                <span class="posm-pill-approved-at">{{ project.concept_approved_at | dubai_time }} GST</span>
+                {% endif %}
             </button>
             {% endif %}
             {% for cd in posm_channels_data %}
@@ -926,6 +929,9 @@
                 <span class="posm-pill-label">{{ cd.label }}{% if cd.cancelled %} · Cancelled{% endif %}</span>
                 <span class="posm-pill-status posm-pill-status--{{ cd.channel.status }}">{{ _sl.get(cd.channel.status,
                     cd.channel.status) }}</span>
+                {% if cd.channel.status == 'approved' and cd.channel.approved_at %}
+                <span class="posm-pill-approved-at">{{ cd.channel.approved_at | dubai_time }} GST</span>
+                {% endif %}
             </button>
             {% endfor %}
         </div>
@@ -2089,11 +2095,13 @@
         document.getElementById('flag-context-text').textContent = 'Flagging: ' + btn.dataset.context;
         document.getElementById('flag-message-input').value = '';
         document.getElementById('flag-create-modal').classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
         setTimeout(function () { document.getElementById('flag-message-input').focus(); }, 100);
     }
 
     function closeFlagModal() {
         document.getElementById('flag-create-modal').classList.add('hidden');
+        if (window.helixPolling) window.helixPolling.resume();
     }
 
     function submitFlag() {
@@ -2526,6 +2534,7 @@
         document.getElementById('approvalModalMessage').textContent = message;
         _approveCallback = onConfirm;
         document.getElementById('approvalModal').classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
     }
 
     // Wired on DOMContentLoaded (normal load — modal HTML is below this script tag,
@@ -2545,6 +2554,7 @@
         function closeApprovalModal() {
             if (modalEl) modalEl.classList.add('hidden');
             _approveCallback = null;
+            if (window.helixPolling) window.helixPolling.resume();
         }
 
         if (cancelBtn) { cancelBtn.addEventListener('click', closeApprovalModal); }

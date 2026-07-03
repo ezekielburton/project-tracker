@@ -7,6 +7,7 @@ from app.models import (Project, User, ProjectCustomer, Deliverable,
 from app.decorators import role_required
 from app.notifications import notify_of_project_approved, notify_of_ckv_posm_pending, create_notification
 from app.utils import log_activity
+from app.achievements import check_achievements
 
 approval_bp = Blueprint('approval', __name__)
 
@@ -179,6 +180,7 @@ def approve_submission(project_id):
 
     if project.project_status == 'approved':
         notify_of_project_approved(project, triggered_by=current_user)
+        check_achievements(current_user, 'project_approved')
 
     return jsonify({'success': True, 'all_approved': all_approved})
 
@@ -212,6 +214,8 @@ def approve_concept_kv(project_id):
         project.concept_status = 'approved'
     if project.has_kv:
         project.kv_status = 'approved'
+    project.concept_approved_at = now
+    project.concept_approved_by_id = current_user.id
 
     # ── No customers/regions: C&KV-only brief ────────────────────────────────
     # Approve the pill but don't lock the project — return a prompt so CS can
@@ -297,4 +301,5 @@ def posm_prompt_response(project_id):
             entity_name=project.name, entity_id=project.id
         )
         notify_of_project_approved(project, triggered_by=current_user)
+        check_achievements(current_user, 'project_approved')
         return jsonify({'success': True})

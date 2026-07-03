@@ -174,6 +174,102 @@
         </div>
 
     </div> <!-- end 2×2 grid -->
+    </div> <!-- end 2×2 grid -->
+    
+    <!-- ⑤ Active Rewards -->
+    <div class="form-card" style="max-width: none; margin-top: 1.5rem;">
+        <h2>Active Rewards</h2>
+        <p style="margin: 0.5rem 0 1.25rem; color: var(--grey-dark); font-size: 0.9rem;">
+            Choose which earned badge, title, and border show on your profile. Leave any as "None" to use the default.
+        </p>
+    
+        <div class="detail-fields">
+            <div class="detail-field" style="align-items: center;">
+                <span class="detail-label">Active Badge</span>
+                {# Options are UserAchievement ids — matches what save_display_settings expects for active_badge_id #}
+                <select id="active-badge-select" class="form-select">
+                    <option value="">— None —</option>
+                    {% for ua in earned_achievements %}
+                    <option value="{{ ua.id }}" {% if display_settings and display_settings.active_badge_id==ua.id
+                        %}selected{% endif %}>
+                        {{ ua.achievement.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="detail-field" style="align-items: center;">
+                <span class="detail-label">Active Title</span>
+                {# Pre-filtered to only achievements with a reward_title (see title_choices in profile.py) #}
+                <select id="active-title-select" class="form-select">
+                    <option value="">— None —</option>
+                    {% for ua in title_choices %}
+                    <option value="{{ ua.id }}" {% if display_settings and display_settings.active_title_id==ua.id
+                        %}selected{% endif %}>
+                        {{ ua.achievement.reward_title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="detail-field" style="align-items: center;">
+                <span class="detail-label">Active Border</span>
+                {# Options are AchievementBorder ids directly, not UserAchievement ids — #}
+                {# borders are earned indirectly, via achievements that reference them. #}
+                <select id="active-border-select" class="form-select">
+                    <option value="">— None —</option>
+                    {% for border in border_choices %}
+                    <option value="{{ border.id }}" {% if display_settings and display_settings.active_border_id==border.id
+                        %}selected{% endif %}>
+                        {{ border.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    
+        <p id="rewards-save-status" style="margin-top: 1rem; font-size: 0.85rem; color: var(--pine); display: none;">
+            Rewards saved.
+        </p>
+    </div>
+    
+    <!-- ⑥ Pinned Achievements -->
+    <div class="form-card" style="max-width: none; margin-top: 1.5rem;">
+        <h2>Pinned Achievements</h2>
+        <p style="margin: 0.5rem 0 1.25rem; color: var(--grey-dark); font-size: 0.9rem;">
+            Drag up to 5 earned achievements into "Pinned" — these show first on your profile, in the order you arrange
+            them.
+        </p>
+    
+        <div class="achievement-pin-columns">
+            <div>
+                <p class="achievement-pin-column-title">Earned</p>
+                {# Everything earned that ISN'T currently pinned. pinned_achievement_ids #}
+                {# is just an id list — cheap membership check, no extra query needed. #}
+                <ul id="earned-pin-list" class="achievement-pin-list">
+                    {% for ua in earned_achievements %}
+                    {% if ua.id not in pinned_achievement_ids %}
+                    <li class="achievement-pin-item" data-user-achievement-id="{{ ua.id }}">{{ ua.achievement.name }}</li>
+                    {% endif %}
+                    {% endfor %}
+                </ul>
+            </div>
+            <div>
+                <p class="achievement-pin-column-title">Pinned (max 5)</p>
+                {# Already in pin_order — this is pinned_achievements_ordered from #}
+                {# Chunk 3's patch, NOT earned_achievements, since order matters here. #}
+                <ul id="pinned-pin-list" class="achievement-pin-list">
+                    {% for ua in pinned_achievements_ordered %}
+                    <li class="achievement-pin-item" data-user-achievement-id="{{ ua.id }}">{{ ua.achievement.name }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    
+        <button type="button" class="btn-primary" id="save-pinned-btn" style="margin-top: 1rem;">Save Pinned
+            Achievements</button>
+        <p id="pinned-save-status" style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--pine); display: none;">
+            Pinned achievements saved.
+        </p>
+    </div>
 
 </div>
 
@@ -356,5 +452,104 @@
         });
     });
 })();
+
+    // ── Active Rewards (badge / title / border) ─────────────────────────────
+    // Auto-saves on change, same UX pattern as the sound/browser toggles above
+    // — no separate Save button, since each dropdown is a single independent
+    // choice rather than a batch of edits like the pinning UI below.
+    (function () {
+        var badgeSelect = document.getElementById('active-badge-select');
+        var titleSelect = document.getElementById('active-title-select');
+        var borderSelect = document.getElementById('active-border-select');
+        var status = document.getElementById('rewards-save-status');
+        var statusTimer = null;
+
+        function saveRewards() {
+            fetch('/account/display-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    // Empty string (unselected "— None —") becomes null, matching
+                    // what save_display_settings expects for "clear this slot".
+                    active_badge_id: badgeSelect.value || null,
+                    active_title_id: titleSelect.value || null,
+                    active_border_id: borderSelect.value || null
+                })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        status.style.display = 'block';
+                        clearTimeout(statusTimer);
+                        statusTimer = setTimeout(function () { status.style.display = 'none'; }, 2500);
+                    } else {
+                        showToast(data.error || 'Could not save rewards.', 'error');
+                    }
+                })
+                .catch(function () {
+                    showToast('Could not save rewards.', 'error');
+                });
+        }
+
+        [badgeSelect, titleSelect, borderSelect].forEach(function (select) {
+            select.addEventListener('change', saveRewards);
+        });
+    })();
+
+    // ── Pinned Achievements drag-and-drop ────────────────────────────────────
+    (function () {
+        var earnedList = document.getElementById('earned-pin-list');
+        var pinnedList = document.getElementById('pinned-pin-list');
+        var saveBtn = document.getElementById('save-pinned-btn');
+        var status = document.getElementById('pinned-save-status');
+
+        if (!earnedList || !pinnedList) return; // defensive — nothing to wire if the cards aren't on the page
+
+        // Shared 'group' name lets items drag freely between the two lists.
+        // SortableJS has no built-in max-items option, so the 5-item cap on
+        // Pinned is enforced by hand in onAdd below.
+        new Sortable(earnedList, {
+            group: 'pinned-achievements',
+            animation: 150
+        });
+
+        new Sortable(pinnedList, {
+            group: 'pinned-achievements',
+            animation: 150,
+            onAdd: function (evt) {
+                if (pinnedList.children.length > 5) {
+                    // Over the limit — bounce it back to Earned rather than
+                    // trying to guess which existing pinned item should be
+                    // displaced instead.
+                    earnedList.appendChild(evt.item);
+                    showToast('You can only pin up to 5 achievements.', 'warning');
+                }
+            }
+        });
+
+        saveBtn.addEventListener('click', function () {
+            var pinnedIds = Array.from(pinnedList.children).map(function (li) {
+                return parseInt(li.dataset.userAchievementId, 10);
+            });
+
+            fetch('/account/pinned-achievements', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pinned_ids: pinnedIds })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        status.style.display = 'block';
+                        setTimeout(function () { status.style.display = 'none'; }, 2500);
+                    } else {
+                        showToast(data.error || 'Could not save pinned achievements.', 'error');
+                    }
+                })
+                .catch(function () {
+                    showToast('Could not save pinned achievements.', 'error');
+                });
+        });
+    })();
 </script>
 {% endblock %}

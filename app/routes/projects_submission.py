@@ -17,6 +17,7 @@ from app.notifications import (
     notify_of_submission_to_client, notify_team_leads_of_new_project
 )
 from app.utils import log_activity
+from app.achievements import check_achievements
 
 submission_bp = Blueprint('submission', __name__)
 
@@ -62,7 +63,21 @@ def submit_project():
         else:
             is_new = project.project_status == 'draft'  # True if promoting from draft
 
-        project.name = data['name']
+        project.name = data['name'].strip()
+
+        # ── Duplicate name guard ─────────────────────────────
+        # Block submission if any non-draft project (including approved ones)
+        # already has this name. Checked BEFORE flush/commit so no NAS folders
+        # are created if it fails.
+        _name_q = Project.query.filter(
+            Project.name.ilike(project.name),
+            Project.project_status != 'draft'
+        )
+        if project.id:
+            _name_q = _name_q.filter(Project.id != project.id)
+        if _name_q.first():
+            return jsonify({'error': f'A project named "{project.name}" already exists. Please choose a different name.'}), 400
+
         project.client_id = int(data['client_id'])
         project.cs_lead_id = int(data['cs_lead_id'])
         job_num = data.get('job_number')
@@ -254,6 +269,7 @@ def submit_project():
             traceback.print_exc()
 
         log_activity('project_submitted', f'Project "{project.name}" submitted', user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
+        check_achievements(current_user, 'project_submitted')
 
         return jsonify({
             'success': True,

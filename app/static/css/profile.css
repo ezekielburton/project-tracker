@@ -1,0 +1,266 @@
+/* Outer wrapper — placeholder for the future border-customization feature */
+.profile-border-wrap {
+    padding: 4px;
+    border-radius: 16px;
+}
+
+.profile-card {
+    background: var(--white);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--sandstone);
+}
+
+/* ── Banner ─────────────────────────────────────────────── */
+.profile-banner {
+    position: relative;
+    height: 180px;
+    background: var(--sandstone);
+}
+
+.profile-banner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-banner-edit-btn {
+    position: absolute;
+    top: 12px;
+    right: 52px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    background: var(--white);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+}
+
+.profile-banner:hover .profile-banner-edit-btn {
+    opacity: 1;
+}
+
+.profile-settings-gear {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--white);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: var(--black);
+}
+
+/* ── Avatar + header row ────────────────────────────────── */
+.profile-header-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 1.25rem;
+    padding: 0 2rem 1.5rem;
+}
+
+.profile-avatar-wrap {
+    position: relative;
+    /* Pull the avatar up so it overlaps the bottom of the banner, Facebook-style */
+    margin-top: -60px;
+    flex-shrink: 0;
+}
+
+.profile-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid var(--white);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    object-fit: cover;
+    display: block;
+    background: var(--tangerine);
+}
+
+.profile-avatar--initials {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--white);
+    font-family: var(--font-headline);
+    font-size: 2.5rem;
+}
+
+.profile-avatar-edit-btn {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    background: var(--white);
+    border: 1px solid var(--sandstone);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+}
+
+.profile-avatar-wrap:hover .profile-avatar-edit-btn {
+    opacity: 1;
+}
+
+.profile-header-info {
+    flex: 1;
+    padding-bottom: 0.25rem;
+}
+
+.profile-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+/* Global h1-h6 are uppercase by default (see CLAUDE.md CSS Facts) —
+   a person's name shouldn't render in the all-caps display font. */
+.profile-name {
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: var(--font-body);
+    margin: 0;
+}
+
+.profile-edit-details-btn,
+.profile-edit-bio-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0.5;
+}
+
+.profile-edit-details-btn:hover,
+.profile-edit-bio-btn:hover {
+    opacity: 1;
+}
+
+.profile-meta-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+/* Outline-style pill tags for fun title / role / favourite food / birthday —
+   shared off-white fill (--sandstone), colored border + text per tag. Same
+   general shape as .status-badge elsewhere (border + fill + colored text),
+   but one consistent fill color instead of a different tint per status,
+   since these are meant to read as personality/flair, not system state. */
+.profile-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    /* Lighter than plain --sandstone — same treatment as the bio/achievements
+       cards below, so the tag fill stays quiet and lets the border+text carry
+       the color instead. */
+    background-color: color-mix(in srgb, var(--sandstone) 50%, white);
+    border: 1.5px solid;
+}
+
+/* Border+text back to full-strength accent colors — the lighter background
+   above now provides the contrast, rather than diluting both together. */
+.profile-tag--title {
+    color: var(--tangerine);
+    border-color: var(--tangerine);
+}
+
+.profile-tag--role {
+    color: var(--ashen);
+    border-color: var(--ashen);
+}
+
+/* --canary as text is hard to read against a light fill regardless of exact
+   shade — border stays canary, text uses --oak (same warm/earthy family,
+   actually legible) instead of literal canary. */
+.profile-tag--food {
+    color: var(--oak);
+    border-color: var(--canary);
+}
+
+.profile-tag--birthday {
+    color: var(--pine);
+    border-color: var(--pine);
+}
+
+/* ── Bio + Achievements ─────────────────────────────────── */
+.profile-body-grid {
+    display: grid;
+    /* Single column — stacks Bio then Achievements top-to-bottom, in the
+       order they already appear in profile.html, rather than side by side. */
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 0 2rem 2rem;
+}
+
+.profile-bio-card,
+.profile-achievements-card {
+    /* Lighter than plain --sandstone — blended most of the way to white so
+       these sub-cards feel airier against the white .profile-card behind them. */
+    background: color-mix(in srgb, var(--sandstone) 40%, white);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    min-height: 160px;
+}
+
+.profile-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ── Crop/zoom modal ────────────────────────────────────── */
+.crop-modal-box {
+    width: 420px;
+    max-width: 90vw;
+}
+
+.crop-container {
+    width: 100%;
+    height: 320px;
+    overflow: hidden;
+    background: var(--black);
+    margin: 1rem 0;
+}
+
+.crop-container img {
+    max-width: 100%;
+    display: block;
+}
+
+/* Cropper.js renders its own internal elements (.cropper-view-box,
+   .cropper-face) — this is the standard trick to make its square crop box
+   preview as a circle for the avatar, without Cropper needing native
+   circle support. */
+.crop-container--circle .cropper-view-box,
+.crop-container--circle .cropper-face {
+    border-radius: 50%;
+}
+
+#crop-zoom-slider {
+    width: 100%;
+}
+
+.crop-size-hint {
+    font-size: 0.8rem;
+    color: var(--grey-dark);
+    margin: 0.25rem 0 0;
+}
+
+.crop-size-hint--warning {
+    color: var(--rose);
+}

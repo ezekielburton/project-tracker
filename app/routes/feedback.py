@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment
 from app.utils import get_actor, log_activity
+from app.achievements import check_achievements
 
 feedback_bp = Blueprint('feedback', __name__)
 
@@ -90,6 +91,7 @@ def submit_feature():
 
     log_activity('feature_request_submitted', f'Feature request "{feature.title}" submitted by {actor.name}',
                  user=actor, entity_type='feature_request', entity_name=feature.title, entity_id=feature.id)
+    check_achievements(actor, 'feature_submitted')
 
     return jsonify({'success': True, 'feature': _feature_dict(feature)})
 
@@ -112,6 +114,13 @@ def toggle_upvote(feature_id):
         voted = True
 
     db.session.commit()
+
+    # Only fires on actually GIVING an upvote, not removing one — this is a
+    # toggle route, so without this guard, upvote-then-un-upvote would count
+    # as two events toward an "upvote 10 times" achievement.
+    if voted:
+        check_achievements(actor, 'upvote_given')
+
     count = FeatureRequestUpvote.query.filter_by(feature_id=feature_id).count()
     return jsonify({'success': True, 'voted': voted, 'count': count})
 
@@ -295,6 +304,7 @@ def submit_bug():
 
     log_activity('bug_report_submitted', f'Bug report "{bug.title}" submitted by {actor.name}',
                  user=actor, entity_type='bug_report', entity_name=bug.title, entity_id=bug.id)
+    check_achievements(actor, 'bug_submitted')
 
     return jsonify({'success': True, 'bug': _bug_dict(bug)})
 

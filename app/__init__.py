@@ -37,6 +37,7 @@ def create_app():
     from app.routes.feedback import feedback_bp
     from app.routes.wiki import wiki_bp
     from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
+    from app.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -50,6 +51,7 @@ def create_app():
     app.register_blueprint(feedback_bp)
     app.register_blueprint(wiki_bp)
     app.register_blueprint(api_bp)  # /api/* poll routes
+    app.register_blueprint(profile_bp)
 
     from app.utils import calculate_project_hours
     

@@ -10,6 +10,7 @@
         <h1 class="dashboard-greeting">Welcome, <span>{{ effective_user.name.split()[0] }}</span></h1>
         <div class="dashboard-actions" style="display: flex; gap: 1rem; align-items: center;">
             <div class="dashboard-toggle">
+                <button type="button" id="btn-deliverable-view" class="toggle-btn">Deliverable View</button>
                 <button type="button" id="btn-my-projects" class="toggle-btn active">My Projects</button>
                 <button type="button" id="btn-all-projects" class="toggle-btn">All Projects</button>
                 <button type="button" id="btn-approved-projects" class="toggle-btn">Approved Projects</button>
@@ -22,7 +23,10 @@
     <div id="my-projects-view" class="dashboard-view">
 
         <div class="dashboard-section">
-            <h2 class="dashboard-section-title">My Projects</h2>
+            <div class="section-header-row">
+                <h2 class="dashboard-section-title">My Projects</h2>
+                <button class="btn-set-default" data-view="my-projects-view">Set as default</button>
+            </div>
 
             {% if projects %}
             <div class="deadline-sort-wrap" data-tbody="cs-my-projects-tbody" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
@@ -30,8 +34,8 @@
                 <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
                 <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
             </div>
-            <div class="table-wrapper">
-                <table class="data-table data-table--with-chevron">
+            <div class="table-wrapper table-wrapper--card">
+                <table class="data-table data-table--with-chevron data-table--card-rows">
                     <thead>
                         <tr>
                             <th></th>
@@ -203,8 +207,11 @@
     <!-- All Projects View - hidden by default -->
     <div id="all-projects-view" class="dashboard-view hidden">
         <div class="dashboard-section">
-            <h2 class="dashboard-section-title">All Projects</h2>
-    
+            <div class="section-header-row">
+                <h2 class="dashboard-section-title">All Projects</h2>
+                <button class="btn-set-default" data-view="all-projects-view">Set as default</button>
+            </div>
+
             <div class="all-projects-filter-bar" id="all-projects-filter-bar">
                 <select id="ap-cs-filter" class="form-input">
                     <option value="">All CS Leads</option>
@@ -224,8 +231,8 @@
                 <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
                 <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
             </div>
-            <div class="table-wrapper">
-                <table class="data-table data-table--with-chevron">
+            <div class="table-wrapper table-wrapper--card">
+                <table class="data-table data-table--with-chevron data-table--card-rows">
                     <thead>
                         <tr>
                             <th></th>
@@ -400,9 +407,75 @@
 
 </div>
 
+<!-- Deliverable View — hidden by default -->
+<div id="deliverable-view" class="dashboard-view hidden">
+    <div class="dashboard-section">
+        <div class="section-header-row">
+            <h2 class="dashboard-section-title">Deliverable View</h2>
+            <button class="btn-set-default" data-view="deliverable-view">Set as default</button>
+        </div>
+
+        {% if all_deliverables %}
+        <div class="table-wrapper table-wrapper--card">
+            <table class="data-table data-table--card-rows">
+                <thead>
+                    <tr>
+                        <th>Deliverable Name</th>
+                        <th>Deadline</th>
+                        <th>Deadline Time</th>
+                        <th>Deliverable Status</th>
+                        <th>Type</th>
+                        <th>Brief Date</th>
+                        <th>CS Lead</th>
+                        <th>Project Designers</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in all_deliverables %}
+                    {# Resolve deadline: use the deliverable's own deadline, else fall back to project customer's #}
+                    {% set _dl_date = d.design_deadline or (d.project_customer.design_deadline if d.project_customer else None) %}
+                    {% set _dl_time = d.design_deadline_time or (d.project_customer.design_deadline_time if d.project_customer else None) %}
+                    {% set _is_overdue = _dl_date and _dl_date < today %}
+                    <tr class="{% if _is_overdue %}overdue{% endif %}">
+                        <td>
+                            <strong>{{ d.name }}</strong>
+                            <div style="font-size:0.78rem;color:var(--grey-dark);margin-top:0.15rem;">{{ d.project.name }}</div>
+                        </td>
+                        <td class="mono">{{ _dl_date.strftime('%d %b %Y') if _dl_date else '—' }}</td>
+                        <td class="mono">{{ _dl_time.strftime('%H:%M') if _dl_time else '—' }}</td>
+                        <td>
+                            <span class="status-badge s-{{ d.status }}">{{ d.status | replace('_', ' ') | title }}</span>
+                        </td>
+                        <td>{{ 'C&CM' if d.project.brief_type == 'ccm' else 'Standard' }}</td>
+                        <td class="mono">{{ d.project.briefing_date.strftime('%d %b %Y') if d.project.briefing_date else '—' }}</td>
+                        <td>{{ d.project.cs_lead.name if d.project.cs_lead else '—' }}</td>
+                        <td>
+                            {% for assignment in d.project.assigned_designers %}
+                            <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.designer.name }}</span>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('project_detail.detail', project_id=d.project_id) }}"
+                               class="btn btn--secondary sidebar-item--nav">Go to Project</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="empty-state">No deliverables in active projects.</p>
+        {% endif %}
+    </div>
+</div>
+
 <!-- Approved Projects View — hidden by default, rendered by JS on first open -->
 <div id="approved-projects-view" class="dashboard-view hidden">
-    <h2 class="dashboard-section-title">Approved Projects</h2>
+    <div class="section-header-row">
+        <h2 class="dashboard-section-title">Approved Projects</h2>
+        <button class="btn-set-default" data-view="approved-projects-view">Set as default</button>
+    </div>
     <div class="approved-filter-bar" id="approved-filter-bar">
         <input type="text" id="approved-search" class="form-input" placeholder="Search by project name...">
         <select id="approved-cs-filter" class="form-input">

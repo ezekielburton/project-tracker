@@ -5,9 +5,18 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
 from app.models import User, NotificationSound
 from app.decorators import role_required
+from app.achievements import check_achievements
 
 
 auth = Blueprint('auth', __name__)
+
+
+# NOTE: avatar/banner/details/bio profile-editing routes, the _save_profile_image
+# helper, and the /profile view route all moved to app/routes/profile.py on
+# 3 Jul 2026 (Achievement System Phase 3 — profile blueprint split, needed so
+# other users' profiles can be viewed via profile.view(user_id)). See that
+# file for anything that used to live here.
+
 
 @auth.route('/register', methods=['GET', 'POST'])
 @login_required
@@ -82,6 +91,7 @@ def login():
             return redirect(url_for('auth.login', next=request.form.get('next', '')))
 
         login_user(user, remember=True)
+        check_achievements(user, 'user_login')
         flash(f'Welcome back, {user.name}.', 'success')
         next_page = request.form.get('next') or ''
         # Flask-Login sometimes sets next to a full URL — extract just the path
@@ -136,8 +146,22 @@ def account():
 
     available_sounds = NotificationSound.query.order_by(NotificationSound.name).all()
 
-    return render_template('auth/account.html', notification_prefs=current_prefs, available_sounds=available_sounds)
+    # Imported inline rather than at module level — matches the existing
+    # convention in this file (see check_achievements at the top of the
+    # file, which IS imported at module level since it's used everywhere;
+    # this one is used in exactly one route, so it stays scoped to it).
+    # Achievement-domain logic lives in profile.py per the Phase 3 split;
+    # this just pulls in the Active Rewards + pinning data for the two new
+    # Phase 5 sections on this page.
+    from app.routes.profile import _build_account_achievement_context
+    achievement_context = _build_account_achievement_context(current_user)
 
+    return render_template(
+        'auth/account.html',
+        notification_prefs=current_prefs,
+        available_sounds=available_sounds,
+        **achievement_context
+    )
 
 @auth.route('/account/notification-prefs', methods=['POST'])
 @login_required

@@ -1,19 +1,19 @@
 ================================================================================
 VITAMIN HELIX — CHANGELOG
 ===============================================================================
-Migrations: python add_notification_link.py
-
-
-
-
+migrations/add_profile_fields.py create_tables.py, add_concept_approved.py
 ================================================================================
-v2.1 Live app updates, deliverable view & bug fixes
+v2.1 Live app updates, deliverable view & Profile Page revamp!
 ================================================================================
 New Features:
 
 - Everything in the app now updates live, no need for refreshing the page. The website updates every second.
 - Expanded profile! Add your about me, your favourite food, a picture etc. Give your profile some personality! You can click on people's names now to go to their profile!
 - Customizable notifcation sounds - added multiple notification sounds for you to select from. If you want one added, just let me know!
+- Profile page revamped! banner, profile pic, bio ready for you to enjoy!
+- Achievements - on your profile there are now achievements. Check it out, see your progress, earn bades and animated things to put on your profile. Display your top 5 to other users!
+- Deliverable View - Sort your day by deliverable deadline rather than project deadline
+- Set your default view - Make it easy to see the information you want to see when the app opens.
 
 Adjustments:
 
@@ -30,6 +30,7 @@ Bug Fixes:
 - Fixed admin being unable to add or remove accounts
 - Fixed secondary cs not being able to edit a project
 - Fixed wiki not loading unless the page is manually refreshed
+- Fixed bug where designers cant transfer ownership.
 
 
 ================================================================================

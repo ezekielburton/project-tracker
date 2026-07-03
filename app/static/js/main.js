@@ -207,8 +207,9 @@ function dismissToast(toast) {
         /* Store the callback for when the user clicks Confirm */
         _confirmCallback = onConfirm || null;
 
-        /* Show the overlay */
+        /* Show the overlay — pause live polling while waiting for user input */
         modal.classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
     };
 
     /* Wire up the buttons — runs once when the DOM is ready */
@@ -218,26 +219,31 @@ function dismissToast(toast) {
         var btnCancel = document.getElementById('confirm-modal-cancel');
         if (!modal) return;
 
+        function _closeConfirm() {
+            modal.classList.add('hidden');
+            if (window.helixPolling) window.helixPolling.resume();
+        }
+
         /* "Confirm" — save callback, close first, THEN call.
            (matches the existing approval modal pattern in CLAUDE.md) */
         btnOk.addEventListener('click', function () {
             var fn = _confirmCallback;
             _confirmCallback = null;       /* clear before calling */
-            modal.classList.add('hidden');
+            _closeConfirm();
             if (fn) fn();
         });
 
         /* "Cancel" — just close */
         btnCancel.addEventListener('click', function () {
             _confirmCallback = null;
-            modal.classList.add('hidden');
+            _closeConfirm();
         });
 
         /* Clicking the dark backdrop also cancels */
         modal.addEventListener('click', function (e) {
             if (e.target === modal) {
                 _confirmCallback = null;
-                modal.classList.add('hidden');
+                _closeConfirm();
             }
         });
     });
@@ -350,15 +356,16 @@ function buildApprovedView(containerId, projects) {
             body.appendChild(monthLabel);
 
             var wrapper = document.createElement('div');
-            wrapper.className = 'table-wrapper';
+            wrapper.className = 'table-wrapper table-wrapper--card';
 
             var table = document.createElement('table');
-            table.className = 'data-table';
+            table.className = 'data-table data-table--card-rows';
 
             // Table header
             var thead = document.createElement('thead');
             thead.innerHTML = '<tr>' +
                 '<th>Project Name</th>' +
+                '<th>Brief Date</th>' +
                 '<th>Client</th>' +
                 '<th>Brief Type</th>' +
                 '<th>CS Lead</th>' +
@@ -378,6 +385,7 @@ function buildApprovedView(containerId, projects) {
                 tr.dataset.href = p.url;
                 tr.innerHTML =
                     '<td>' + _escHtml(p.name) + '</td>' +
+                    '<td class="mono">' + _escHtml(p.briefing_date || '—') + '</td>' +
                     '<td>' + _escHtml(p.client) + '</td>' +
                     '<td>' + briefLabel + '</td>' +
                     '<td>' + _escHtml(p.cs_lead) + '</td>' +
@@ -611,15 +619,19 @@ function syncTableScrollers(viewEl) {
     var btnApprovedProjects = document.getElementById('btn-approved-projects');
     var approvedProjectsView = document.getElementById('approved-projects-view');
 
-    // Team lead + designer toggle — team view / personal view / approved projects
+    // Team lead + designer toggle — team view / personal view / deliverable view / approved projects
     const btnTeamView = document.getElementById('btn-team-view');
     const btnPersonalView = document.getElementById('btn-personal-view');
+    const btnDeliverableViewDT = document.getElementById('btn-deliverable-view');
     const teamView = document.getElementById('team-view');
     const personalView = document.getElementById('personal-view');
+    const deliverableViewDT = document.getElementById('deliverable-view');
 
     if (btnTeamView && btnPersonalView && teamView && personalView) {
         var dtAllViews = [teamView, personalView];
         var dtAllBtns = [btnTeamView, btnPersonalView];
+        if (deliverableViewDT) dtAllViews.push(deliverableViewDT);
+        if (btnDeliverableViewDT) dtAllBtns.push(btnDeliverableViewDT);
         if (approvedProjectsView) dtAllViews.push(approvedProjectsView);
         if (btnApprovedProjects) dtAllBtns.push(btnApprovedProjects);
 
@@ -632,6 +644,9 @@ function syncTableScrollers(viewEl) {
 
         btnTeamView.addEventListener('click', function () { switchDTView(btnTeamView, teamView); });
         btnPersonalView.addEventListener('click', function () { switchDTView(btnPersonalView, personalView); });
+        if (btnDeliverableViewDT && deliverableViewDT) {
+            btnDeliverableViewDT.addEventListener('click', function () { switchDTView(btnDeliverableViewDT, deliverableViewDT); });
+        }
 
         if (btnApprovedProjects && approvedProjectsView) {
             btnApprovedProjects.addEventListener('click', function () {
@@ -645,6 +660,34 @@ function syncTableScrollers(viewEl) {
                 }
             });
         }
+
+        // ── Default view persistence (designer / team lead) ──────────────
+        var DT_DEFAULT_KEY = 'helix_dt_default_view';
+        var dtViewMap = {
+            'team-view':              { btn: btnTeamView,           view: teamView },
+            'personal-view':          { btn: btnPersonalView,       view: personalView },
+            'deliverable-view':       { btn: btnDeliverableViewDT,  view: deliverableViewDT },
+            'approved-projects-view': { btn: btnApprovedProjects,   view: approvedProjectsView }
+        };
+        function updateDTDefaultBadges(activeViewId) {
+            document.querySelectorAll('.btn-set-default').forEach(function (b) {
+                b.classList.toggle('is-default', b.dataset.view === activeViewId);
+                b.textContent = b.dataset.view === activeViewId ? '✓ Default view' : 'Set as default';
+            });
+        }
+        var savedDTViewId = localStorage.getItem(DT_DEFAULT_KEY);
+        if (savedDTViewId && dtViewMap[savedDTViewId] && dtViewMap[savedDTViewId].btn && dtViewMap[savedDTViewId].view) {
+            dtViewMap[savedDTViewId].btn.click();
+        }
+        updateDTDefaultBadges(savedDTViewId);
+        document.querySelectorAll('.btn-set-default').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var viewId = this.dataset.view;
+                localStorage.setItem(DT_DEFAULT_KEY, viewId);
+                updateDTDefaultBadges(viewId);
+                showToast('Default view saved', 'success');
+            });
+        });
     }
 
     // Wire up scroll sync for each view once on page load.
@@ -673,17 +716,21 @@ function syncTableScrollers(viewEl) {
         });
     }
 
-    // CS dashboard toggle — my projects / all projects / approved projects
+    // CS dashboard toggle — my projects / all projects / approved projects / deliverable view
     const btnMyProjects = document.getElementById('btn-my-projects');
     const btnAllProjects = document.getElementById('btn-all-projects');
     const myProjectsView = document.getElementById('my-projects-view');
     const allProjectsView = document.getElementById('all-projects-view');
+    const btnDeliverableView = document.getElementById('btn-deliverable-view');
+    const deliverableView = document.getElementById('deliverable-view');
 
     if (btnMyProjects && btnAllProjects && myProjectsView && allProjectsView) {
         var csAllViews = [myProjectsView, allProjectsView];
         var csAllBtns = [btnMyProjects, btnAllProjects];
         if (approvedProjectsView) csAllViews.push(approvedProjectsView);
         if (btnApprovedProjects) csAllBtns.push(btnApprovedProjects);
+        if (deliverableView) csAllViews.push(deliverableView);
+        if (btnDeliverableView) csAllBtns.push(btnDeliverableView);
 
         function switchCSView(activeBtn, activeView) {
             csAllViews.forEach(function (v) { v.classList.add('hidden'); });
@@ -707,6 +754,48 @@ function syncTableScrollers(viewEl) {
                 }
             });
         }
+
+        if (btnDeliverableView && deliverableView) {
+            btnDeliverableView.addEventListener('click', function () {
+                switchCSView(btnDeliverableView, deliverableView);
+                syncTableScrollers(deliverableView);
+            });
+        }
+
+        // ── Default view persistence ───────────────────────────────────
+        var DEFAULT_KEY = 'helix_cs_default_view';
+
+        // Map view ID → { btn, view, onSwitch } so we can trigger lazy renders
+        var viewMap = {
+            'my-projects-view':       { btn: btnMyProjects,      view: myProjectsView },
+            'all-projects-view':      { btn: btnAllProjects,     view: allProjectsView },
+            'deliverable-view':       { btn: btnDeliverableView, view: deliverableView },
+            'approved-projects-view': { btn: btnApprovedProjects, view: approvedProjectsView }
+        };
+
+        function updateDefaultBadges(activeViewId) {
+            document.querySelectorAll('.btn-set-default').forEach(function (b) {
+                b.classList.toggle('is-default', b.dataset.view === activeViewId);
+                b.textContent = b.dataset.view === activeViewId ? '✓ Default view' : 'Set as default';
+            });
+        }
+
+        // On first load, switch to saved default if one is stored
+        var savedViewId = localStorage.getItem(DEFAULT_KEY);
+        if (savedViewId && viewMap[savedViewId] && viewMap[savedViewId].btn && viewMap[savedViewId].view) {
+            viewMap[savedViewId].btn.click();
+        }
+        updateDefaultBadges(savedViewId);
+
+        // "Set as default" buttons
+        document.querySelectorAll('.btn-set-default').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var viewId = this.dataset.view;
+                localStorage.setItem(DEFAULT_KEY, viewId);
+                updateDefaultBadges(viewId);
+                showToast('Default view saved', 'success');
+            });
+        });
     }
 
     // Wire up scroll sync for each CS view once on page load.
@@ -1708,6 +1797,7 @@ function syncTableScrollers(viewEl) {
             });
 
             document.getElementById('reviewModalOverlay').classList.remove('hidden');
+            if (window.helixPolling) window.helixPolling.pause();
         }
         
         // ── Start Project modal ───────────────────────────────────────────────────────
@@ -1719,11 +1809,13 @@ function syncTableScrollers(viewEl) {
         function openStartProjectModal(projectId) {
             _startProjectId = projectId;
             document.getElementById('start-project-modal').classList.remove('hidden');
+            if (window.helixPolling) window.helixPolling.pause();
         }
 
         function closeStartProjectModal() {
             document.getElementById('start-project-modal').classList.add('hidden');
             _startProjectId = null;
+            if (window.helixPolling) window.helixPolling.resume();
         }
 
         var startConfirmBtn = document.getElementById('start-project-confirm');
@@ -1986,6 +2078,7 @@ function syncTableScrollers(viewEl) {
         if (reviewModalClose) {
             reviewModalClose.addEventListener('click', function () {
                 document.getElementById('reviewModalOverlay').classList.add('hidden');
+                if (window.helixPolling) window.helixPolling.resume();
             });
         }
 
@@ -1993,6 +2086,7 @@ function syncTableScrollers(viewEl) {
         if (reviewModalCancel) {
             reviewModalCancel.addEventListener('click', function () {
                 document.getElementById('reviewModalOverlay').classList.add('hidden');
+                if (window.helixPolling) window.helixPolling.resume();
             });
         }
 
