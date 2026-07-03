@@ -390,7 +390,7 @@ if (archivedRemoveBtn) {
     });
 }
 
-var inboxMarkAllReadBtn = document.getElementById('inbox-mark-add-read-btn');
+var inboxMarkAllReadBtn = document.getElementById('inbox-mark-all-read-btn');
 
 if (inboxMarkAllReadBtn) {
     inboxMarkAllReadBtn.addEventListener('click', function () {
@@ -400,7 +400,7 @@ if (inboxMarkAllReadBtn) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         })
-            .then(function (r) { return r.josin(); })
+            .then(function (r) { return r.json(); })
             .then(function(data) {
                 if(!data.success) { btnDone(inboxMarkAllReadBtn); return; }
                 
@@ -411,7 +411,7 @@ if (inboxMarkAllReadBtn) {
 
                 // Remove the bell badge
                 var badge = document.getElementById('notif-unread-badge');
-                if (badge) badge.remove;
+                if (badge) badge.remove();
 
                 inboxMarkAllReadBtn.remove();
                         

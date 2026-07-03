@@ -424,7 +424,7 @@
             {% if user_notifications %}
             <div class="archived-toolbar">
                 {% if unread_count > 0 %}
-                <button type="button" id="inbox-mark-all-read-btn" class=""archived-select-btn">Mark all as read</button>
+                <button type="button" id="inbox-mark-all-read-btn" class="archived-select-btn">Mark all as read</button>
                 {% endif %}
                 <button type="button" id="inbox-archive-all-btn" class="archived-select-btn">Archive All</button>
             </div>
@@ -801,8 +801,7 @@
         const HELIX_SOUND_PREFS = {{ sound_prefs | tojson }};
     </script>
 
-    
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detail.js') }}"></script>
