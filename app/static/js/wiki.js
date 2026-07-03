@@ -3,7 +3,9 @@
 
     // ── VIEWER ────────────────────────────────────────────────────────────────────
 
-    var contentPanel = document.getElementById('wiki-content-panel');
+    // NOTE: contentPanel is NOT captured at module scope. The wiki page can be
+    // reached via SPA navigation (sidebar.js swaps #main-content), in which case
+    // the DOM is replaced but this IIFE doesn't re-run. Always look it up fresh.
 
     function toEmbedUrl(url) {
         if (!url) return null;
@@ -15,6 +17,7 @@
     }
 
     function loadArticle(articleId) {
+        var contentPanel = document.getElementById('wiki-content-panel');
         if (!contentPanel) return;
 
         document.querySelectorAll('.wiki-nav-article').forEach(function (a) {
@@ -41,16 +44,20 @@
         history.replaceState(null, '', '#article-' + articleId);
     }
 
-    // Nav click handlers
-    document.querySelectorAll('.wiki-nav-article').forEach(function (a) {
-        a.addEventListener('click', function (e) {
-            e.preventDefault();
-            loadArticle(this.dataset.articleId);
-        });
+    // Nav clicks — delegated to document so they survive SPA navigation
+    // (after sidebar.js swaps #main-content, the original <a> elements are gone
+    // but the document listener stays alive)
+    document.addEventListener('click', function (e) {
+        var a = e.target.closest('.wiki-nav-article');
+        if (!a) return;
+        e.preventDefault();
+        loadArticle(a.dataset.articleId);
     });
 
-    // Load from hash on page load, or first article
-    (function () {
+    // Auto-load: first article or hash-specified article.
+    // Named function so it can be called on both initial load AND SPA navigation.
+    function autoLoadWiki() {
+        if (!document.getElementById('wiki-content-panel')) return; // not on wiki page
         var match = window.location.hash.match(/^#article-(\d+)$/);
         if (match) {
             loadArticle(match[1]);
@@ -58,7 +65,10 @@
             var first = document.querySelector('.wiki-nav-article');
             if (first) loadArticle(first.dataset.articleId);
         }
-    }());
+    }
+
+    autoLoadWiki();
+    document.addEventListener('helix:navigated', autoLoadWiki);
 
     // ── Section publish + delete (dashboard) ─────────────────────────────────────
 
