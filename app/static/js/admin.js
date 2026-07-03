@@ -39,6 +39,8 @@
             if (sectionName === 'accounts') loadAccountsSection();
             if (sectionName === 'projects') loadProjectToolsSection();
             if (sectionName === 'activity') loadActivitySection();
+            if (sectionName === 'sounds') loadSoundsSection();
+            
         });
     });
 
@@ -437,6 +439,101 @@
                 .catch(function () { btnDone(submitBtn); });
         });
     }
+
+// ── Notification Sounds ─────────────────────────────────────────
+var addSoundToggle = document.getElementById('add-sound-toggle');
+var addSoundForm = document.getElementById('add-sound-form');
+var addSoundCancel = document.getElementById('add-sound-cancel');
+var soundsList = document.getElementById('sounds-list');
+
+if (addSoundToggle) {
+    addSoundToggle.addEventListener('click', function () {
+        addSoundForm.classList.toggle('hidden');
+    });
+}
+if (addSoundCancel) {
+    addSoundCancel.addEventListener('click', function () {
+        addSoundForm.reset();
+        addSoundForm.classList.add('hidden');
+    });
+}
+
+function loadSoundsSection() {
+    if (!soundsList) return;
+    fetch('/admin/api/sounds')
+        .then(function (r) { return r.json(); })
+        .then(function (sounds) {
+            renderSoundsList(sounds);
+        });
+}
+
+function renderSoundsList(sounds) {
+    soundsList.innerHTML = '';
+    if (sounds.length === 0) {
+        soundsList.innerHTML = '<p class="no-notifications">No sounds uploaded yet</p>';
+        return;
+    }
+    sounds.forEach(function (sound) {
+        var row = document.createElement('div');
+        row.className = 'account-user-row';
+        row.id = 'sound-' + sound.id;
+        row.innerHTML =
+            '<div class="account-user-info">' +
+            '<span class="account-user-name">' + sound.name + '</span>' +
+            '<audio controls src="' + sound.url + '" style="height:28px;"></audio>' +
+            '</div>' +
+            '<div class="account-user-actions">' +
+            '<button type="button" class="account-delete-btn" data-id="' + sound.id + '" data-name="' + sound.name + '">&times;</button>' +
+            '</div>';
+        soundsList.appendChild(row);
+
+        row.querySelector('.account-delete-btn').addEventListener('click', function () {
+            var name = this.dataset.name;
+            var id = this.dataset.id;
+            showConfirm('Delete sound "' + name + '"? Anyone using it will fall back to the default chime.', function () {
+                fetch('/admin/api/sounds/' + id, { method: 'DELETE' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.success) { document.getElementById('sound-' + id).remove(); }
+                        else { showToast(data.error || 'Could not delete sound.', 'error'); }
+                    });
+            });
+        });
+    });
+}
+
+if (addSoundForm) {
+    addSoundForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var nameInput = document.getElementById('new-sound-name');
+        var fileInput = document.getElementById('new-sound-file');
+
+        if (!nameInput.value.trim() || !fileInput.files[0]) {
+            showToast('Please provide a name and a file.', 'error');
+            return;
+        }
+
+        // multipart/form-data — FormData handles the file automatically,
+        // unlike the JSON.stringify() pattern used for other admin forms.
+        var formData = new FormData();
+        formData.append('name', nameInput.value.trim());
+        formData.append('file', fileInput.files[0]);
+
+        var submitBtn = addSoundForm.querySelector('button[type="submit"]');
+        btnLoading(submitBtn);
+
+        fetch('/admin/api/sounds', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                btnDone(submitBtn);
+                if (!data.success) { showToast(data.error || 'Upload failed.', 'error'); return; }
+                addSoundForm.reset();
+                addSoundForm.classList.add('hidden');
+                loadSoundsSection(); // simplest way to show the new row in the same sorted order as a fresh page load
+            })
+            .catch(function () { btnDone(submitBtn); });
+    });
+}
 
     // ── Project Tools ─────────────────────────────────────────────────────────
 

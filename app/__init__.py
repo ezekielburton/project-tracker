@@ -58,10 +58,12 @@ def create_app():
         return dict(calculate_hours=calculate_project_hours)
     
     @app.context_processor
+    @app.context_processor
     def inject_notifications():
-        from flask import session
+        import json
+        from flask import session, url_for
         from flask_login import current_user
-        from app.models import Notification
+        from app.models import Notification, NotificationSound
 
         if current_user.is_authenticated:
             # Use the emulated user's ID when in emulation mode
@@ -80,15 +82,37 @@ def create_app():
 
             unread_count = sum(1 for n in active_notifications if not n.is_read)
 
+            # Resolve this user's saved sound prefs (enabled/volume/chosen file)
+            # from the same notification_prefs JSON blob used on the account page.
+            # Every page needs this — not just /account — because the 30-second
+            # poll loop that actually plays the sound runs globally via base.html.
+            try:
+                prefs = json.loads(current_user.notification_prefs or '{}')
+            except (ValueError, TypeError):
+                prefs = {}
+
+            sound_url = None
+            sound = NotificationSound.query.get(prefs['sound_id']) if prefs.get('sound_id') else None
+            if sound:
+                sound_url = url_for('static', filename=f'sounds/{sound.filename}')
+
+            sound_prefs = {
+                'enabled': prefs.get('sound_enabled', True),
+                'volume': prefs.get('sound_volume', 1.0),
+                'url': sound_url,  # None = no file chosen yet, JS falls back to the synthesized chime
+            }
+
             return {
                 'user_notifications': active_notifications,
                 'archived_notifications': archived_notifications,
-                'unread_count': unread_count
+                'unread_count': unread_count,
+                'sound_prefs': sound_prefs
             }
         return {
             'user_notifications': [],
             'archived_notifications': [],
-            'unread_count': 0
+            'unread_count': 0,
+            'sound_prefs': {'enabled': True, 'volume': 1.0, 'url': None}
         }
 
     @app.context_processor

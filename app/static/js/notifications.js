@@ -5,29 +5,56 @@
 
 // ── Notification Sound (Web Audio API) ──────────────────────────────────────
 // Generates a two-tone chime without needing any audio file
-window.helixPlayNotificationSound = function () {
-    if (localStorage.getItem('helix_audio_notifications') === 'off') return;
+window.helixPlayNotificationSound = function (overrideUrl, overrideVolume) {
+    // Explicit test (account.html's "Test Sound" button) always plays, even
+    // if the on/off toggle is currently off — you're deliberately previewing
+    // it. The automatic poll-triggered call (no arguments) respects the toggle.
+    var isExplicitTest = overrideUrl !== undefined;
+    var prefs = window.HELIX_SOUND_PREFS || { enabled: true, volume: 1, url: null };
+
+    if (!isExplicitTest && prefs.enabled === false) return;
+
+    var url = isExplicitTest ? overrideUrl : prefs.url;
+    var volume = (overrideVolume !== undefined) ? overrideVolume : (prefs.volume != null ? prefs.volume : 1);
+    volume = Math.max(0, Math.min(1, volume));
+
+    if (url) {
+        // A real uploaded file has been chosen — play it directly.
+        var audio = new Audio(url);
+        audio.volume = volume;
+        audio.play().catch(function () {
+            // Autoplay can be blocked before the user has interacted with the
+            // page at all — silent fail, matches the old try/catch behavior.
+        });
+        return;
+    }
+
+    // No file chosen yet (fresh install, or "Default chime" selected) —
+    // fall back to the original synthesized two-tone chime so sound still
+    // works out of the box with zero admin setup.
     try {
         var ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-        function playTone(freq, startTime, duration) {
+        function playTone(freq, startTime, duration, peakGain) {
             var osc = ctx.createOscillator();
             var gain = ctx.createGain();
             osc.connect(gain);
             gain.connect(ctx.destination);
             osc.type = 'sine';
             osc.frequency.value = freq;
-            // Fade in then out for a soft chime feel
             gain.gain.setValueAtTime(0, startTime);
-            gain.gain.linearRampToValueAtTime(0.25, startTime + 0.05);
+            gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.05);
             gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
             osc.start(startTime);
             osc.stop(startTime + duration);
         }
 
+        // Scale the chime's peak volume by the saved slider value too —
+        // otherwise volume would only work for uploaded files, not the fallback.
+        var peak = 0.25 * volume;
         var now = ctx.currentTime;
-        playTone(880, now, 0.4);        // A5 — first note
-        playTone(1108, now + 0.18, 0.5); // C#6 — second note, overlaps slightly
+        playTone(880, now, 0.4, peak);
+        playTone(1108, now + 0.18, 0.5, peak);
     } catch (e) {
         // Audio context blocked (e.g. before first user interaction) — silent fail
     }

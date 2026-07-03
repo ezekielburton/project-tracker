@@ -29,6 +29,7 @@ Bug Fixes:
 - Fixed concept and KV approval locking project
 - Fixed admin being unable to add or remove accounts
 - Fixed secondary cs not being able to edit a project
+- Fixed wiki not loading unless the page is manually refreshed
 
 
 ================================================================================

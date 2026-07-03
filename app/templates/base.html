@@ -423,6 +423,9 @@
         <div id="notif-inbox-view" class="notification-panel-body">
             {% if user_notifications %}
             <div class="archived-toolbar">
+                {% if unread_count > 0 %}
+                <button type="button" id="inbox-mark-all-read-btn" class=""archived-select-btn">Mark all as read</button>
+                {% endif %}
                 <button type="button" id="inbox-archive-all-btn" class="archived-select-btn">Archive All</button>
             </div>
             {% for notification in user_notifications %}
@@ -511,6 +514,15 @@
                     <polyline points="10 9 9 9 8 9" />
                 </svg>
                 <span>Activity Log</span>
+            </button>
+            <button type="button" class="admin-nav-btn" data-section="sounds">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 18V5l12-2v13" />
+                    <circle cx="6" cy="18" r="3" />
+                    <circle cx="18" cy="16" r="3" />
+                </svg>
+                <span>Notification Sounds</span>
             </button>
         </div>
 
@@ -706,6 +718,18 @@
                 </div>
                 <div id="activity-log-list" class="activity-log-list"></div>
             </div>
+            <div class="admin-section hidden" id="admin-section-sounds">
+                <button type="button" class="accounts-add-btn" id="add-sound-toggle">+ Add Sound</button>
+                <form id="add-sound-form" class="add-user-form hidden">
+                    <input type="text" id="new-sound-name" class="form-input" placeholder="Sound name (e.g. Soft Chime)">
+                    <input type="file" id="new-sound-file" class="form-input" accept=".mp3,.wav,.ogg,.m4a,.aac">
+                    <div class="add-user-actions">
+                        <button type="submit" class="btn-primary">Upload</button>
+                        <button type="button" id="add-sound-cancel">Cancel</button>
+                    </div>
+                </form>
+                <div id="sounds-list" class="accounts-user-list"></div>
+            </div>
         </div>
     </aside>
     {% endif %}
@@ -770,6 +794,15 @@
     <!-- aria-live="polite" announces toasts to screen readers without interrupting.             -->
     <div id="toast-container" aria-live="polite"></div>
 
+    <script>
+        // Per-user notification sound settings (on/off, volume, chosen file) —
+        // resolved server-side once per page load in inject_notifications().
+        // Read by helixPlayNotificationSound() in notifications.js.
+        const HELIX_SOUND_PREFS = {{ sound_prefs | tojson }};
+    </script>
+
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detail.js') }}"></script>

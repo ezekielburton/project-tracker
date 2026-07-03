@@ -111,7 +111,27 @@ class DesignDirection(db.Model):
 
     def __repr__(self):
         return f'<DesignDirection {self.name}>'
+    
 
+class NotificationSound (db.Model):
+    """
+    An admin-uploaded audio file users can choose to play when a new notification arrives.
+    Files themselves alive on the disk at app/static/sounds/
+    This table only tracks metadata + which file backs each entry.
+    """
+
+    __tablename__ = 'notification_sounds'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False) # Display label
+    filename = db.Column(db.String(255), nullable=False) # Actual file on disk
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+
+    def __repr__(self):
+        return f'<NotificationSound {self.name}>'
 
 class Scope(db.Model):
     __tablename__ = 'scopes'

@@ -1,12 +1,15 @@
+import os
+import uuid
 from functools import wraps
 from datetime import timezone, timedelta
 from flask import Blueprint, jsonify, session, url_for, request
 from flask_login import login_required, current_user
+from werkzeug.utils import secure_filename
 from app import db
 from app.models import (
     User, Client, Customer, Project, ProjectFile,
     DeliverableType, DeliverableTypeDiscipline,
-    DesignType, DesignDirection, ActivityLog
+    DesignType, DesignDirection, ActivityLog, NotificationSound
 )
 from app.utils import log_activity
 from app.notifications import broadcast_update_email
@@ -79,6 +82,73 @@ def create_user():
     log_activity('user_created', f'User "{user.name}" created with role {role}', user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
     return jsonify({'success': True, 'user': {'id': user.id, 'name': user.name, 'role': user.role, 'team': user.team}})
 
+SOUND_UPLOAD_FOLDER = os.path.join('app', 'static', 'sounds')
+ALLOWED_SOUND_EXTENSIONS = {'mp3', 'wav', 'ogg', 'm4a', 'aac'}
+
+@admin_bp.route('/admin/api/sounds', methods=['GET'])
+@login_required
+@admin_required
+def list_sounds():
+    """List all admin-uploaded notification sounds, newest first."""
+    sounds = NotificationSound.query.order_by(NotificationSound.created_at.desc()).all()
+    return jsonify([{
+        'id': s.id,
+        'name': s.name,
+        'url': url_for('static', filename=f'sounds/{s.filename}'),
+        'uploaded_by': s.uploaded_by.name if s.uploaded_by else None,
+    } for s in sounds])
+
+@admin_bp.route('/admin/api/sounds', methods=['POST'])
+@login_required
+@admin_required
+def upload_sound():
+    """Upload a new notification sound file. Admin only."""
+    name = (request.form.get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'error': 'Please provide a name for this sound'}), 400
+
+    if 'file' not in request.files or request.files['file'].filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+    file = request.files['file']
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_SOUND_EXTENSIONS:
+        return jsonify({'success': False, 'error': f'File type .{ext} not allowed'}), 400
+
+    # Prefix with a short uuid so two admins uploading "chime.mp3" never collide
+    # or silently overwrite each other's file.
+    stored_filename = f'{uuid.uuid4().hex[:8]}_{secure_filename(file.filename)}'
+    os.makedirs(SOUND_UPLOAD_FOLDER, exist_ok=True)
+    file.save(os.path.join(SOUND_UPLOAD_FOLDER, stored_filename))
+
+    sound = NotificationSound(name=name, filename=stored_filename, uploaded_by_id=current_user.id)
+    db.session.add(sound)
+    db.session.commit()
+
+    log_activity('notification_sound_added', f'{current_user.name} added notification sound "{name}"',
+                 user=current_user, entity_type='notification_sound', entity_name=name, entity_id=sound.id)
+    return jsonify({'success': True, 'sound': {'id': sound.id, 'name': sound.name,
+                    'url': url_for('static', filename=f'sounds/{stored_filename}')}})
+
+
+@admin_bp.route('/admin/api/sounds/<int:sound_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_sound(sound_id):
+    """Delete a notification sound — removes the DB row and the file on disk."""
+    sound = NotificationSound.query.get_or_404(sound_id)
+    name = sound.name  # capture before delete — attributes clear post-commit
+
+    file_path = os.path.join(SOUND_UPLOAD_FOLDER, sound.filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    db.session.delete(sound)
+    db.session.commit()
+
+    log_activity('notification_sound_removed', f'{current_user.name} removed notification sound "{name}"',
+                 user=current_user, entity_type='notification_sound', entity_name=name, entity_id=sound_id)
+    return jsonify({'success': True})
 
 @admin_bp.route('/admin/api/users/<int:user_id>', methods=['PATCH'])
 @login_required

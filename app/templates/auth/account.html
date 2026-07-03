@@ -147,13 +147,25 @@
                 </div>
                 <div class="detail-field" style="align-items: center;">
                     <span class="detail-label">Notification Sound</span>
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                         <label class="toggle-switch">
                             <input type="checkbox" id="toggle-audio-notif">
                             <span class="toggle-slider"></span>
                         </label>
                         <span id="audio-notif-status" style="font-size: 0.85rem; color: var(--grey-dark);">Loading…</span>
-                        <button type="button" class="btn-secondary" id="test-sound-btn" style="font-size:0.8rem;padding:0.3rem 0.75rem;">
+                        <select id="sound-choice" class="form-select">
+                            <option value="" data-url="">Default chime</option>
+                            {% for sound in available_sounds %}
+                            <option value="{{ sound.id }}" data-url="{{ url_for('static', filename='sounds/' + sound.filename) }}">{{
+                                sound.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div style="display: flex; align-items: center; gap: 0.4rem;">
+                            <input type="range" id="sound-volume" min="0" max="100" style="width: 100px;">
+                            <span id="sound-volume-label" style="font-size: 0.8rem; color: var(--grey-dark); width: 2.5em;">100%</span>
+                        </div>
+                        <button type="button" class="btn-secondary" id="test-sound-btn"
+                            style="font-size:0.8rem;padding:0.3rem 0.75rem;">
                             Test Sound
                         </button>
                     </div>
@@ -228,9 +240,37 @@
     var ICON_ON  = '/static/images/notiftoggle2.png';
     var ICON_OFF = '/static/images/notiftoggle1.png';
 
-    // Read current preferences from localStorage (set by main.js)
-    var audioOn   = localStorage.getItem('helix_audio_notifications') !== 'off';
+    // Sound prefs (on/off, chosen sound, volume) now live server-side, in the
+    // same NOTIF_PREFS blob the email toggles above already use — so they follow
+    // the user between devices. Desktop-notification permission stays in
+    // localStorage below: it's a per-browser permission grant, which genuinely
+    // can never be synced from the server.
+    var audioOn = NOTIF_PREFS.sound_enabled !== false;
     var browserOn = localStorage.getItem('helix_browser_notifications') !== 'off';
+
+    var soundChoice = document.getElementById('sound-choice');
+    var volumeSlider = document.getElementById('sound-volume');
+    var volumeLabel = document.getElementById('sound-volume-label');
+
+    // Initialise picker + slider from saved prefs (nothing saved yet = default chime, 100%)
+    soundChoice.value = NOTIF_PREFS.sound_id || '';
+    var initialVolume = (NOTIF_PREFS.sound_volume != null) ? Math.round(NOTIF_PREFS.sound_volume * 100) : 100;
+    volumeSlider.value = initialVolume;
+    volumeLabel.textContent = initialVolume + '%';
+
+    function saveSoundPrefs() {
+        fetch('/account/sound-prefs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sound_enabled: audioOn,
+                sound_id: soundChoice.value || null,
+                sound_volume: parseInt(volumeSlider.value, 10) / 100
+            })
+        }).catch(function () {
+            showToast('Could not save sound preferences.', 'error');
+        });
+    }
 
     function getBrowserNotifLabel() {
         if (!('Notification' in window)) return 'Not supported in this browser';
@@ -240,9 +280,9 @@
 
     function syncUI() {
         var isOn = browserOn && Notification.permission === 'granted';
-        audioToggle.checked   = audioOn;
+        audioToggle.checked = audioOn;
         browserToggle.checked = isOn;
-        audioStatus.textContent   = audioOn ? 'On' : 'Off';
+        audioStatus.textContent = audioOn ? 'On' : 'Off';
         browserStatus.textContent = getBrowserNotifLabel();
         browserIcon.src = isOn ? ICON_ON : ICON_OFF;
 
@@ -255,9 +295,18 @@
 
     audioToggle.addEventListener('change', function () {
         audioOn = this.checked;
-        localStorage.setItem('helix_audio_notifications', audioOn ? 'on' : 'off');
-        audioStatus.textContent = audioOn ? 'On' : 'Off';
+        syncUI();
+        saveSoundPrefs();
     });
+
+    soundChoice.addEventListener('change', saveSoundPrefs);
+
+    // 'input' fires continuously while dragging — just update the % label live.
+    // 'change' fires once, on release — that's when we actually save.
+    volumeSlider.addEventListener('input', function () {
+        volumeLabel.textContent = this.value + '%';
+    });
+    volumeSlider.addEventListener('change', saveSoundPrefs);
 
     browserToggle.addEventListener('change', function () {
         if (this.checked) {
@@ -285,7 +334,9 @@
 
     testBtn.addEventListener('click', function () {
         if (window.helixPlayNotificationSound) {
-            window.helixPlayNotificationSound();
+            var selected = soundChoice.selectedOptions[0];
+            var url = selected ? selected.dataset.url : '';
+            window.helixPlayNotificationSound(url || undefined, parseInt(volumeSlider.value, 10) / 100);
         }
     });
 

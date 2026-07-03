@@ -3,8 +3,9 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
-from app.models import User
+from app.models import User, NotificationSound
 from app.decorators import role_required
+
 
 auth = Blueprint('auth', __name__)
 
@@ -127,13 +128,15 @@ def account():
         flash('Password updated successfully.', 'success')
         return redirect(url_for('auth.account'))
 
-    # Parse current notification prefs to pass to the template (default empty dict = all on)
+   # Parse current notification prefs to pass to the template (default empty dict = all on)
     try:
         current_prefs = json.loads(current_user.notification_prefs or '{}')
     except (ValueError, TypeError):
         current_prefs = {}
 
-    return render_template('auth/account.html', notification_prefs=current_prefs)
+    available_sounds = NotificationSound.query.order_by(NotificationSound.name).all()
+
+    return render_template('auth/account.html', notification_prefs=current_prefs, available_sounds=available_sounds)
 
 
 @auth.route('/account/notification-prefs', methods=['POST'])
@@ -176,3 +179,43 @@ def reset_password(user_id):
     db.session.commit()
     flash(f'Password for {user.name} has been reset to Vitamin2026!', 'success')
     return redirect(url_for('auth.admin_users'))
+
+@auth.route('/account/sound-prefs', methods=['POST'])
+@login_required
+def save_sound_prefs():
+    """
+    Save the user's sound-related preferences (on/off, chosen sound, volume)
+    into the same notification_prefs JSON blob used for email prefs.
+    Kept as its own route rather than folded into save_notification_prefs,
+    because that route force-casts every value to bool — fine for on/off
+    toggles, but it would corrupt a volume float or a sound_id.
+    """
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
+
+    # Read-modify-write: load whatever's already there so we don't clobber
+    # the unrelated email-toggle keys living in this same JSON column.
+    try:
+        prefs = json.loads(current_user.notification_prefs or '{}')
+    except (ValueError, TypeError):
+        prefs = {}
+
+    if 'sound_enabled' in data:
+        prefs['sound_enabled'] = bool(data['sound_enabled'])
+
+    if 'sound_volume' in data:
+        try:
+            prefs['sound_volume'] = max(0.0, min(1.0, float(data['sound_volume'])))
+        except (TypeError, ValueError):
+            pass  # ignore a malformed value rather than 500ing the request
+
+    if 'sound_id' in data:
+        sound_id = data['sound_id']
+        # Accept null (reset to default chime) or a real, still-existing sound
+        if sound_id is None or NotificationSound.query.get(sound_id):
+            prefs['sound_id'] = sound_id
+
+    current_user.notification_prefs = json.dumps(prefs)
+    db.session.commit()
+    return jsonify({'success': True})
