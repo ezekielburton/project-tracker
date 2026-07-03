@@ -363,6 +363,36 @@ if (archivedRemoveBtn) {
     });
 }
 
+var inboxMarkAllReadBtn = document.getElementById('inbox-mark-add-read-btn');
+
+if (inboxMarkAllReadBtn) {
+    inboxMarkAllReadBtn.addEventListener('click', function () {
+        btnLoading(inboxMarkAllReadBtn);
+    
+        fetch('/notifications/mark-all-read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(function (r) { return r.josin(); })
+            .then(function(data) {
+                if(!data.success) { btnDone(inboxMarkAllReadBtn); return; }
+                
+                // Every inbox item stays put, just strip the 'unread' class, so the highlight disappears.
+                document.querySelectorAll('#notif-inbox-view .notification-item.unread').forEach(function (el){
+                    el.classList.remove('unread');
+                });
+
+                // Remove the bell badge
+                var badge = document.getElementById('notif-unread-badge');
+                if (badge) badge.remove;
+
+                inboxMarkAllReadBtn.remove();
+                        
+            });
+            
+     });
+}
+
 var inboxArchiveAllBtn = document.getElementById('inbox-archive-all-btn');
 
 if (inboxArchiveAllBtn) {

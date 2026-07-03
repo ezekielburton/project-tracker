@@ -21,7 +21,7 @@
             </form>
             {% endif %}
             {% endif %}
-            {% if effective_user.role == 'admin' or project.cs_lead_id == effective_user.id %}
+            {% if effective_user.role == 'admin' or project.cs_lead_id == effective_user.id or is_secondary_cs %}
             {% if project.project_status != 'approved' %}
             <a href="{{ url_for('brief.edit_project', project_id=project.id) }}" class="btn-secondary">Edit
                 Project</a>
@@ -38,7 +38,7 @@
             {% endif %}
             <button class="btn-secondary" id="open-nas-btn"
                 data-url="{{ url_for('project_detail.get_nas_link', project_id=project.id) }}">
-                Open NAS Folder
+                Open Project Folder
             </button>
             <a href="{{ url_for('main.index') }}" class="btn-secondary sidebar-item--nav">← Back</a>
         </div>

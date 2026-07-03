@@ -10,6 +10,7 @@ from app.models import (
 )
 from app.utils import log_activity
 from app.notifications import broadcast_update_email
+from werkzeug.security import generate_password_hash
 
 DUBAI_TZ = timezone(timedelta(hours=4))
 
@@ -129,16 +130,76 @@ def admin_reset_password(user_id):
 @admin_required
 def delete_user(user_id):
     from sqlalchemy.exc import IntegrityError
+
     if user_id == current_user.id:
         return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 400
+
     user = User.query.get_or_404(user_id)
+
+    # Hard blocks — these columns are NOT NULL so we can't null them out.
+    # The admin must reassign/delete those records manually first.
+    cs_lead_count = Project.query.filter_by(cs_lead_id=user_id).count()
+    if cs_lead_count:
+        return jsonify({'success': False,
+                        'error': f'This user is the CS Lead on {cs_lead_count} project(s). '
+                                 f'Reassign those projects to another CS before deleting.'}), 400
+
+    created_count = Project.query.filter_by(created_by_id=user_id).count()
+    if created_count:
+        return jsonify({'success': False,
+                        'error': f'This user created {created_count} project(s). '
+                                 f'Delete or reassign those projects before deleting the account.'}), 400
+
+    uid = user_id
     try:
+        t = db.text
+
+        # ── Delete rows owned solely by this user ─────────────────────────────
+        db.session.execute(t('DELETE FROM notifications WHERE recipient_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM project_secondary_cs WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM project_secondary_cs_regions WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM project_designers WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM project_reviewers WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM project_approvals WHERE reviewer_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM deliverable_assignments WHERE designer_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM feature_request_upvotes WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM feature_request_comments WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM blog_comments WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM bug_report_comments WHERE user_id = :u'), {'u': uid})
+        db.session.execute(t('DELETE FROM sidebar_clicks WHERE user_id = :u'), {'u': uid})
+
+        # ── Null out nullable FK references ───────────────────────────────────
+        db.session.execute(t('UPDATE notifications SET triggered_by_id = NULL WHERE triggered_by_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE project_secondary_cs SET added_by_id = NULL WHERE added_by_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE projects SET concept_designer_id = NULL WHERE concept_designer_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE projects SET kv_designer_id = NULL WHERE kv_designer_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE projects SET lead_designer_id = NULL WHERE lead_designer_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE projects SET approved_by_id = NULL WHERE approved_by_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE project_submissions SET flagged_by_id = NULL WHERE flagged_by_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE project_submissions SET submitted_by_id = NULL WHERE submitted_by_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE project_posm_channels SET approved_by_id = NULL WHERE approved_by_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE brief_flags SET resolved_by_id = NULL WHERE resolved_by_id = :u'), {'u': uid})
+        db.session.execute(t('UPDATE activity_logs SET user_id = NULL WHERE user_id = :u'), {'u': uid})
+
         db.session.delete(user)
         db.session.commit()
         return jsonify({'success': True})
-    except IntegrityError:
+
+    except IntegrityError as exc:
         db.session.rollback()
-        return jsonify({'success': False, 'error': 'This user has linked records (projects, notifications, etc.) and cannot be deleted. Remove their data first or reassign it.'}), 400
+        # Surface which table is still holding a reference
+        msg = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
+        table = 'unknown table'
+        for t_name in ['project_files', 'project_submissions', 'project_revisions',
+                        'brief_flags', 'brief_flag_messages', 'blog_posts',
+                        'feature_requests', 'bug_reports', 'deliverable_assignments',
+                        'clients']:
+            if t_name in msg:
+                table = t_name.replace('_', ' ')
+                break
+        return jsonify({'success': False,
+                        'error': f'Could not delete — this user still has records in {table} '
+                                 f'that must be removed first.'}), 400
 
 # ── Project Tools ────────────────────────────────────────────────────────────
 

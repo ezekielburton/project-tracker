@@ -245,7 +245,7 @@
         // class is also on the notification panel in base.html, which would make
         // this condition true on every page including project detail.
         if (document.querySelector('#my-projects-view, #all-projects-view, #team-view, #personal-view')) {
-            _dashboardInterval = setInterval(pollDashboard, 30000);
+            _dashboardInterval = setInterval(pollDashboard, 1000);
         }
 
         // Detail page: identified by #section-assignments (unique to detail.html)
@@ -256,7 +256,7 @@
             // Wrap pollDetail in a closure so the projectId is captured correctly
             _detailInterval = setInterval(function () {
                 pollDetail(projectId);
-            }, 15000);
+            }, 1000);
         }
     }
 

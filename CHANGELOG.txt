@@ -11,15 +11,24 @@ v2.1 Live app updates, deliverable view & bug fixes
 ================================================================================
 New Features:
 
-- Everything in the app now updates live, no need for refreshing the page.
+- Everything in the app now updates live, no need for refreshing the page. The website updates every second.
+- Expanded profile! Add your about me, your favourite food, a picture etc. Give your profile some personality! You can click on people's names now to go to their profile!
+- Customizable notifcation sounds - added multiple notification sounds for you to select from. If you want one added, just let me know!
 
 Adjustments:
+
 - Projects now sort by deadline in order and you can choose which deadline type you want to sort by
 - Management can now be set as secondary CS
+- If a C&CM project has only concept and KV, upon approval, CS can decide to pause the projet, setting it to awaiting POSM details, or they can add POSM details right away.
+- Project dashboards now have two views: Active Projects & Approved Projects. Above the project table are multiple sorting options, so that you can customize your projects page.
+
 
 Bug Fixes:
 
 - Fixed projects getting stuck in internal review stage
+- Fixed concept and KV approval locking project
+- Fixed admin being unable to add or remove accounts
+- Fixed secondary cs not being able to edit a project
 
 
 ================================================================================

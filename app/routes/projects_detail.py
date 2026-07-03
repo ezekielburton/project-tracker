@@ -1056,8 +1056,9 @@ def add_secondary_cs(project_id):
         return jsonify({'success': False, 'error': 'The CS lead is already the primary CS on this project.'}), 400
 
     user = User.query.get_or_404(user_id)
-    if user.role != 'cs':
-        return jsonify({'success': False, 'error': 'Only CS members can be added as secondary CS.'}), 400
+    # Allow the same three roles that populate the picker provides.
+    if user.role not in ('cs', 'admin', 'management'):
+        return jsonify({'success': False, 'error': 'Only CS & Management members can be added as secondary CS.'}), 400
 
     if ProjectSecondaryCS.query.filter_by(project_id=project_id, user_id=user_id).first():
         return jsonify({'success': False, 'error': 'Already a secondary CS on this project.'}), 400

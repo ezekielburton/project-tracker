@@ -79,7 +79,15 @@ def create():
 def edit_project(project_id):
     project = Project.query.get_or_404(project_id)
 
-    if current_user.role == 'cs' and project.cs_lead_id != current_user.id:
+    # Secondary CS get the same edit rights as the CS lead — imported locally
+    # here (not at module top) to avoid circular imports, matching the pattern
+    # used for activity logging elsewhere in the app.
+    from app.models import ProjectSecondaryCS
+    is_secondary_cs = ProjectSecondaryCS.query.filter_by(
+        project_id=project_id, user_id=current_user.id
+    ).first() is not None
+
+    if current_user.role == 'cs' and project.cs_lead_id != current_user.id and not is_secondary_cs:
         abort(403)
 
     cs_users = User.query.filter(User.role.in_(['cs', 'admin', 'management'])).order_by(User.name).all()
@@ -159,7 +167,12 @@ def edit_project(project_id):
 def update_project(project_id):
     project = Project.query.get_or_404(project_id)
 
-    if current_user.role == 'cs' and project.cs_lead_id != current_user.id:
+    from app.models import ProjectSecondaryCS
+    is_secondary_cs = ProjectSecondaryCS.query.filter_by(
+        project_id=project_id, user_id=current_user.id
+    ).first() is not None
+
+    if current_user.role == 'cs' and project.cs_lead_id != current_user.id and not is_secondary_cs:
         abort(403)
 
     try:
