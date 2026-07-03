@@ -183,7 +183,7 @@
                                     endif %}>{{ dt.name }}</option>
                                 {% endfor %}
                             </select>
-                            {% if effective_user.role in ['admin', 'cs'] %}
+                            {% if effective_user.role in ['admin', 'cs', 'management'] %}
                             <button type="button" class="btn btn--tangerine btn--sm" onclick="openQuickAdd('design-type')">+ Add New Type</button>
                             {% endif %}
                         </div>
