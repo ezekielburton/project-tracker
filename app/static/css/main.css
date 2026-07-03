@@ -1207,7 +1207,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: clip; /* clip, not hidden — avoids creating a sticky-containing block so thead th can stick to the page scroll */
     -webkit-overflow-scrolling: touch;
 }
 
@@ -1261,7 +1261,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 
 .data-table thead {
     background-color: var(--sandstone);
-    border-bottom: 2px solid var(--grey-light);
+    /* border-bottom moved to thead th so it sticks with the cells */
 }
 
 .data-table thead th {
@@ -1273,6 +1273,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     padding: 0.85rem 1.25rem;
     text-align: left;
     white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background-color: var(--sandstone);
+    border-bottom: 2px solid var(--grey-light);
 }
 
 .data-table tbody tr {
@@ -1333,8 +1338,8 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     z-index: 2;
 }
 
-/* Header cells sit above body cells during vertical scroll */
-.data-table thead th:first-child { z-index: 3; background-color: var(--sandstone); }
+/* Corner cell: sticky left + sticky top — must sit above both (z-index 4 for header row, 2 for sticky columns) */
+.data-table thead th:first-child { z-index: 5; background-color: var(--sandstone); }
 .data-table tbody td:first-child { background-color: var(--white); }
 .data-table tbody tr.overdue td:first-child { background-color: #F9ECED; }
 .data-table tbody tr:hover td:first-child { background-color: #FBF8F4; }
@@ -1356,7 +1361,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
 }
 
-.data-table--with-chevron thead th:nth-child(2) { z-index: 3; background-color: var(--sandstone); }
+.data-table--with-chevron thead th:nth-child(2) { z-index: 5; background-color: var(--sandstone); }
 .data-table--with-chevron tbody td:nth-child(2) { background-color: var(--white); }
 .data-table--with-chevron tbody tr.overdue td:nth-child(2) { background-color: #F9ECED; }
 .data-table--with-chevron tbody tr:hover td:nth-child(2) { background-color: #FBF8F4; }
@@ -3599,6 +3604,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 .data-table--card-rows thead th:first-child {
     background-color: #F3B297 !important;
     color: var(--white);
+    border-bottom: none; /* card-rows have no header separator line */
 }
 
 /* Each cell carries the card shadow, no borders */
