@@ -35,6 +35,7 @@ class User(db.Model, UserMixin):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_conditional_reviewer = db.Column(db.Boolean, default=False)
     team = db.Column(db.String(20), nullable=True)
+    nas_url = db.Column(db.String(500), nullable=True)
 
     # JSON string storing per-type email notification opt-outs.
     # Format: '{"new_project": false, "revision_flag": true}'
@@ -47,6 +48,7 @@ class User(db.Model, UserMixin):
     banner_filename = db.Column(db.String(255), nullable=True)   # app/static/banners/<filename>
     favorite_food = db.Column(db.String(100), nullable=True)
     birthday = db.Column(db.Date, nullable=True)
+    wizard_completed = db.Column(db.Boolean, default=False, nullable=False)
 
     def set_password(self, password):
         from werkzeug.security import generate_password_hash

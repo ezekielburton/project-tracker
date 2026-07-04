@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_mail import Mail
 from config import Config
+from datetime import timezone, timedelta, datetime
 import os
 
 db = SQLAlchemy()
@@ -39,6 +40,7 @@ def create_app():
     from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
     from app.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
     from app.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel (Phase 7)
+    from app.routes.wizard import wizard_bp
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -54,6 +56,8 @@ def create_app():
     app.register_blueprint(api_bp)  # /api/* poll routes
     app.register_blueprint(profile_bp)
     app.register_blueprint(admin_achievements_bp)
+    app.register_blueprint(wizard_bp)
+   
 
     from app.utils import calculate_project_hours
     
@@ -186,8 +190,18 @@ def create_app():
            'is_emulating': False
        }
     
-    from datetime import timezone, timedelta
 
+    WIZARD_LAUNCH_DATE = datetime (2026, 7, 5)
+
+    @app.context_processor
+    def inject_wizard_state():
+        if current_user.is_authenticated and not current_user.wizard_completed:
+            return {
+                'show_wizard': True,
+                'show_name_step': current_user.created_at >= WIZARD_LAUNCH_DATE
+            }
+        return {'show_wizard': False, 'show_name_step': False}
+    
     def dubai_time(dt):
         if dt is None:
             return '_'

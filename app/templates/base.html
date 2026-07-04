@@ -15,6 +15,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/achievements.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}">
 </head>
 
 {# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}
@@ -88,7 +89,7 @@
                             </a>
 
                             {# File Storage — external link, opens NAS in new tab #}
-                            <a href="http://quickconnect.to/vitaminNAS26/files" target="_blank"
+                            <a href="{{ current_user.nas_url or 'http://quickconnect.to/vitaminNAS26/files' }}" target="_blank"
                                 class="sidebar-item sidebar-item--external" data-link="file-storage"
                                 title="File Storage">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
@@ -932,6 +933,84 @@
         <p>Vitamin-E &copy; 2026 - v2.0</p>
     </footer>
 
+    {% if show_wizard %}
+    <div id="wizard-overlay" class="wizard-overlay" data-show-name-step="{{ 'true' if show_name_step else 'false' }}">
+        <div class="wizard-card">
+    
+            <div class="wizard-steps-indicator">
+                <span class="wizard-dot" data-step="1"></span>
+                <span class="wizard-dot" data-step="2"></span>
+                <span class="wizard-dot" data-step="3"></span>
+            </div>
+    
+            <div class="wizard-step hidden" data-wizard-step="1">
+                <h2>Welcome — let's get you set up</h2>
+                <div class="form-group">
+                    <label for="wizard-name">Display Name</label>
+                    <input type="text" id="wizard-name" class="form-input" value="{{ current_user.name }}">
+                </div>
+                <div class="form-group">
+                    <label for="wizard-password">New Password (optional)</label>
+                    <input type="password" id="wizard-password" class="form-input" autocomplete="new-password"
+                        placeholder="Leave blank to keep your current password">
+                </div>
+                <div class="form-group">
+                    <label for="wizard-password-confirm">Confirm New Password</label>
+                    <input type="password" id="wizard-password" class="form-input" autocomplete="new-password"
+                        placeholder="Leave blank to keep your current password">
+                </div>
+                <p id="wizard-password-error" class="wizard-error hidden">Passwords do not match.</p>
+            </div>
+    
+            <div class="wizard-step hidden" data-wizard-step="2">
+                <h2>Tell us a bit about yourself</h2>
+                <div class="form-group">
+                    <label for="wizard-birthday">Date of Birth (optional)</label>
+                    <input type="date" id="wizard-birthday" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="wizard-food">Favourite Food (optional)</label>
+                    <input type="text" id="wizard-food" class="form-input" placeholder="e.g. Shawarma">
+                </div>
+            </div>
+    
+            <div class="wizard-step hidden" data-wizard-step="3">
+                <h2>Notification Preferences</h2>
+                <div class="detail-fields">
+                    <div class="detail-field" style="align-items: center;">
+                        <span class="detail-label">Email Notifications</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="wizard-email-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="detail-field" style="align-items: center;">
+                        <span class="detail-label">In-App Notification Sound</span>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="wizard-sound-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <input type="range" id="wizard-sound-volume" min="0" max="100" style="width: 100px;">
+                                <span id="wizard-sound-volume-label"
+                                    style="font-size: 0.8rem; color: var(--grey-dark); width: 2.5em;">100%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    
+            <div class="wizard-actions">
+                <button type="button" class="btn-secondary hidden" id="wizard-back-btn">Back</button>
+                <button type="button" class="btn-primary" id="wizard-next-btn">Next</button>
+                <button type="button" class="btn-primary hidden" id="wizard-finish-btn">Finish</button>
+            </div>
+    
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ===== Confirm Modal ===== -->
     <!-- Single reusable overlay for all confirmation dialogs.                     -->
     <!-- JS shows it via showConfirm(message, onConfirm) defined in main.js.      -->
@@ -976,6 +1055,7 @@
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}
     <script src="{{ url_for('static', filename='js/polling.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/wizard.js') }}"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     {% endif %}
 
