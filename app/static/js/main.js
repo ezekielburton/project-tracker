@@ -176,6 +176,43 @@ function dismissToast(toast) {
     }, { once: true });
 }
 
+// ── Achievement Toast ───────────────────────────────────────────────────────
+// Displays a special gold trophy toast in #achievement-toast-container,
+// which sits ABOVE the regular #toast-container in the layout.
+function showAchievementToast(message) {
+    var container = document.getElementById('achievement-toast-container');
+    if (!container) return;
+
+    var toast = document.createElement('div');
+    toast.className = 'achievement-toast';
+    toast.innerHTML =
+        '<span class="achievement-toast__icon">🏆</span>' +
+        '<div class="achievement-toast__body">' +
+            '<strong class="achievement-toast__label">Achievement Unlocked</strong>' +
+            '<span class="achievement-toast__msg">' + _escHtml(message) + '</span>' +
+        '</div>' +
+        '<button class="achievement-toast__close" aria-label="Dismiss">&times;</button>';
+
+    toast.querySelector('.achievement-toast__close').addEventListener('click', function () {
+        dismissAchievementToast(toast);
+    });
+
+    container.appendChild(toast);
+
+    var timer = setTimeout(function () { dismissAchievementToast(toast); }, 7000);
+    toast.querySelector('.achievement-toast__close').addEventListener('click', function () {
+        clearTimeout(timer);
+    }, { once: true });
+}
+
+function dismissAchievementToast(toast) {
+    if (toast.classList.contains('achievement-toast--out')) return;
+    toast.classList.add('achievement-toast--out');
+    toast.addEventListener('animationend', function () {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, { once: true });
+}
+
 /* ==========================================================================
    CONFIRM MODAL SYSTEM
    --------------------------------------------------------------------------

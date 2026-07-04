@@ -1427,6 +1427,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.35rem;
     font-family: var(--font-mono);
     font-size: 0.68rem;
     letter-spacing: 0.06em;
@@ -1435,7 +1436,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     border-radius: var(--radius);
     white-space: nowrap;
     margin-bottom:0.25rem;
-    
+
 }
 
 .team-3d {
@@ -4891,6 +4892,89 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     to   { opacity: 0; transform: translateX(1rem); }
 }
 
+/* ── Achievement Toast ──────────────────────────────────────────────────────
+   Separate container sits above the regular toast container.
+   Styled in gold/tangerine to feel distinct and celebratory.
+   ─────────────────────────────────────────────────────────────────────────── */
+#achievement-toast-container {
+    position: fixed;
+    bottom: 5.5rem;   /* sits above #toast-container (1.5rem + toasts + gap) */
+    right: 1.5rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    pointer-events: none;
+}
+
+.achievement-toast {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: linear-gradient(135deg, #fffbea 0%, #fff8e0 100%);
+    border: 1.5px solid var(--canary);
+    border-left: 4px solid var(--tangerine);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 20px rgba(242, 127, 85, 0.2);
+    padding: 0.85rem 1rem 0.85rem 1rem;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--black);
+    min-width: 280px;
+    max-width: 380px;
+    pointer-events: all;
+    animation: toast-in 0.3s ease forwards;
+}
+
+.achievement-toast__icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.achievement-toast__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.achievement-toast__label {
+    font-family: var(--font-heading);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--tangerine);
+}
+
+.achievement-toast__msg {
+    font-size: 0.9rem;
+    color: var(--black);
+    line-height: 1.3;
+}
+
+.achievement-toast__close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--tangerine);
+    padding: 0 0.1rem;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.achievement-toast__close:hover {
+    opacity: 1;
+}
+
+.achievement-toast--out {
+    animation: toast-out 0.25s ease forwards;
+}
+
 /*============================================================
   SECTION — CONFIRM MODAL
   Single reusable modal for all "are you sure?" actions.
@@ -5091,11 +5175,25 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 /* Quick-add modal */
 .modal-box {
-    background: var(--surface);
+    /* --surface is undefined in :root (per CLAUDE.md) — resolves to
+       transparent, letting .modal-overlay's translucent sandstone tint
+       show through instead of a solid white popup. --white is the
+       actual solid background token. */
+    background: var(--white);
     border-radius: var(--radius);
     padding: 1.5rem;
     min-width: 320px;
     max-width: 420px;
+    /* Some forms using this shared modal (e.g. the Achievement admin
+       add/edit popup) are taller than the viewport on smaller screens.
+       Without this, .modal-overlay's align-items:center centers a modal
+       that overflows top and bottom with no way to reach the cut-off
+       parts — there's no scroll container anywhere in the stack.
+       max-height + overflow-y here turns the modal itself into that
+       scroll container. Harmless for shorter modals since max-height
+       only kicks in once content actually exceeds it. */
+    max-height: 85vh;
+    overflow-y: auto;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
 }
 
@@ -5672,4 +5770,77 @@ select.s-awaiting_posm_details {
 .approved-filter-bar .form-input {
     flex: 1;
     min-width: 140px;
+}
+
+/* ── Clickable user avatars with optional achievement badge overlay ─────
+   Used via the user_avatar() macro in _macros.html — topbar, comment
+   threads, and (at xs size, no badge) dashboard/table designer pills. */
+.user-avatar-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    text-decoration: none;
+    flex-shrink: 0;
+    background: var(--tangerine);
+    color: var(--white);
+    overflow: visible;
+    /* the badge overlay intentionally pokes outside this circle */
+}
+
+.user-avatar-link.user-avatar--sm {
+    width: 32px;
+    height: 32px;
+}
+
+.user-avatar-link.user-avatar--xs {
+    width: 18px;
+    height: 18px;
+}
+
+.user-avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+.user-avatar-initials {
+    font-family: var(--font-headline);
+    line-height: 1;
+}
+
+.user-avatar--sm .user-avatar-initials {
+    font-size: 0.9rem;
+}
+
+.user-avatar--xs .user-avatar-initials {
+    font-size: 0.55rem;
+}
+
+.user-avatar-badge {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--white);
+    object-fit: contain;
+    background: var(--white);
+}
+
+/* CS Lead table cells (cs.html, team_lead.html) — stacks avatar above
+   name/secondary-CS line instead of the default inline layout, and
+   centers the whole group in the column. Kept as a standalone class
+   (rather than a table-wide rule) since other columns in these same
+   tables — e.g. assigned designers — intentionally stay inline. */
+.cs-lead-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.25rem;
 }

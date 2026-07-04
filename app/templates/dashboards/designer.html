@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_macros.html' import user_avatar %}
 
 {% block title %}Projects — Vitamin-E{% endblock %}
 
@@ -94,7 +95,7 @@
                             <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
                             <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if project.execution_date else '—' }}</td>
                             <td>
-                                {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'xs') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                 {% if project.secondary_cs_assignments %}
                                 <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
                                     {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not loop.last
@@ -103,15 +104,16 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% set assigned_names = [] %}
+                                {% set has_assignment = [] %}
                                 {% for a in project.assigned_designers %}
                                 {% if a.team == effective_user.team %}
-                                {% if assigned_names.append(a.designer.name) %}{% endif %}
+                                {% if has_assignment.append(1) %}{% endif %}
+                                <span class="team-tag team-{{ a.team|lower }}">
+                                    {{ user_avatar(a.designer, 'xs') }} {{ a.designer.name }}
+                                </span>
                                 {% endif %}
                                 {% endfor %}
-                                {% if assigned_names %}
-                                {{ assigned_names | join(', ') }}
-                                {% else %}
+                                {% if not has_assignment %}
                                 <span class="badge badge-rose">Pending</span>
                                 {% endif %}
                             </td>
@@ -165,7 +167,7 @@
                                 <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
                                 <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if project.execution_date else '—' }}</td>
                                 <td>
-                                    {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                    {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'xs') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                     {% if project.secondary_cs_assignments %}
                                     <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
                                         {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not
@@ -174,15 +176,16 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% set assigned_names = [] %}
+                                    {% set has_assignment = [] %}
                                     {% for a in project.assigned_designers %}
                                     {% if a.team == effective_user.team %}
-                                    {% if assigned_names.append(a.designer.name) %}{% endif %}
+                                    {% if has_assignment.append(1) %}{% endif %}
+                                    <span class="team-tag team-{{ a.team|lower }}">
+                                        {{ user_avatar(a.designer, 'xs') }} {{ a.designer.name }}
+                                    </span>
                                     {% endif %}
                                     {% endfor %}
-                                    {% if assigned_names %}
-                                    {{ assigned_names | join(', ') }}
-                                    {% else %}
+                                    {% if not has_assignment %}
                                     <span class="badge badge-rose">Pending</span>
                                     {% endif %}
                                 </td>
@@ -280,7 +283,7 @@
                             <td><span class="status-badge s-{{ project.project_status }}"
                                       data-status="{{ project.project_status }}">{{ project.project_status | replace('_', ' ') | title }}</span></td>
                             <td>
-                                {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'xs') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                 {% if project.secondary_cs_assignments %}
                                 <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
                                     {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not loop.last
@@ -290,9 +293,9 @@
                             </td>
                             <td>
                                 {% for assignment in project.assigned_designers %}
-                                {% if assignment.user_id == effective_user.id %}
-                                <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.team }}</span>
-                                {% endif %}
+                                <span class="team-tag team-{{ assignment.team|lower }}">
+                                    {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
+                                </span>
                                 {% endfor %}
                             </td>
                             <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
@@ -342,7 +345,7 @@
                                 <td><span class="status-badge s-{{ project.project_status }}"
                                           data-status="{{ project.project_status }}">{{ project.project_status | replace('_', ' ') | title }}</span></td>
                                 <td>
-                                    {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                    {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'xs') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                     {% if project.secondary_cs_assignments %}
                                     <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
                                         {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not
@@ -352,9 +355,9 @@
                                 </td>
                                 <td>
                                     {% for assignment in project.assigned_designers %}
-                                    {% if assignment.user_id == effective_user.id %}
-                                    <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.team }}</span>
-                                    {% endif %}
+                                    <span class="team-tag team-{{ assignment.team|lower }}">
+                                        {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
+                                    </span>
                                     {% endfor %}
                                 </td>
                                 <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
@@ -404,7 +407,7 @@
                     <td class="mono">{{ _dl_date.strftime('%d %b %Y') if _dl_date else '—' }}</td>
                     <td class="mono">{{ _dl_time.strftime('%H:%M') if _dl_time else '—' }}</td>
                     <td><span class="status-badge s-{{ d.status }}">{{ d.status | replace('_', ' ') | title }}</span></td>
-                    <td>{{ d.project.cs_lead.name if d.project.cs_lead else '—' }}</td>
+                    <td>{% if d.project.cs_lead %}{{ user_avatar(d.project.cs_lead, 'xs') }} {{ d.project.cs_lead.name }}{% else %}—{% endif %}</td>
                     <td><a href="{{ url_for('project_detail.detail', project_id=d.project_id) }}" class="btn btn--secondary sidebar-item--nav">Go to Project</a></td>
                 </tr>
                 {% endfor %}

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, request, jsonify, session, url_for
+from flask import Blueprint, request, jsonify, session, url_for, redirect, abort, flash
 from flask_login import login_required, current_user
 from app import db
 from app.models import (Project, User, ProjectCustomer, Deliverable,
@@ -303,3 +303,49 @@ def posm_prompt_response(project_id):
         notify_of_project_approved(project, triggered_by=current_user)
         check_achievements(current_user, 'project_approved')
         return jsonify({'success': True})
+
+
+@approval_bp.route('/projects/<int:project_id>/resume-posm', methods=['POST'])
+@login_required
+def resume_posm_project(project_id):
+    """
+    Designers click this once CS has added POSM customer/region details to a
+    project that was paused via the 'Pause' choice in the C&KV-only approval
+    prompt (project_status == 'awaiting_posm_details'). update_project() (in
+    projects_brief.py) is what notifies designers that details were added —
+    this route is the "I've seen it, resuming" action they take in response
+    to that notification, per CS's own request that resuming be a deliberate
+    designer action rather than automatic.
+
+    Restricted to the project's assigned designers plus admin — this is a
+    designer-initiated action, not a CS one, so it deliberately does NOT use
+    the @role_required('admin', 'cs', 'management') decorator every other
+    route in this file uses.
+
+    Plain form POST + redirect (not JSON/fetch) to match the existing
+    toggle_hold route's pattern, which the detail page button is modeled on.
+    """
+    project = Project.query.get_or_404(project_id)
+
+    is_assigned_designer = any(a.user_id == current_user.id for a in project.assigned_designers)
+    if current_user.role != 'admin' and not is_assigned_designer:
+        abort(403)
+
+    if project.project_status != 'awaiting_posm_details':
+        flash('Project is not awaiting POSM details.', 'error')
+        return redirect(url_for('project_detail.detail', project_id=project_id))
+
+    project.project_status = 'in_progress'
+
+    # Emulation-aware actor, per CLAUDE.md pattern
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    log_activity(
+        'posm_resumed',
+        f'"{project.name}" resumed by {actor.name} — back to In Progress with POSM details added',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
+    )
+    db.session.commit()
+    flash('Project resumed — back to In Progress.', 'success')
+    return redirect(url_for('project_detail.detail', project_id=project_id))

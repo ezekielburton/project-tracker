@@ -3,6 +3,20 @@
    the tab toggle, tile rows, individual tiles, the show more/less button,
    and the expandable category checklist with progress bars. */
 
+/* ── Unlock count tag (next to "Achievements" heading) ───────────────── */
+.achievement-unlock-count {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--grey-dark);
+    background: var(--sandstone);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 /* ── Recent / Pinned tabs ─────────────────────────────────────────────── */
 .achievement-tabs {
     display: flex;
@@ -24,6 +38,7 @@
     color: var(--grey-dark);
     cursor: pointer;
     transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+    margin-left:0.5rem;
 }
 
 .achievement-tab-btn.active {
@@ -37,6 +52,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.85rem;
+    margin-top: 1rem;
 }
 
 .achievement-tile {
@@ -260,4 +276,312 @@
 /* SortableJS applies this class to the element being dragged */
 .achievement-pin-item.sortable-ghost {
     opacity: 0.4;
+}
+
+/* ── Admin achievement management panel (Phase 7) ────────────────────────
+   Sub-tabs reuse the exact .pt-tabs/.pt-tab-btn visual treatment from the
+   Project Tools admin section, just under an ach- prefix so the two
+   sections' JS click handlers (each scoped by their own class name) never
+   collide even though they render identically. */
+.ach-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 0.5rem;
+}
+
+.ach-tab-btn {
+    background: none;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--grey-mid);
+    padding: 0.3rem 0.7rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.ach-tab-btn:hover {
+    background: var(--grey-light);
+    color: var(--text-primary);
+}
+
+.ach-tab-btn.active {
+    background: var(--tangerine);
+    color: var(--sandstone);
+}
+
+.ach-panel.hidden {
+    display: none;
+}
+
+/* Category accordion cards */
+.ach-category-card {
+    background: var(--white);
+    border: 1px solid var(--sandstone);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.ach-category-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.85rem;
+    background: color-mix(in srgb, var(--sandstone) 40%, white);
+}
+
+.ach-category-drag-handle,
+.ach-drag-handle {
+    cursor: grab;
+    color: var(--grey-mid);
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.ach-category-name {
+    flex: 1;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.ach-category-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--grey-dark);
+}
+
+.ach-category-body {
+    padding: 0.75rem 0.85rem;
+}
+
+.ach-category-body.hidden {
+    display: none;
+}
+
+/* Individual achievement rows within a category */
+.ach-achievement-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+
+.ach-achievement-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--sandstone);
+    border-radius: 6px;
+    background: var(--white);
+}
+
+.ach-achievement-badge-thumb {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.ach-achievement-badge-thumb--empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.ach-achievement-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ach-achievement-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.ach-achievement-meta {
+    font-size: 0.72rem;
+    color: var(--grey-dark);
+}
+
+/* Border preview swatch on the Borders tab — applies the admin-typed
+   css_class to a real element so a typo (class that doesn't exist in this
+   file) is visible immediately as a plain grey box, not discovered later
+   when a user tries to select it as their active border. */
+.ach-border-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--sandstone);
+    flex-shrink: 0;
+}
+
+/* ── Profile page: edit achievements button ────────────────────────────── */
+.profile-edit-ach-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--grey-dark);
+    padding: 0.1rem 0.3rem;
+    border-radius: var(--radius);
+    margin-left: auto;   /* pushes to the right inside the flex section-header */
+    transition: color 0.15s, background 0.15s;
+}
+.profile-edit-ach-btn:hover {
+    color: var(--tangerine);
+    background: var(--sandstone);
+}
+
+/* ── Customize achievements modal ──────────────────────────────────────── */
+.achievement-customize-box {
+    width: min(560px, 92vw);
+    max-height: 80vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.achievement-customize-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.achievement-customize-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.achievement-customize-section-header strong {
+    font-family: var(--font-heading);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--black);
+}
+
+.achievement-customize-help {
+    font-size: 0.78rem;
+    color: var(--grey-dark);
+}
+
+/* ── Badge picker grid ─────────────────────────────────────────────────── */
+.badge-picker-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.badge-picker-item {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius);
+    border: 2px solid var(--grey-light);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: var(--sandstone);
+}
+.badge-picker-item:hover {
+    border-color: var(--tangerine);
+}
+.badge-picker-item--selected {
+    border-color: var(--tangerine);
+    box-shadow: 0 0 0 3px rgba(242, 127, 85, 0.25);
+}
+.badge-picker-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+.badge-picker-none {
+    font-size: 1.2rem;
+    color: var(--grey-dark);
+    line-height: 1;
+}
+
+/* ── Pin picker list ───────────────────────────────────────────────────── */
+.pin-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.pin-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: var(--radius);
+    transition: background 0.12s;
+}
+.pin-picker-row:hover {
+    background: var(--sandstone);
+}
+
+.pin-picker-badge {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    flex-shrink: 0;
+    font-size: 1.2rem;   /* for the fallback emoji */
+    line-height: 1;
+}
+
+.pin-picker-name {
+    flex: 1;
+    font-size: 0.88rem;
+    color: var(--black);
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pin-toggle-btn {
+    flex-shrink: 0;
+    background: none;
+    border: 1px solid var(--grey-light);
+    border-radius: var(--radius);
+    padding: 0.2rem 0.55rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    color: var(--grey-dark);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.pin-toggle-btn:hover {
+    border-color: var(--tangerine);
+    color: var(--tangerine);
+}
+.pin-toggle-btn--active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
+.pin-toggle-btn--active:hover {
+    background: #e06b3f;
+    border-color: #e06b3f;
+    color: var(--white);
 }

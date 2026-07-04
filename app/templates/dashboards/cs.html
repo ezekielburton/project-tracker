@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_macros.html' import user_avatar %}
 
 {% block title %}Projects — Vitamin-E{% endblock %}
 
@@ -78,18 +79,21 @@
                             </td>
                             <td>
                                 {% for assignment in project.assigned_designers %}
-                                <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.designer.name
-                                    }}</span>
+                                <span class="team-tag team-{{ assignment.team|lower }}">
+                                    {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
+                                </span>
                                 {% endfor %}
                             </td>
                             <td>
-                                {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                <div class="cs-lead-stack">
+                                {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'sm') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                 {% if project.secondary_cs_assignments %}
-                                <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
+                                <div style="font-size: 0.78rem; color: var(--grey-dark);">
                                     {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not loop.last
                                     %}, {% endif %}{% endfor %}
                                 </div>
                                 {% endif %}
+                                </div>
                             </td>
                             <td>
                                 {# Status is read-only for CS — shown as a static label, not an editable dropdown #}
@@ -169,18 +173,21 @@
                                 </td>
                                 <td>
                                     {% for assignment in project.assigned_designers %}
-                                    <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.designer.name
-                                        }}</span>
+                                    <span class="team-tag team-{{ assignment.team|lower }}">
+                                        {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
+                                    </span>
                                     {% endfor %}
                                 </td>
                                 <td>
-                                    {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                    <div class="cs-lead-stack">
+                                    {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'sm') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                     {% if project.secondary_cs_assignments %}
-                                    <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
+                                    <div style="font-size: 0.78rem; color: var(--grey-dark);">
                                         {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not
                                         loop.last %}, {% endif %}{% endfor %}
                                     </div>
                                     {% endif %}
+                                    </div>
                                 </td>
                                 <td>
                                     {# Status is read-only for CS — shown as a static label, not an editable dropdown #}
@@ -275,18 +282,21 @@
                             </td>
                             <td>
                                 {% for assignment in project.assigned_designers %}
-                                <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.designer.name
-                                    }}</span>
+                                <span class="team-tag team-{{ assignment.team|lower }}">
+                                    {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
+                                </span>
                                 {% endfor %}
                             </td>
                             <td>
-                                {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                <div class="cs-lead-stack">
+                                {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'sm') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                 {% if project.secondary_cs_assignments %}
-                                <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
+                                <div style="font-size: 0.78rem; color: var(--grey-dark);">
                                     {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not loop.last %},
                                     {% endif %}{% endfor %}
                                 </div>
                                 {% endif %}
+                                </div>
                             </td>
                             <td>
                                 {# data-status: holds the raw value so polling.js can compare without parsing the text #}
@@ -370,18 +380,21 @@
                                 </td>
                                 <td>
                                     {% for assignment in project.assigned_designers %}
-                                    <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.designer.name
-                                        }}</span>
+                                    <span class="team-tag team-{{ assignment.team|lower }}">
+                                        {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
+                                    </span>
                                     {% endfor %}
                                 </td>
                                 <td>
-                                    {{ project.cs_lead.name if project.cs_lead else '—' }}
+                                    <div class="cs-lead-stack">
+                                    {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'sm') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                     {% if project.secondary_cs_assignments %}
-                                    <div style="font-size: 0.78rem; color: var(--grey-dark); margin-top: 0.15rem;">
+                                    <div style="font-size: 0.78rem; color: var(--grey-dark);">
                                         {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not loop.last
                                         %}, {% endif %}{% endfor %}
                                     </div>
                                     {% endif %}
+                                    </div>
                                 </td>
                                 <td>
                                     {# data-status: holds the raw value so polling.js can compare without parsing the text #}
@@ -449,10 +462,16 @@
                         </td>
                         <td>{{ 'C&CM' if d.project.brief_type == 'ccm' else 'Standard' }}</td>
                         <td class="mono">{{ d.project.briefing_date.strftime('%d %b %Y') if d.project.briefing_date else '—' }}</td>
-                        <td>{{ d.project.cs_lead.name if d.project.cs_lead else '—' }}</td>
+                        <td>
+                            <div class="cs-lead-stack">
+                            {% if d.project.cs_lead %}{{ user_avatar(d.project.cs_lead, 'sm') }} {{ d.project.cs_lead.name }}{% else %}—{% endif %}
+                            </div>
+                        </td>
                         <td>
                             {% for assignment in d.project.assigned_designers %}
-                            <span class="team-tag team-{{ assignment.team|lower }}">{{ assignment.designer.name }}</span>
+                            <span class="team-tag team-{{ assignment.team|lower }}">
+                                {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
+                            </span>
                             {% endfor %}
                         </td>
                         <td>

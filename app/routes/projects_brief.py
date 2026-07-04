@@ -175,6 +175,13 @@ def update_project(project_id):
     if current_user.role == 'cs' and project.cs_lead_id != current_user.id and not is_secondary_cs:
         abort(403)
 
+    # Snapshot taken BEFORE any mutation below — used after the customer
+    # upsert to detect "this edit is the one that came out of Pause" (see
+    # notify_of_posm_details_added call further down). Both conditions have
+    # to be true of the state as it was walking in the door, not after.
+    was_awaiting_posm_details = project.project_status == 'awaiting_posm_details'
+    had_no_customers_before = len(project.project_customers) == 0
+
     try:
         data = request.get_json()
         if not data:
@@ -399,6 +406,17 @@ def update_project(project_id):
         # -- Emulation-aware actor -----
         emulating_id = flask.session.get('emulating_user_id')
         actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+        # -- POSM resume notification ---
+        # Fires exactly once: when this project was paused (awaiting_posm_details)
+        # with zero customers, and this edit is the one that gave it its first
+        # customer(s). Reusing was_awaiting_posm_details/had_no_customers_before
+        # from before the mutation, not the current state, is what keeps this
+        # from re-firing on every subsequent edit to the same project.
+        if (project.brief_type != 'standard' and was_awaiting_posm_details
+                and had_no_customers_before and submitted_customer_ids):
+            from app.notifications import notify_of_posm_details_added
+            notify_of_posm_details_added(project, triggered_by=actor)
 
         # -- Field-level change logs ---
         new_client = project.client_brand.name if project.client_brand else '—'

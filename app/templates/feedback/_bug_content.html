@@ -1,3 +1,4 @@
+{% from '_macros.html' import user_avatar %}
 <article class="blog-article" id="br-scroll-area">
 
     <!-- ── Bug header ── -->
@@ -50,7 +51,7 @@
             {% for comment in comments %}
             <div class="blog-comment" id="br-comment-{{ comment.id }}">
                 <div class="blog-comment-meta">
-                    <div class="blog-comment-avatar">{{ comment.author.name[0].upper() }}</div>
+                    {{ user_avatar(comment.author, 'sm') }}
                     <div class="blog-comment-author-info">
                         <span class="blog-comment-author-name">{{ comment.author.name }}</span>
                         <span class="blog-comment-date">{{ comment.created_at | dubai_time }}</span>
@@ -76,7 +77,7 @@
                     {% for reply in comment.replies %}
                     <div class="blog-comment blog-comment--reply" id="br-comment-{{ reply.id }}">
                         <div class="blog-comment-meta">
-                            <div class="blog-comment-avatar">{{ reply.author.name[0].upper() }}</div>
+                            {{ user_avatar(reply.author, 'sm') }}
                             <div class="blog-comment-author-info">
                                 <span class="blog-comment-author-name">{{ reply.author.name }}</span>
                                 <span class="blog-comment-date">{{ reply.created_at | dubai_time }}</span>

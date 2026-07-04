@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_macros.html' import user_avatar %}
 
 {% block title %}{{ project.name }} — Vitamin-E{% endblock %}
 
@@ -36,6 +37,19 @@
             <button class="btn-brief-flag" data-flag-type="project" data-project-id="{{ project.id }}"
                 data-context="Entire Project" data-action="open-flag-modal">⚑ Flag Issue</button>
             {% endif %}
+            {# Shown once CS adds POSM customer details to a paused (awaiting_posm_details)
+               C&KV-only project — notify_of_posm_details_added() pings the assigned
+               designers, and this button is the deliberate "resuming" action they take
+               in response. Restricted to admin + this project's own assigned designers,
+               not CS/team-lead — it's the designers' call when they're ready to resume. #}
+            {% if project.project_status == 'awaiting_posm_details' %}
+            {% set _is_assigned_designer = project.assigned_designers | selectattr('user_id', 'equalto', effective_user.id) | list %}
+            {% if effective_user.role == 'admin' or _is_assigned_designer %}
+            <form method="POST" action="{{ url_for('approval.resume_posm_project', project_id=project.id) }}" id="resume-posm-form">
+                <button type="submit" class="btn-resume">▶ Resume — POSM Added</button>
+            </form>
+            {% endif %}
+            {% endif %}
             <button class="btn-secondary" id="open-nas-btn"
                 data-url="{{ url_for('project_detail.get_nas_link', project_id=project.id) }}">
                 Open Project Folder
@@ -65,7 +79,9 @@
 
                 <div class="detail-field">
                     <span class="detail-label">CS Lead</span>
-                    <span class="detail-value">{{ project.cs_lead.name }}</span>
+                    <span class="detail-value" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+                        {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'xs') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
+                    </span>
                 </div>
 
                 <div class="detail-field">
@@ -205,7 +221,7 @@
 
                             <td>
                                 {% if assignment %}
-                                {{ assignment.designer.name }}
+                                {{ user_avatar(assignment.designer, 'xs') }} {{ assignment.designer.name }}
                                 {% else %}
                                 <span class="badge badge-rose">Pending</span>
                                 {% endif %}
@@ -602,7 +618,7 @@
                             <div class="brief-assignment-chip">
                                 <span class="team-tag team-{{ d.team | lower }}">{{ d.team }}</span>
                                 <span class="brief-assignment-name {{ 'muted' if not asgn }}">
-                                    {{ asgn.designer.name if asgn else 'Pending' }}
+                                    {% if asgn %}{{ user_avatar(asgn.designer, 'xs') }} {{ asgn.designer.name }}{% else %}Pending{% endif %}
                                 </span>
                                 {% if effective_user.role in ['admin', 'designer', 'team_lead'] and (not ch_locked or effective_user.role == 'admin') %}
                                 <form method="POST"
@@ -755,7 +771,7 @@
                         <span class="team-tag team-{{ asgn.designer.team | lower }}">{{ asgn.designer.team }}</span>
                         {% endif %}
                         <span class="brief-assignment-name {{ 'muted' if not asgn }}">
-                            {{ asgn.designer.name if asgn else 'Pending' }}
+                            {% if asgn %}{{ user_avatar(asgn.designer, 'xs') }} {{ asgn.designer.name }}{% else %}Pending{% endif %}
                         </span>
                         {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
                         <form method="POST"
@@ -1131,8 +1147,21 @@
             </div>
             {% endif %}
 
+            {# State 7: Channel approved — no further uploads allowed.
+               Checked FIRST, ahead of every ch_sub-based state below. Approving a
+               channel never clears ch_sub/active_submission (is_active only gets
+               flipped off when a *new* deck replaces an old one — see
+               projects_submission.py) so an approved channel still has a truthy,
+               non-flagged ch_sub sitting around. That used to fall through to the
+               "deck uploaded" branch further down and show live Reupload/Submit
+               buttons on an already-approved, supposedly-locked channel. Checking
+               approved first — same ordering the C&KV section above already uses —
+               is what actually locks it. #}
+            {% if ch.status == 'approved' %}
+            <div class="submission-status submission-status--approved" style="margin-top:0.5rem;">✓ This channel has been fully approved and is locked.</div>
+
             {# State 3: In Internal Review — CS can approve or flag #}
-            {% if ch.status == 'internal_review' and ch_sub %}
+            {% elif ch.status == 'internal_review' and ch_sub %}
             <div class="reference-file-item">
                 <span class="reference-file-icon">{% if ch_sub.file_type == 'pdf' %}📄{% else %}📊{% endif %}</span>
                 <span class="reference-file-name">{{ ch_sub.original_filename }}</span>
@@ -1320,10 +1349,6 @@
                 <span class="ch-upload-status" id="ch-upload-status-{{ ch.id }}"></span>
             </div>
             {% endif %}
-
-            {# State 7: Channel approved — no further uploads allowed #}
-            {% elif ch.status == 'approved' %}
-            <div class="submission-status submission-status--approved" style="margin-top:0.5rem;">✓ This channel has been fully approved and is locked.</div>
 
             {# State 1: No deck yet #}
             {% else %}

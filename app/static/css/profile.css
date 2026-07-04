@@ -122,6 +122,14 @@
     margin-top: 1rem;
 }
 
+/* Active achievement badge displayed inline next to the user's name */
+.profile-name-badge {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
 /* Global h1-h6 are uppercase by default (see CLAUDE.md CSS Facts) —
    a person's name shouldn't render in the all-caps display font. */
 .profile-name {
@@ -217,6 +225,12 @@
     min-height: 160px;
 }
 
+#profile-bio-text {
+    /* Preserve line breaks typed in the textarea — without this, HTML
+       collapses all newlines to spaces when rendering the bio. */
+    white-space: pre-wrap;
+}
+
 .profile-section-header {
     display: flex;
     align-items: center;
@@ -264,3 +278,5 @@
 .crop-size-hint--warning {
     color: var(--rose);
 }
+
+/* ── Active badge inline next to name — see .profile-name-badge in rules above ── */

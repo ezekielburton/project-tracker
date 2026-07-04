@@ -109,10 +109,21 @@ def _build_achievement_context(profile_user, is_own_profile):
         for pin in pinned_rows
     ]
 
+    # ── Unlock counts — shown on both own and other-user profiles ──────────
+    earned_count = (
+        UserAchievement.query
+        .filter_by(user_id=profile_user.id)
+        .filter(UserAchievement.earned_at.isnot(None))
+        .count()
+    )
+    total_count = Achievement.query.count()
+
     context = {
         'pinned_tiles': pinned_tiles,
         'recent_tiles': [],
         'achievement_checklist': [],
+        'achievement_earned_count': earned_count,
+        'achievement_total_count': total_count,
     }
 
     if not is_own_profile:
@@ -202,7 +213,7 @@ def view(user_id=None):
     /profile with no id — consistent with how emulation is handled
     everywhere else in the app.
     """
-    from app.models import RoleTitle, DEFAULT_ROLE_TITLES
+    from app.models import RoleTitle, DEFAULT_ROLE_TITLES, UserDisplaySettings, UserAchievement, AchievementBorder
     from app.utils import get_actor
 
     actor = get_actor()
@@ -214,13 +225,41 @@ def view(user_id=None):
     role_title = RoleTitle.query.filter_by(role=profile_user.role).first()
     fun_title = role_title.title if role_title else DEFAULT_ROLE_TITLES.get(profile_user.role, '')
 
+    # Active Rewards (Phase 5) override the defaults above, based on
+    # profile_user's own saved choices — NOT the viewer's. Visiting someone
+    # else's profile always shows THEIR active title/border, same as their
+    # pinned achievements already do.
+    active_border_class = None
+    display_settings = UserDisplaySettings.query.filter_by(user_id=profile_user.id).first()
+    if display_settings:
+        if display_settings.active_title_id:
+            active_title_ua = UserAchievement.query.get(display_settings.active_title_id)
+            # Defensive re-check, same reasoning as save_display_settings'
+            # validation — an achievement could theoretically have been
+            # edited to remove its reward_title after being set as active.
+            if active_title_ua and active_title_ua.achievement.reward_title:
+                fun_title = active_title_ua.achievement.reward_title
+
+        if display_settings.active_border_id:
+            border = AchievementBorder.query.get(display_settings.active_border_id)
+            if border:
+                active_border_class = border.css_class
+
     achievement_context = _build_achievement_context(profile_user, is_own_profile)
+
+    # Customize context — only needed on own profile (badge picker + pin manager).
+    # Reuses _build_account_achievement_context() which already assembles this data.
+    customize_context = {}
+    if is_own_profile:
+        customize_context = _build_account_achievement_context(profile_user)
 
     return render_template(
         'auth/profile.html',
         profile_user=profile_user,
         is_own_profile=is_own_profile,
         fun_title=fun_title,
+        active_border_class=active_border_class,
+        customize_context=customize_context,
         **achievement_context
     )
 

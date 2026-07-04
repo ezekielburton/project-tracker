@@ -556,6 +556,51 @@ def notify_of_ckv_posm_pending(project, triggered_by):
         )
 
 
+def notify_of_posm_details_added(project, triggered_by):
+    """
+    Notify the project's assigned designers (project.assigned_designers —
+    the ProjectDesigner rows shown in every dashboard's "Assigned Designers"
+    column) when CS adds POSM customer details to a project that was paused
+    in 'awaiting_posm_details' status (the "Pause" choice from the C&KV-only
+    approval prompt — see notify_of_ckv_posm_pending for the sibling "Add
+    POSM" choice, which notifies immediately instead of waiting for this).
+
+    Deliberately uses project.assigned_designers rather than
+    _get_project_designers() (which is deliverable/concept/kv based) — at
+    this point no POSM deliverables have been assigned to anyone yet, so
+    that helper would likely return nothing useful. assigned_designers is
+    the project-level team assignment made back when the project was first
+    briefed, which is who actually needs to know work has resumed.
+
+    Only fires once — see the had_no_customers_before check in
+    update_project() (projects_brief.py) that gates the call site. The
+    project's status stays 'awaiting_posm_details' after this; a designer
+    must explicitly click "Resume" (resume_posm_project route) to move it
+    to in_progress, rather than this notification doing it automatically.
+    """
+    message = f'"{project.name}" — POSM customer details have been added. Resume the project to continue.'
+
+    recipients = []
+    recipient_ids = set()
+    for assignment in project.assigned_designers:
+        designer = assignment.designer
+        if designer.id not in recipient_ids:
+            recipients.append(designer)
+            recipient_ids.add(designer.id)
+
+    for recipient in recipients:
+        if recipient.id == triggered_by.id:
+            continue
+        create_notification(
+            recipient=recipient,
+            message=message,
+            notification_type='project_updated',
+            project=project,
+            triggered_by=triggered_by,
+            pref_key='project_updated'
+        )
+
+
 def notify_of_project_approved(project, triggered_by):
     """
     Notify management, admin, project designers, and secondary CS when a project

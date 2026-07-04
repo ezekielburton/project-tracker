@@ -7,7 +7,11 @@
 
     {# Outer wrapper — no border styling yet, this div just exists so the future #}
     {# "customize profile border" feature has something to attach a border to. #}
-    <div class="profile-border-wrap">
+    {# active_border_class comes from the profile owner's UserDisplaySettings —
+    applied to the OUTER wrapper (not just the banner), matching the div
+    Ezekiel asked for back when the layout was first sketched: "make sure
+    there is a surrounding div as we will make cool borders later." #}
+    <div class="profile-border-wrap {{ active_border_class or '' }}">
         <div class="profile-card">
 
             <div class="profile-banner">
@@ -27,20 +31,23 @@
             <div class="profile-header-row">
                 <div class="profile-avatar-wrap">
                     {% if profile_user.avatar_filename %}
-                    <img src="{{ url_for('static', filename='avatars/' + profile_user.avatar_filename) }}"
-                        class="profile-avatar" alt="">
+                    <img src="{{ url_for('static', filename='avatars/' + profile_user.avatar_filename) }}" class="profile-avatar"
+                        alt="">
                     {% else %}
                     <div class="profile-avatar profile-avatar--initials">{{ profile_user.name[0].upper() }}</div>
                     {% endif %}
                     {% if is_own_profile %}
-                    <button type="button" class="profile-avatar-edit-btn" id="edit-avatar-btn"
-                        title="Change photo">✎</button>
+                    <button type="button" class="profile-avatar-edit-btn" id="edit-avatar-btn" title="Change photo">✎</button>
                     {% endif %}
                 </div>
 
                 <div class="profile-header-info">
                     <div class="profile-name-row">
                         <h1 class="profile-name">{{ profile_user.name }}</h1>
+                        {% set profile_badge = active_badge_image(profile_user) %}
+                        {% if profile_badge %}
+                        <img src="{{ url_for('static', filename='achievements/' + profile_badge) }}" class="profile-name-badge" alt="">
+                        {% endif %}
                         {% if is_own_profile %}
                         <button type="button" class="profile-edit-details-btn" id="edit-details-btn"
                             title="Edit details">✎</button>
@@ -120,6 +127,11 @@
                 <div class="profile-achievements-card">
                     <div class="profile-section-header">
                         <h2>Achievements</h2>
+                        <span class="achievement-unlock-count">{{ achievement_earned_count }} / {{ achievement_total_count }}</span>
+                        {% if is_own_profile %}
+                        <button type="button" class="btn-secondary btn-sm" id="edit-achievements-btn"
+                            style="margin-left:auto;">Customize</button>
+                        {% endif %}
                     </div>
 
                     {% if is_own_profile %}
@@ -216,6 +228,36 @@
 
 </div>
 
+{% if is_own_profile %}
+{# ── Customize achievements data ────────────────────────────────────────── #}
+{# Serialised using the <script> block pattern (CLAUDE.md) — NEVER in HTML  #}
+{# value="" attributes, which break silently when values contain quotes.    #}
+{# active_title_ua_id and active_border_id are included so that saving a    #}
+{# new badge from here doesn't accidentally clear the user's saved title    #}
+{# and border (the /account/display-settings route writes all three slots   #}
+{# in one go, so we must echo the current values back when only one changes)#}
+<script>
+{% set ds = customize_context.display_settings %}
+window.PROFILE_CUSTOMIZE = {
+    earned: [
+        {% for ua in customize_context.earned_achievements %}
+        {
+            ua_id: {{ ua.id }},
+            name: {{ ua.achievement.name | tojson }},
+            badge_image: {{ (ua.achievement.badge_image or '') | tojson }},
+            badge_url: {{ (url_for('static', filename='achievements/' + ua.achievement.badge_image) if ua.achievement.badge_image else '') | tojson }},
+            badge_type: {{ (ua.achievement.badge_type or 'static') | tojson }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ],
+    active_badge_ua_id: {{ (ds.active_badge_id if ds and ds.active_badge_id else 'null') }},
+    active_title_ua_id: {{ (ds.active_title_id if ds and ds.active_title_id else 'null') }},
+    active_border_id:   {{ (ds.active_border_id if ds and ds.active_border_id else 'null') }},
+    pinned_ids: {{ customize_context.pinned_achievement_ids | tojson }}
+};
+</script>
+{% endif %}
+
 {# Loaded unconditionally (not inside the is_own_profile block below) —     #}
 {# the Recent/Pinned tab toggle and Show more/less button only exist on     #}
 {# your own profile, but achievements.js just no-ops via querySelector      #}
@@ -288,6 +330,43 @@
         <div class="modal-actions">
             <button type="button" class="btn-secondary" id="edit-details-cancel-btn">Cancel</button>
             <button type="button" class="btn-primary" id="edit-details-save-btn">Save</button>
+        </div>
+    </div>
+</div>
+
+{# ── Customize achievements modal ──────────────────────────────────────── #}
+{# Opened by the ✎ button on the achievements card. Lets the user pick     #}
+{# their active badge and manage their pinned achievements (max 5) without #}
+{# leaving the profile page. achievements.js populates both sections from   #}
+{# window.PROFILE_CUSTOMIZE and saves via the existing display-settings and #}
+{# pinned-achievements routes.                                              #}
+<div id="achievement-customize-modal" class="modal-overlay hidden">
+    <div class="modal-box achievement-customize-box">
+        <h3 class="modal-title">Customize Achievements</h3>
+
+        <div class="achievement-customize-section">
+            <div class="achievement-customize-section-header">
+                <strong>Active Badge</strong>
+                <span class="achievement-customize-help">Shown on your avatar across the app</span>
+            </div>
+            <div id="badge-picker-grid" class="badge-picker-grid">
+                {# Populated by achievements.js from window.PROFILE_CUSTOMIZE #}
+            </div>
+        </div>
+
+        <div class="achievement-customize-section">
+            <div class="achievement-customize-section-header">
+                <strong>Pinned Achievements</strong>
+                <span class="achievement-customize-help">Featured on your profile · <span id="pin-count-label">0</span>/5 selected</span>
+            </div>
+            <div id="pin-picker-list" class="pin-picker-list">
+                {# Populated by achievements.js from window.PROFILE_CUSTOMIZE #}
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="achievement-customize-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" id="achievement-customize-save-btn">Save</button>
         </div>
     </div>
 </div>

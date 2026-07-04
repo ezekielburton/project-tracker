@@ -1,3 +1,4 @@
+{% from '_macros.html' import user_avatar_visual %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -376,7 +377,7 @@
 
         <div class="account-menu">
             <button type="button" id="account-trigger" class="account-trigger topbar-btn">
-                <div class="account-avatar">{{ current_user.name[0].upper() }}</div>
+                {{ user_avatar_visual(current_user, 'sm') }}
                 <span class="account-name">{{ current_user.name.split()[0] }}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -527,6 +528,15 @@
                     <circle cx="18" cy="16" r="3" />
                 </svg>
                 <span>Notification Sounds</span>
+            </button>
+            {# Phase 7 of the achievement system — new nav entry, same shape as every other admin-nav-btn above. #}
+            <button type="button" class="admin-nav-btn" data-section="achievements">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="6" />
+                    <path d="M8.5 13.5 7 22l5-3 5 3-1.5-8.5" />
+                </svg>
+                <span>Achievements</span>
             </button>
         </div>
 
@@ -734,8 +744,154 @@
                 </form>
                 <div id="sounds-list" class="accounts-user-list"></div>
             </div>
+
+            {# ── Phase 7: Achievement system admin panel ──────────────────────────
+               Two sub-tabs (Achievements / Borders), same pattern as the existing
+               "Project Tools" section's .pt-tabs/.pt-panel above — own prefixed
+               classes (ach- instead of pt-) so the two sections' JS click handlers
+               never collide, even though they look identical. #}
+            <div class="admin-section hidden" id="admin-section-achievements">
+                <div class="ach-tabs">
+                    <button type="button" class="ach-tab-btn active" data-ach="categories">Achievements</button>
+                    <button type="button" class="ach-tab-btn" data-ach="borders">Borders</button>
+                </div>
+
+                {# ── Achievements sub-tab: category accordion ─────────────────── #}
+                <div class="ach-panel" id="ach-panel-categories">
+                    <button type="button" class="accounts-add-btn" id="add-ach-category-toggle">+ Add Category</button>
+                    <form id="add-ach-category-form" class="add-user-form hidden">
+                        <input type="text" id="new-ach-category-name" class="form-input"
+                            placeholder="Category name (e.g. Submissions)">
+                        <input type="text" id="new-ach-category-icon" class="form-input"
+                            placeholder="Icon (emoji, optional)">
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="add-ach-category-cancel">Cancel</button>
+                        </div>
+                    </form>
+
+                    {# Hidden until a drag actually happens — appears so the admin has an #}
+                    {# explicit, unambiguous moment to commit reordering, rather than #}
+                    {# every drag auto-saving (same reasoning as the Pinned Achievements #}
+                    {# UI on the Account page, Phase 5). #}
+                    <button type="button" class="btn-primary hidden" id="save-ach-order-btn"
+                        style="margin: 0.75rem 0;">Save Order</button>
+
+                    {# Rendered entirely by admin.js from GET /admin/api/achievement-categories — #}
+                    {# see loadAchievementCategories() there for the accordion markup. #}
+                    <div id="ach-categories-list"></div>
+                </div>
+
+                {# ── Borders sub-tab ───────────────────────────────────────────── #}
+                <div class="ach-panel hidden" id="ach-panel-borders">
+                    <button type="button" class="accounts-add-btn" id="add-ach-border-toggle">+ Add Border</button>
+                    <form id="add-ach-border-form" class="add-user-form hidden">
+                        <input type="text" id="new-ach-border-name" class="form-input"
+                            placeholder="Border name (e.g. Golden Shimmer)">
+                        <input type="text" id="new-ach-border-class" class="form-input"
+                            placeholder="CSS class (must exist in achievements.css, e.g. border-golden-shimmer)">
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="add-ach-border-cancel">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="ach-borders-list" class="accounts-user-list"></div>
+                </div>
+            </div>
         </div>
     </aside>
+
+    {# ── Add/Edit Achievement modal ────────────────────────────────────────────
+       One modal serves both create and edit — achievement-modal-mode / -editing-id
+       (set by admin.js right before opening it) tell the submit handler which
+       API call to make. Kept as a single modal rather than two nearly-identical
+       ones, same reasoning as the profile page's combined Edit Details popup. #}
+    <div id="achievement-modal" class="modal-overlay hidden" data-mode="create" data-editing-id="">
+        <div class="modal-box">
+            <h3 class="modal-title" id="achievement-modal-title">Add Achievement</h3>
+
+            <div class="form-group">
+                <label for="ach-form-name">Name</label>
+                <input type="text" id="ach-form-name" class="form-input" placeholder="e.g. First Submission">
+            </div>
+            <div class="form-group">
+                <label for="ach-form-description">Description</label>
+                <textarea id="ach-form-description" class="form-input" rows="2"
+                    placeholder="Shown to users on the profile checklist"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-category">Category</label>
+                {# Populated by admin.js from the already-loaded category list — #}
+                {# no separate fetch needed, the Achievements tab already has it. #}
+                <select id="ach-form-category" class="form-input"></select>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-trigger">Trigger Event</label>
+                {# Hardcoded to the 7 events actually wired into check_achievements() #}
+                {# call sites (see VALID_TRIGGER_EVENTS in admin_achievements.py) — #}
+                {# anything else could never fire, so a dropdown is the only option #}
+                {# that makes an achievement's trigger ever actually work. #}
+                <select id="ach-form-trigger" class="form-input">
+                    <option value="project_submitted">Project Submitted</option>
+                    <option value="project_approved">Project Approved</option>
+                    <option value="bug_submitted">Bug Report Submitted</option>
+                    <option value="feature_submitted">Feature Request Submitted</option>
+                    <option value="blog_comment">Blog Comment Posted</option>
+                    <option value="upvote_given">Feature Upvote Given</option>
+                    <option value="user_login">User Logged In</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-threshold">Threshold (progress needed to earn)</label>
+                <input type="number" id="ach-form-threshold" class="form-input" min="1" value="1">
+            </div>
+            <div class="form-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="ach-form-hidden">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="margin-left: 0.5rem; font-size: 0.85rem;">Hidden until earned (shows "???")</span>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-badge-file">Badge Image</label>
+                <input type="file" id="ach-form-badge-file" class="form-input" accept=".png,.jpg,.jpeg,.webp,.gif">
+                {# Shown only when editing an achievement that already has an image — #}
+                {# lets the admin see what's currently saved without re-uploading it. #}
+                <img id="ach-form-badge-preview" src="" alt="" class="hidden"
+                    style="width: 48px; height: 48px; object-fit: contain; margin-top: 0.5rem;">
+            </div>
+            <div class="form-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="ach-form-animated">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="margin-left: 0.5rem; font-size: 0.85rem;">Animated badge (subtle pulse effect)</span>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-reward-title">Reward Title (optional)</label>
+                <input type="text" id="ach-form-reward-title" class="form-input" placeholder="e.g. Rookie Submitter">
+            </div>
+            <div class="form-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="ach-form-title-animated">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="margin-left: 0.5rem; font-size: 0.85rem;">Animated title text</span>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-border">Reward Border (optional)</label>
+                {# Populated by admin.js from GET /admin/api/achievement-borders. #}
+                <select id="ach-form-border" class="form-input">
+                    <option value="">— None —</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="achievement-modal-cancel-btn">Cancel</button>
+                <button type="button" class="btn-primary" id="achievement-modal-save-btn">Save</button>
+            </div>
+        </div>
+    </div>
     {% endif %}
     {% endif %}
 
@@ -792,6 +948,10 @@
             </div>
         </div>
     </div>
+
+    <!-- ===== Achievement Toast Container ===== -->
+    <!-- Sits above the regular toast container; showAchievementToast() injects here. -->
+    <div id="achievement-toast-container" aria-live="polite"></div>
 
     <!-- ===== Toast Container ===== -->
     <!-- Fixed bottom-right container; individual toasts are injected by showToast() in main.js. -->

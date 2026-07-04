@@ -146,6 +146,7 @@ def poll():
             {
                 'id': n.id,
                 'message': n.message,
+                'notification_type': n.notification_type,
                 'created_at': n.created_at.isoformat()
             }
             for n in new_notifications

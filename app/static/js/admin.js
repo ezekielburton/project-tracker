@@ -40,7 +40,8 @@
             if (sectionName === 'projects') loadProjectToolsSection();
             if (sectionName === 'activity') loadActivitySection();
             if (sectionName === 'sounds') loadSoundsSection();
-            
+            if (sectionName === 'achievements') loadAchievementsSection(); // Phase 7 — see bottom of this file
+
         });
     });
 
@@ -1472,3 +1473,483 @@ if (addSoundForm) {
             btn.addEventListener('click', handleFileDelete);
         });
     }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ── Achievements admin panel (Phase 7 of the achievement system) ────────
+// ═══════════════════════════════════════════════════════════════════════
+// Two sub-tabs: Achievements (category accordion, drag-reorderable, with
+// an Add/Edit modal per achievement) and Borders (simple list + preview).
+// Depends on: btnLoading/btnDone, showConfirm, showToast (all defined
+// elsewhere in this file / main.js), and the global `Sortable` constructor
+// loaded via CDN in base.html (added for the Pinned Achievements UI on the
+// Account page, Phase 5 — reused here rather than loading a second copy).
+
+// achCategoriesData / achBordersData cache the last fetch so the Add/Edit
+// modal can populate its category + border <select> options without a
+// separate round trip every time it opens.
+var achCategoriesData = [];
+var achBordersData = [];
+
+// Tracks whether a drag has actually happened since the last save, so the
+// "Save Order" button only appears once there's something to save — same
+// UX as the Pinned Achievements drag UI reusing the same idea.
+var achOrderDirty = false;
+
+function loadAchievementsSection() {
+    var activeAchTab = document.querySelector('.ach-tab-btn.active');
+    var tab = activeAchTab ? activeAchTab.dataset.ach : 'categories';
+    if (tab === 'categories') loadAchievementCategories();
+    else loadAchievementBorders();
+}
+
+// ── Achievements / Borders sub-tab toggle ───────────────────────────────
+document.querySelectorAll('.ach-tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        document.querySelectorAll('.ach-tab-btn').forEach(function (b) { b.classList.remove('active'); });
+        document.querySelectorAll('.ach-panel').forEach(function (p) { p.classList.add('hidden'); });
+        this.classList.add('active');
+        var panel = document.getElementById('ach-panel-' + this.dataset.ach);
+        if (panel) panel.classList.remove('hidden');
+        if (this.dataset.ach === 'categories') loadAchievementCategories();
+        else loadAchievementBorders();
+    });
+});
+
+// ─────────────────────────── Categories + Achievements ──────────────────
+
+function loadAchievementCategories() {
+    var list = document.getElementById('ach-categories-list');
+    if (!list) return;
+    fetch('/admin/api/achievement-categories')
+        .then(function (r) { return r.json(); })
+        .then(function (categories) {
+            achCategoriesData = categories;
+            achOrderDirty = false;
+            document.getElementById('save-ach-order-btn').classList.add('hidden');
+            renderAchievementCategories(categories);
+        });
+}
+
+var TRIGGER_EVENT_LABELS = {
+    project_submitted: 'Project Submitted',
+    project_approved: 'Project Approved',
+    bug_submitted: 'Bug Report Submitted',
+    feature_submitted: 'Feature Request Submitted',
+    blog_comment: 'Blog Comment Posted',
+    upvote_given: 'Feature Upvote Given',
+    user_login: 'User Logged In'
+};
+
+function renderAchievementCategories(categories) {
+    var list = document.getElementById('ach-categories-list');
+
+    if (categories.length === 0) {
+        list.innerHTML = '<p class="empty-state">No categories yet — add one above to get started.</p>';
+        return;
+    }
+
+    list.innerHTML = categories.map(function (cat) {
+        var achievementRows = cat.achievements.map(function (a) {
+            var metaBits = [TRIGGER_EVENT_LABELS[a.trigger_event] || a.trigger_event, 'threshold ' + a.threshold];
+            if (a.is_hidden) metaBits.push('hidden');
+            if (a.reward_title) metaBits.push('title: ' + a.reward_title);
+            return '<div class="ach-achievement-row" data-id="' + a.id + '">' +
+                '<span class="ach-drag-handle" title="Drag to reorder">⠿</span>' +
+                (a.badge_url
+                    ? '<img src="' + a.badge_url + '" class="ach-achievement-badge-thumb" alt="">'
+                    : '<span class="ach-achievement-badge-thumb ach-achievement-badge-thumb--empty">🏆</span>') +
+                '<div class="ach-achievement-info">' +
+                '<span class="ach-achievement-name">' + a.name + '</span>' +
+                '<span class="ach-achievement-meta">' + metaBits.join(' · ') + '</span>' +
+                '</div>' +
+                '<div class="account-user-actions">' +
+                '<button type="button" class="account-edit-btn ach-edit-btn" data-id="' + a.id + '">Edit</button>' +
+                '<button type="button" class="account-delete-btn ach-delete-btn" data-id="' + a.id + '" data-name="' + a.name + '">&times;</button>' +
+                '</div></div>';
+        }).join('');
+
+        return '<div class="ach-category-card" data-cat-id="' + cat.id + '">' +
+            '<div class="ach-category-header">' +
+            '<span class="ach-category-drag-handle" title="Drag to reorder">⠿</span>' +
+            (cat.icon ? '<span class="ach-category-icon">' + cat.icon + '</span>' : '') +
+            '<span class="ach-category-name">' + cat.name + '</span>' +
+            '<button type="button" class="ach-category-toggle-btn" data-cat-id="' + cat.id + '">▾</button>' +
+            '<button type="button" class="account-delete-btn ach-category-delete" data-id="' + cat.id + '" data-name="' + cat.name + '">&times;</button>' +
+            '</div>' +
+            '<div class="ach-category-body" id="ach-category-body-' + cat.id + '">' +
+            '<button type="button" class="accounts-add-btn ach-add-achievement-btn" data-cat-id="' + cat.id + '">+ Add Achievement</button>' +
+            '<div class="ach-achievement-list" data-cat-id="' + cat.id + '">' + (achievementRows || '<p class="empty-state">No achievements in this category yet.</p>') + '</div>' +
+            '</div></div>';
+    }).join('');
+
+    attachAchievementCategoryHandlers();
+    initAchievementSortables();
+}
+
+function attachAchievementCategoryHandlers() {
+    // Collapse/expand — purely visual, no server round trip.
+    document.querySelectorAll('.ach-category-toggle-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var body = document.getElementById('ach-category-body-' + this.dataset.catId);
+            body.classList.toggle('hidden');
+            this.textContent = body.classList.contains('hidden') ? '▸' : '▾';
+        });
+    });
+
+    // Delete category — blocked server-side if it still has achievements
+    // in it (see delete_achievement_category in admin_achievements.py),
+    // so the error message from that response is what actually explains
+    // why a delete didn't go through.
+    document.querySelectorAll('.ach-category-delete').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var name = this.dataset.name;
+            var id = this.dataset.id;
+            showConfirm('Delete category "' + name + '"?', function () {
+                fetch('/admin/api/achievement-categories/' + id, { method: 'DELETE' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.success) loadAchievementCategories();
+                        else showToast(data.error || 'Could not delete category.', 'error');
+                    });
+            });
+        });
+    });
+
+    // "+ Add Achievement" — opens the shared modal in create mode, pre-scoped to this category.
+    document.querySelectorAll('.ach-add-achievement-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            openAchievementModal('create', null, this.dataset.catId);
+        });
+    });
+
+    document.querySelectorAll('.ach-edit-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = btn.dataset.id;
+            var achievement = null;
+            achCategoriesData.forEach(function (cat) {
+                cat.achievements.forEach(function (a) { if (String(a.id) === String(id)) achievement = a; });
+            });
+            if (achievement) openAchievementModal('edit', achievement, achievement.category_id);
+        });
+    });
+
+    document.querySelectorAll('.ach-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var name = this.dataset.name;
+            var id = this.dataset.id;
+            showConfirm('Delete achievement "' + name + '"? Everyone\'s progress toward it will be lost too.', function () {
+                fetch('/admin/api/achievements/' + id, { method: 'DELETE' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.success) loadAchievementCategories();
+                        else showToast(data.error || 'Could not delete achievement.', 'error');
+                    });
+            });
+        });
+    });
+}
+
+// SortableJS wiring — one Sortable instance for the category list itself
+// (reorders categories), plus one PER category for its achievement list
+// (reorders achievements within that category only — achievements do NOT
+// drag between categories, since that's not something the spec asked for
+// and it would need a category_id reassignment on drop, not just a
+// display_order change).
+function initAchievementSortables() {
+    var categoriesList = document.getElementById('ach-categories-list');
+    new Sortable(categoriesList, {
+        handle: '.ach-category-drag-handle',
+        animation: 150,
+        onEnd: function () { markAchOrderDirty(); }
+    });
+
+    document.querySelectorAll('.ach-achievement-list').forEach(function (list) {
+        new Sortable(list, {
+            handle: '.ach-drag-handle',
+            animation: 150,
+            onEnd: function () { markAchOrderDirty(); }
+        });
+    });
+}
+
+function markAchOrderDirty() {
+    achOrderDirty = true;
+    document.getElementById('save-ach-order-btn').classList.remove('hidden');
+}
+
+// Save Order — reads the CURRENT DOM order (post-drag) for categories and
+// for every category's achievement list, and fires one reorder request per
+// list. Deliberately reads live DOM order rather than tracking it via drag
+// event payloads — simpler, and always correct even if several drags
+// happened before Save was clicked.
+document.getElementById('save-ach-order-btn').addEventListener('click', function () {
+    var saveBtn = this;
+    btnLoading(saveBtn);
+
+    var categoryIds = Array.from(document.querySelectorAll('.ach-category-card')).map(function (card) {
+        return card.dataset.catId;
+    });
+
+    var achievementReorders = Array.from(document.querySelectorAll('.ach-achievement-list')).map(function (list) {
+        var ids = Array.from(list.querySelectorAll('.ach-achievement-row')).map(function (row) { return row.dataset.id; });
+        return { achievement_ids: ids };
+    }).filter(function (payload) { return payload.achievement_ids.length > 0; });
+
+    var requests = [
+        fetch('/admin/api/achievement-categories/reorder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category_ids: categoryIds })
+        })
+    ].concat(achievementReorders.map(function (payload) {
+        return fetch('/admin/api/achievements/reorder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }));
+
+    Promise.all(requests)
+        .then(function () {
+            btnDone(saveBtn);
+            saveBtn.classList.add('hidden');
+            achOrderDirty = false;
+        })
+        .catch(function () {
+            btnDone(saveBtn);
+            showToast('Could not save order — please try again.', 'error');
+        });
+});
+
+// ── Add Category form ────────────────────────────────────────────────────
+var addAchCategoryToggle = document.getElementById('add-ach-category-toggle');
+var addAchCategoryForm = document.getElementById('add-ach-category-form');
+if (addAchCategoryToggle) {
+    addAchCategoryToggle.addEventListener('click', function () {
+        addAchCategoryForm.classList.toggle('hidden');
+    });
+    document.getElementById('add-ach-category-cancel').addEventListener('click', function () {
+        addAchCategoryForm.classList.add('hidden');
+        addAchCategoryForm.reset();
+    });
+    addAchCategoryForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = document.getElementById('new-ach-category-name').value.trim();
+        var icon = document.getElementById('new-ach-category-icon').value.trim();
+        if (!name) return;
+        var submitBtn = addAchCategoryForm.querySelector('button[type="submit"]');
+        btnLoading(submitBtn);
+        fetch('/admin/api/achievement-categories', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, icon: icon })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    addAchCategoryForm.reset();
+                    addAchCategoryForm.classList.add('hidden');
+                    loadAchievementCategories();
+                } else {
+                    showToast(data.error || 'Could not create category.', 'error');
+                    btnDone(submitBtn);
+                }
+            })
+            .catch(function () { btnDone(submitBtn); });
+    });
+}
+
+// ── Add/Edit Achievement modal ──────────────────────────────────────────
+var achievementModal = document.getElementById('achievement-modal');
+var achievementModalTitle = document.getElementById('achievement-modal-title');
+var achFormBadgeFile = document.getElementById('ach-form-badge-file');
+var achFormBadgePreview = document.getElementById('ach-form-badge-preview');
+
+function populateAchievementCategoryDropdown(selectedCategoryId) {
+    var sel = document.getElementById('ach-form-category');
+    sel.innerHTML = achCategoriesData.map(function (cat) {
+        return '<option value="' + cat.id + '"' + (String(cat.id) === String(selectedCategoryId) ? ' selected' : '') + '>' + cat.name + '</option>';
+    }).join('');
+}
+
+function populateAchievementBorderDropdown(selectedBorderId) {
+    var sel = document.getElementById('ach-form-border');
+    sel.innerHTML = '<option value="">— None —</option>' + achBordersData.map(function (b) {
+        return '<option value="' + b.id + '"' + (String(b.id) === String(selectedBorderId) ? ' selected' : '') + '>' + b.name + '</option>';
+    }).join('');
+}
+
+function openAchievementModal(mode, achievement, categoryId) {
+    achievementModal.dataset.mode = mode;
+    achievementModal.dataset.editingId = achievement ? achievement.id : '';
+    achievementModalTitle.textContent = mode === 'edit' ? 'Edit Achievement' : 'Add Achievement';
+
+    // Borders are needed for the dropdown here even if the admin never
+    // visited the Borders tab this session — fetch on demand if we don't
+    // have them cached yet, same lazy-load idea as loadPTDelFormData().
+    var ensureBorders = achBordersData.length > 0
+        ? Promise.resolve()
+        : fetch('/admin/api/achievement-borders').then(function (r) { return r.json(); }).then(function (b) { achBordersData = b; });
+
+    ensureBorders.then(function () {
+        populateAchievementCategoryDropdown(categoryId);
+        populateAchievementBorderDropdown(achievement ? achievement.border_id : '');
+
+        document.getElementById('ach-form-name').value = achievement ? achievement.name : '';
+        document.getElementById('ach-form-description').value = achievement ? (achievement.description || '') : '';
+        document.getElementById('ach-form-trigger').value = achievement ? achievement.trigger_event : 'project_submitted';
+        document.getElementById('ach-form-threshold').value = achievement ? achievement.threshold : 1;
+        document.getElementById('ach-form-hidden').checked = achievement ? achievement.is_hidden : false;
+        document.getElementById('ach-form-animated').checked = achievement ? achievement.badge_type === 'animated' : false;
+        document.getElementById('ach-form-reward-title').value = achievement ? (achievement.reward_title || '') : '';
+        document.getElementById('ach-form-title-animated').checked = achievement ? achievement.title_animated : false;
+        achFormBadgeFile.value = '';
+
+        if (achievement && achievement.badge_url) {
+            achFormBadgePreview.src = achievement.badge_url;
+            achFormBadgePreview.classList.remove('hidden');
+        } else {
+            achFormBadgePreview.classList.add('hidden');
+        }
+
+        achievementModal.classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause(); // modal requires input before any server action — see CLAUDE.md polling pattern
+    });
+}
+
+function closeAchievementModal() {
+    achievementModal.classList.add('hidden');
+    if (window.helixPolling) window.helixPolling.resume();
+}
+
+document.getElementById('achievement-modal-cancel-btn').addEventListener('click', closeAchievementModal);
+
+document.getElementById('achievement-modal-save-btn').addEventListener('click', function () {
+    var saveBtn = this;
+    var mode = achievementModal.dataset.mode;
+    var editingId = achievementModal.dataset.editingId;
+
+    var name = document.getElementById('ach-form-name').value.trim();
+    var categoryId = document.getElementById('ach-form-category').value;
+    var threshold = document.getElementById('ach-form-threshold').value;
+
+    if (!name || !categoryId || !threshold) {
+        showToast('Name, category, and threshold are required.', 'warning');
+        return;
+    }
+
+    // Multipart form, not JSON — a badge image file may be attached.
+    // Booleans are appended as literal 'true'/'false' strings rather than
+    // relying on checkbox-only-present-when-checked FormData behaviour,
+    // matching what admin_achievements.py's create/update routes expect.
+    var formData = new FormData();
+    formData.append('name', name);
+    formData.append('description', document.getElementById('ach-form-description').value.trim());
+    formData.append('category_id', categoryId);
+    formData.append('trigger_event', document.getElementById('ach-form-trigger').value);
+    formData.append('threshold', threshold);
+    formData.append('is_hidden', document.getElementById('ach-form-hidden').checked ? 'true' : 'false');
+    formData.append('badge_type', document.getElementById('ach-form-animated').checked ? 'animated' : 'static');
+    formData.append('reward_title', document.getElementById('ach-form-reward-title').value.trim());
+    formData.append('title_animated', document.getElementById('ach-form-title-animated').checked ? 'true' : 'false');
+    formData.append('border_id', document.getElementById('ach-form-border').value);
+    if (achFormBadgeFile.files[0]) formData.append('badge_file', achFormBadgeFile.files[0]);
+
+    var url = mode === 'edit' ? '/admin/api/achievements/' + editingId : '/admin/api/achievements';
+    var method = mode === 'edit' ? 'PATCH' : 'POST';
+
+    btnLoading(saveBtn);
+    fetch(url, { method: method, body: formData })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            btnDone(saveBtn);
+            if (!data.success) { showToast(data.error || 'Could not save achievement.', 'error'); return; }
+            closeAchievementModal();
+            loadAchievementCategories();
+        })
+        .catch(function () { btnDone(saveBtn); });
+});
+
+// ─────────────────────────── Borders tab ────────────────────────────────
+
+function loadAchievementBorders() {
+    var list = document.getElementById('ach-borders-list');
+    if (!list) return;
+    fetch('/admin/api/achievement-borders')
+        .then(function (r) { return r.json(); })
+        .then(function (borders) {
+            achBordersData = borders;
+            renderAchievementBorders(borders);
+        });
+}
+
+function renderAchievementBorders(borders) {
+    var list = document.getElementById('ach-borders-list');
+    if (borders.length === 0) {
+        list.innerHTML = '<p class="empty-state">No borders yet — add one above.</p>';
+        return;
+    }
+    list.innerHTML = borders.map(function (b) {
+        return '<div class="account-user-row" id="ach-border-' + b.id + '">' +
+            // Live preview — applies the actual saved css_class to a small div,
+            // so the admin can see immediately whether the class name they typed
+            // actually matches something real in achievements.css, rather than
+            // discovering a typo only once a user tries to select it as active.
+            '<div class="ach-border-preview ' + b.css_class + '"></div>' +
+            '<div class="account-user-info">' +
+            '<span class="account-user-name">' + b.name + '</span>' +
+            '<span class="account-user-role">' + b.css_class + '</span>' +
+            '</div>' +
+            '<div class="account-user-actions">' +
+            '<button type="button" class="account-delete-btn" data-id="' + b.id + '" data-name="' + b.name + '">&times;</button>' +
+            '</div></div>';
+    }).join('');
+
+    list.querySelectorAll('.account-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var name = this.dataset.name;
+            var id = this.dataset.id;
+            showConfirm('Delete border "' + name + '"?', function () {
+                fetch('/admin/api/achievement-borders/' + id, { method: 'DELETE' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.success) document.getElementById('ach-border-' + id).remove();
+                        else showToast(data.error || 'Could not delete border.', 'error');
+                    });
+            });
+        });
+    });
+}
+
+var addAchBorderToggle = document.getElementById('add-ach-border-toggle');
+var addAchBorderForm = document.getElementById('add-ach-border-form');
+if (addAchBorderToggle) {
+    addAchBorderToggle.addEventListener('click', function () {
+        addAchBorderForm.classList.toggle('hidden');
+    });
+    document.getElementById('add-ach-border-cancel').addEventListener('click', function () {
+        addAchBorderForm.classList.add('hidden');
+        addAchBorderForm.reset();
+    });
+    addAchBorderForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = document.getElementById('new-ach-border-name').value.trim();
+        var cssClass = document.getElementById('new-ach-border-class').value.trim();
+        if (!name || !cssClass) return;
+        var submitBtn = addAchBorderForm.querySelector('button[type="submit"]');
+        btnLoading(submitBtn);
+        fetch('/admin/api/achievement-borders', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, css_class: cssClass })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    addAchBorderForm.reset();
+                    addAchBorderForm.classList.add('hidden');
+                    loadAchievementBorders();
+                } else {
+                    showToast(data.error || 'Could not create border.', 'error');
+                    btnDone(submitBtn);
+                }
+            })
+            .catch(function () { btnDone(submitBtn); });
+    });
+}

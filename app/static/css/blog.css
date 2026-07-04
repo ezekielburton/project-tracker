@@ -355,20 +355,6 @@
     margin-bottom: 0.5rem;
 }
 
-/* Avatar pill — matches .account-avatar in main.css */
-.blog-comment-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background-color: var(--tangerine);
-    color: var(--white);
-    font-family: var(--font-heading);
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
 
 .blog-comment-author-info {
     display: flex;

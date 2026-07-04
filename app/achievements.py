@@ -84,11 +84,13 @@ def check_achievements(user, event_type, metadata=None):
                     user=user, entity_type='achievement',
                     entity_name=achievement.name, entity_id=achievement.id
                 )
+                from flask import url_for
                 create_notification(
                     recipient=user,
                     message=f'You earned: {achievement.name}',
                     notification_type='achievement_earned',
-                    triggered_by=None  # system-earned, not caused by another user's action
+                    triggered_by=None,  # system-earned, not caused by another user's action
+                    link=url_for('profile.view', user_id=user.id)
                 )
     except Exception:
         db.session.rollback()

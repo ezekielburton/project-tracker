@@ -38,6 +38,7 @@ def create_app():
     from app.routes.wiki import wiki_bp
     from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
     from app.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
+    from app.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel (Phase 7)
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -52,6 +53,7 @@ def create_app():
     app.register_blueprint(wiki_bp)
     app.register_blueprint(api_bp)  # /api/* poll routes
     app.register_blueprint(profile_bp)
+    app.register_blueprint(admin_achievements_bp)
 
     from app.utils import calculate_project_hours
     
@@ -116,6 +118,53 @@ def create_app():
             'unread_count': 0,
             'sound_prefs': {'enabled': True, 'volume': 1.0, 'url': None}
         }
+    
+    def _active_badge_image(user):
+        """
+        Resolves the given user's active badge image filename, or None.
+        Cached on flask.g per request: a dashboard table can easily render
+        the same designer 10+ times across different rows, and without this
+        cache that would be 10+ identical UserDisplaySettings +
+        UserAchievement queries for the exact same answer. g is
+        request-scoped, so the cache never leaks between users or requests.
+
+        Registered below as a Jinja GLOBAL (app.jinja_env.globals), NOT a
+        @app.context_processor. That distinction matters and caused a real
+        bug: context processors only inject into the per-request render
+        context, which is visible to directly-rendered templates and to
+        {% include %}'d ones (context passes by default there) — but NOT to
+        templates pulled in via {% from '_macros.html' import user_avatar %},
+        since Jinja's import statement does not pass context unless every
+        single call site adds `with context`. The user_avatar()/
+        user_avatar_visual() macros in _macros.html are imported this way
+        in ~10 templates, so as a context processor this function was
+        UndefinedError-ing everywhere it was actually used. A true Jinja
+        global is compiled into every template's namespace unconditionally,
+        macros included, regardless of how they were imported — so this is
+        the fix, not just a workaround for one call site.
+        """
+        from flask import g
+        from app.models import UserDisplaySettings, UserAchievement
+
+        if not hasattr(g, '_active_badge_cache'):
+            g._active_badge_cache = {}
+
+        if user.id not in g._active_badge_cache:
+            badge_image = None
+            settings = UserDisplaySettings.query.filter_by(user_id=user.id).first()
+            if settings and settings.active_badge_id:
+                ua = UserAchievement.query.get(settings.active_badge_id)
+                # Defensive: the achievement itself might not have an
+                # uploaded image yet (Phase 7 admin upload didn't exist
+                # when this was earned) — in that case there's nothing
+                # to overlay, same as the tile fallback trophy elsewhere.
+                if ua and ua.achievement.badge_image:
+                    badge_image = ua.achievement.badge_image
+            g._active_badge_cache[user.id] = badge_image
+
+        return g._active_badge_cache[user.id]
+
+    app.jinja_env.globals['active_badge_image'] = _active_badge_image
 
     @app.context_processor
     def inject_effective_user():

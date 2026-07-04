@@ -98,6 +98,13 @@ function helixShowBrowserNotification(message) {
                 helixShowBrowserNotification(msg);
                 window.helixPlayNotificationSound();
 
+                // Achievement toast — show one per achievement in the batch
+                data.notifications.forEach(function (n) {
+                    if (n.notification_type === 'achievement_earned' && typeof showAchievementToast === 'function') {
+                        showAchievementToast(n.message);
+                    }
+                });
+
                 // Update the unread badge in the nav without a full page reload
                 var badge = document.getElementById('notif-unread-badge');
                 if (badge) {
