@@ -878,17 +878,6 @@
             <p class="no-files-msg">No reference files uploaded yet.</p>
             {% endif %}
         </div>
-
-        <!-- Upload form — CS and admin only -->
-        {% if effective_user.role in ['admin', 'cs'] %}
-        <div class="reference-file-upload" style="margin-top:1rem;">
-            <input type="file" id="refFileInput" class="hidden" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.dwg">
-            <button type="button" class="btn-secondary" id="refFileBtn" data-project-id="{{ project.id }}">
-                + Upload Reference File
-            </button>
-            <span class="reference-file-upload-status" id="refFileStatus"></span>
-        </div>
-        {% endif %}
     </div>
 
     <!-- Server data for detail page JS — all accessed via window.PAGE -->

@@ -7,18 +7,22 @@ v2.1.1 - Bug Fixes
 New Features:
 
 - Added first login wizard
-- Added onboarding tutorial for first login
+- Added file preview for reference files
+- Added file preview for Submission Files files (do this tmw)
+- Added drag and dropping when uploading files (do this tmw)
 
 Adjustments:
 
-
+- Added the ability to submit multiple files
+- Added DWG and ZIP to allowed file types for submissions and reference files.
+- Redesigned submission UI/UX to stop accidental approvals (do this tmw)
 
 Bug Fixes:
 
 - Fixed the resume proejct button now showing in some cases
 - Fixed assigned designer styling
 - Approved C&CM customer submission paths, now properly lock.
-- 
+- Removed upload reference file from detail page - only accessible in edit project page
 
 ================================================================================
 v2.1 Live app updates, deliverable view & Profile Page revamp!

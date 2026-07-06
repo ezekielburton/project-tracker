@@ -1345,6 +1345,53 @@ def download_project_file(file_id):
         download_name=project_file.original_filename
     )
 
+@detail_bp.route('/projects/files/<int:file_id>/preview')
+@login_required
+def preview_project_file(file_id):
+    """Serve a reference file for inline browser preview. Only file types a
+    browser can actually render natively are supported — PDFs and common
+    image formats. Anything else (.ai, .psd, .docx, etc.) returns a clear
+    'no preview available' response so the frontend can fall back to
+    download-only, rather than trying to force something that can't work."""
+    from app.models import ProjectFile
+    from app.nas import download_app_file, build_file_path
+    from flask import send_file, jsonify
+    import io
+
+    # Maps a stored file extension to the mimetype the browser needs to
+    # render it inline. Anything not in here just isn't previewable.
+    PREVIEWABLE_TYPES = {
+        'pdf':  'application/pdf',
+        'jpg':  'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png':  'image/png',
+        'gif':  'image/gif',
+        'webp': 'image/webp',
+    }
+
+    project_file = ProjectFile.query.get_or_404(file_id)
+
+    mimetype = PREVIEWABLE_TYPES.get((project_file.file_type or '').lower())
+    if not mimetype:
+        # Check the type BEFORE touching the NAS at all — no point paying
+        # for a network round-trip to fetch a .psd we already know we can't
+        # render.
+        return jsonify({
+            'success': False,
+            'error': 'No preview available for this file type — download instead.'
+        }), 415  # Unsupported Media Type
+
+    project = Project.query.get(project_file.project_id)
+    nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
+    file_bytes = download_app_file(nas_path)
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        mimetype=mimetype,
+        as_attachment=False,
+        download_name=project_file.original_filename
+    )
+
 
 @detail_bp.route('/projects/files/<int:file_id>/delete', methods=['POST'])
 @login_required

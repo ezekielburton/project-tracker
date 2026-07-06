@@ -1,0 +1,70 @@
+/* File Preview Modal — reuses the existing .modal-overlay backdrop from
+   main.css, but needs its own much larger box than the standard
+   .modal-box (which tops out at 420px, fine for small forms, useless for
+   viewing a document). */
+.file-preview-modal-box {
+    background: var(--white);
+    border-radius: var(--radius);
+    width: 90vw;
+    max-width: 1000px;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    /* the iframe/image scrolls internally, not the box */
+}
+
+.file-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
+    /* header never shrinks, even if the title is long */
+}
+
+/* The actual viewing area. Fills whatever space is left below the header. */
+.file-preview-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    background: #525659;
+    /* neutral dark surround, same idea as a PDF reader */
+}
+
+.file-preview-body iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.file-preview-body img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* Shown while we're waiting on the preview or pptx conversion to finish */
+.file-preview-loading {
+    color: var(--white);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+}
+
+/* Shown when a file can't be previewed at all — wrong type (415) or a
+   conversion failure (502). Same visual treatment for both; the message
+   text is what tells them apart. */
+.file-preview-fallback {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: var(--ink);
+    font-family: var(--font-body);
+    text-align: center;
+    padding: 24px;
+}

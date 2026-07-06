@@ -1321,6 +1321,48 @@ def start_revision(project_id):
 
     return jsonify({'success': True})
 
+# -------- Convert PDF to PPTX for file preview -----#
 
-# ── Approval Route ─────────────────────────────────────────────────────────────
+@submission_bp.route('/projects/submission/<int:submission_id>/preview')
+@login_required
+def preview_submission(submission_id):
+    """Serve a submission deck for inline browser preview instead of download.
+    PDFs are streamed as-is. PPTX decks get converted to PDF on the fly first,
+    since browsers can't render PowerPoint natively — this way the frontend
+    only ever has to deal with one format regardless of what was uploaded."""
+    from app.models import ProjectSubmission
+    from app.nas import download_app_file, build_file_path
+    from app.pptx_convert import convert_pptx_to_pdf
+    from flask import send_file, jsonify, current_app
+    import io, subprocess
+
+    submission = ProjectSubmission.query.get_or_404(submission_id)
+    project    = Project.query.get(submission.project_id)
+
+    nas_path   = build_file_path(project, 'Submissions', submission.original_filename)
+    file_bytes = download_app_file(nas_path)
+
+    if submission.file_type.lower() == 'pptx':
+        try:
+            file_bytes = convert_pptx_to_pdf(file_bytes)
+        except (subprocess.TimeoutExpired, RuntimeError) as e:
+            # Conversion can legitimately fail — a corrupted deck, an
+            # unusual embed LibreOffice chokes on, whatever. We learned the
+            # hard way this can happen even for real files. Log it for
+            # debugging, but never let a bad deck 500 the page — the
+            # frontend falls back to "preview unavailable, download instead."
+            current_app.logger.warning(
+                f'Preview conversion failed for submission {submission_id}: {e}'
+            )
+            return jsonify({
+                'success': False,
+                'error': 'Preview unavailable for this file — try downloading instead.'
+            }), 502
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=submission.original_filename.rsplit('.', 1)[0] + '.pdf'
+    )
 

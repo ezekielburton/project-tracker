@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/preview.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/achievements.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}">
 </head>
@@ -914,6 +915,16 @@
     </div>
     {% endif %}
 
+    <div id="file-preview-modal" class="modal-overlay hidden">
+        <div class="file-preview-modal-box">
+            <div class="file-preview-header">
+                <h3 class="modal-title" id="file-preview-title"></h3>
+                <button type="button" class="modal-close" id="file-preview-close">&times;</button>
+            </div>
+            <div class="file-preview-body" id="file-preview-body"></div>
+        </div>
+    </div>
+
     {# Main content area — shifts right to make room for sidebar when authenticated #}
     <main class="main-content" id="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -1044,7 +1055,7 @@
         const HELIX_SOUND_PREFS = {{ sound_prefs | tojson }};
     </script>
 
-
+    <script src="{{ url_for('static', filename='js/preview.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detail.js') }}"></script>
