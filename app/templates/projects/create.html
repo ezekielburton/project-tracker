@@ -398,7 +398,7 @@
             </div>
 
             <div class="reference-file-upload" style="margin-top:1rem;">
-                <input type="file" id="createRefFileInput" class="hidden" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx, .zip">
+                <input type="file" id="createRefFileInput" class="hidden" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx, .zip, .dwg">
                 <button type="button" id="createRefFileBtn" class="btn btn--secondary"
                     data-project-id="{{ draft.id if draft else '' }}" {% if not draft %}disabled{% endif %}>
                     + Upload Reference File

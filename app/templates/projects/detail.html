@@ -874,7 +874,7 @@
         <!-- Upload form — CS and admin only -->
         {% if effective_user.role in ['admin', 'cs'] %}
         <div class="reference-file-upload" style="margin-top:1rem;">
-            <input type="file" id="refFileInput" class="hidden" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx">
+            <input type="file" id="refFileInput" class="hidden" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx, .dwg, .dwg">
             <button type="button" class="btn-secondary" id="refFileBtn" data-project-id="{{ project.id }}">
                 + Upload Reference File
             </button>

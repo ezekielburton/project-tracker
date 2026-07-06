@@ -1282,7 +1282,7 @@ def upload_project_file(project_id):
         return jsonify({'success': False, 'error': 'No file selected'}), 400
 
     # Only allow safe file types
-    allowed_extensions = {'jpg', 'jpeg', 'png', 'pdf', 'docx', 'xlsx', 'pptx', 'zip'}
+    allowed_extensions = {'jpg', 'jpeg', 'png', 'pdf', 'docx', 'xlsx', 'pptx', 'zip', 'dwg'}
     original_filename = file.filename
     ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
 
