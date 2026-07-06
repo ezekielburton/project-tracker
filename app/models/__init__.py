@@ -23,6 +23,7 @@ def load_user(token):
         return None
     return user
 
+# User Class
 
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
@@ -81,6 +82,7 @@ class User(db.Model, UserMixin):
     def __repr__(self):
         return f'<User {self.email}>'
 
+# Notification Class
 class Notification(db.Model):
     __tablename__ = 'notifications'
 
