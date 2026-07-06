@@ -172,35 +172,41 @@ def create_app():
 
     def _nas_deliverable_url(deliverable, project, project_customer=None, region_slug=None):
         """
-        Returns the Synology File Station deep-link URL for a deliverable's Design Files folder,
+        Returns the DSM 7 File Station deep-link URL for a deliverable's Design Files folder,
         or None if NAS_WEB_URL is not configured.
 
         Standard brief:  .../Design Files/{deliverable.name}
         C&CM brief:      .../Design Files/{Region}/{Customer}/{deliverable.name}
         Pass project_customer (ProjectCustomer ORM) + region_slug for C&CM deliverables.
+
+        Uses the same double-encoded launchParam format as get_nas_link() — & in folder
+        names survives Synology's internal sub-param parse that way.
         """
         from urllib.parse import quote
         from app.nas import REGION_DISPLAY
 
-        base_url = app.config.get('NAS_WEB_URL')
-        if not base_url:
-            return None
+        base = (app.config.get('NAS_WEB_URL') or
+                f"https://{app.config.get('NAS_HOST', '')}:{app.config.get('NAS_PORT', '5001')}")
 
-        root       = app.config.get('NAS_PROJECT_ROOT', '')
-        year       = project.created_at.year
-        client     = project.client_brand.name if project.client_brand else 'Unknown Client'
-        proj_name  = project.name
+        root        = app.config.get('NAS_PROJECT_ROOT', '/Projects')
+        year        = project.created_at.year
+        client      = project.client_brand.name if project.client_brand else 'Unknown Client'
+        proj_name   = project.name
         design_root = f'{root}/{year}/{client}/{proj_name}/Design Files'
 
         if project_customer and region_slug:
-            region_display   = REGION_DISPLAY.get((region_slug or '').lower(), (region_slug or '').title())
-            customer_name    = project_customer.customer.name
-            folder_path      = f'{design_root}/{region_display}/{customer_name}/{deliverable.name}'
+            region_display = REGION_DISPLAY.get((region_slug or '').lower(), (region_slug or '').title())
+            customer_name  = project_customer.customer.name
+            folder_path    = f'{design_root}/{region_display}/{customer_name}/{deliverable.name}'
         else:
             folder_path = f'{design_root}/{deliverable.name}'
 
-        # Synology File Station deep-link: base_url/file/#{url-encoded-path}
-        return f'{base_url.rstrip("/")}/file/#{quote(folder_path)}'
+        # DSM 7 deep-link: double-encode so & in folder names survives launchParam parse
+        path_encoded  = quote(folder_path, safe='/')      # & → %26, space → %20
+        launch_param  = quote(f'opendir={path_encoded}', safe='/')   # % → %25
+        return (f'{base.rstrip("/")}/index.cgi'
+                f'?launchApp=SYNO.SDS.App.FileStation3.Instance'
+                f'&launchParam={launch_param}')
 
     app.jinja_env.globals['nas_deliverable_url'] = _nas_deliverable_url
 
