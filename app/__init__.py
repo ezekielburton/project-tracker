@@ -23,7 +23,7 @@ def create_app():
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-    from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
+    from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
     from app.routes import main
     from app.routes.auth import auth
     from app.routes.projects_brief import brief_bp
@@ -169,6 +169,40 @@ def create_app():
         return g._active_badge_cache[user.id]
 
     app.jinja_env.globals['active_badge_image'] = _active_badge_image
+
+    def _nas_deliverable_url(deliverable, project, project_customer=None, region_slug=None):
+        """
+        Returns the Synology File Station deep-link URL for a deliverable's Design Files folder,
+        or None if NAS_WEB_URL is not configured.
+
+        Standard brief:  .../Design Files/{deliverable.name}
+        C&CM brief:      .../Design Files/{Region}/{Customer}/{deliverable.name}
+        Pass project_customer (ProjectCustomer ORM) + region_slug for C&CM deliverables.
+        """
+        from urllib.parse import quote
+        from app.nas import REGION_DISPLAY
+
+        base_url = app.config.get('NAS_WEB_URL')
+        if not base_url:
+            return None
+
+        root       = app.config.get('NAS_PROJECT_ROOT', '')
+        year       = project.created_at.year
+        client     = project.client_brand.name if project.client_brand else 'Unknown Client'
+        proj_name  = project.name
+        design_root = f'{root}/{year}/{client}/{proj_name}/Design Files'
+
+        if project_customer and region_slug:
+            region_display   = REGION_DISPLAY.get((region_slug or '').lower(), (region_slug or '').title())
+            customer_name    = project_customer.customer.name
+            folder_path      = f'{design_root}/{region_display}/{customer_name}/{deliverable.name}'
+        else:
+            folder_path = f'{design_root}/{deliverable.name}'
+
+        # Synology File Station deep-link: base_url/file/#{url-encoded-path}
+        return f'{base_url.rstrip("/")}/file/#{quote(folder_path)}'
+
+    app.jinja_env.globals['nas_deliverable_url'] = _nas_deliverable_url
 
     @app.context_processor
     def inject_effective_user():

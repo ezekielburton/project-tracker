@@ -653,6 +653,10 @@
                             data-deliverable-id="{{ deliverable.id }}" data-context="{{ deliverable.name }}"
                             data-action="open-flag-modal">⚑ Flag Issue</button>
                         {% endif %}
+                        {% set _nas_url = nas_deliverable_url(deliverable, project, pc, region_key) %}
+                        {% if _nas_url %}
+                        <a href="{{ _nas_url }}" target="_blank" rel="noopener" class="btn-nas-folder" title="Open Design Files folder on NAS">📁 Files</a>
+                        {% endif %}
                         {% if effective_user.role != 'admin' %}
                         <span class="status-badge s-{{ deliverable.status }}">{{ deliverable.status | replace('_', ' ')
                             | title }}</span>
@@ -803,6 +807,10 @@
                         {%- else %}—{% endif -%}
                     </span>
                 </div>
+                {% set _nas_url = nas_deliverable_url(d, project) %}
+                {% if _nas_url %}
+                <a href="{{ _nas_url }}" target="_blank" rel="noopener" class="btn-nas-folder" title="Open Design Files folder on NAS">📁 Files</a>
+                {% endif %}
                 {% if effective_user.role != 'admin' %}
                 <span class="status-badge s-{{ d.status }}">{{ d.status | replace('_', ' ') | title }}</span>
                 {% else %}
@@ -908,15 +916,20 @@
     submission pipeline displayed as a pill tab.
     ═══════════════════════════════════════════════════════════════════════════════ #}
     <div class="detail-card detail-card--full submission-card" id="section-submission" style="margin-top: 1.5rem;">
-        {# Header row: title left, total revision counter right (CCM only, once a revision has been sent) #}
+        {# Header row: title left, revision counter + approve button right (CCM only) #}
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
             <h2 class="detail-card-title" style="margin:0;">Submissions</h2>
-            {% if total_revision_count > 0 %}
-            <div style="display:flex;align-items:center;gap:0.4rem;">
-                <span class="detail-label">Total Revisions:</span>
-                <span class="revision-count-badge">{{ total_revision_count }}</span>
+            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                {% if total_revision_count > 0 %}
+                <div style="display:flex;align-items:center;gap:0.4rem;">
+                    <span class="detail-label">Total Revisions:</span>
+                    <span class="revision-count-badge">{{ total_revision_count }}</span>
+                </div>
+                {% endif %}
+                {% if effective_user.role in ['admin', 'cs'] and project.project_status != 'approved' %}
+                <button type="button" id="approveDirectBtn" class="btn-approve-direct" data-project-id="{{ project.id }}">✓ Approve Project</button>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
 
         {# ── Channel pill bar — C&KV first, then POSM channels ── #}
@@ -1470,17 +1483,22 @@
          4. Internal Revision  → designer sees flag message + Reupload; CS sees waiting msg
          5. Submitted to Client → read-only; history shown below                          -->
     <div class="detail-card detail-card--full submission-card" id="section-posm-submission" style="margin-top: 1.5rem;">
-        <h2 class="detail-card-title">Submission
-            {% if project.project_status == 'internal_review' %}
-            <span class="submission-badge submission-badge--review">In Review</span>
-            {% elif project.project_status == 'internal_revision' %}
-            <span class="submission-badge submission-badge--revision">Needs Revision</span>
-            {% elif project.project_status == 'submitted_to_client' %}
-            <span class="submission-badge submission-badge--sent">Sent to Client</span>
-            {% elif project.project_status == 'approved' %}
-            <span class="submission-badge submission-badge--approved">✓ Approved</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.25rem;">
+            <h2 class="detail-card-title" style="margin:0;">Submission
+                {% if project.project_status == 'internal_review' %}
+                <span class="submission-badge submission-badge--review">In Review</span>
+                {% elif project.project_status == 'internal_revision' %}
+                <span class="submission-badge submission-badge--revision">Needs Revision</span>
+                {% elif project.project_status == 'submitted_to_client' %}
+                <span class="submission-badge submission-badge--sent">Sent to Client</span>
+                {% elif project.project_status == 'approved' %}
+                <span class="submission-badge submission-badge--approved">✓ Approved</span>
+                {% endif %}
+            </h2>
+            {% if effective_user.role in ['admin', 'cs'] and project.project_status != 'approved' %}
+            <button type="button" id="approveDirectBtn" class="btn-approve-direct" data-project-id="{{ project.id }}">✓ Approve Project</button>
             {% endif %}
-        </h2>
+        </div>
 
         {# ── State 3: In Internal Review — CS can approve or flag ── #}
         {% if project.project_status == 'internal_review' and active_submission %}
@@ -1494,6 +1512,27 @@
                     class="btn-secondary btn-sm">Download</a>
             </div>
         </div>
+        {# Extra files attached to this submission #}
+        {% for ef in active_submission.extra_files %}
+        <div class="reference-file-item submission-extra-file" data-file-id="{{ ef.id }}">
+            <span class="reference-file-icon">📎</span>
+            <span class="reference-file-name">{{ ef.original_filename }}</span>
+            <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+            <div class="reference-file-actions">
+                <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                {% if effective_user.role == 'admin' or ef.uploaded_by_id == effective_user.id %}
+                <button type="button" class="btn-danger btn-sm" data-action="delete-extra-file" data-file-id="{{ ef.id }}">✕</button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
+        <div style="margin-top: 0.5rem;">
+            <input type="file" id="extraFileInput3" class="hidden">
+            <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ active_submission.id }}" data-input-id="extraFileInput3">📎 Attach File</button>
+            <span class="reference-file-upload-status" id="extraFileStatus3"></span>
+        </div>
+        {% endif %}
         <div class="submission-status" style="margin-top: 0.5rem;">🔍 In Internal Review. Awaiting Client Servicing
             approval</div>
         {% if active_submission.included_deliverables or active_submission.includes_concept or
@@ -1567,6 +1606,17 @@
                     class="btn-secondary btn-sm">Download</a>
             </div>
         </div>
+        {# Extra files — view only once sent to client #}
+        {% for ef in active_submission.extra_files %}
+        <div class="reference-file-item submission-extra-file">
+            <span class="reference-file-icon">📎</span>
+            <span class="reference-file-name">{{ ef.original_filename }}</span>
+            <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+            <div class="reference-file-actions">
+                <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+            </div>
+        </div>
+        {% endfor %}
         <div class="submission-status submission-status--sent" style="margin-top: 0.5rem;">
             ✓ Submitted to client on {{ active_submission.submitted_to_client_at | dubai_time }} GST
             by {{ active_submission.submitted_by.name if active_submission.submitted_by else '—' }}
@@ -1823,6 +1873,27 @@
                     class="btn-secondary btn-sm">Download</a>
             </div>
         </div>
+        {# Extra files attached to this submission #}
+        {% for ef in active_submission.extra_files %}
+        <div class="reference-file-item submission-extra-file" data-file-id="{{ ef.id }}">
+            <span class="reference-file-icon">📎</span>
+            <span class="reference-file-name">{{ ef.original_filename }}</span>
+            <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+            <div class="reference-file-actions">
+                <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                {% if effective_user.role == 'admin' or ef.uploaded_by_id == effective_user.id %}
+                <button type="button" class="btn-danger btn-sm" data-action="delete-extra-file" data-file-id="{{ ef.id }}">✕</button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
+        <div style="margin-top: 0.5rem;">
+            <input type="file" id="extraFileInput2" class="hidden">
+            <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ active_submission.id }}" data-input-id="extraFileInput2">📎 Attach File</button>
+            <span class="reference-file-upload-status" id="extraFileStatus2"></span>
+        </div>
+        {% endif %}
         {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
         <div class="submission-picker" id="submissionPicker" style="margin-top: 1rem;">
             <p class="detail-label" style="margin-bottom: 0.5rem;">Which deliverables are included in this deck?</p>
@@ -2763,6 +2834,34 @@
                 }
             );
         });
+
+        // ── Direct approve button (bypasses submission pipeline) ─────────────
+        var approveDirectBtn = document.getElementById('approveDirectBtn');
+        if (approveDirectBtn) {
+            approveDirectBtn.addEventListener('click', function () {
+                var projectId = this.dataset.projectId;
+                openApprovalModal(
+                    'Approve Project?',
+                    'Straight to approved — this bypasses the submission system entirely and locks the project immediately. This cannot be undone.',
+                    function () {
+                        fetch('/projects/' + projectId + '/approve-direct', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                        })
+                            .then(function (r) { return r.json(); })
+                            .then(function (data) {
+                                if (data.success) {
+                                    showToast('Project approved', 'success');
+                                    setTimeout(function () { location.reload(); }, 800);
+                                } else {
+                                    showToast(data.error || 'Something went wrong', 'error');
+                                }
+                            })
+                            .catch(function () { showToast('Something went wrong', 'error'); });
+                    }
+                );
+            });
+        }
 
         // ── Standard deliverable inline input: Enter key shortcut ────────────
         var stdInp = document.getElementById('newStandardDeliverable');

@@ -305,6 +305,67 @@ def posm_prompt_response(project_id):
         return jsonify({'success': True})
 
 
+@approval_bp.route('/projects/<int:project_id>/approve-direct', methods=['POST'])
+@login_required
+@role_required('admin', 'cs', 'management')
+def approve_direct(project_id):
+    """Bypass the submission system and approve a project directly.
+
+    Used for technical-only projects (or any case where CS wants to lock
+    the project without going through the submission pipeline).
+
+    Approves project + all deliverables + C&KV + all POSM channels in one
+    shot, regardless of current project_status.
+    """
+    project = Project.query.get_or_404(project_id)
+
+    if project.project_status == 'approved':
+        return jsonify({'success': False, 'error': 'Project is already approved'}), 400
+
+    now = datetime.utcnow()
+
+    # Emulation-aware actor (CLAUDE.md pattern)
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    # Lock the project
+    project.project_status = 'approved'
+    project.approved_at = now
+    project.approved_by_id = actor.id
+
+    # Approve all standard deliverables
+    for deliverable in project.project_deliverables:
+        deliverable.status = 'approved'
+
+    # Approve C&KV if present
+    if project.has_concept:
+        project.concept_status = 'approved'
+    if project.has_kv:
+        project.kv_status = 'approved'
+
+    # Approve all POSM channels if present
+    posm_channels = ProjectPosmChannel.query.filter_by(project_id=project_id).all()
+    for channel in posm_channels:
+        if channel.status != 'approved':
+            channel.status = 'approved'
+            channel.approved_at = now
+            channel.approved_by_id = actor.id
+
+    db.session.commit()
+
+    log_activity(
+        'project_approved',
+        f'"{project.name}" directly approved (bypassing submission) by {actor.name}',
+        user=actor, entity_type='project',
+        entity_name=project.name, entity_id=project.id
+    )
+
+    notify_of_project_approved(project, triggered_by=actor)
+    check_achievements(actor, 'project_approved')
+
+    return jsonify({'success': True})
+
+
 @approval_bp.route('/projects/<int:project_id>/resume-posm', methods=['POST'])
 @login_required
 def resume_posm_project(project_id):

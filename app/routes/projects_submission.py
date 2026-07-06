@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.models import (Project, User, Customer, ProjectCustomer, Deliverable,
                         DeliverableAssignment, ProjectSubmission,
-                        ProjectSubmissionDeliverable, ProjectRevision,
+                        ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision,
                         ProjectRevisionDeliverable, ProjectPosmChannel, ProjectFile,
                         ProjectRegion)
 from app.decorators import role_required
@@ -861,6 +861,117 @@ def download_submission(submission_id):
         as_attachment=True,
         download_name=submission.original_filename
     )
+
+
+@submission_bp.route('/projects/<int:project_id>/submission/<int:submission_id>/add-file', methods=['POST'])
+@login_required
+@role_required('admin', 'designer', 'team_lead')
+def add_submission_file(project_id, submission_id):
+    """Attach an additional file to an existing active submission.
+
+    Allows designers to upload multiple files against a single submission entry —
+    e.g. both a PDF overview deck and individual artwork files. These extra files
+    do not affect the submission state machine; they're purely supplementary."""
+    import io
+
+    project = Project.query.get_or_404(project_id)
+
+    if project.project_status == 'approved':
+        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
+
+    submission = ProjectSubmission.query.filter_by(
+        id=submission_id, project_id=project_id, is_active=True
+    ).first_or_404()
+
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+    allowed = {'pdf', 'pptx', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'zip'}
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in allowed:
+        return jsonify({'success': False, 'error': f'File type .{ext} is not supported'}), 400
+
+    file_bytes = file.read()
+
+    extra = ProjectSubmissionFile(
+        submission_id=submission_id,
+        project_id=project_id,
+        original_filename=file.filename,
+        file_type=ext,
+        uploaded_by_id=current_user.id,
+    )
+    db.session.add(extra)
+    db.session.commit()
+
+    # Upload to NAS in background (same Submissions/ folder as the main deck)
+    from app.nas import upload_app_file, build_file_path, _run_in_background
+    _bg_folder   = build_file_path(project, 'Submissions', extra.original_filename).rsplit('/', 1)[0]
+    _bg_bytes    = file_bytes
+    _bg_filename = extra.original_filename
+    _bg_app      = current_app._get_current_object()
+    _run_in_background(_bg_app, lambda: upload_app_file(_bg_bytes, _bg_folder, _bg_filename))
+
+    log_activity('file_attached',
+                 f'Extra file "{file.filename}" attached to submission for "{project.name}" by {current_user.name}',
+                 user=current_user, entity_type='project',
+                 entity_name=project.name, entity_id=project.id)
+
+    return jsonify({
+        'success': True,
+        'file': {
+            'id': extra.id,
+            'original_filename': extra.original_filename,
+            'file_type': extra.file_type,
+            'uploaded_by': current_user.name,
+        }
+    })
+
+
+@submission_bp.route('/projects/submission/file/<int:file_id>/download')
+@login_required
+def download_submission_file(file_id):
+    """Download a supplementary file attached to a submission."""
+    import io
+
+    extra   = ProjectSubmissionFile.query.get_or_404(file_id)
+    project = Project.query.get(extra.project_id)
+
+    from app.nas import download_app_file, build_file_path
+    nas_path   = build_file_path(project, 'Submissions', extra.original_filename)
+    file_bytes = download_app_file(nas_path)
+    return send_file(
+        io.BytesIO(file_bytes),
+        as_attachment=True,
+        download_name=extra.original_filename
+    )
+
+
+@submission_bp.route('/projects/submission/file/<int:file_id>', methods=['DELETE'])
+@login_required
+def delete_submission_file(file_id):
+    """Delete a supplementary file. Only the uploader or an admin may delete."""
+    extra   = ProjectSubmissionFile.query.get_or_404(file_id)
+    project = Project.query.get(extra.project_id)
+
+    if current_user.role != 'admin' and extra.uploaded_by_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Not authorised to delete this file'}), 403
+
+    if project and project.project_status == 'approved':
+        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
+
+    # Remove from NAS in background
+    from app.nas import delete_app_file, build_file_path, _run_in_background
+    _del_path = build_file_path(project, 'Submissions', extra.original_filename)
+    _del_app  = current_app._get_current_object()
+    _run_in_background(_del_app, lambda: delete_app_file(_del_path))
+
+    db.session.delete(extra)
+    db.session.commit()
+    return jsonify({'success': True})
 
 
 @submission_bp.route('/projects/<int:project_id>/submission/send-revision', methods=['POST'])

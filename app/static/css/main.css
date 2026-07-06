@@ -3758,6 +3758,28 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     background: #fef3c7;
 }
 
+.btn-nas-folder {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--ashen);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ashen);
+    cursor: pointer;
+    white-space: nowrap;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.btn-nas-folder:hover {
+    background: color-mix(in srgb, var(--ashen) 15%, white);
+    color: var(--ashen);
+}
+
 .brief-flag-indicator {
     font-size: 0.72rem;
     font-family: var(--font-mono);
@@ -5242,6 +5264,15 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     background: var(--surface);
 }
 
+/* Supplementary file rows attached to a submission — same layout as the main
+   reference-file-item but slightly inset with a dashed border so it reads as
+   "secondary" relative to the primary submission deck above it. */
+.submission-extra-file {
+    border-style: dashed;
+    background: color-mix(in srgb, var(--sandstone) 30%, white);
+    margin-left: 1rem;
+}
+
 .reference-file-icon {
     font-size: 1.2rem;
     flex-shrink: 0;
@@ -5377,6 +5408,28 @@ select.s-awaiting_posm_details {
     background: color-mix(in srgb, var(--pine) 20%, transparent);
     color: var(--pine);
     border: 1px solid var(--pine);
+}
+
+/* ── Direct-approve button (submission card header, right side) ─────────── */
+/* Intentionally quiet — sits far right so it's not accidentally clicked,
+   pine-colored so it reads clearly as an approval action, not an error. */
+.btn-approve-direct {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.35rem 0.85rem;
+    border: 1.5px solid var(--pine);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--pine);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+    margin-left: auto;
+}
+
+.btn-approve-direct:hover {
+    background: color-mix(in srgb, var(--pine) 12%, transparent);
 }
 
 /* ── Approved Projects — year/month grouping in dashboards ───────────────── */

@@ -260,10 +260,11 @@ def update_project(project_id):
             # deadline and teams updated without touching their status or assignments.
             def _norm_del(x):
                 if isinstance(x, str):
-                    return {'name': x.strip(), 'design_deadline': None, 'teams': []}
+                    return {'name': x.strip(), 'design_deadline': None, 'design_deadline_time': None, 'teams': []}
                 return {
                     'name': (x.get('name') or '').strip(),
                     'design_deadline': x.get('design_deadline'),
+                    'design_deadline_time': x.get('design_deadline_time'),
                     'teams': x.get('teams') or [],
                 }
 

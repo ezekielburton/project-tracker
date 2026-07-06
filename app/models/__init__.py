@@ -731,6 +731,33 @@ class ProjectSubmissionDeliverable(db.Model):
         return f'<ProjectSubmissionDeliverable submission={self.submission_id} deliverable={self.deliverable_id}>'
 
 
+class ProjectSubmissionFile(db.Model):
+    """Supplementary files attached to a ProjectSubmission.
+
+    Multiple files can be attached to the same active submission — the first
+    file is on ProjectSubmission.filename as before; any additional attachments
+    live here. Deleting the parent submission cascades to these rows.
+    Files are stored on the NAS under the project's Submissions/ folder."""
+    __tablename__ = 'project_submission_files'
+
+    id               = db.Column(db.Integer, primary_key=True)
+    submission_id    = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
+    project_id       = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    file_type        = db.Column(db.String(10), nullable=False)
+    uploaded_by_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    uploaded_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+    submission  = db.relationship('ProjectSubmission',
+                                  backref=db.backref('extra_files', cascade='all, delete-orphan'))
+    project     = db.relationship('Project',
+                                  backref=db.backref('submission_extra_files', cascade='all, delete-orphan'))
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+
+    def __repr__(self):
+        return f'<ProjectSubmissionFile {self.original_filename} submission={self.submission_id}>'
+
+
 class SidebarClick(db.Model):
     """Analytics table — records every sidebar link click.
     Used by admin to see which tools and pages are most used.

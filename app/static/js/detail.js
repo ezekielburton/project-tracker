@@ -1416,6 +1416,97 @@ document.addEventListener('click', function (e) {
         }
         return;
     }
+
+    // ── Attach extra file to submission ───────────────────────────────────────
+    // Button triggers the hidden file input; the change listener does the upload.
+    var attachBtn = e.target.closest('[data-action="attach-extra-file"]');
+    if (attachBtn) {
+        var inputId = attachBtn.dataset.inputId;
+        var fileInput = document.getElementById(inputId);
+        if (fileInput) fileInput.click();
+        return;
+    }
+
+    // ── Delete extra file ─────────────────────────────────────────────────────
+    var delFileBtn = e.target.closest('[data-action="delete-extra-file"]');
+    if (delFileBtn) {
+        var fileId = parseInt(delFileBtn.dataset.fileId);
+        if (!confirm('Delete this attached file?')) return;
+        fetch('/projects/submission/file/' + fileId, { method: 'DELETE' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    var row = document.querySelector('.submission-extra-file[data-file-id="' + fileId + '"]');
+                    if (row) row.remove();
+                    showToast('File deleted', 'success');
+                } else {
+                    showToast(data.error || 'Something went wrong', 'error');
+                }
+            })
+            .catch(function () { showToast('Something went wrong', 'error'); });
+        return;
+    }
+});
+
+// ── Extra file attachment: file input change listeners ────────────────────────
+// Handles the case where a user picks a file via the attach-extra-file inputs.
+// We use event delegation on document for the change event too — file inputs
+// are inside conditional Jinja blocks and may not exist until a certain state.
+document.addEventListener('change', function (e) {
+    var input = e.target;
+    if (!input || input.type !== 'file') return;
+    // Only handle the extra-file inputs (id starts with extraFileInput)
+    if (!input.id || !input.id.startsWith('extraFileInput')) return;
+
+    var file = input.files[0];
+    if (!file) return;
+
+    // Find the Attach File button associated with this input
+    var attachBtn = document.querySelector('[data-action="attach-extra-file"][data-input-id="' + input.id + '"]');
+    var statusEl  = attachBtn ? attachBtn.parentElement.querySelector('.reference-file-upload-status') : null;
+    var submissionId = attachBtn ? parseInt(attachBtn.dataset.submissionId) : null;
+
+    if (!submissionId) return;
+
+    if (statusEl) statusEl.textContent = 'Uploading…';
+
+    var formData = new FormData();
+    formData.append('file', file);
+
+    fetch('/projects/' + detailProjectId + '/submission/' + submissionId + '/add-file', {
+        method: 'POST',
+        body: formData
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                if (statusEl) statusEl.textContent = 'Error: ' + (data.error || 'failed');
+                return;
+            }
+            if (statusEl) statusEl.textContent = '';
+            // Inject the new file row before the status span's parent button
+            var ef = data.file;
+            var row = document.createElement('div');
+            row.className = 'reference-file-item submission-extra-file';
+            row.dataset.fileId = ef.id;
+            row.innerHTML =
+                '<span class="reference-file-icon">📎</span>' +
+                '<span class="reference-file-name">' + ef.original_filename + '</span>' +
+                '<span class="reference-file-meta">' + ef.uploaded_by + '</span>' +
+                '<div class="reference-file-actions">' +
+                    '<a href="/projects/submission/file/' + ef.id + '/download" class="btn-secondary btn-sm">Download</a>' +
+                    '<button type="button" class="btn-danger btn-sm" data-action="delete-extra-file" data-file-id="' + ef.id + '">✕</button>' +
+                '</div>';
+            // Insert before the attach-file button row
+            if (attachBtn && attachBtn.parentElement) {
+                attachBtn.parentElement.parentElement.insertBefore(row, attachBtn.parentElement);
+            }
+            input.value = '';
+            showToast('File attached', 'success');
+        })
+        .catch(function () {
+            if (statusEl) statusEl.textContent = 'Upload failed.';
+        });
 });
 
 // ── Status select: change delegation ─────────────────────────────────────────
