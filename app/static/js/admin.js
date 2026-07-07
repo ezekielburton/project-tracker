@@ -865,7 +865,7 @@ if (addSoundForm) {
 // out so the submit handler can call it either immediately or after
 // the upload finishes — same idea as the inline quick-add flow in
 // main.js.
-function createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, referenceImage, submitBtn) {
+function createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, referenceImage, templateFilename, submitBtn) {
     fetch('/admin/api/deliverable-types', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -875,7 +875,8 @@ function createPTDeliverableType(name, clientId, customerId, disciplines, isCust
             customer_id: customerId,
             disciplines: disciplines,
             is_custom: isCustom,
-            reference_image: referenceImage
+            reference_image: referenceImage,
+            template_filename: templateFilename
         })
     })
         .then(function (res) { return res.json(); })
@@ -895,6 +896,33 @@ function createPTDeliverableType(name, clientId, customerId, disciplines, isCust
         .catch(function () { btnDone(submitBtn); });
 }
 
+// Returns a Promise resolving to the uploaded filename, or null if no file
+// was chosen at all. Shared by both the reference-image and template-file
+// uploads below — same endpoint-agnostic shape, just a different URL.
+function uploadDeliverableFile(file, endpoint) {
+    if (!file) return Promise.resolve(null);
+    var formData = new FormData();
+    formData.append('file', file);
+    return fetch(endpoint, { method: 'POST', body: formData })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (!data.success) return Promise.reject(data.error || 'Upload failed.');
+            return data.filename;
+        });
+}
+
+// Three possible outcomes for one of the file fields on an edit save:
+//  - a new file was chosen -> upload it, resolve to the new filename
+//  - "remove current" was checked -> resolve to null (explicit clear)
+//  - neither -> resolve to undefined, meaning "leave alone" — the caller
+//    uses that to decide whether to include the key in the PATCH body at
+//    all, matching the backend's "only touch the field if present" rule.
+function resolveFileField(chosenFile, removeChecked, endpoint) {
+    if (chosenFile) return uploadDeliverableFile(chosenFile, endpoint);
+    if (removeChecked) return Promise.resolve(null);
+    return Promise.resolve(undefined);
+}
+
 ptAddDelForm.addEventListener('submit', function (e) {
     e.preventDefault();
     var name = document.getElementById('pt-new-del-name').value.trim();
@@ -911,29 +939,20 @@ ptAddDelForm.addEventListener('submit', function (e) {
     var submitBtn = ptAddDelForm.querySelector('button[type="submit"]');
     btnLoading(submitBtn);
 
-    // If an image was chosen, upload it first and use the returned
-    // filename; otherwise create with no image.
-    var chosenFile = document.getElementById('pt-new-del-image').files[0];
-    if (chosenFile) {
-        var formData = new FormData();
-        formData.append('file', chosenFile);
-        fetch('/projects/deliverable-types/upload-image', { method: 'POST', body: formData })
-            .then(function (res) { return res.json(); })
-            .then(function (uploadData) {
-                if (!uploadData.success) {
-                    showToast(uploadData.error || 'Image upload failed.', 'error');
-                    btnDone(submitBtn);
-                    return;
-                }
-                createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, uploadData.filename, submitBtn);
-            })
-            .catch(function () {
-                showToast('Something went wrong uploading the image.', 'error');
-                btnDone(submitBtn);
-            });
-    } else {
-        createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, null, submitBtn);
-    }
+    var imageFile = document.getElementById('pt-new-del-image').files[0];
+    var templateFile = document.getElementById('pt-new-del-template').files[0];
+
+    // Both uploads (if chosen) run in parallel, then the deliverable type
+    // is created once both filenames (or nulls) are known.
+    Promise.all([
+        uploadDeliverableFile(imageFile, '/projects/deliverable-types/upload-image'),
+        uploadDeliverableFile(templateFile, '/admin/api/deliverable-types/upload-template')
+    ]).then(function (results) {
+        createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, results[0], results[1], submitBtn);
+    }).catch(function (err) {
+        showToast(typeof err === 'string' ? err : 'Something went wrong uploading a file.', 'error');
+        btnDone(submitBtn);
+    });
 });
 
 
@@ -1241,10 +1260,16 @@ ptAddDelForm.addEventListener('submit', function (e) {
                         '<label style="font-size:0.85rem;"><input type="checkbox" class="pt-del-remove-image"> Remove current image</label>'
                         : '') +
                     '<label style="font-size:0.85rem;display:block;margin-top:4px;">Replace image: <input type="file" class="pt-del-image-input" accept="image/*"></label>' +
+                    (type.template_filename ?
+                        '<p style="font-size:0.85rem;margin:6px 0;">Current template: <code>' + type.template_filename + '</code></p>' +
+                        '<label style="font-size:0.85rem;"><input type="checkbox" class="pt-del-remove-template"> Remove current template</label>'
+                        : '') +
+                    '<label style="font-size:0.85rem;display:block;margin-top:4px;">Replace template (.ai): <input type="file" class="pt-del-template-input" accept=".ai"></label>' +
                     '<div class="account-edit-actions">' +
                     '<button type="button" class="btn-primary pt-del-save-btn">Save</button>' +
                     '<button type="button" class="account-cancel-edit-btn">Cancel</button>' +
                     '</div></div>';
+                    
                 row.querySelector('.account-cancel-edit-btn').addEventListener('click', function () {
                     renderPTDeliverableRows(ptAllDeliverableTypes);
                 });
@@ -1257,18 +1282,10 @@ ptAddDelForm.addEventListener('submit', function (e) {
                     var saveBtn = this;
                     btnLoading(saveBtn);
 
-                    // imageKeyProvided controls whether reference_image is
-                    // included in the PATCH body at all. This has to be a
-                    // deliberate three-way choice: include a new filename
-                    // (swap), include null (explicit clear), or leave the
-                    // key out entirely (untouched) — matching the PATCH
-                    // route's "only touch reference_image if the key is
-                    // present" behaviour from earlier, so an ordinary
-                    // name/discipline-only save can never accidentally
-                    // wipe out an existing image.
-                    function savePTDeliverableType(referenceImage, imageKeyProvided) {
+                    function savePTDeliverableType(referenceImage, imageKeyProvided, templateFilename, templateKeyProvided) {
                         var body = { name: name, disciplines: disciplines };
                         if (imageKeyProvided) body.reference_image = referenceImage;
+                        if (templateKeyProvided) body.template_filename = templateFilename;
 
                         fetch('/admin/api/deliverable-types/' + id, {
                             method: 'PATCH',
@@ -1283,6 +1300,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
                                         ptAllDeliverableTypes[idx].name = name;
                                         ptAllDeliverableTypes[idx].disciplines = disciplines;
                                         if (imageKeyProvided) ptAllDeliverableTypes[idx].reference_image = referenceImage;
+                                        if (templateKeyProvided) ptAllDeliverableTypes[idx].template_filename = templateFilename;
                                     }
                                     renderPTDeliverableRows(ptAllDeliverableTypes);
                                 } else {
@@ -1293,31 +1311,22 @@ ptAddDelForm.addEventListener('submit', function (e) {
                             .catch(function () { btnDone(saveBtn); });
                     }
 
-                    var removeChecked = row.querySelector('.pt-del-remove-image');
-                    var chosenFile = row.querySelector('.pt-del-image-input').files[0];
+                    var imageFile = row.querySelector('.pt-del-image-input').files[0];
+                    var imageRemoveEl = row.querySelector('.pt-del-remove-image');
+                    var templateFile = row.querySelector('.pt-del-template-input').files[0];
+                    var templateRemoveEl = row.querySelector('.pt-del-remove-template');
 
-                    if (chosenFile) {
-                        var formData = new FormData();
-                        formData.append('file', chosenFile);
-                        fetch('/projects/deliverable-types/upload-image', { method: 'POST', body: formData })
-                            .then(function (res) { return res.json(); })
-                            .then(function (uploadData) {
-                                if (!uploadData.success) {
-                                    showToast(uploadData.error || 'Image upload failed.', 'error');
-                                    btnDone(saveBtn);
-                                    return;
-                                }
-                                savePTDeliverableType(uploadData.filename, true);
-                            })
-                            .catch(function () {
-                                showToast('Something went wrong uploading the image.', 'error');
-                                btnDone(saveBtn);
-                            });
-                    } else if (removeChecked && removeChecked.checked) {
-                        savePTDeliverableType(null, true);
-                    } else {
-                        savePTDeliverableType(null, false);
-                    }
+                    Promise.all([
+                        resolveFileField(imageFile, imageRemoveEl && imageRemoveEl.checked, '/projects/deliverable-types/upload-image'),
+                        resolveFileField(templateFile, templateRemoveEl && templateRemoveEl.checked, '/admin/api/deliverable-types/upload-template')
+                    ]).then(function (results) {
+                        var referenceImage = results[0];
+                        var templateFilename = results[1];
+                        savePTDeliverableType(referenceImage, referenceImage !== undefined, templateFilename, templateFilename !== undefined);
+                    }).catch(function (err) {
+                        showToast(typeof err === 'string' ? err : 'Something went wrong uploading a file.', 'error');
+                        btnDone(saveBtn);
+                    });
                 });
             });
         });

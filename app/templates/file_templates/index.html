@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}File Templates{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">C&CM File Templates</h1>
+    <p class="page-subtitle">Per-store design template files (.ai), organized by region and customer.</p>
+
+    {% if not regions_data %}
+    <p class="no-files-msg">No deliverable types with templates configured yet.</p>
+    {% endif %}
+
+    {% for region in regions_data %}
+    <div class="ft-region-block">
+        <div class="ft-region-header">
+            <span class="ft-region-toggle-area" data-action="toggle-ft-region"
+                data-target="ft-region-body-{{ region.region_key }}">
+                <span class="ft-region-chevron">▾</span>
+                <h2 class="ft-region-name">{{ region.region_label }}</h2>
+            </span>
+            <button type="button" class="btn-secondary btn-sm" data-action="download-all-zip"
+                data-zip-build-url="{{ url_for('file_templates.download_all_region_templates', region_key=region.region_key) }}">
+                Download All
+            </button>
+        </div>
+
+        <div class="ft-region-body" id="ft-region-body-{{ region.region_key }}">
+            {% for row in region.customers %}
+            <div class="brief-customer-block">
+                <div class="brief-customer-summary">
+                    <span class="ft-customer-toggle-area" data-action="toggle-ft-customer"
+                        data-target="ft-customer-body-{{ row.customer.id }}" data-customer-id="{{ row.customer.id }}">
+                        <span class="brief-customer-summary-name">{{ row.customer.name }}</span>
+                        <span class="brief-customer-summary-count">{{ row.deliverable_types|length }} deliverable{{ 's'
+                            if row.deliverable_types|length != 1 }}</span>
+                        <span class="brief-customer-summary-chevron">▾</span>
+                    </span>
+                    <button type="button" class="btn-secondary btn-sm" data-action="download-all-zip"
+                        data-zip-build-url="{{ url_for('file_templates.download_all_customer_templates', customer_id=row.customer.id) }}">
+                        Download All
+                    </button>
+                </div>
+
+                <div class="brief-customer-body" id="ft-customer-body-{{ row.customer.id }}">
+                    <div class="ft-deliverable-list">
+                        {% for dt in row.deliverable_types %}
+                        <div class="ft-deliverable-row">
+                            <span class="ft-deliverable-name">{{ dt.name }}</span>
+                            {% if dt.template_filename %}
+                            <a href="{{ url_for('file_templates.download_template', deliverable_type_id=dt.id) }}"
+                                class="btn-secondary btn-sm">Download</a>
+                            {% else %}
+                            <span class="ft-no-file-badge">No file yet</span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script src="{{ url_for('static', filename='js/file-templates.js') }}"></script>
+{% endblock %}

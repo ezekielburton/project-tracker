@@ -6,31 +6,34 @@ v2.2 - Large feature update
 ================================================================================
 New Features:
 
-- Added first login wizard
-- Added file preview for reference files
-- Added deliverable images for C&CM
-- Added file preview for Submission Files files
-- Added drag and dropping when attaching files 
+- Added first login wizard.
+- Added file preview for reference files.
+- Added deliverable images for C&CM.
+- Added file preview for Submission Files files.
+- Added drag and dropping when attaching files.
+- Added C&CM File Template Directory for Graphics.
+- Added download all for reference files and submisson file history.
 
 Adjustments:
 
 - Added the ability to submit multiple files
 - Added DWG and ZIP to allowed file types for submissions and reference files.
-- Redesigned submission UI/UX to stop accidental approvals (do this tmw)
+- Redesigned submission UI/UX to stop accidental approvals (do this tmw).
 - Moved settings and edit banner on the profile page, to the left side for better visibility.
 - C&CM customers are now collapsible, for better UI/UX.
-- Added project filtering and searching for all views
+- Added project filtering and searching for all views.
 
 Bug Fixes:
 
-- Fixed the resume proejct button now showing in some cases
-- Fixed assigned designer styling
+- Fixed the resume proejct button now showing in some cases.
+- Fixed assigned designer styling.
 - Approved C&CM customer submission paths, now properly lock.
-- Removed upload reference file from detail page - only accessible in edit project page
+- Removed upload reference file from detail page - only accessible in edit project page.
 - Fixed notifications not updating in the notification section, without a page refresh.
 - Fixed tab name being wrong in some cases.
 - Fixed text formatting in revision feedback.
-- Fixed management and admin receiving notifications for every project
+- Fixed management and admin receiving notifications for every project.
+- Fixed flagging internal revision, adding to the revision counter.
 
 ================================================================================
 v2.1 Live app updates, deliverable view & Profile Page revamp!

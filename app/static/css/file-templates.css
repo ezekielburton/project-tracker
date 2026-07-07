@@ -1,0 +1,118 @@
+/* file-templates.css — Vitamin-E
+   C&CM File Templates library page. Region/customer rows reuse the exact
+   .brief-customer-* classes from the C&CM detail page (already defined in
+   main.css) — only the region-level pieces and the deliverable-row list
+   below are new here. */
+
+.page-title {
+    font-size: 2.4rem;
+    margin: 0 0 0.25rem;
+}
+
+.page-subtitle {
+    font-size: 0.9rem;
+    color: var(--grey-dark);
+    margin: 0 0 1.5rem;
+}
+
+.ft-region-block {
+    margin-bottom: 1.5rem;
+    background: var(--white);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Scoped to .ft-region-body so this only applies on this page —
+   .brief-customer-block is shared with the C&CM detail page, which
+   doesn't want a bordered white-box treatment applied to it too. */
+.ft-region-body .brief-customer-block {
+    background: var(--white);
+    border: 1px solid var(--grey-light);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.ft-region-body .brief-customer-block:last-child {
+    margin-bottom: 0;
+}
+
+.ft-region-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.ft-region-toggle-area {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+}
+
+.ft-region-name {
+    font-family: var(--font-headline);
+    font-size: 1.4rem;
+    letter-spacing: 0.05em;
+    color: var(--tangerine);
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.ft-region-chevron {
+    font-size: 0.9rem;
+    color: var(--grey-dark);
+    transition: transform 0.15s ease;
+}
+
+.ft-region-toggle-area.collapsed .ft-region-chevron {
+    transform: rotate(-90deg);
+}
+
+/* Only the toggle-only inner span (not the whole summary bar) drives
+   collapse now, per Chunk 5's structure — this reuses the existing
+   .brief-customer-summary-chevron element/rotation-on-collapse pattern
+   from the C&CM detail page, just scoped to this page's own wrapper. */
+.ft-customer-toggle-area {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex: 1;
+    cursor: pointer;
+}
+
+.ft-customer-toggle-area.collapsed .brief-customer-summary-chevron {
+    transform: rotate(-90deg);
+}
+
+.ft-deliverable-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+}
+
+.ft-deliverable-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--grey-light);
+}
+
+.ft-deliverable-row:last-child {
+    border-bottom: none;
+}
+
+.ft-deliverable-name {
+    font-size: 0.9rem;
+}
+
+.ft-no-file-badge {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--grey-mid);
+}

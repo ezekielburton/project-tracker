@@ -400,7 +400,8 @@ def list_deliverable_types():
         'region': dt.customer.region if dt.customer else '—',
         'disciplines': [d.team for d in dt.disciplines],
         'is_custom': dt.is_custom,
-        'reference_image': dt.reference_image
+        'reference_image': dt.reference_image,
+        'template_filename': dt.template_filename
     } for dt in types])
     
 
@@ -421,13 +422,46 @@ def update_deliverable_type(type_id):
     # image was already set — the admin isn't re-uploading one every time
     # they save, so "not present" has to mean "leave it alone."
     if 'reference_image' in data:
-        dt.reference_image = data['reference_image'] # a filename, or None to explicitly clear it    
+        dt.reference_image = data['reference_image'] # a filename, or None to explicitly clear it  
+    if 'template_filename' in data:
+        dt.template_filename = data['template_filename']  
     DeliverableTypeDiscipline.query.filter_by(deliverable_type_id=dt.id).delete()
     for team in disciplines:
         db.session.add(DeliverableTypeDiscipline(deliverable_type_id=dt.id, team=team))
     db.session.commit()
     log_activity('deliverable_updated', f'Deliverable type "{dt.name}" updated', user=current_user, entity_type='deliverable', entity_name=dt.name, entity_id=dt.id)
-    return jsonify({'success': True, 'type': {'id': dt.id, 'name': dt.name, 'disciplines': disciplines, 'reference_image': dt.reference_image}})
+    return jsonify({'success': True, 'type': {'id': dt.id, 'name': dt.name, 'disciplines': disciplines, 'reference_image': dt.reference_image, 'template_filename': dt.template_filename}})
+
+@admin_bp.route('/admin/api/deliverable-types/upload-template', methods=['POST'])
+@login_required
+@admin_required
+def upload_deliverable_type_template():
+    """
+    Uploads a template file (.ai) for a deliverable type. Same two-step
+    pattern as upload_deliverable_type_image() in projects_brief.py:
+    upload first, get back a filename, then include that filename in the
+    create/update payload below. Stored on local disk (app/file_templates/),
+    not the NAS — these are small per-store template files.
+    """
+    import os, uuid
+    from app.routes.file_templates import TEMPLATE_UPLOAD_FOLDER
+
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext != 'ai':
+        return jsonify({'success': False, 'error': 'Only .ai files are supported'}), 400
+
+    stored_filename = f'{uuid.uuid4().hex[:8]}.{ext}'
+    os.makedirs(TEMPLATE_UPLOAD_FOLDER, exist_ok=True)
+    file.save(os.path.join(TEMPLATE_UPLOAD_FOLDER, stored_filename))
+
+    return jsonify({'success': True, 'filename': stored_filename})
 
 @admin_bp.route('/admin/api/deliverable-types', methods=['POST'])
 @login_required
@@ -439,7 +473,8 @@ def create_deliverable_type():
     customer_id = data.get('customer_id')
     disciplines = data.get('disciplines', [])
     is_custom = bool(data.get('is_custom', False))
-    reference_image = data.get('reference_image') 
+    reference_image = data.get('reference_image')
+    template_filename = data.get('template_filename')
     if not name or not client_id or not customer_id:
         return jsonify({'success': False, 'error': 'Name, client, and customer are required'}), 400
     dt = DeliverableType(
@@ -447,7 +482,8 @@ def create_deliverable_type():
         client_id=int(client_id),
         customer_id=int(customer_id),
         is_custom=is_custom,
-        reference_image=reference_image
+        reference_image=reference_image,
+        template_filename=template_filename
     )
     db.session.add(dt)
     db.session.flush()
@@ -463,7 +499,8 @@ def create_deliverable_type():
         'region': dt.customer.region,
         'disciplines': disciplines,
         'is_custom': dt.is_custom,
-        'reference_image': dt.reference_image
+        'reference_image': dt.reference_image,
+        'template_filename': dt.template_filename
     }})
 
 @admin_bp.route('/admin/api/deliverable-types/<int:type_id>', methods=['DELETE'])

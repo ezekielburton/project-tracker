@@ -41,6 +41,7 @@ def create_app():
     from app.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
     from app.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel (Phase 7)
     from app.routes.wizard import wizard_bp
+    from app.routes.file_templates import file_templates_bp
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -57,6 +58,7 @@ def create_app():
     app.register_blueprint(profile_bp)
     app.register_blueprint(admin_achievements_bp)
     app.register_blueprint(wizard_bp)
+    app.register_blueprint(file_templates_bp)
    
 
     from app.utils import calculate_project_hours

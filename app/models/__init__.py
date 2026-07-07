@@ -350,6 +350,7 @@ class DeliverableType(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False) 
     reference_image = db.Column(db.String(255), nullable=True)
+    template_filename = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, default=True)
     is_custom = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

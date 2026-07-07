@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/achievements.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/drag-drop.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/file-templates.css') }}">
 </head>
 
 {# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}
@@ -246,6 +247,16 @@
                         </svg>
                         <span class="sidebar-item-label">Production Directory</span>
                     </span>
+
+                    <a href="{{ url_for('file_templates.index') }}" class="sidebar-item sidebar-item--nav" data-link="file-templates"
+                        title="File Templates">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <path d="M14 2v6h6" />
+                        </svg>
+                        <span class="sidebar-item-label">File Templates</span>
+                    </a>
 
                 </div>
             </div>
@@ -621,6 +632,12 @@
                         </div>
                         <label class="pt-custom-label">
                             <input type="checkbox" id="pt-new-del-custom"> Mark as custom
+                        </label>
+                        <label style="font-size:0.85rem;display:block;margin-top:4px;">
+                            Reference image: <input type="file" id="pt-new-del-image" accept="image/*">
+                        </label>
+                        <label style="font-size:0.85rem;display:block;margin-top:4px;">
+                            Template file (.ai): <input type="file" id="pt-new-del-template" accept=".ai">
                         </label>
                         <div class="add-user-actions">
                             <button type="submit" class="btn-primary">Create</button>
