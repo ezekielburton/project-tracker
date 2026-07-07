@@ -15,7 +15,7 @@ import uuid
 import zipfile
 from flask import send_file, after_this_request
 
-ZIP_TEMP_FOLDER = os.path.join('app', 'temp_zips')
+ZIP_TEMP_FOLDER = ZIP_TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp_zips')
 
 # How long an unclaimed zip is allowed to sit before it's swept away.
 ZIP_MAX_AGE_SECONDS = 60 * 60  # 1 hour
