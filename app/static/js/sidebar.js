@@ -178,7 +178,15 @@
             setTimeout(function () {
                 mainContent.innerHTML = result.html;
                 execScripts(mainContent);
-                if (result.title) { document.title = decodeURIComponent(result.title); }
+                if (result.title) {
+                    // decodeURIComponent undoes the quote() percent-encoding added in __init__.py.
+                    // The textarea trick decodes HTML entities (&amp; → &, etc.) because
+                    // document.title expects plain text, not HTML — without this, project names
+                    // containing & show as &amp; in the browser tab.
+                    var _ta = document.createElement('textarea');
+                    _ta.innerHTML = decodeURIComponent(result.title);
+                    document.title = _ta.value;
+                }
                 document.dispatchEvent(new CustomEvent('helix:navigated'));
                 mainContent.style.opacity = '1';
                 if (push !== false) { history.pushState(null, '', url); }

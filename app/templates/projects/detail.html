@@ -1012,8 +1012,9 @@
             {# State: Client sent a revision — designer needs to work then reupload #}
             {% if ckv_latest_revision %}
             {# Show the revision message so the designer knows what to fix #}
-            <div class="submission-status submission-status--flagged" style="margin-top:0.5rem;">
-                ↩ Revision requested by {{ ckv_latest_revision.sent_by.name }}: "{{ ckv_latest_revision.message }}"
+            <div class="revision-card" style="margin-top:0.5rem;">
+                <p class="detail-label" style="margin-bottom:0.25rem;">↩ Revision requested by {{ ckv_latest_revision.sent_by.name }}</p>
+                <div class="revision-message">{{ ckv_latest_revision.message }}</div>
             </div>
             {% endif %}
             {% if project.concept_status == 'revision_in_queue' %}
