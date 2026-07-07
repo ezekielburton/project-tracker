@@ -122,6 +122,22 @@ function helixShowBrowserNotification(message) {
                         bell.appendChild(newBadge);
                     }
                 }
+
+                // Inject new notifications into the sidebar inbox panel so they
+                // show immediately without requiring a page refresh.
+                var inboxView = document.getElementById('notif-inbox-view');
+                if (inboxView) {
+                    // Remove the "no notifications" empty state if present
+                    var emptyMsg = inboxView.querySelector('.no-notifications');
+                    if (emptyMsg) emptyMsg.remove();
+
+                    // Prepend newest at the top (poll returns oldest-first, so reverse)
+                    data.notifications.slice().reverse().forEach(function (n) {
+                        var newItem = buildInboxItem(n.id, n.message, n.time_display || 'Just now');
+                        newItem.classList.add('unread');
+                        inboxView.prepend(newItem);
+                    });
+                }
             })
             .catch(function () {
                 // Network error — silently skip this poll cycle

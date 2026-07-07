@@ -141,13 +141,20 @@ def poll():
 
     new_notifications = query.order_by(Notification.created_at.asc()).all()
 
+    from datetime import timezone, timedelta
+    dubai_tz = timezone(timedelta(hours=4))
+
+    def _fmt(dt):
+        return dt.replace(tzinfo=timezone.utc).astimezone(dubai_tz).strftime('%d %b %Y, %H:%M')
+
     return jsonify({
         'notifications': [
             {
                 'id': n.id,
                 'message': n.message,
                 'notification_type': n.notification_type,
-                'created_at': n.created_at.isoformat()
+                'created_at': n.created_at.isoformat(),
+                'time_display': _fmt(n.created_at)
             }
             for n in new_notifications
         ]

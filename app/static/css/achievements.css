@@ -345,8 +345,31 @@
     line-height: 1;
 }
 
-.ach-category-name {
+.ach-category-display {
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ach-category-edit-form {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ach-category-edit-form.hidden {
+    display: none;
+}
+
+.ach-category-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.ach-category-name {
     font-weight: 700;
     font-size: 0.9rem;
 }

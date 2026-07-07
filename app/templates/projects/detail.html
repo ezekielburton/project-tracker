@@ -606,11 +606,16 @@
                     {% for deliverable in pc.deliverables %}
                     <div class="brief-deliverable-row">
                         <span class="brief-deliverable-name">
+                            {% if deliverable.deliverable_type and deliverable.deliverable_type.reference_image %}
+                            <img src="{{ url_for('static', filename='deliverable-images/' + deliverable.deliverable_type.reference_image) }}"
+                                class="deliverable-row-thumb">
+                            {% endif %}
                             {{ deliverable.name }}
                             {% if deliverable.revision_count > 0 %}
                             <span class="revision-count-badge">Revision {{ deliverable.revision_count }}</span>
                             {% endif %}
                         </span>
+                        <div class="brief-deliverable-right-group">
                         <div class="brief-deliverable-assignments">
                             {% if deliverable.deliverable_type %}
                             {% for d in deliverable.deliverable_type.disciplines %}
@@ -682,6 +687,7 @@
                             </option>
                         </select>
                         {% endif %}
+                        </div>
                     </div>
                     {% endfor %}
                 </div>

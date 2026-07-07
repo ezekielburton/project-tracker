@@ -8,6 +8,7 @@ New Features:
 
 - Added first login wizard
 - Added file preview for reference files
+- Added deliverable images for C&CM
 - Added file preview for Submission Files files (do this tmw)
 - Added drag and dropping when uploading files (do this tmw)
 
@@ -23,6 +24,7 @@ Bug Fixes:
 - Fixed assigned designer styling
 - Approved C&CM customer submission paths, now properly lock.
 - Removed upload reference file from detail page - only accessible in edit project page
+- Fixed notifications not updating in the notification section, without a page refresh.
 
 ================================================================================
 v2.1 Live app updates, deliverable view & Profile Page revamp!

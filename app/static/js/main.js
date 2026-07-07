@@ -1408,6 +1408,7 @@ function syncTableScrollers(viewEl) {
                 opt.value = type.id;
                 opt.textContent = type.is_custom ? type.name + ' (Custom)' : type.name;
                 opt.dataset.disciplines = JSON.stringify(type.disciplines);
+                opt.dataset.referenceImage = type.reference_image || '';
                 select.appendChild(opt);
             });
 
@@ -1426,13 +1427,13 @@ function syncTableScrollers(viewEl) {
                     showCustomDeliverableForm(customerId, clientId, types);
                 } else if (this.value) {
                     var disciplines = JSON.parse(selected.dataset.disciplines);
-                    addDeliverableRow(customerId, this.value, selected.text, disciplines);
+                    addDeliverableRow(customerId, this.value, selected.text, disciplines, selected.dataset.referenceImage);
                     selector.remove();
                 }
             });
         }
 
-        function addDeliverableRow(customerId, typeId, name, disciplines) {
+        function addDeliverableRow(customerId, typeId, name, disciplines, referenceImage) {
             var rowsContainer = document.getElementById('deliverableRows_' + customerId);
 
             var row = document.createElement('div');
@@ -1444,7 +1445,14 @@ function syncTableScrollers(viewEl) {
                 return '<span class="discipline-tag tag--' + d + '">' + d.toUpperCase() + '</span>';
             }).join('');
 
+            // Thumbnail is optional — most rows simply won't have one, so
+            // this collapses to an empty string and the row looks exactly
+            // like it did before whenever there's no image to show.
+            var thumbnail = referenceImage ?
+                '<img src="/static/deliverable-images/' + referenceImage + '" class="deliverable-row-thumb">' : '';
+
             row.innerHTML =
+                thumbnail +
                 '<span class="deliverable-row-name">' + name + '</span>' +
                 '<div class="deliverable-row-disciplines">' + disciplineTags + '</div>' +
                 '<button type="button" class="btn-remove-deliverable" title="Remove">&times;</button>';
@@ -1491,6 +1499,20 @@ function syncTableScrollers(viewEl) {
                 disciplineRow.appendChild(lbl);
             });
 
+            // NEW — optional reference image. Just builds a labeled file input;
+            // nothing happens with whatever gets chosen until Add is clicked.
+            var imageLabel = document.createElement('label');
+            imageLabel.style.fontSize = '0.85rem';
+            imageLabel.style.display = 'flex';
+            imageLabel.style.flexDirection = 'column';
+            imageLabel.style.gap = '4px';
+            imageLabel.textContent = 'Reference image (optional)';
+
+            var imageInput = document.createElement('input');
+            imageInput.type = 'file';
+            imageInput.accept = 'image/*';
+            imageLabel.appendChild(imageInput);
+
             var warningMsg = document.createElement('div');
             warningMsg.style.color = 'var(--rose)';
             warningMsg.style.fontSize = '0.85rem';
@@ -1515,10 +1537,49 @@ function syncTableScrollers(viewEl) {
 
             form.appendChild(nameInput);
             form.appendChild(disciplineRow);
+            form.appendChild(imageLabel);   // NEW
             form.appendChild(warningMsg);
             form.appendChild(btnRow);
 
             rowsContainer.after(form);
+
+            // Actually creates the DeliverableType, given whatever reference image
+            // filename we ended up with (or null if none was chosen). Pulled out
+            // as its own function so the click handler below can call it either
+            // straight away (no image picked) or after the upload finishes (image
+            // picked) — same creation call either way, just a different starting point.
+            function createDeliverableType(referenceImage) {
+                fetch('/projects/deliverable-types/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: nameInput.value.trim(),
+                        client_id: clientId,
+                        customer_id: customerId,
+                        disciplines: Array.from(
+                            form.querySelectorAll('input[type="checkbox"]:checked')
+                        ).map(function (cb) { return cb.value; }),
+                        reference_image: referenceImage
+                    })
+                })
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) {
+                        if (data.error) {
+                            warningMsg.textContent = data.error;
+                            warningMsg.style.display = 'block';
+                            btnDone(confirmBtn);
+                            return;
+                        }
+                        types.push({ id: data.id, name: data.name, disciplines: data.disciplines, is_custom: true });
+                        addDeliverableRow(customerId, data.id, data.name, data.disciplines, data.reference_image);
+                        form.remove();
+                    })
+                    .catch(function (err) {
+                        warningMsg.textContent = 'Something went wrong. Please try again.';
+                        warningMsg.style.display = 'block';
+                        btnDone(confirmBtn);
+                    });
+            }
 
             confirmBtn.addEventListener('click', function () {
                 var name = nameInput.value.trim();
@@ -1556,33 +1617,36 @@ function syncTableScrollers(viewEl) {
 
                 btnLoading(confirmBtn);
 
-                fetch('/projects/deliverable-types/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: name,
-                        client_id: clientId,
-                        customer_id: customerId,
-                        disciplines: disciplines
+                // NEW — if an image was chosen, upload it first and only create the
+                // deliverable type once we have a filename back. No image chosen?
+                // Skip straight to creation.
+                var chosenFile = imageInput.files[0];
+                if (chosenFile) {
+                    var formData = new FormData();
+                    formData.append('file', chosenFile);
+
+                    fetch('/projects/deliverable-types/upload-image', {
+                        method: 'POST',
+                        body: formData
                     })
-                })
-                    .then(function (res) { return res.json(); })
-                    .then(function (data) {
-                        if (data.error) {
-                            warningMsg.textContent = data.error;
+                        .then(function (res) { return res.json(); })
+                        .then(function (uploadData) {
+                            if (!uploadData.success) {
+                                warningMsg.textContent = uploadData.error || 'Image upload failed.';
+                                warningMsg.style.display = 'block';
+                                btnDone(confirmBtn);
+                                return;
+                            }
+                            createDeliverableType(uploadData.filename);
+                        })
+                        .catch(function () {
+                            warningMsg.textContent = 'Something went wrong uploading the image.';
                             warningMsg.style.display = 'block';
                             btnDone(confirmBtn);
-                            return;
-                        }
-                        types.push({ id: data.id, name: data.name, disciplines: data.disciplines, is_custom: true });
-                        addDeliverableRow(customerId, data.id, data.name, data.disciplines, true);
-                        form.remove();
-                    })
-                    .catch(function (err) {
-                        warningMsg.textContent = 'Something went wrong. Please try again.';
-                        warningMsg.style.display = 'block';
-                        btnDone(confirmBtn);
-                    });
+                        });
+                } else {
+                    createDeliverableType(null);
+                }
             });
 
             cancelBtn.addEventListener('click', function () {

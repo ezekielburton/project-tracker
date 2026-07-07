@@ -399,7 +399,8 @@ def list_deliverable_types():
         'customer': dt.customer.name if dt.customer else '—',
         'region': dt.customer.region if dt.customer else '—',
         'disciplines': [d.team for d in dt.disciplines],
-        'is_custom': dt.is_custom
+        'is_custom': dt.is_custom,
+        'reference_image': dt.reference_image
     } for dt in types])
     
 
@@ -414,12 +415,19 @@ def update_deliverable_type(type_id):
     if not name:
         return jsonify({'success': False, 'error': 'Name is required'}), 400
     dt.name = name
+    # Only touch reference_image if the key was actually sent. Without this
+    # check, saving a plain name/discipline edit (no new image chosen) would
+    # send reference_image as absent/None and silently wipe out whatever
+    # image was already set — the admin isn't re-uploading one every time
+    # they save, so "not present" has to mean "leave it alone."
+    if 'reference_image' in data:
+        dt.reference_image = data['reference_image'] # a filename, or None to explicitly clear it    
     DeliverableTypeDiscipline.query.filter_by(deliverable_type_id=dt.id).delete()
     for team in disciplines:
         db.session.add(DeliverableTypeDiscipline(deliverable_type_id=dt.id, team=team))
     db.session.commit()
     log_activity('deliverable_updated', f'Deliverable type "{dt.name}" updated', user=current_user, entity_type='deliverable', entity_name=dt.name, entity_id=dt.id)
-    return jsonify({'success': True, 'type': {'id': dt.id, 'name': dt.name, 'disciplines': disciplines}})
+    return jsonify({'success': True, 'type': {'id': dt.id, 'name': dt.name, 'disciplines': disciplines, 'reference_image': dt.reference_image}})
 
 @admin_bp.route('/admin/api/deliverable-types', methods=['POST'])
 @login_required
@@ -431,13 +439,15 @@ def create_deliverable_type():
     customer_id = data.get('customer_id')
     disciplines = data.get('disciplines', [])
     is_custom = bool(data.get('is_custom', False))
+    reference_image = data.get('reference_image') 
     if not name or not client_id or not customer_id:
         return jsonify({'success': False, 'error': 'Name, client, and customer are required'}), 400
     dt = DeliverableType(
         name=name,
         client_id=int(client_id),
         customer_id=int(customer_id),
-        is_custom=is_custom
+        is_custom=is_custom,
+        reference_image=reference_image
     )
     db.session.add(dt)
     db.session.flush()
@@ -452,7 +462,8 @@ def create_deliverable_type():
         'customer': dt.customer.name,
         'region': dt.customer.region,
         'disciplines': disciplines,
-        'is_custom': dt.is_custom
+        'is_custom': dt.is_custom,
+        'reference_image': dt.reference_image
     }})
 
 @admin_bp.route('/admin/api/deliverable-types/<int:type_id>', methods=['DELETE'])

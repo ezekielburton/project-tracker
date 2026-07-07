@@ -134,6 +134,26 @@ def create_achievement_category():
     return jsonify({'success': True, 'category': {'id': category.id, 'name': category.name, 'icon': category.icon}})
 
 
+@admin_achievements_bp.route('/admin/api/achievement-categories/<int:category_id>', methods=['PATCH'])
+@login_required
+@admin_required
+def update_achievement_category(category_id):
+    """Edit a category's name and/or icon."""
+    category = AchievementCategory.query.get_or_404(category_id)
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'error': 'Category name is required'}), 400
+
+    category.name = name
+    category.icon = (data.get('icon') or '').strip() or None
+    db.session.commit()
+
+    log_activity('achievement_category_edited', f'{current_user.name} edited achievement category "{name}"',
+                 user=current_user, entity_type='achievement_category', entity_name=name, entity_id=category.id)
+    return jsonify({'success': True, 'category': {'id': category.id, 'name': category.name, 'icon': category.icon}})
+
+
 @admin_achievements_bp.route('/admin/api/achievement-categories/<int:category_id>', methods=['DELETE'])
 @login_required
 @admin_required

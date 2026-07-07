@@ -2789,6 +2789,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     padding: 0.75rem 1rem;
     border-radius: 4px;
     margin: 0;
+    white-space: pre-wrap;
 }
 
 .brief-region-block {
@@ -2826,6 +2827,8 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 
 .brief-deliverable-row {
     display: flex;
+    flex-wrap: wrap;
+    /* NEW — lets the assignments group drop to its own line instead of squeezing the name */
     align-items: center;
     gap: 0.75rem;
     padding: 0.4rem 0.75rem;
@@ -2839,6 +2842,13 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     font-size: 0.85rem;
     color: var(--color-text);
     flex: 1;
+    display: flex;
+    /* NEW — puts the image and text on one line together */
+    align-items: center;
+    gap: 0.5rem;
+    /* NEW — spacing between image and text */
+    min-width: 200px;
+    /* NEW — stops the name from being crushed to near-zero width before it wraps */
 }
 
 .brief-deliverable-tags {
@@ -2853,6 +2863,30 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     gap: 0.5rem;
     align-items: center;
     flex-shrink: 0;
+}
+
+/* Groups the assignment chips together with the flag button, Files link,
+   and status dropdown that follow them in the template, so all of it stays
+   together and right-aligned as one unit — whether it fits on the name's
+   line or wraps to its own line below. Without this shared wrapper, only
+   whichever element happened to carry margin-left: auto stayed pinned
+   right, and anything wrapping past it (like the status dropdown) fell
+   back to the left edge on its own line. */
+.brief-deliverable-right-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.deliverable-row-thumb {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+    /* never let the image itself get squeezed by a long name */
 }
 
 .brief-assignment-chip {

@@ -860,48 +860,81 @@ if (addSoundForm) {
         populatePTDelFormCustomers(this.value);
     });
 
-    ptAddDelForm.addEventListener('submit', function (e) {
-        e.preventDefault();
-        var name = document.getElementById('pt-new-del-name').value.trim();
-        var clientId = document.getElementById('pt-new-del-client').value;
-        var customerId = document.getElementById('pt-new-del-customer').value;
-        var disciplines = Array.from(
-            ptAddDelForm.querySelectorAll('.pt-discipline-checks input:checked')
-        ).map(function (cb) { return cb.value; });
-        var isCustom = document.getElementById('pt-new-del-custom').checked;
-        if (!name || !clientId || !customerId) {
-            showToast('Name, client, and customer are all required.', 'warning');
-            return;
-        }
-        var submitBtn = ptAddDelForm.querySelector('button[type="submit"]');
-        btnLoading(submitBtn);
-        fetch('/admin/api/deliverable-types', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: name,
-                client_id: clientId,
-                customer_id: customerId,
-                disciplines: disciplines,
-                is_custom: isCustom
-            })
+// Actually creates the deliverable type via the admin API, given
+// whatever reference image filename we ended up with (or null). Split
+// out so the submit handler can call it either immediately or after
+// the upload finishes — same idea as the inline quick-add flow in
+// main.js.
+function createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, referenceImage, submitBtn) {
+    fetch('/admin/api/deliverable-types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: name,
+            client_id: clientId,
+            customer_id: customerId,
+            disciplines: disciplines,
+            is_custom: isCustom,
+            reference_image: referenceImage
         })
+    })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data.success) {
+                ptAddDelForm.classList.add('hidden');
+                ptAddDelForm.reset();
+                ptAllDeliverableTypes.push(data.type);
+                ptAllDeliverableTypes.sort(function (a, b) { return a.name.localeCompare(b.name); });
+                populatePTDelClientFilter(ptAllDeliverableTypes);
+                filterPTDeliverables();
+            } else {
+                showToast(data.error || 'Could not create deliverable type.', 'error');
+                btnDone(submitBtn);
+            }
+        })
+        .catch(function () { btnDone(submitBtn); });
+}
+
+ptAddDelForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = document.getElementById('pt-new-del-name').value.trim();
+    var clientId = document.getElementById('pt-new-del-client').value;
+    var customerId = document.getElementById('pt-new-del-customer').value;
+    var disciplines = Array.from(
+        ptAddDelForm.querySelectorAll('.pt-discipline-checks input:checked')
+    ).map(function (cb) { return cb.value; });
+    var isCustom = document.getElementById('pt-new-del-custom').checked;
+    if (!name || !clientId || !customerId) {
+        showToast('Name, client, and customer are all required.', 'warning');
+        return;
+    }
+    var submitBtn = ptAddDelForm.querySelector('button[type="submit"]');
+    btnLoading(submitBtn);
+
+    // If an image was chosen, upload it first and use the returned
+    // filename; otherwise create with no image.
+    var chosenFile = document.getElementById('pt-new-del-image').files[0];
+    if (chosenFile) {
+        var formData = new FormData();
+        formData.append('file', chosenFile);
+        fetch('/projects/deliverable-types/upload-image', { method: 'POST', body: formData })
             .then(function (res) { return res.json(); })
-            .then(function (data) {
-                if (data.success) {
-                    ptAddDelForm.classList.add('hidden');
-                    ptAddDelForm.reset();
-                    ptAllDeliverableTypes.push(data.type);
-                    ptAllDeliverableTypes.sort(function (a, b) { return a.name.localeCompare(b.name); });
-                    populatePTDelClientFilter(ptAllDeliverableTypes);
-                    filterPTDeliverables(); // re-apply current filters instead of showing all rows
-                } else {
-                    showToast(data.error || 'Could not create deliverable type.', 'error');
+            .then(function (uploadData) {
+                if (!uploadData.success) {
+                    showToast(uploadData.error || 'Image upload failed.', 'error');
                     btnDone(submitBtn);
+                    return;
                 }
+                createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, uploadData.filename, submitBtn);
             })
-            .catch(function () { btnDone(submitBtn); });
-    });
+            .catch(function () {
+                showToast('Something went wrong uploading the image.', 'error');
+                btnDone(submitBtn);
+            });
+    } else {
+        createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, null, submitBtn);
+    }
+});
 
 
     var ptAllDeliverableTypes = [];
@@ -1199,6 +1232,15 @@ if (addSoundForm) {
                         return '<label><input type="checkbox" value="' + d + '" ' + checked + '> ' + d.toUpperCase() + '</label>';
                     }).join('') +
                     '</div>' +
+                    // Shows the current image (if one's set) plus a checkbox
+                    // to explicitly remove it, and a file input to replace
+                    // it with something new. Three independent choices:
+                    // leave it alone, remove it, or swap it.
+                    (type.reference_image ?
+                        '<img src="/static/deliverable-images/' + type.reference_image + '" class="pt-del-image-preview" style="max-width:80px;max-height:80px;display:block;margin:6px 0;">' +
+                        '<label style="font-size:0.85rem;"><input type="checkbox" class="pt-del-remove-image"> Remove current image</label>'
+                        : '') +
+                    '<label style="font-size:0.85rem;display:block;margin-top:4px;">Replace image: <input type="file" class="pt-del-image-input" accept="image/*"></label>' +
                     '<div class="account-edit-actions">' +
                     '<button type="button" class="btn-primary pt-del-save-btn">Save</button>' +
                     '<button type="button" class="account-cancel-edit-btn">Cancel</button>' +
@@ -1214,26 +1256,68 @@ if (addSoundForm) {
                     if (!name) { showToast('Name is required.', 'warning'); return; }
                     var saveBtn = this;
                     btnLoading(saveBtn);
-                    fetch('/admin/api/deliverable-types/' + id, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: name, disciplines: disciplines })
-                    })
-                        .then(function (res) { return res.json(); })
-                        .then(function (data) {
-                            if (data.success) {
-                                var idx = ptAllDeliverableTypes.findIndex(function (t) { return String(t.id) === String(id); });
-                                if (idx !== -1) {
-                                    ptAllDeliverableTypes[idx].name = name;
-                                    ptAllDeliverableTypes[idx].disciplines = disciplines;
-                                }
-                                renderPTDeliverableRows(ptAllDeliverableTypes);
-                            } else {
-                                showToast(data.error || 'Could not save.', 'error');
-                                btnDone(saveBtn);
-                            }
+
+                    // imageKeyProvided controls whether reference_image is
+                    // included in the PATCH body at all. This has to be a
+                    // deliberate three-way choice: include a new filename
+                    // (swap), include null (explicit clear), or leave the
+                    // key out entirely (untouched) — matching the PATCH
+                    // route's "only touch reference_image if the key is
+                    // present" behaviour from earlier, so an ordinary
+                    // name/discipline-only save can never accidentally
+                    // wipe out an existing image.
+                    function savePTDeliverableType(referenceImage, imageKeyProvided) {
+                        var body = { name: name, disciplines: disciplines };
+                        if (imageKeyProvided) body.reference_image = referenceImage;
+
+                        fetch('/admin/api/deliverable-types/' + id, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body)
                         })
-                        .catch(function () { btnDone(saveBtn); });
+                            .then(function (res) { return res.json(); })
+                            .then(function (data) {
+                                if (data.success) {
+                                    var idx = ptAllDeliverableTypes.findIndex(function (t) { return String(t.id) === String(id); });
+                                    if (idx !== -1) {
+                                        ptAllDeliverableTypes[idx].name = name;
+                                        ptAllDeliverableTypes[idx].disciplines = disciplines;
+                                        if (imageKeyProvided) ptAllDeliverableTypes[idx].reference_image = referenceImage;
+                                    }
+                                    renderPTDeliverableRows(ptAllDeliverableTypes);
+                                } else {
+                                    showToast(data.error || 'Could not save.', 'error');
+                                    btnDone(saveBtn);
+                                }
+                            })
+                            .catch(function () { btnDone(saveBtn); });
+                    }
+
+                    var removeChecked = row.querySelector('.pt-del-remove-image');
+                    var chosenFile = row.querySelector('.pt-del-image-input').files[0];
+
+                    if (chosenFile) {
+                        var formData = new FormData();
+                        formData.append('file', chosenFile);
+                        fetch('/projects/deliverable-types/upload-image', { method: 'POST', body: formData })
+                            .then(function (res) { return res.json(); })
+                            .then(function (uploadData) {
+                                if (!uploadData.success) {
+                                    showToast(uploadData.error || 'Image upload failed.', 'error');
+                                    btnDone(saveBtn);
+                                    return;
+                                }
+                                savePTDeliverableType(uploadData.filename, true);
+                            })
+                            .catch(function () {
+                                showToast('Something went wrong uploading the image.', 'error');
+                                btnDone(saveBtn);
+                            });
+                    } else if (removeChecked && removeChecked.checked) {
+                        savePTDeliverableType(null, true);
+                    } else {
+                        savePTDeliverableType(null, false);
+                    }
                 });
             });
         });
@@ -1571,10 +1655,21 @@ function renderAchievementCategories(categories) {
         return '<div class="ach-category-card" data-cat-id="' + cat.id + '">' +
             '<div class="ach-category-header">' +
             '<span class="ach-category-drag-handle" title="Drag to reorder">⠿</span>' +
+            '<span class="ach-category-display">' +
             (cat.icon ? '<span class="ach-category-icon">' + cat.icon + '</span>' : '') +
             '<span class="ach-category-name">' + cat.name + '</span>' +
+            '</span>' +
+            '<span class="ach-category-edit-form hidden">' +
+            '<input type="text" class="ach-cat-edit-icon admin-input" placeholder="icon emoji" value="' + (cat.icon || '') + '" maxlength="4" style="width:3.5rem">' +
+            '<input type="text" class="ach-cat-edit-name admin-input" placeholder="Category name" value="' + cat.name + '" style="flex:1;min-width:8rem">' +
+            '<button type="button" class="accounts-add-btn ach-cat-save-btn" data-id="' + cat.id + '">Save</button>' +
+            '<button type="button" class="account-cancel-btn ach-cat-cancel-btn">Cancel</button>' +
+            '</span>' +
+            '<div class="ach-category-actions">' +
+            '<button type="button" class="account-edit-btn ach-category-edit-btn" data-id="' + cat.id + '">Edit</button>' +
             '<button type="button" class="ach-category-toggle-btn" data-cat-id="' + cat.id + '">▾</button>' +
             '<button type="button" class="account-delete-btn ach-category-delete" data-id="' + cat.id + '" data-name="' + cat.name + '">&times;</button>' +
+            '</div>' +
             '</div>' +
             '<div class="ach-category-body" id="ach-category-body-' + cat.id + '">' +
             '<button type="button" class="accounts-add-btn ach-add-achievement-btn" data-cat-id="' + cat.id + '">+ Add Achievement</button>' +
@@ -1612,6 +1707,70 @@ function attachAchievementCategoryHandlers() {
                         else showToast(data.error || 'Could not delete category.', 'error');
                     });
             });
+        });
+    });
+
+    // Edit category — toggle inline edit form
+    document.querySelectorAll('.ach-category-edit-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var card = this.closest('.ach-category-card');
+            card.querySelector('.ach-category-display').classList.add('hidden');
+            card.querySelector('.ach-category-actions').classList.add('hidden');
+            card.querySelector('.ach-category-edit-form').classList.remove('hidden');
+            card.querySelector('.ach-cat-edit-name').focus();
+        });
+    });
+
+    // Cancel edit
+    document.querySelectorAll('.ach-cat-cancel-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var card = this.closest('.ach-category-card');
+            var catId = card.dataset.catId;
+            // Reset inputs to original data
+            var cat = achCategoriesData.find(function (c) { return String(c.id) === String(catId); });
+            if (cat) {
+                card.querySelector('.ach-cat-edit-name').value = cat.name;
+                card.querySelector('.ach-cat-edit-icon').value = cat.icon || '';
+            }
+            card.querySelector('.ach-category-edit-form').classList.add('hidden');
+            card.querySelector('.ach-category-display').classList.remove('hidden');
+            card.querySelector('.ach-category-actions').classList.remove('hidden');
+        });
+    });
+
+    // Save category edit
+    document.querySelectorAll('.ach-cat-save-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var card = this.closest('.ach-category-card');
+            var catId = this.dataset.id;
+            var newName = card.querySelector('.ach-cat-edit-name').value.trim();
+            var newIcon = card.querySelector('.ach-cat-edit-icon').value.trim();
+            if (!newName) { showToast('Category name cannot be empty.', 'error'); return; }
+            btnLoading(btn);
+            fetch('/admin/api/achievement-categories/' + catId, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName, icon: newIcon })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.success) { showToast(data.error || 'Could not save.', 'error'); btnDone(btn); return; }
+                    // Update in-memory data and display
+                    var cat = achCategoriesData.find(function (c) { return String(c.id) === String(catId); });
+                    if (cat) { cat.name = data.category.name; cat.icon = data.category.icon; }
+                    var displayEl = card.querySelector('.ach-category-display');
+                    displayEl.innerHTML = (data.category.icon ? '<span class="ach-category-icon">' + data.category.icon + '</span>' : '') +
+                        '<span class="ach-category-name">' + data.category.name + '</span>';
+                    // Also update the delete button's data-name so confirm dialog shows the right name
+                    var deleteBtn = card.querySelector('.ach-category-delete');
+                    if (deleteBtn) deleteBtn.dataset.name = data.category.name;
+                    card.querySelector('.ach-category-edit-form').classList.add('hidden');
+                    card.querySelector('.ach-category-display').classList.remove('hidden');
+                    card.querySelector('.ach-category-actions').classList.remove('hidden');
+                    btnDone(btn);
+                    showToast('Category updated.', 'success');
+                })
+                .catch(function () { btnDone(btn); showToast('Network error.', 'error'); });
         });
     });
 

@@ -699,7 +699,8 @@ def get_deliverable_types(customer_id):
         'id': dt.id,
         'name': dt.name,
         'disciplines': [d.team for d in dt.disciplines],
-        'is_custom': dt.is_custom
+        'is_custom': dt.is_custom,
+        'reference_image': dt.reference_image
     } for dt in types])
 
 
@@ -743,6 +744,7 @@ def add_deliverable_type():
         client_id = data.get('client_id')
         customer_id = data.get('customer_id')
         disciplines = data.get('disciplines', [])
+        reference_image = data.get('reference_image')
 
         if not name:
             return jsonify({'error': 'Deliverable name is required.'}), 400
@@ -767,7 +769,8 @@ def add_deliverable_type():
             client_id=client_id,
             customer_id=customer_id,
             is_active=True,
-            is_custom=True
+            is_custom=True,
+            reference_image=reference_image
         )
         db.session.add(new_type)
         db.session.flush()
@@ -786,11 +789,39 @@ def add_deliverable_type():
             'id': new_type.id,
             'name': new_type.name,
             'disciplines': disciplines,
-            'is_custom': True
+            'is_custom': True,
+            'reference_image': new_type.reference_image
         }), 201
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Something went wrong. Please try again.'}), 500
+    
+@brief_bp.route('/projects/deliverable-types/upload-image', methods=['POST'])
+@login_required
+@role_required('cs', 'admin', 'management')
+def upload_deliverable_type_image():
+    """Upload a reference image for a DeliverableType. Shared by both the
+    Admin Panel's Deliverable Types form and the inline "+ Add custom
+    deliverable" quick-add during C&CM briefing — same permission set as
+    add_deliverable_type() above, since both flows create/edit the same
+    resource. This route only saves the file and hands back its filename;
+    it doesn't touch the DB itself, since it has no idea yet which
+    DeliverableType (new or existing) the image belongs to — the caller
+    folds the returned filename into its own create/update request."""
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
+        return jsonify({'success': False, 'error': 'File type not allowed'}), 400
+
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    upload_dir = os.path.join(current_app.root_path, 'static', 'deliverable-images')
+    os.makedirs(upload_dir, exist_ok=True)
+    file.save(os.path.join(upload_dir, filename))
+
+    return jsonify({'success': True, 'filename': filename})
     
 
