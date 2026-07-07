@@ -8,13 +8,22 @@
 // triggerZipDownload() function) already defined in detail.js, which
 // loads globally on every page. Nothing new needed for those.
 
-document.addEventListener('click', function (e) {
-    var regionToggle = e.target.closest('[data-action="toggle-ft-region"]');
-    if (regionToggle) { toggleFtSection(regionToggle); return; }
+// Guard against re-registering this listener every time the SPA nav
+// re-executes this script (sidebar.js's execScripts() genuinely re-runs
+// external <script> tags on every navigation to this page). Without this,
+// document — which is never destroyed — would accumulate one extra click
+// listener per visit, and a single click would fire the toggle multiple
+// times, canceling itself out (toggle off then straight back on).
+if (!window._ftDispatcherWired) {
+    window._ftDispatcherWired = true;
+    document.addEventListener('click', function (e) {
+        var regionToggle = e.target.closest('[data-action="toggle-ft-region"]');
+        if (regionToggle) { toggleFtSection(regionToggle); return; }
 
-    var customerToggle = e.target.closest('[data-action="toggle-ft-customer"]');
-    if (customerToggle) { toggleFtSection(customerToggle); return; }
-});
+        var customerToggle = e.target.closest('[data-action="toggle-ft-customer"]');
+        if (customerToggle) { toggleFtSection(customerToggle); return; }
+    });
+}
 
 // One shared toggle for both regions and customers — the behavior is
 // identical (toggle the target's hidden class, remember the choice), only
