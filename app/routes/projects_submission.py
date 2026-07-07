@@ -862,6 +862,46 @@ def download_submission(submission_id):
         download_name=submission.original_filename
     )
 
+@submission_bp.route('/projects/submission/file/<int:file_id>/preview')
+@login_required
+def preview_submission_file(file_id):
+    """Serve a supplementary submission file for inline browser preview.
+    Same PDF/image-only restriction as reference file previews — these are
+    arbitrary supplementary uploads, not always something a browser can
+    render natively."""
+    from app.models import ProjectSubmissionFile
+    from app.nas import download_app_file, build_file_path
+    from flask import send_file, jsonify
+    import io
+
+    PREVIEWABLE_TYPES = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+    }
+
+    extra = ProjectSubmissionFile.query.get_or_404(file_id)
+
+    mimetype = PREVIEWABLE_TYPES.get((extra.file_type or '').lower())
+    if not mimetype:
+        return jsonify ({
+            'success': False,
+            'error': 'No preview available for this file type - download instead.'
+            }), 415
+    
+    project = Project.query.get(extra.project_id)
+    nas_path = build_file_path(project, 'Submissions', extra.original_filename)
+    file_bytes = download_app_file(nas_path)
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        mimetype=mimetype,
+        as_attachment=False,
+        download_name=extra.original_filename
+    )
 
 @submission_bp.route('/projects/<int:project_id>/submission/<int:submission_id>/add-file', methods=['POST'])
 @login_required

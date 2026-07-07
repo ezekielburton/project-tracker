@@ -397,11 +397,11 @@
                 {% endif %}
             </div>
 
-            <div class="reference-file-upload" style="margin-top:1rem;">
+            <div class="reference-file-upload">
                 <input type="file" id="createRefFileInput" class="hidden" accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.zip,.dwg">
                 <button type="button" id="createRefFileBtn" class="btn btn--secondary"
                     data-project-id="{{ draft.id if draft else '' }}" {% if not draft %}disabled{% endif %}>
-                    + Upload Reference File
+                     Drop a file or click to attach....
                 </button>
                 <span id="createRefFileStatus" class="reference-file-upload-status">
                     {% if not draft %}Draft will autosave shortly — upload will enable automatically{% endif %}

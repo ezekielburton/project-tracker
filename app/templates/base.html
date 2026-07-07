@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/preview.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/achievements.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/drag-drop.css') }}">
 </head>
 
 {# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}
@@ -1059,6 +1060,7 @@
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detail.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/drag-drop.js') }}"></script>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
     {% endif %}

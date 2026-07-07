@@ -112,8 +112,7 @@
             // counterpart for. "Extra" submission files use a different
             // route we haven't wired up yet — leave those Download-only.
             var isReferenceFile = href.indexOf('/projects/files/') !== -1;
-            var isSubmissionDeck = href.indexOf('/projects/submission/') !== -1 &&
-                href.indexOf('/projects/submission/file/') === -1;
+            var isSubmissionDeck = href.indexOf('/projects/submission/') !== -1;
             if (!isReferenceFile && !isSubmissionDeck) return;
 
             var previewUrl = href.replace('/download', '/preview');

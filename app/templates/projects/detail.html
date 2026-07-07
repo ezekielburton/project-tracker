@@ -1053,7 +1053,7 @@
                     <a href="{{ url_for('submission.download_submission', submission_id=ckv_submission.id) }}" class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
-            <div class="submission-status" style="margin-top:0.5rem;">🔍 In Internal Review. Awaiting Client Servicing approval</div>
+            <div class="submission-status submission-status--review" style="margin-top:0.5rem;">🔍 In Internal Review. Awaiting Client Servicing approval</div>
             {% if ckv_submission.includes_concept or ckv_submission.includes_kv %}
             <div style="margin-top:0.75rem;">
                 <p class="detail-label" style="margin-bottom:0.4rem;">Included in this submission:</p>
@@ -1180,9 +1180,8 @@
                         class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
-            <div class="submission-status" style="margin-top:0.5rem;">🔍 In Internal Review. Awaiting Client Servicing
-                approval</div>
-            {% if effective_user.role in ['admin', 'cs'] and not ch_readonly %}
+            <div class="submission-status submission-status--review" style="margin-top:0.5rem;">🔍 In Internal Review. Awaiting Client Servicing approval</div>
+            {% if effective_user.role in ['admin', 'cs', 'management'] and not ch_readonly %}
             <div style="margin-top:1rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
                 <button type="button" class="btn-primary ch-submit-client-btn" data-channel-id="{{ ch.id }}"
                     data-project-id="{{ project.id }}" data-project-name="{{ project.name }}">Submit to Client</button>
@@ -1264,7 +1263,7 @@
                 </div>
             </div>
             {% endif %}
-            {% if effective_user.role in ['admin', 'cs'] and not ch_readonly %}
+            {% if effective_user.role in ['admin', 'cs', 'management'] and not ch_readonly %}
             <div style="margin-top:1rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
                 <button type="button" class="btn-danger btn-sm ch-send-revision-btn" data-channel-id="{{ ch.id }}">↩
                     Send for Revision</button>
@@ -1523,14 +1522,13 @@
         </div>
         {% endfor %}
         {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
-        <div style="margin-top: 0.5rem;">
+        <div class="attach-file-upload">
             <input type="file" id="extraFileInput3" class="hidden">
-            <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ active_submission.id }}" data-input-id="extraFileInput3">📎 Attach File</button>
+            <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ active_submission.id }}" data-input-id="extraFileInput3">Drop a file or click to attach...</button>
             <span class="reference-file-upload-status" id="extraFileStatus3"></span>
         </div>
         {% endif %}
-        <div class="submission-status" style="margin-top: 0.5rem;">🔍 In Internal Review. Awaiting Client Servicing
-            approval</div>
+        <div class="submission-status submission-status--review" style="margin-top: 0.5rem;">🔍 In Internal Review. Awaiting Client Servicing approval</div>
         {% if active_submission.included_deliverables or active_submission.includes_concept or
         active_submission.includes_kv %}
         <div style="margin-top: 0.75rem;">
@@ -1546,7 +1544,7 @@
             {% endif %}{% endfor %}
         </div>
         {% endif %}
-        {% if effective_user.role in ['admin', 'cs'] %}
+        {% if effective_user.role in ['admin', 'cs', 'management'] %}
         <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
             <button type="button" class="btn-primary" id="submissionSubmitBtn" data-project-id="{{ project.id }}"
                 data-project-name="{{ project.name }}">Submit to Client</button>
@@ -1884,9 +1882,9 @@
         </div>
         {% endfor %}
         {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
-        <div style="margin-top: 0.5rem;">
+        <div class="attach-file-upload">
             <input type="file" id="extraFileInput2" class="hidden">
-            <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ active_submission.id }}" data-input-id="extraFileInput2">📎 Attach File</button>
+            <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ active_submission.id }}" data-input-id="extraFileInput2">Drop a file or click to attach...</button>
             <span class="reference-file-upload-status" id="extraFileStatus2"></span>
         </div>
         {% endif %}

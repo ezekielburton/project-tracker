@@ -1,0 +1,6 @@
+.drag-over {
+    outline: 2px dashed var(--tangerine);
+    outline-offset: 2px;
+    background: rgba(242, 127, 85, 0.05);
+    border-radius: 4px;
+}

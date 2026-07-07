@@ -17,6 +17,7 @@ Adjustments:
 - Added the ability to submit multiple files
 - Added DWG and ZIP to allowed file types for submissions and reference files.
 - Redesigned submission UI/UX to stop accidental approvals (do this tmw)
+- Moved settings and edit banner on the profile page, to the left side for better visibility.
 
 Bug Fixes:
 
