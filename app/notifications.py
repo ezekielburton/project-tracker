@@ -493,24 +493,33 @@ def notify_lead_designers_of_project_started(project, triggered_by):
 
 def notify_of_submission_to_client(project, triggered_by):
     """
-    Notify management, admin users, and all designers assigned to the project
-    when CS submits a deck to the client.
-    The triggering CS user is excluded (they know what they just did).
+    Notify the project's CS lead, secondary CS, and assigned designers when CS
+    submits a deck to the client. The triggering user is excluded.
+    No blanket role broadcast — only people actually on the project receive this.
     """
     message = f'"{project.name}" has been submitted to the client.'
 
-    # Collect recipients: management + admin (all users with those roles)
-    recipients = User.query.filter(User.role.in_(['management', 'admin'])).all()
-    recipient_ids = {r.id for r in recipients}
+    recipients = []
+    recipient_ids = set()
 
-    # Add designers assigned to any deliverable on this project
+    # CS lead
+    if project.cs_lead and project.cs_lead.id not in recipient_ids:
+        recipients.append(project.cs_lead)
+        recipient_ids.add(project.cs_lead.id)
+
+    # Secondary CS
+    for secondary in _get_secondary_cs(project):
+        if secondary.id not in recipient_ids:
+            recipients.append(secondary)
+            recipient_ids.add(secondary.id)
+
+    # Designers assigned to any deliverable on this project
     for designer in _get_project_designers(project):
         if designer.id not in recipient_ids:
             recipients.append(designer)
             recipient_ids.add(designer.id)
 
     for recipient in recipients:
-        # Skip the person who triggered it — they don't need a notification about their own action
         if recipient.id == triggered_by.id:
             continue
         create_notification(
@@ -603,26 +612,31 @@ def notify_of_posm_details_added(project, triggered_by):
 
 def notify_of_project_approved(project, triggered_by):
     """
-    Notify management, admin, project designers, and secondary CS when a project
-    reaches full approval. The approving CS user is excluded.
+    Notify the project's CS lead, secondary CS, and assigned designers when a
+    project reaches full approval. The approving user is excluded.
+    No blanket role broadcast — only people actually on the project receive this.
     """
     message = f'"{project.name}" has been approved!'
 
-    # Start with management + admin
-    recipients = User.query.filter(User.role.in_(['management', 'admin'])).all()
-    recipient_ids = {r.id for r in recipients}
+    recipients = []
+    recipient_ids = set()
 
-    # Add designers assigned to this project
-    for designer in _get_project_designers(project):
-        if designer.id not in recipient_ids:
-            recipients.append(designer)
-            recipient_ids.add(designer.id)
+    # CS lead
+    if project.cs_lead and project.cs_lead.id not in recipient_ids:
+        recipients.append(project.cs_lead)
+        recipient_ids.add(project.cs_lead.id)
 
-    # Add secondary CS
+    # Secondary CS
     for secondary in _get_secondary_cs(project):
         if secondary.id not in recipient_ids:
             recipients.append(secondary)
             recipient_ids.add(secondary.id)
+
+    # Designers assigned to this project
+    for designer in _get_project_designers(project):
+        if designer.id not in recipient_ids:
+            recipients.append(designer)
+            recipient_ids.add(designer.id)
 
     for recipient in recipients:
         if recipient.id == triggered_by.id:

@@ -2,7 +2,7 @@
 VITAMIN HELIX — CHANGELOG
 ===============================================================================
 ================================================================================
-v2.1.1 - Bug Fixes
+v2.2 - Large feature update
 ================================================================================
 New Features:
 
@@ -25,6 +25,9 @@ Bug Fixes:
 - Approved C&CM customer submission paths, now properly lock.
 - Removed upload reference file from detail page - only accessible in edit project page
 - Fixed notifications not updating in the notification section, without a page refresh.
+- Fixed tab name being wrong in some cases.
+- Fixed text formatting in revision feedback.
+- Fixed management and admin receiving notifications for every project
 
 ================================================================================
 v2.1 Live app updates, deliverable view & Profile Page revamp!
