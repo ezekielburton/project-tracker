@@ -937,22 +937,26 @@
         </div>
         {% endif %}
         {% endwith %}
+        {% include 'partials/avatar_crop_modal.html' %}
+        <script src="{{ url_for('static', filename='js/avatar-cropper.js') }}"></script>
 
         {% block content %}{% endblock %}
     </main>
 
     <footer class="footer">
-        <p>Vitamin-E &copy; 2026 - v2.0</p>
+        <p>Vitamin-E &copy; 2026 - v2.2</p>
     </footer>
 
     {% if show_wizard %}
-    <div id="wizard-overlay" class="wizard-overlay" data-show-name-step="{{ 'true' if show_name_step else 'false' }}">
+    <div id="wizard-overlay" class="wizard-overlay" data-show-name-step="{{ 'true' if show_name_step else 'false' }}"
+        data-avatar-step-only="{{ 'true' if avatar_step_only else 'false' }}">
         <div class="wizard-card">
     
             <div class="wizard-steps-indicator">
                 <span class="wizard-dot" data-step="1"></span>
                 <span class="wizard-dot" data-step="2"></span>
                 <span class="wizard-dot" data-step="3"></span>
+                <span class="wizard-dot" data-step="4"></span>
             </div>
     
             <div class="wizard-step hidden" data-wizard-step="1">
@@ -1011,6 +1015,23 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div class="wizard-step hidden" data-wizard-step="4">
+                <h2>Add a Profile Photo</h2>
+                <div class="wizard-avatar-preview-wrap" style="display:flex; justify-content:center; margin-bottom:1rem;">
+                    <img id="wizard-avatar-preview"
+                        src="{% if current_user.avatar_filename %}{{ url_for('static', filename='avatars/' + current_user.avatar_filename) }}{% endif %}"
+                        class="profile-avatar{% if not current_user.avatar_filename %} hidden{% endif %}" alt="">
+                    <div id="wizard-avatar-initials"
+                        class="profile-avatar profile-avatar--initials{% if current_user.avatar_filename %} hidden{% endif %}">
+                        {{ current_user.name[0].upper() }}
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:center;">
+                    <button type="button" class="btn-secondary" id="wizard-avatar-btn">Change Photo</button>
+                </div>
+                <input type="file" id="wizard-avatar-input" accept="image/jpeg,image/png,image/webp" style="display:none;">
             </div>
     
             <div class="wizard-actions">

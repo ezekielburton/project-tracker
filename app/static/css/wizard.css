@@ -25,6 +25,7 @@
     letter-spacing: normal;
     font-family: var(--font-body);
     margin-top: 0;
+    justify-content: center;
 }
 
 .wizard-steps-indicator {

@@ -56,10 +56,19 @@
             </div>
 
             {% if team_projects %}
-            <div class="deadline-sort-wrap" data-tbody="designer-team-tbody" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                <span style="font-size:0.75rem;color:var(--grey-dark);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;">Sort by</span>
-                <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
-                <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
+            <div class="all-projects-filter-bar" id="des-team-filter-bar">
+                <input type="text" id="des-team-search" class="form-input" placeholder="Search by project name...">
+                <select id="des-team-cs-filter" class="form-input">
+                    <option value="">All CS Leads</option>
+                </select>
+                <select id="des-team-status-filter" class="form-input">
+                    <option value="">All Statuses</option>
+                </select>
+                <select id="des-team-order-filter" class="form-input">
+                    <option value="firstDeadline">First Output Deadline</option>
+                    <option value="finalDeadline">Final Deadline</option>
+                </select>
+                <button type="button" class="btn-secondary" id="des-team-clear-filters">Clear</button>
             </div>
             <div class="table-wrapper table-wrapper--card">
                 <table class="data-table data-table--with-chevron data-table--card-rows">
@@ -86,6 +95,9 @@
                             data-expand="team_{{ project.id }}"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
+                            data-status="{{ project.project_status }}"
+                            data-name="{{ project.name }}"
+                            data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                             data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                             data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                             {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
@@ -159,6 +171,9 @@
                                 data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                                 data-project-id="{{ project.id }}"
                                 data-fp="{{ _dfp }}"
+                                data-status="{{ project.project_status }}"
+                                data-name="{{ project.name }}"
+                                data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                                 data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                                 data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                                 <td class="chevron-cell"></td>
@@ -238,10 +253,19 @@
             </div>
 
             {% if projects %}
-            <div class="deadline-sort-wrap" data-tbody="designer-personal-tbody" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                <span style="font-size:0.75rem;color:var(--grey-dark);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;">Sort by</span>
-                <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
-                <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
+            <div class="all-projects-filter-bar" id="des-personal-filter-bar">
+                <input type="text" id="des-personal-search" class="form-input" placeholder="Search by project name...">
+                <select id="des-personal-cs-filter" class="form-input">
+                    <option value="">All CS Leads</option>
+                </select>
+                <select id="des-personal-status-filter" class="form-input">
+                    <option value="">All Statuses</option>
+                </select>
+                <select id="des-personal-order-filter" class="form-input">
+                    <option value="firstDeadline">First Output Deadline</option>
+                    <option value="finalDeadline">Final Deadline</option>
+                </select>
+                <button type="button" class="btn-secondary" id="des-personal-clear-filters">Clear</button>
             </div>
             <div class="table-wrapper table-wrapper--card">
                 <table class="data-table data-table--with-chevron data-table--card-rows">
@@ -269,6 +293,9 @@
                             data-expand="{{ project.id }}"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
+                            data-status="{{ project.project_status }}"
+                            data-name="{{ project.name }}"
+                            data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                             data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                             data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                             {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
@@ -332,6 +359,9 @@
                                 data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                                 data-project-id="{{ project.id }}"
                                 data-fp="{{ _dfp }}"
+                                data-status="{{ project.project_status }}"
+                                data-name="{{ project.name }}"
+                                data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                                 data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                                 data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                                 <td class="chevron-cell"></td>

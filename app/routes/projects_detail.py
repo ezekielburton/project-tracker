@@ -1345,6 +1345,45 @@ def download_project_file(file_id):
         download_name=project_file.original_filename
     )
 
+@detail_bp.route('/projects/<int:project_id>/reference-files/download-all')
+@login_required
+def download_all_reference_files(project_id):
+    """Zips every reference file for this project and returns a download link."""
+    from app.zip_utils import build_zip
+    from app.nas import download_app_file, build_file_path
+
+    project = Project.query.get_or_404(project_id)
+    files = project.reference_files
+    if not files:
+        return jsonify({'success': False, 'error': 'No reference files to download.'}), 400
+
+    zip_files = []
+    seen_names = {}
+    for f in files:
+        nas_path = build_file_path(project, 'Reference Files', f.original_filename)
+        try:
+            content = download_app_file(nas_path)
+        except RuntimeError:
+            continue  # skip a file that failed to fetch rather than failing the whole zip
+
+        # Disambiguate if two files happen to share a filename — zipfile
+        # allows duplicate entry names, but most extractors handle that badly.
+        name = f.original_filename
+        if name in seen_names:
+            seen_names[name] += 1
+            base, dot, ext = name.rpartition('.')
+            name = f'{base} ({seen_names[name]}).{ext}' if dot else f'{name} ({seen_names[name]})'
+        else:
+            seen_names[name] = 0
+
+        zip_files.append((name, content))
+
+    if not zip_files:
+        return jsonify({'success': False, 'error': 'Could not fetch any files from the NAS.'}), 502
+
+    zip_id = build_zip(zip_files, f'{project.name} - Reference Files.zip')
+    return jsonify({'success': True, 'download_url': url_for('api.zip_download', zip_id=zip_id)})
+
 @detail_bp.route('/projects/files/<int:file_id>/preview')
 @login_required
 def preview_project_file(file_id):

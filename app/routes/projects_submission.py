@@ -808,11 +808,16 @@ def submit_to_client(project_id):
                 if deliverable.id in included_ids:
                     deliverable.status = 'submitted_to_client'
 
-            # Increment revision_count on each *included* deliverable for revised submissions
+            # Stamp revision_count on each *included* deliverable to match the current
+            # client revision number. Using assignment (not +=) makes this idempotent:
+            # if the same revision goes through multiple internal CS review cycles
+            # (flag → reupload → re-submit internally → submit to client again), the
+            # deliverable always ends up showing the correct revision number, not a
+            # count of how many times CS hit "Submit to Client" on that revision.
             if is_revised_submission:
                 for deliverable in project.project_deliverables:
                     if deliverable.id in included_ids:
-                        deliverable.revision_count = (deliverable.revision_count or 0) + 1
+                        deliverable.revision_count = project.revision_count
 
         # Advance concept/KV if they have an active status (i.e. were part of the workflow)
         if project.concept_status:
@@ -988,6 +993,59 @@ def download_submission_file(file_id):
         as_attachment=True,
         download_name=extra.original_filename
     )
+
+@submission_bp.route('/projects/<int:project_id>/submissions/download-all')
+@login_required
+def download_all_submissions(project_id):
+    """Zips every submission deck in this project's Submission History and
+    returns a download link. Organizes the zip into subfolders matching how
+    the history panel groups them on screen (Concept & KV / POSM by region)."""
+    from app.zip_utils import build_zip
+    from app.nas import download_app_file, build_file_path
+    from app.models import ProjectSubmission
+
+    project = Project.query.get_or_404(project_id)
+    submissions = ProjectSubmission.query.filter(
+        ProjectSubmission.project_id == project_id,
+        ProjectSubmission.submitted_to_client_at.isnot(None)
+    ).order_by(ProjectSubmission.submitted_to_client_at.desc()).all()
+
+    if not submissions:
+        return jsonify({'success': False, 'error': 'No submissions to download.'}), 400
+
+    zip_files = []
+    seen_names = {}
+    for s in submissions:
+        nas_path = build_file_path(project, 'Submissions', s.original_filename)
+        try:
+            content = download_app_file(nas_path)
+        except RuntimeError:
+            continue
+
+        if s.phase == 'concept_kv':
+            folder = 'Concept & KV'
+        elif s.posm_country == 'uae':
+            customer_name = s.posm_customer.customer.name if s.posm_customer else 'Customer'
+            folder = f'POSM - UAE - {customer_name}'
+        else:
+            folder = f'POSM - {(s.posm_country or "Unknown").upper()}'
+
+        name = s.original_filename
+        key = f'{folder}/{name}'
+        if key in seen_names:
+            seen_names[key] += 1
+            base, dot, ext = name.rpartition('.')
+            name = f'{base} ({seen_names[key]}).{ext}' if dot else f'{name} ({seen_names[key]})'
+        else:
+            seen_names[key] = 0
+
+        zip_files.append((f'{folder}/{name}', content))
+
+    if not zip_files:
+        return jsonify({'success': False, 'error': 'Could not fetch any files from the NAS.'}), 502
+
+    zip_id = build_zip(zip_files, f'{project.name} - Submission History.zip')
+    return jsonify({'success': True, 'download_url': url_for('api.zip_download', zip_id=zip_id)})
 
 
 @submission_bp.route('/projects/submission/file/<int:file_id>', methods=['DELETE'])

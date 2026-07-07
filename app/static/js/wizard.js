@@ -5,12 +5,15 @@
     if (window.helixPolling) window.helixPolling.pause();
 
     var showNameStep = overlay.dataset.showNameStep === 'true';
+    var avatarStepOnly = overlay.dataset.avatarStepOnly === 'true';
     var steps = Array.prototype.slice.call(overlay.querySelectorAll('.wizard-step'));
     var dots = Array.prototype.slice.call(overlay.querySelectorAll('.wizard-dot'));
     var backBtn = document.getElementById('wizard-back-btn');
     var nextBtn = document.getElementById('wizard-next-btn');
     var finishBtn = document.getElementById('wizard-finish-btn');
-    var firstIndex = showNameStep ? 0 : 1;
+    // Existing accounts who already finished the wizard before the avatar
+    // step existed land straight on the last step instead of replaying 1-3.
+    var firstIndex = avatarStepOnly ? (steps.length - 1) : (showNameStep ? 0 : 1);
     var currentIndex = firstIndex;
 
     function render() {
@@ -68,6 +71,25 @@
     document.getElementById('wizard-sound-toggle').checked = HELIX_SOUND_PREFS.enabled !== false;
     volumeSlider.addEventListener('input', function () {
         volumeLabel.textContent = this.value + '%';
+    });
+
+    // ── Wizard photo step — reuses the shared crop-and-upload module ────────
+    var wizardAvatarBtn = document.getElementById('wizard-avatar-btn');
+    var wizardAvatarInput = document.getElementById('wizard-avatar-input');
+    var wizardAvatarPreview = document.getElementById('wizard-avatar-preview');
+    var wizardAvatarInitials = document.getElementById('wizard-avatar-initials');
+
+    wizardAvatarBtn.addEventListener('click', function () {
+        wizardAvatarInput.click();
+    });
+
+    // No page reload here (unlike the profile page) — the wizard isn't done
+    // yet and the other steps' data hasn't been submitted. Just swap the
+    // preview image in place.
+    HelixAvatarCropper.wireFileInput(wizardAvatarInput, 'avatar', function (data) {
+        wizardAvatarPreview.src = data.url;
+        wizardAvatarPreview.classList.remove('hidden');
+        wizardAvatarInitials.classList.add('hidden');
     });
 
     finishBtn.addEventListener('click', function () {

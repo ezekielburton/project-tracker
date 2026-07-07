@@ -13,6 +13,22 @@ from app.models import Project, User, ProjectDesigner, ProjectSecondaryCS
 # All routes in this file will be under /api/...
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
+@api_bp.route('/zip-download/<zip_id>')
+@login_required
+def zip_download(zip_id):
+    """
+    Generic zip download endpoint — serves a zip previously built by
+    zip_utils.build_zip(), then deletes it. Any feature with a "Download
+    All" button points its frontend at this same route; only the zip_id
+    changes per feature.
+    """
+    from flask import abort
+    from app.zip_utils import serve_zip
+
+    response = serve_zip(zip_id)
+    if response is None:
+        abort(404)
+    return response
 
 def _detail_fingerprint(p):
     """

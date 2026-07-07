@@ -545,39 +545,40 @@
             {% else %}
                 {% set ch_locked = (region_key, none) in approved_channel_keys %}
             {% endif %}
+
             <div class="brief-customer-block{% if pc.cancelled %} customer-cancelled{% endif %}">
-                <div class="brief-customer-header">
-                    <h4 class="brief-customer-name">{{ pc.customer.name }}</h4>
-                    <div class="brief-customer-dates">
-                        <span class="brief-date-item">
-                            <span class="brief-date-label">Design Deadline</span>
-                            <span class="brief-date-value mono">
-                                {%- if pc.design_deadline -%}
-                                    {{ pc.design_deadline.strftime('%d %b %Y') }}
-                                    {%- if pc.design_deadline_time %} · {{ pc.design_deadline_time.strftime('%H:%M') }}{% endif %}
-                                {%- else %}—{% endif -%}
-                            </span>
+                    {# Always-visible summary bar. toggleCustomerBlock() reads data-target
+                    to find the body below and persists collapse state to localStorage
+                    so it survives the 1s-poll full-page reloads. #}
+                    <div class="brief-customer-summary" data-action="toggle-customer-block" data-target="customer-body-{{ pc.id }}"
+                        data-customer-id="{{ pc.id }}">
+                        <span class="brief-customer-summary-name">{{ pc.customer.name }}</span>
+                        <span class="brief-customer-summary-deadline mono">
+                            {%- if pc.design_deadline -%}
+                            {{ pc.design_deadline.strftime('%d %b %Y') }}
+                            {%- if pc.design_deadline_time %} · {{ pc.design_deadline_time.strftime('%H:%M') }}{% endif %}
+                            {%- else %}—{% endif -%}
                         </span>
-                        <span class="brief-date-item">
-                            <span class="brief-date-label">Installation</span>
-                            <span class="brief-date-value mono">{{ pc.installation_date.strftime('%d %b %Y') if
-                                pc.installation_date else '—' }}</span>
+                        <span class="brief-customer-summary-installation mono">
+                            Install: {{ pc.installation_date.strftime('%d %b %Y') if pc.installation_date else '—' }}
                         </span>
+                        <span class="brief-customer-summary-count">{{ pc.deliverables|length }} deliverable{{ 's' if
+                            pc.deliverables|length != 1 }}</span>
+                        {% if posm_active %}
+                        {% if region_key == 'uae' %}
+                        <span class="posm-customer-revisions">{{ pc.posm_revision_count or 0 }} POSM Rev{{ 's' if
+                            (pc.posm_revision_count or 0) != 1 }}</span>
+                        {% elif loop.first %}
+                        {% set country_rev_count = gulf_posm_counts.get(region_key, 0) %}
+                        <span class="posm-customer-revisions">{{ country_rev_count }} POSM Rev{{ 's' if
+                            country_rev_count != 1 }}</span>
+                        {% endif %}
+                        {% endif %}
+                        <span class="brief-customer-summary-chevron">▾</span>
                     </div>
-                    {% if posm_active %}
-                    {# UAE: track per customer. Other regions: track per country. #}
-                    {% if region_key == 'uae' %}
-                    <span class="posm-customer-revisions">{{ pc.posm_revision_count or 0 }} POSM Rev{{ 's' if
-                        (pc.posm_revision_count or 0) != 1 }}</span>
-                    {% elif loop.first %}
-                    {# Show country revision count once on the first customer row for non-UAE regions #}
-                    {% set country_rev_count = gulf_posm_counts.get(region_key, 0) %}
-                    <span class="posm-customer-revisions">{{ country_rev_count }} POSM Rev{{ 's' if country_rev_count !=
-                        1 }}</span>
-                    {% endif %}
-                    {% endif %}
-                    {% if effective_user.role == 'admin' or project.cs_lead_id == effective_user.id or is_secondary_cs
-                    %}
+                    <div class="brief-customer-body" id="customer-body-{{ pc.id }}">
+                {% if effective_user.role == 'admin' or project.cs_lead_id == effective_user.id or is_secondary_cs %}
+                <div class="brief-customer-header">
                     {% if pc.status == 'approved' %}
                     <span class="customer-approved-badge">✓ Approved</span>
                     {% endif %}
@@ -600,8 +601,8 @@
                     </button>
                     {% endif %}
                     {% endif %}
-                    {% endif %}
                 </div>
+                {% endif %}
                 <div class="brief-deliverables">
                     {% for deliverable in pc.deliverables %}
                     <div class="brief-deliverable-row">
@@ -691,6 +692,7 @@
                     </div>
                     {% endfor %}
                 </div>
+            </div>{# /brief-customer-body #}
             </div>
             {% endfor %}
         </div>
@@ -852,7 +854,15 @@
 
     <!-- Reference Files — shown for all brief types and all roles -->
     <div class="detail-card detail-card--full" style="margin-top: 1.5rem;">
-        <h2 class="detail-card-title">Reference Files</h2>
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+            <h2 class="detail-card-title">Reference Files</h2>
+            {% if project.reference_files %}
+            <button type="button" class="btn-secondary btn-sm" data-action="download-all-zip"
+                data-zip-build-url="{{ url_for('project_detail.download_all_reference_files', project_id=project.id) }}">
+                Download All
+            </button>
+            {% endif %}
+        </div>
 
         <!-- File list — all authenticated users can see and download -->
         <div id="reference-files-list">
@@ -1377,6 +1387,15 @@
 
         {# ── Submission History (concept/KV phase + POSM sent submissions) ── #}
         {% if submitted_history %}
+        <div style="margin-top:1.75rem;border-top:1px solid var(--border);padding-top:1rem;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+                <p class="detail-label" style="margin:0;">Submission History</p>
+                <button type="button" class="btn-secondary btn-sm" data-action="download-all-zip"
+                    data-zip-build-url="{{ url_for('submission.download_all_submissions', project_id=project.id) }}">
+                    Download All
+                </button>
+            </div>
+            {% set ckv_history = submitted_history | selectattr('phase','equalto','concept_kv') | list %}
         <div style="margin-top:1.75rem;border-top:1px solid var(--border);padding-top:1rem;">
             {% set ckv_history = submitted_history | selectattr('phase','equalto','concept_kv') | list %}
             {% set posm_history = submitted_history | selectattr('phase','equalto','posm') | list %}
@@ -2637,6 +2656,8 @@
         // fires multiple times due to script re-execution), skip to avoid stacking listeners.
         if (!modalEl || modalEl._wired) return;
         modalEl._wired = true;
+        
+        restoreCustomerCollapseState();
 
         var cancelBtn = document.getElementById('approvalModalCancel');
         var confirmBtn = document.getElementById('approvalModalConfirm');
@@ -2896,6 +2917,30 @@
                     }
                 })
                 .catch(function () { showToast('Could not assign designer.', 'error'); });
+        });
+    }
+
+    // --C&CM customer block collapse/expand -----------
+    // Same hidden-class approach as togglePosmHistory(), but this one also writes to localStorage so the state is saved
+    // through the polling update.
+    function toggleCustomerBlock(bar) {
+        var targetId = bar.getAttribute('data-target');
+        var body = document.getElementById(targetId);
+        if (!body) return;
+        var collapsed = body.classList.toggle('hidden');
+        bar.classList.toggle('collapsed', collapsed);
+        localStorage.setItem('helix_customer_collapsed_' + bar.dataset.customerId, collapsed ? '1' : '0');      
+    }
+
+    // Runs on every page load/reload and reapplies the collapse state from localstorage. Default is expanded.
+    function restoreCustomerCollapseState() {
+        document.querySelectorAll('.brief-customer-summary[data-customer-id]').forEach(function (bar) {
+            var collapsed = localStorage.getItem('helix_customer_collapsed_' + bar.dataset.customerId) === '1';
+            if (!collapsed) return;
+            var body = document.getElementById(bar.getAttribute('data-target'));
+            if (!body) return;
+            body.classList.add('hidden');
+            bar.classList.add('collapsed');
         });
     }
 </script>

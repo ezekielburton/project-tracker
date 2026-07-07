@@ -30,10 +30,22 @@
             </div>
 
             {% if projects %}
-            <div class="deadline-sort-wrap" data-tbody="cs-my-projects-tbody" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                <span style="font-size:0.75rem;color:var(--grey-dark);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;">Sort by</span>
-                <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
-                <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
+            <div class="all-projects-filter-bar" id="my-projects-filter-bar">
+                <input type="text" id="mp-search" class="form-input" placeholder="Search by project name...">
+                <select id="mp-cs-filter" class="form-input">
+                    <option value="">All CS Leads</option>
+                </select>
+                <select id="mp-status-filter" class="form-input">
+                    <option value="">All Statuses</option>
+                </select>
+                <select id="mp-designer-filter" class="form-input">
+                    <option value="">All Designers</option>
+                </select>
+                <select id="mp-order-filter" class="form-input">
+                    <option value="firstDeadline">First Output Deadline</option>
+                    <option value="finalDeadline">Final Deadline</option>
+                </select>
+                <button type="button" class="btn-secondary" id="mp-clear-filters">Clear</button>
             </div>
             <div class="table-wrapper table-wrapper--card">
                 <table class="data-table data-table--with-chevron data-table--card-rows">
@@ -57,11 +69,16 @@
                         {% set is_overdue = project.design_needed_by and project.design_needed_by < today %}
                         {# _dfp: sorted designer user IDs — fingerprint for polling.js assignment-change detection #}
                         {% set _dfp = project.assigned_designers | map(attribute='user_id') | sort | join(',') %}
+                        {% set designer_names = project.assigned_designers | map(attribute='designer.name') | join(',') %}
                         {% if project.brief_type=='ccm' and project.project_customers %} <tr
                             class="expandable-row {% if is_overdue %}overdue{% endif %}"
                             data-expand="{{ project.id }}"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
+                            data-status="{{ project.project_status }}"
+                            data-designers="{{ designer_names }}"
+                            data-name="{{ project.name }}"
+                            data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                             data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                             data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                             {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
@@ -157,6 +174,10 @@
                                 data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                                 data-project-id="{{ project.id }}"
                                 data-fp="{{ _dfp }}"
+                                data-status="{{ project.project_status }}"
+                                data-designers="{{ designer_names }}"
+                                data-name="{{ project.name }}"
+                                data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                                 data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                                 data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
                                 <td class="chevron-cell"></td>
@@ -220,6 +241,7 @@
             </div>
 
             <div class="all-projects-filter-bar" id="all-projects-filter-bar">
+                <input type="text" id="ap-search" class="form-input" placeholder="Search by project name...">
                 <select id="ap-cs-filter" class="form-input">
                     <option value="">All CS Leads</option>
                 </select>
@@ -229,15 +251,14 @@
                 <select id="ap-designer-filter" class="form-input">
                     <option value="">All Designers</option>
                 </select>
+                <select id="ap-order-filter" class="form-input">
+                    <option value="firstDeadline">First Output Deadline</option>
+                    <option value="finalDeadline">Final Deadline</option>
+                </select>
                 <button type="button" class="btn-secondary" id="ap-clear-filters">Clear</button>
             </div>
-    
+
             {% if all_projects %}
-            <div class="deadline-sort-wrap" data-tbody="cs-all-projects-tbody" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                <span style="font-size:0.75rem;color:var(--grey-dark);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.06em;">Sort by</span>
-                <button class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
-                <button class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
-            </div>
             <div class="table-wrapper table-wrapper--card">
                 <table class="data-table data-table--with-chevron data-table--card-rows">
                     <thead>
@@ -264,6 +285,7 @@
                             class="expandable-row {% if is_overdue %}overdue{% endif %}" data-expand="{{ project.id }}"
                             data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                             data-status="{{ project.project_status }}" data-designers="{{ designer_names }}"
+                            data-name="{{ project.name }}"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
                             data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
@@ -363,6 +385,7 @@
                                 data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                                 data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                                 data-status="{{ project.project_status }}" data-designers="{{ designer_names }}"
+                                data-name="{{ project.name }}"
                                 data-project-id="{{ project.id }}"
                                 data-fp="{{ _dfp }}"
                                 data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"

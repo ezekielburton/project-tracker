@@ -544,6 +544,8 @@ function initAllProjectsFilters() {
     var csFilter = document.getElementById('ap-cs-filter');
     var statusFilter = document.getElementById('ap-status-filter');
     var designerFilter = document.getElementById('ap-designer-filter');
+    var orderFilter = document.getElementById('ap-order-filter');
+    var searchInput = document.getElementById('ap-search');
     var clearBtn = document.getElementById('ap-clear-filters');
 
     // Not on this dashboard — bail out
@@ -596,15 +598,18 @@ function initAllProjectsFilters() {
         var csVal = csFilter.value;
         var statusVal = statusFilter.value;
         var designerVal = designerFilter.value;
+        var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
         rows.forEach(function (row) {
             var cs = row.getAttribute('data-cs-lead') || '';
             var status = row.getAttribute('data-status') || '';
             var designerNames = (row.getAttribute('data-designers') || '').split(',').map(function (d) { return d.trim(); });
+            var name = (row.getAttribute('data-name') || '').toLowerCase();
 
             var match = (!csVal || cs === csVal) &&
                 (!statusVal || status === statusVal) &&
-                (!designerVal || designerNames.indexOf(designerVal) !== -1);
+                (!designerVal || designerNames.indexOf(designerVal) !== -1) &&
+                (!searchVal || name.indexOf(searchVal) !== -1);
 
             row.classList.toggle('hidden', !match);
 
@@ -615,18 +620,423 @@ function initAllProjectsFilters() {
                 if (expansionRow && !match) expansionRow.classList.add('hidden');
             }
         });
+        // Re-sort after filtering
+        sortTableBy(tbody, orderFilter ? (orderFilter.value || 'firstDeadline') : 'firstDeadline');
     }
 
     csFilter.addEventListener('change', applyFilters);
     statusFilter.addEventListener('change', applyFilters);
     designerFilter.addEventListener('change', applyFilters);
+    if (orderFilter) orderFilter.addEventListener('change', applyFilters);
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
 
     clearBtn.addEventListener('click', function () {
         csFilter.value = '';
         statusFilter.value = '';
         designerFilter.value = '';
+        if (orderFilter) orderFilter.value = 'firstDeadline';
+        if (searchInput) searchInput.value = '';
         applyFilters();
     });
+
+    // Initial sort
+    sortTableBy(tbody, 'firstDeadline');
+}
+
+// ── My Projects filters (Status, Designer, Ordering) ─────────────────────────
+function initMyProjectsFilters() {
+    var tbody = document.querySelector('#my-projects-view .data-table tbody');
+    var csFilter = document.getElementById('mp-cs-filter');
+    var statusFilter = document.getElementById('mp-status-filter');
+    var designerFilter = document.getElementById('mp-designer-filter');
+    var orderFilter = document.getElementById('mp-order-filter');
+    var searchInput = document.getElementById('mp-search');
+    var clearBtn = document.getElementById('mp-clear-filters');
+
+    if (!tbody || !statusFilter) return;
+
+    var csLeads = {}, statuses = {}, designers = {};
+    var rows = Array.from(tbody.querySelectorAll('tr[data-status]'));
+
+    rows.forEach(function (row) {
+        var cs = row.getAttribute('data-cs-lead');
+        var status = row.getAttribute('data-status');
+        var designerStr = row.getAttribute('data-designers');
+        if (cs) csLeads[cs] = true;
+        if (status) statuses[status] = true;
+        if (designerStr) {
+            designerStr.split(',').forEach(function (d) {
+                var name = d.trim();
+                if (name) designers[name] = true;
+            });
+        }
+    });
+
+    if (csFilter) {
+        Object.keys(csLeads).sort().forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            csFilter.appendChild(opt);
+        });
+    }
+
+    Object.keys(statuses).sort().forEach(function (status) {
+        var opt = document.createElement('option');
+        opt.value = status;
+        opt.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+        statusFilter.appendChild(opt);
+    });
+
+    Object.keys(designers).sort().forEach(function (name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        designerFilter.appendChild(opt);
+    });
+
+    function applyFilters() {
+        var csVal = csFilter ? csFilter.value : '';
+        var statusVal = statusFilter.value;
+        var designerVal = designerFilter.value;
+        var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+        rows.forEach(function (row) {
+            var cs = row.getAttribute('data-cs-lead') || '';
+            var status = row.getAttribute('data-status') || '';
+            var designerNames = (row.getAttribute('data-designers') || '').split(',').map(function (d) { return d.trim(); });
+            var name = (row.getAttribute('data-name') || '').toLowerCase();
+            var match = (!csVal || cs === csVal) &&
+                (!statusVal || status === statusVal) &&
+                (!designerVal || designerNames.indexOf(designerVal) !== -1) &&
+                (!searchVal || name.indexOf(searchVal) !== -1);
+            row.classList.toggle('hidden', !match);
+            var expandId = row.getAttribute('data-expand');
+            if (expandId) {
+                var expansionRow = document.getElementById('expand_' + expandId);
+                if (expansionRow && !match) expansionRow.classList.add('hidden');
+            }
+        });
+        sortTableBy(tbody, orderFilter ? (orderFilter.value || 'firstDeadline') : 'firstDeadline');
+    }
+
+    if (csFilter) csFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+    designerFilter.addEventListener('change', applyFilters);
+    if (orderFilter) orderFilter.addEventListener('change', applyFilters);
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+    clearBtn.addEventListener('click', function () {
+        if (csFilter) csFilter.value = '';
+        statusFilter.value = '';
+        designerFilter.value = '';
+        if (orderFilter) orderFilter.value = 'firstDeadline';
+        if (searchInput) searchInput.value = '';
+        applyFilters();
+    });
+
+    // Initial sort
+    sortTableBy(tbody, 'firstDeadline');
+}
+
+// ── Designer Team View filters ────────────────────────────────────────────────
+function initDesignerTeamFilters() {
+    var tbody = document.getElementById('designer-team-tbody');
+    var csFilter = document.getElementById('des-team-cs-filter');
+    var statusFilter = document.getElementById('des-team-status-filter');
+    var orderFilter = document.getElementById('des-team-order-filter');
+    var searchInput = document.getElementById('des-team-search');
+    var clearBtn = document.getElementById('des-team-clear-filters');
+
+    if (!tbody || !statusFilter) return;
+
+    var csLeads = {}, statuses = {};
+    var rows = Array.from(tbody.querySelectorAll('tr[data-status]'));
+
+    rows.forEach(function (row) {
+        var cs = row.getAttribute('data-cs-lead');
+        var status = row.getAttribute('data-status');
+        if (cs) csLeads[cs] = true;
+        if (status) statuses[status] = true;
+    });
+
+    if (csFilter) {
+        Object.keys(csLeads).sort().forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            csFilter.appendChild(opt);
+        });
+    }
+
+    Object.keys(statuses).sort().forEach(function (status) {
+        var opt = document.createElement('option');
+        opt.value = status;
+        opt.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+        statusFilter.appendChild(opt);
+    });
+
+    function applyFilters() {
+        var csVal = csFilter ? csFilter.value : '';
+        var statusVal = statusFilter.value;
+        var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+        rows.forEach(function (row) {
+            var cs = row.getAttribute('data-cs-lead') || '';
+            var status = row.getAttribute('data-status') || '';
+            var name = (row.getAttribute('data-name') || '').toLowerCase();
+            var match = (!csVal || cs === csVal) &&
+                (!statusVal || status === statusVal) &&
+                (!searchVal || name.indexOf(searchVal) !== -1);
+            row.classList.toggle('hidden', !match);
+            var expandId = row.getAttribute('data-expand');
+            if (expandId) {
+                var expansionRow = document.getElementById('expand_' + expandId);
+                if (expansionRow && !match) expansionRow.classList.add('hidden');
+            }
+        });
+        sortTableBy(tbody, orderFilter ? (orderFilter.value || 'firstDeadline') : 'firstDeadline');
+    }
+
+    if (csFilter) csFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+    if (orderFilter) orderFilter.addEventListener('change', applyFilters);
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+        if (csFilter) csFilter.value = '';
+        statusFilter.value = '';
+        if (orderFilter) orderFilter.value = 'firstDeadline';
+        if (searchInput) searchInput.value = '';
+        applyFilters();
+    });
+
+    sortTableBy(tbody, 'firstDeadline');
+}
+
+// ── Designer Personal View filters ────────────────────────────────────────────
+function initDesignerPersonalFilters() {
+    var tbody = document.getElementById('designer-personal-tbody');
+    var csFilter = document.getElementById('des-personal-cs-filter');
+    var statusFilter = document.getElementById('des-personal-status-filter');
+    var orderFilter = document.getElementById('des-personal-order-filter');
+    var searchInput = document.getElementById('des-personal-search');
+    var clearBtn = document.getElementById('des-personal-clear-filters');
+
+    if (!tbody || !statusFilter) return;
+
+    var csLeads = {}, statuses = {};
+    var rows = Array.from(tbody.querySelectorAll('tr[data-status]'));
+
+    rows.forEach(function (row) {
+        var cs = row.getAttribute('data-cs-lead');
+        var status = row.getAttribute('data-status');
+        if (cs) csLeads[cs] = true;
+        if (status) statuses[status] = true;
+    });
+
+    if (csFilter) {
+        Object.keys(csLeads).sort().forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            csFilter.appendChild(opt);
+        });
+    }
+
+    Object.keys(statuses).sort().forEach(function (status) {
+        var opt = document.createElement('option');
+        opt.value = status;
+        opt.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+        statusFilter.appendChild(opt);
+    });
+
+    function applyFilters() {
+        var csVal = csFilter ? csFilter.value : '';
+        var statusVal = statusFilter.value;
+        var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+        rows.forEach(function (row) {
+            var cs = row.getAttribute('data-cs-lead') || '';
+            var status = row.getAttribute('data-status') || '';
+            var name = (row.getAttribute('data-name') || '').toLowerCase();
+            var match = (!csVal || cs === csVal) &&
+                (!statusVal || status === statusVal) &&
+                (!searchVal || name.indexOf(searchVal) !== -1);
+            row.classList.toggle('hidden', !match);
+            var expandId = row.getAttribute('data-expand');
+            if (expandId) {
+                var expansionRow = document.getElementById('expand_' + expandId);
+                if (expansionRow && !match) expansionRow.classList.add('hidden');
+            }
+        });
+        sortTableBy(tbody, orderFilter ? (orderFilter.value || 'firstDeadline') : 'firstDeadline');
+    }
+
+    if (csFilter) csFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+    if (orderFilter) orderFilter.addEventListener('change', applyFilters);
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+        if (csFilter) csFilter.value = '';
+        statusFilter.value = '';
+        if (orderFilter) orderFilter.value = 'firstDeadline';
+        if (searchInput) searchInput.value = '';
+        applyFilters();
+    });
+
+    sortTableBy(tbody, 'firstDeadline');
+}
+
+// ── Team Lead Team View filters ───────────────────────────────────────────────
+function initTeamLeadTeamFilters() {
+    var tbody = document.getElementById('tl-team-tbody');
+    var csFilter = document.getElementById('tl-team-cs-filter');
+    var statusFilter = document.getElementById('tl-team-status-filter');
+    var orderFilter = document.getElementById('tl-team-order-filter');
+    var searchInput = document.getElementById('tl-team-search');
+    var clearBtn = document.getElementById('tl-team-clear-filters');
+
+    if (!tbody || !statusFilter) return;
+
+    var csLeads = {}, statuses = {};
+    var rows = Array.from(tbody.querySelectorAll('tr[data-status]'));
+
+    rows.forEach(function (row) {
+        var cs = row.getAttribute('data-cs-lead');
+        var status = row.getAttribute('data-status');
+        if (cs) csLeads[cs] = true;
+        if (status) statuses[status] = true;
+    });
+
+    if (csFilter) {
+        Object.keys(csLeads).sort().forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            csFilter.appendChild(opt);
+        });
+    }
+
+    Object.keys(statuses).sort().forEach(function (status) {
+        var opt = document.createElement('option');
+        opt.value = status;
+        opt.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+        statusFilter.appendChild(opt);
+    });
+
+    function applyFilters() {
+        var csVal = csFilter ? csFilter.value : '';
+        var statusVal = statusFilter.value;
+        var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+        rows.forEach(function (row) {
+            var cs = row.getAttribute('data-cs-lead') || '';
+            var status = row.getAttribute('data-status') || '';
+            var name = (row.getAttribute('data-name') || '').toLowerCase();
+            var match = (!csVal || cs === csVal) &&
+                (!statusVal || status === statusVal) &&
+                (!searchVal || name.indexOf(searchVal) !== -1);
+            row.classList.toggle('hidden', !match);
+            var expandId = row.getAttribute('data-expand');
+            if (expandId) {
+                var expansionRow = document.getElementById('expand_' + expandId);
+                if (expansionRow && !match) expansionRow.classList.add('hidden');
+            }
+        });
+        sortTableBy(tbody, orderFilter ? (orderFilter.value || 'firstDeadline') : 'firstDeadline');
+    }
+
+    if (csFilter) csFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+    if (orderFilter) orderFilter.addEventListener('change', applyFilters);
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+        if (csFilter) csFilter.value = '';
+        statusFilter.value = '';
+        if (orderFilter) orderFilter.value = 'firstDeadline';
+        if (searchInput) searchInput.value = '';
+        applyFilters();
+    });
+
+    sortTableBy(tbody, 'firstDeadline');
+}
+
+// ── Team Lead Personal View filters ──────────────────────────────────────────
+function initTeamLeadPersonalFilters() {
+    var tbody = document.getElementById('tl-personal-tbody');
+    var csFilter = document.getElementById('tl-personal-cs-filter');
+    var statusFilter = document.getElementById('tl-personal-status-filter');
+    var orderFilter = document.getElementById('tl-personal-order-filter');
+    var searchInput = document.getElementById('tl-personal-search');
+    var clearBtn = document.getElementById('tl-personal-clear-filters');
+
+    if (!tbody || !statusFilter) return;
+
+    var csLeads = {}, statuses = {};
+    var rows = Array.from(tbody.querySelectorAll('tr[data-status]'));
+
+    rows.forEach(function (row) {
+        var cs = row.getAttribute('data-cs-lead');
+        var status = row.getAttribute('data-status');
+        if (cs) csLeads[cs] = true;
+        if (status) statuses[status] = true;
+    });
+
+    if (csFilter) {
+        Object.keys(csLeads).sort().forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            csFilter.appendChild(opt);
+        });
+    }
+
+    Object.keys(statuses).sort().forEach(function (status) {
+        var opt = document.createElement('option');
+        opt.value = status;
+        opt.textContent = status.replace(/_/g, ' ').replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+        statusFilter.appendChild(opt);
+    });
+
+    function applyFilters() {
+        var csVal = csFilter ? csFilter.value : '';
+        var statusVal = statusFilter.value;
+        var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+        rows.forEach(function (row) {
+            var cs = row.getAttribute('data-cs-lead') || '';
+            var status = row.getAttribute('data-status') || '';
+            var name = (row.getAttribute('data-name') || '').toLowerCase();
+            var match = (!csVal || cs === csVal) &&
+                (!statusVal || status === statusVal) &&
+                (!searchVal || name.indexOf(searchVal) !== -1);
+            row.classList.toggle('hidden', !match);
+            var expandId = row.getAttribute('data-expand');
+            if (expandId) {
+                var expansionRow = document.getElementById('expand_' + expandId);
+                if (expansionRow && !match) expansionRow.classList.add('hidden');
+            }
+        });
+        sortTableBy(tbody, orderFilter ? (orderFilter.value || 'firstDeadline') : 'firstDeadline');
+    }
+
+    if (csFilter) csFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+    if (orderFilter) orderFilter.addEventListener('change', applyFilters);
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+        if (csFilter) csFilter.value = '';
+        statusFilter.value = '';
+        if (orderFilter) orderFilter.value = 'firstDeadline';
+        if (searchInput) searchInput.value = '';
+        applyFilters();
+    });
+
+    sortTableBy(tbody, 'firstDeadline');
 }
 
 // Synchronises horizontal scroll across all .table-wrapper elements within a view.
@@ -838,7 +1248,12 @@ function syncTableScrollers(viewEl) {
     // Wire up scroll sync for each CS view once on page load.
     if (myProjectsView) syncTableScrollers(myProjectsView);
     if (allProjectsView) syncTableScrollers(allProjectsView);
-    initAllProjectsFilters(); // populate and wire up All Projects filter bar
+    initAllProjectsFilters();       // CS — All Projects filter bar
+    initMyProjectsFilters();        // CS — My Projects filter bar
+    initDesignerTeamFilters();      // Designer — Team View filter bar
+    initDesignerPersonalFilters();  // Designer — Personal View filter bar
+    initTeamLeadTeamFilters();      // Team Lead — Team View filter bar
+    initTeamLeadPersonalFilters();  // Team Lead — Personal View filter bar
     }
     initDashboardTabs();
     document.addEventListener('helix:navigated', initDashboardTabs);  
@@ -2386,52 +2801,36 @@ function syncTableScrollers(viewEl) {
 
     } // end sectionBasics wrapper
 
-// ── Dashboard deadline sort toggle ────────────────────────────────────────────
+// ── Dashboard deadline sort ───────────────────────────────────────────────────
 // Sorts project table rows by first-output-deadline or final-deadline.
-// Rows are identified by data-project-id. CCM expandable rows carry a paired
-// expansion-row sibling that must travel with them when re-ordering.
-(function () {
-    function sortTableBy(tbody, field) {
-        var children = Array.from(tbody.rows);
-        var groups = [];
-        var i = 0;
-        while (i < children.length) {
-            var row = children[i];
-            if (row.dataset.projectId) {
-                var group = [row];
-                var next = children[i + 1];
-                if (next && next.classList.contains('expansion-row')) {
-                    group.push(next);
-                    i += 2;
-                } else {
-                    i++;
-                }
-                groups.push(group);
+// Exposed at module scope so initAllProjectsFilters / initMyProjectsFilters
+// can call it from the ordering dropdown handler.
+function sortTableBy(tbody, field) {
+    var children = Array.from(tbody.rows);
+    var groups = [];
+    var i = 0;
+    while (i < children.length) {
+        var row = children[i];
+        if (row.dataset.projectId) {
+            var group = [row];
+            var next = children[i + 1];
+            if (next && next.classList.contains('expansion-row')) {
+                group.push(next);
+                i += 2;
             } else {
                 i++;
             }
+            groups.push(group);
+        } else {
+            i++;
         }
-        groups.sort(function (a, b) {
-            var aVal = a[0].dataset[field] || '9999-12-31';
-            var bVal = b[0].dataset[field] || '9999-12-31';
-            return aVal.localeCompare(bVal);
-        });
-        groups.forEach(function (group) {
-            group.forEach(function (row) { tbody.appendChild(row); });
-        });
     }
-
-    document.addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-deadline-sort]');
-        if (!btn) return;
-        var wrap = btn.closest('.deadline-sort-wrap');
-        if (!wrap) return;
-        var tbody = document.getElementById(wrap.dataset.tbody);
-        if (!tbody) return;
-        wrap.querySelectorAll('[data-deadline-sort]').forEach(function (b) {
-            b.classList.remove('active');
-        });
-        btn.classList.add('active');
-        sortTableBy(tbody, btn.dataset.deadlineSort);
+    groups.sort(function (a, b) {
+        var aVal = a[0].dataset[field] || '9999-12-31';
+        var bVal = b[0].dataset[field] || '9999-12-31';
+        return aVal.localeCompare(bVal);
     });
-}());
+    groups.forEach(function (group) {
+        group.forEach(function (row) { tbody.appendChild(row); });
+    });
+}

@@ -235,12 +235,16 @@ def create_app():
 
     @app.context_processor
     def inject_wizard_state():
-        if current_user.is_authenticated and not current_user.wizard_completed:
+        if current_user.is_authenticated and (not current_user.wizard_completed or not current_user.avatar_step_completed):
             return {
                 'show_wizard': True,
-                'show_name_step': current_user.created_at >= WIZARD_LAUNCH_DATE
+                'show_name_step': current_user.created_at >= WIZARD_LAUNCH_DATE,
+                # True only for accounts that already finished the wizard before
+                # the avatar step existed — they should land straight on that one
+                # new step, not replay steps 1-3 they've already done.
+                'avatar_step_only': current_user.wizard_completed and not current_user.avatar_step_completed,
             }
-        return {'show_wizard': False, 'show_name_step': False}
+        return {'show_wizard': False, 'show_name_step': False, 'avatar_step_only': False}
     
     def dubai_time(dt):
         if dt is None:

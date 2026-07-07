@@ -79,6 +79,7 @@ def complete():
 
     current_user.notification_prefs = json.dumps(prefs)
     current_user.wizard_completed = True
+    current_user.avatar_step_completed = True
     db.session.commit()
 
     return jsonify({'success': True})

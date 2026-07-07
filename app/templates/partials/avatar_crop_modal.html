@@ -1,0 +1,18 @@
+{% if current_user.is_authenticated %}
+<div id="crop-modal" class="modal-overlay hidden">
+    <div class="modal-box crop-modal-box">
+        <h3 class="modal-title" id="crop-modal-title">Adjust Photo</h3>
+        <div class="crop-container">
+            <img id="crop-image" src="" alt="">
+        </div>
+        <input type="range" id="crop-zoom-slider" min="0" max="100" value="0">
+        <p id="crop-size-hint" class="crop-size-hint"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="crop-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" id="crop-save-btn">Save</button>
+        </div>
+    </div>
+</div>
+<input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/webp" style="display:none;">
+<input type="file" id="banner-file-input" accept="image/jpeg,image/png,image/webp" style="display:none;">
+{% endif %}

@@ -1,8 +1,10 @@
 // profile.js — Vitamin-E
-// Drives the avatar/banner picker + Cropper.js crop-and-zoom popup, and the
-// upload of the resulting cropped+compressed image.
-// Depends on: showToast(), btnLoading(), btnDone() from main.js. Loaded after
-// Cropper.js and after the page HTML (script tag sits at the bottom of profile.html).
+// Wires the profile page's avatar/banner pickers into the shared
+// HelixAvatarCropper module (avatar-cropper.js) — that module owns the
+// crop modal, Cropper.js wiring, and upload; this file only tells it which
+// inputs to watch and what to do once each upload succeeds.
+// Depends on: HelixAvatarCropper (avatar-cropper.js, loaded before this
+// file), showToast()/btnLoading()/btnDone() from main.js.
 
 (function () {
     var editAvatarBtn = document.getElementById('edit-avatar-btn');
@@ -10,98 +12,6 @@
     var avatarFileInput = document.getElementById('avatar-file-input');
     var bannerFileInput = document.getElementById('banner-file-input');
 
-    var cropModal = document.getElementById('crop-modal');
-    var cropModalTitle = document.getElementById('crop-modal-title');
-    var cropImage = document.getElementById('crop-image');
-    var cropContainer = cropImage.parentElement;
-    var cropZoomSlider = document.getElementById('crop-zoom-slider');
-    var cropCancelBtn = document.getElementById('crop-cancel-btn');
-    var cropSaveBtn = document.getElementById('crop-save-btn');
-
-    var cropper = null;
-    var currentMode = null; // 'avatar' or 'banner'
-
-    // Per-mode settings: aspect ratio for the crop box, and the fixed pixel
-    // size we export to (also crops AND resizes/compresses spatially in one step).
-    var MODE_CONFIG = {
-        avatar: { aspectRatio: 1, outputWidth: 512, outputHeight: 512, title: 'Adjust Photo' },
-        banner: { aspectRatio: 4, outputWidth: 1584, outputHeight: 396, title: 'Adjust Banner' }
-    };
-
-    function openCropModal(dataUrl, mode) {
-        currentMode = mode;
-        var config = MODE_CONFIG[mode];
-
-        var cropSizeHint = document.getElementById('crop-size-hint');
-        cropSizeHint.textContent = 'Saved at ' + config.outputWidth + '×' + config.outputHeight + 'px';
-        cropSizeHint.classList.remove('crop-size-hint--warning');
-
-        cropModalTitle.textContent = config.title;
-        cropImage.src = dataUrl;
-        cropModal.classList.remove('hidden');
-
-        // Circular crop preview only makes sense for the avatar — toggled via
-        // a CSS class rather than inline styles, see profile.css.
-        cropContainer.classList.toggle('crop-container--circle', mode === 'avatar');
-
-        // Pause the 1s dashboard polling while this modal is open — same rule
-        // CLAUDE.md documents for any modal requiring input before a server action.
-        if (window.helixPolling) window.helixPolling.pause();
-
-        // Cropper.js needs the <img> to have already loaded its new src before
-        // it can read natural dimensions — destroy any previous instance first.
-        if (cropper) {
-            cropper.destroy();
-            cropper = null;
-        }
-
-        cropImage.onload = function () {
-            // Warn if the source photo is smaller than our target output — cropping
-            // can't add detail that isn't there, so this would upscale and look soft.
-            // This has to run here, inside onload, since naturalWidth/Height are
-            // only known once the image has actually finished loading.
-            if (cropImage.naturalWidth < config.outputWidth || cropImage.naturalHeight < config.outputHeight) {
-                cropSizeHint.textContent = 'This photo is smaller than ' + config.outputWidth + '×' + config.outputHeight +
-                    'px \u2014 it may look blurry once saved.';
-                cropSizeHint.classList.add('crop-size-hint--warning');
-            }
-
-            cropper = new Cropper(cropImage, {
-                aspectRatio: config.aspectRatio,
-                viewMode: 1,
-                dragMode: 'move',
-                background: false,
-                autoCropArea: 1,
-                guides: false,
-                center: false,
-                highlight: false,
-                cropBoxResizable: false,
-                cropBoxMovable: false,
-                toggleDragModeOnDblclick: false
-            });
-            cropZoomSlider.value = 0;
-        };
-    }
-
-    function closeCropModal() {
-        cropModal.classList.add('hidden');
-        if (cropper) {
-            cropper.destroy();
-            cropper = null;
-        }
-        avatarFileInput.value = '';
-        banannerFileInputReset();
-        if (window.helixPolling) window.helixPolling.resume();
-    }
-
-    // Separate helper only so a typo in one spot doesn't silently break both —
-    // resets whichever file input was actually used, so re-selecting the same
-    // file later still fires a 'change' event.
-    function banannerFileInputReset() {
-        bannerFileInput.value = '';
-    }
-
-    // ── Trigger file pickers from the pencil icons ──────────────────────────
     editAvatarBtn.addEventListener('click', function () {
         avatarFileInput.click();
     });
@@ -109,75 +19,15 @@
         bannerFileInput.click();
     });
 
-    function handleFileSelected(input, mode) {
-        input.addEventListener('change', function () {
-            var file = this.files[0];
-            if (!file) return;
-
-            var reader = new FileReader();
-            reader.onload = function (e) {
-                openCropModal(e.target.result, mode);
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-    handleFileSelected(avatarFileInput, 'avatar');
-    handleFileSelected(bannerFileInput, 'banner');
-
-    // ── Zoom slider ──────────────────────────────────────────────────────────
-    // Cropper's zoomTo() takes an absolute ratio (1 = image at natural size
-    // relative to the crop box), not a percentage — map the 0-100 slider onto
-    // a 0.1-2.0 range, which covers "zoomed out" to "zoomed in" for most photos.
-    cropZoomSlider.addEventListener('input', function () {
-        if (!cropper) return;
-        var ratio = 0.1 + (parseInt(this.value, 10) / 100) * 1.9;
-        cropper.zoomTo(ratio);
+    // Same "reload the whole page" behavior as before extraction — simplest
+    // correct way to reflect the new image everywhere it appears (this page,
+    // and eventually project tables). Uploads are infrequent enough that
+    // this tradeoff is fine.
+    HelixAvatarCropper.wireFileInput(avatarFileInput, 'avatar', function () {
+        window.location.reload();
     });
-
-    // ── Cancel / close on backdrop click ────────────────────────────────────
-    cropCancelBtn.addEventListener('click', closeCropModal);
-    cropModal.addEventListener('click', function (e) {
-        if (e.target === cropModal) closeCropModal();
-    });
-
-    // ── Save: export the cropped canvas, compress to JPEG, upload ──────────
-    cropSaveBtn.addEventListener('click', function () {
-        if (!cropper) return;
-        var config = MODE_CONFIG[currentMode];
-
-        var canvas = cropper.getCroppedCanvas({
-            width: config.outputWidth,
-            height: config.outputHeight
-        });
-
-        btnLoading(cropSaveBtn);
-
-        // toBlob's quality argument (0.85) is where the actual compression
-        // happens — this is a JPEG regardless of what format was uploaded.
-        canvas.toBlob(function (blob) {
-            var formData = new FormData();
-            formData.append('file', blob, currentMode + '.jpg');
-
-            fetch('/profile/' + currentMode, { method: 'POST', body: formData })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    btnDone(cropSaveBtn);
-                    if (!data.success) {
-                        showToast(data.error || 'Upload failed.', 'error');
-                        return;
-                    }
-                    closeCropModal();
-                    // Simplest correct way to reflect the new image everywhere
-                    // it appears (this page, and eventually project tables) —
-                    // a full reload rather than patching the DOM in place.
-                    // Uploads are infrequent enough that this tradeoff is fine.
-                    window.location.reload();
-                })
-                .catch(function () {
-                    btnDone(cropSaveBtn);
-                    showToast('Upload failed.', 'error');
-                });
-        }, 'image/jpeg', 0.85);
+    HelixAvatarCropper.wireFileInput(bannerFileInput, 'banner', function () {
+        window.location.reload();
     });
 
     // ── Edit Details modal (Phase 4) ────────────────────────────────────────

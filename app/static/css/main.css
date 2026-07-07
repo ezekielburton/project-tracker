@@ -2819,6 +2819,52 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     margin-bottom: 0.5rem;
 }
 
+.brief-customer-summary {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.6rem 0.9rem;
+    margin-bottom: 0.5rem;
+    background: var(--sandstone);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.brief-customer-summary:hover {
+    background: #ece5d8;
+}
+
+.brief-customer-summary-name {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--black);
+}
+
+.brief-customer-summary-deadline,
+.brief-customer-summary-installation,
+.brief-customer-summary-count {
+    font-size: 0.8rem;
+    color: var(--grey-dark);
+}
+
+/* Pushes the chevron to the far right regardless of how much text
+   is in the name/deadline/count spans before it. */
+
+.brief-customer-summary-chevron {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--grey-dark);
+    transition: transform 0.15s ease;
+}
+
+/* toggleCustomerBlock() (detail.html) adds/removes this class on the
+   summary bar itself when it collapses/expands the body below it. */
+.brief-customer-summary.collapsed .brief-customer-summary-chevron {
+    transform: rotate(-90deg);
+}
+
 .brief-deliverables {
     display: flex;
     flex-direction: column;
@@ -2970,6 +3016,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     gap: 1.5rem;
     flex-wrap: wrap;
     margin-bottom: 0.5rem;
+    justify-content: flex-end;
 }
 
 .brief-customer-dates {

@@ -9,8 +9,8 @@ New Features:
 - Added first login wizard
 - Added file preview for reference files
 - Added deliverable images for C&CM
-- Added file preview for Submission Files files (do this tmw)
-- Added drag and dropping when uploading files (do this tmw)
+- Added file preview for Submission Files files
+- Added drag and dropping when attaching files 
 
 Adjustments:
 
@@ -18,6 +18,8 @@ Adjustments:
 - Added DWG and ZIP to allowed file types for submissions and reference files.
 - Redesigned submission UI/UX to stop accidental approvals (do this tmw)
 - Moved settings and edit banner on the profile page, to the left side for better visibility.
+- C&CM customers are now collapsible, for better UI/UX.
+- Added project filtering and searching for all views
 
 Bug Fixes:
 

@@ -25,6 +25,36 @@
         });
     });
 
+// ── "Download All" zip download — shared by reference files and submission
+// history buttons. Both just point data-zip-build-url at their own backend
+// route; this function doesn't care which one it's talking to.
+function triggerZipDownload(btn) {
+    var url = btn.dataset.zipBuildUrl;
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Zipping...';
+
+    fetch(url)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            if (!data.success) {
+                showToast(data.error || 'Could not build zip.', 'error');
+                return;
+            }
+            // Trigger the actual browser download by navigating to the
+            // /api/zip-download/<zip_id> route from Chunk 2 of the shared
+            // utility — this is what starts the save-file dialog.
+            window.location = data.download_url;
+        })
+        .catch(function () {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            showToast('Could not build zip.', 'error');
+        });
+}
+
     // ── Status dropdowns ─────────────────────────────────────
     function updateStatus(select) {
         var url = select.dataset.url;
@@ -1370,6 +1400,14 @@ document.addEventListener('click', function (e) {
     // data-target holds the panel ID; togglePosmHistory() reads it from the element.
     var historyToggle = e.target.closest('[data-action="toggle-posm-history"]');
     if (historyToggle) { togglePosmHistory(historyToggle); return; }
+
+    // ── "Download All" zip buttons - Reference Files and Submission History ───
+    var downloadAllBtn = e.target.closest('[data-action="download-all-zip"]');
+    if (downloadAllBtn) { triggerZipDownload(downloadAllBtn); return; }
+
+    // ── C&CM Customer block collapse/expand ───────────────────────────────────
+    var customerToggle = e.target.closest('[data-action="toggle-customer-block"]');
+    if (customerToggle) { toggleCustomerBlock(customerToggle); return; }
 
     // ── Flag history section toggle ───────────────────────────────────────────
     if (e.target.closest('[data-action="toggle-flag-history"]')) {
