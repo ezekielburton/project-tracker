@@ -27,7 +27,7 @@
 .profile-banner-edit-btn {
     position: absolute;
     top: 12px;
-    right: 52px;
+    left: 52px;
     opacity: 0;
     transition: opacity 0.15s;
     background: var(--white);
@@ -45,7 +45,7 @@
 .profile-settings-gear {
     position: absolute;
     top: 12px;
-    right: 12px;
+    left: 12px;
     background: var(--white);
     border-radius: 50%;
     width: 32px;
