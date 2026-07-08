@@ -122,8 +122,13 @@ def update_post(post_id):
 
     send_email = data.get('send_email', False)
     if send_email:
-        from app.notifications import notify_all_of_new_blog_post
-        notify_all_of_new_blog_post(post, current_user, send_inapp=False, send_email=True)
+        try:
+            from app.notifications import notify_all_of_new_blog_post
+            notify_all_of_new_blog_post(post, current_user, send_inapp=False, send_email=True)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            # Email failure must not crash the response — post is already saved
 
     return jsonify({'success': True})
 
@@ -143,8 +148,13 @@ def toggle_publish(post_id):
     if post.is_published:
         payload = request.get_json(silent=True) or {}
         send_email = payload.get('send_email', False)
-        from app.notifications import notify_all_of_new_blog_post
-        notify_all_of_new_blog_post(post, current_user, send_inapp=True, send_email=send_email)
+        try:
+            from app.notifications import notify_all_of_new_blog_post
+            notify_all_of_new_blog_post(post, current_user, send_inapp=True, send_email=send_email)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            # Email failure must not crash the response — post is already published
 
     published_date = post.published_at.strftime('%d %b %Y') if post.published_at else ''
 

@@ -18,6 +18,7 @@ from app.notifications import (
 )
 from app.utils import log_activity
 from app.achievements import check_achievements
+from app.status_tracking import record_project_status, record_customer_status, record_deliverable_status
 
 submission_bp = Blueprint('submission', __name__)
 
@@ -91,7 +92,6 @@ def submit_project():
         project.job_number = job_num
         project.design_teams_requested = ','.join(data.get('design_teams', []))
         project.brief_type = data['brief_type']
-        project.project_status = 'briefed'
         project.urgency = data.get('urgency')
         project.required_output = data.get('required_output')
         project.campaign_notes = data.get('concept_requirements')
@@ -119,6 +119,12 @@ def submit_project():
             project.additional_information = data.get('additional_information')
 
         db.session.flush()
+
+        # First-ever status for this project — needs the flush above so
+        # project.id exists (record_project_status needs it for the log row).
+        # Also correctly handles a promoted draft: closes whatever status log
+        # row the draft had open (if any) and opens a fresh 'briefed' one.
+        record_project_status(project, 'briefed', current_user)
 
         if data['brief_type'] == 'standard':
             for del_item in data.get('standard_deliverables', []):
@@ -148,6 +154,8 @@ def submit_project():
                     created_by=current_user
                 )
                 db.session.add(deliverable)
+                db.session.flush()  # need deliverable.id for the status log row
+                record_deliverable_status(deliverable, 'in_queue', current_user)
         else:
             # ── Create regions ───────────────────────────────────
             ProjectRegion.query.filter_by(project_id=project.id).delete()
@@ -181,6 +189,7 @@ def submit_project():
                     )
                     db.session.add(project_customer)
                     db.session.flush()
+                    record_customer_status(project_customer, 'briefed', current_user)
                     customer_map[customer_id] = project_customer.id
 
                 deliverable = Deliverable(
@@ -192,6 +201,8 @@ def submit_project():
                     status='in_queue'
                 )
                 db.session.add(deliverable)
+                db.session.flush()  # need deliverable.id for the status log row
+                record_deliverable_status(deliverable, 'in_queue', current_user)
 
         db.session.commit()
         # --- NAS Folder Creation ------
@@ -440,7 +451,7 @@ def upload_submission(project_id):
         channel.status = 'in_queue'
     elif not channel and project.project_status == 'internal_revision':
         # Standard brief reupload after internal CS flag
-        project.project_status = 'in_progress'
+        record_project_status(project, 'in_progress', current_user)
     elif not channel and project.concept_status in ('revision_in_queue', 'revision_in_progress', 'internal_revision'):
         # C&KV reupload after client revision or internal flag — reset so picker shows
         project.concept_status = 'in_progress'
@@ -544,7 +555,7 @@ def submit_for_internal_review(project_id):
             submission.posm_customer_id = pc.id if pc else None
         else:
             submission.posm_customer_id = None
-        project.project_status = 'internal_review'
+        record_project_status(project, 'internal_review', current_user)
     else:
         submission.phase = 'concept_kv'
         submission.posm_country    = None
@@ -552,7 +563,7 @@ def submit_for_internal_review(project_id):
         # When the project has POSM channels, project status is driven by those channels.
         # C&KV is a parallel channel — don't overwrite project status here.
         if not project.posm_channels:
-            project.project_status = 'internal_review'
+            record_project_status(project, 'internal_review', current_user)
 
     # Save concept/KV flags on the submission and advance their statuses (concept/KV phase only)
     submission.includes_concept = includes_concept
@@ -573,7 +584,7 @@ def submit_for_internal_review(project_id):
             )
             db.session.add(link)
             # Move the deliverable into internal review (applies to both Standard and POSM flows)
-            deliverable.status = 'internal_review'
+            record_deliverable_status(deliverable, 'internal_review', current_user)
 
     db.session.commit()
 
@@ -653,14 +664,14 @@ def flag_submission(project_id):
         # Push every included deliverable into internal_revision (POSM flow)
         for link in submission.included_deliverables:
             if link.deliverable:
-                link.deliverable.status = 'internal_revision'
+                record_deliverable_status(link.deliverable, 'internal_revision', current_user)
     else:
         # Push project into internal_revision state
-        project.project_status = 'internal_revision'
+        record_project_status(project, 'internal_revision', current_user)
         # Push every included deliverable into internal_revision
         for link in submission.included_deliverables:
             if link.deliverable:
-                link.deliverable.status = 'internal_revision'
+                record_deliverable_status(link.deliverable, 'internal_revision', current_user)
         # Push concept/KV too if they were included in this submission
         if submission.includes_concept:
             project.concept_status = 'internal_revision'
@@ -790,11 +801,11 @@ def submit_to_client(project_id):
         # Push every included deliverable into submitted_to_client (POSM flow)
         for link in submission.included_deliverables:
             if link.deliverable:
-                link.deliverable.status = 'submitted_to_client'
+                record_deliverable_status(link.deliverable, 'submitted_to_client', current_user)
     else:
         # NOTE: project.revision_count is NOT incremented here.
         # It is incremented only when CS sends a revision back (send_revision route).
-        project.project_status = 'submitted_to_client'
+        record_project_status(project, 'submitted_to_client', current_user)
         is_revised_submission = (project.revision_count or 0) > 0
 
         # Standard briefs only: mark included deliverables as submitted to client.
@@ -806,7 +817,7 @@ def submit_to_client(project_id):
             included_ids = {link.deliverable_id for link in submission.included_deliverables if link.deliverable_id}
             for deliverable in project.project_deliverables:
                 if deliverable.id in included_ids:
-                    deliverable.status = 'submitted_to_client'
+                    record_deliverable_status(deliverable, 'submitted_to_client', current_user)
 
             # Stamp revision_count on each *included* deliverable to match the current
             # client revision number. Using assignment (not +=) makes this idempotent:
@@ -1231,7 +1242,7 @@ def send_revision(project_id):
                         deliverable_id=link.deliverable_id
                     ))
                     if link.deliverable:
-                        link.deliverable.status = 'revision_in_queue'
+                        record_deliverable_status(link.deliverable, 'revision_in_queue', current_user)
             ch_active.is_active = False
 
         # Increment per-channel revision counter
@@ -1251,7 +1262,7 @@ def send_revision(project_id):
                     revision_id=revision.id,
                     deliverable_id=d_id
                 ))
-                deliverable.status = 'revision_in_queue'
+                record_deliverable_status(deliverable, 'revision_in_queue', current_user)
 
         # Move concept/KV into revision_in_queue if flagged
         if includes_concept:
@@ -1271,7 +1282,7 @@ def send_revision(project_id):
             counts[posm_country] = counts.get(posm_country, 0) + 1
             project.posm_country_revision_counts = counts
 
-        project.project_status = 'revision_in_queue'
+        record_project_status(project, 'revision_in_queue', current_user)
 
         # Deactivate the current submission so the deck area appears empty (history is preserved)
         active_submission = ProjectSubmission.query.filter_by(
@@ -1352,7 +1363,7 @@ def start_revision(project_id):
         if revision:
             for link in revision.revision_deliverables:
                 if link.deliverable:
-                    link.deliverable.status = 'revision_in_progress'
+                    record_deliverable_status(link.deliverable, 'revision_in_progress', current_user)
     elif data.get('ckv'):
         # ── C&KV start revision ───────────────────────────────────────────────
         # Designer acknowledges the C&KV revision and starts working on it.
@@ -1394,9 +1405,9 @@ def start_revision(project_id):
 
         for link in revision.revision_deliverables:
             if link.deliverable:
-                link.deliverable.status = 'revision_in_progress'
+                record_deliverable_status(link.deliverable, 'revision_in_progress', current_user)
 
-        project.project_status = 'revision_in_progress'
+        record_project_status(project, 'revision_in_progress', current_user)
 
     db.session.commit()
 

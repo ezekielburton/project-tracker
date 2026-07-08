@@ -8,6 +8,7 @@ from app.decorators import role_required
 from app.notifications import notify_of_project_approved, notify_of_ckv_posm_pending, create_notification
 from app.utils import log_activity
 from app.achievements import check_achievements
+from app.status_tracking import record_project_status, record_deliverable_status
 
 approval_bp = Blueprint('approval', __name__)
 
@@ -76,7 +77,7 @@ def approve_submission(project_id):
             if ch_sub:
                 for link in ch_sub.included_deliverables:
                     if link.deliverable and link.deliverable.id in deliverable_id_set:
-                        link.deliverable.status = 'approved'
+                        record_deliverable_status(link.deliverable, 'approved', current_user)
 
             # Cascade to channel approval only when ALL deliverables for this channel's
             # customer(s) are approved — not just those in the current submission.
@@ -112,7 +113,7 @@ def approve_submission(project_id):
             if ch_sub:
                 for link in ch_sub.included_deliverables:
                     if link.deliverable:
-                        link.deliverable.status = 'approved'
+                        record_deliverable_status(link.deliverable, 'approved', current_user)
 
         # Cascade: if ALL channels are now approved (and C&KV if applicable), approve project
         if channel.status == 'approved':
@@ -124,7 +125,7 @@ def approve_submission(project_id):
                 if project.has_kv and project.kv_status != 'approved':
                     ckv_gate = False
                 if ckv_gate:
-                    project.project_status = 'approved'
+                    record_project_status(project, 'approved', current_user)
                     project.approved_at = now
                     project.approved_by_id = current_user.id
                     all_approved = True
@@ -141,11 +142,11 @@ def approve_submission(project_id):
             # Partial approval: only mark the selected deliverables
             for deliverable in project.project_deliverables:
                 if deliverable.id in deliverable_id_set:
-                    deliverable.status = 'approved'
+                    record_deliverable_status(deliverable, 'approved', current_user)
 
             # If every project deliverable is now approved, approve the project
             if all(d.status == 'approved' for d in project.project_deliverables):
-                project.project_status = 'approved'
+                record_project_status(project, 'approved', current_user)
                 project.approved_at = now
                 project.approved_by_id = current_user.id
                 if project.concept_status:
@@ -155,13 +156,13 @@ def approve_submission(project_id):
                 all_approved = True
         else:
             # Full approval
-            project.project_status = 'approved'
+            record_project_status(project, 'approved', current_user)
             project.approved_at = now
             project.approved_by_id = current_user.id
             all_approved = True
 
             for deliverable in project.project_deliverables:
-                deliverable.status = 'approved'
+                record_deliverable_status(deliverable, 'approved', current_user)
 
             if project.concept_status:
                 project.concept_status = 'approved'
@@ -233,7 +234,7 @@ def approve_concept_kv(project_id):
     # ── POSM channels present: cascade if all channels are now approved ───────
     all_channels = ProjectPosmChannel.query.filter_by(project_id=project_id).all()
     if all_channels and all(c.status == 'approved' for c in all_channels):
-        project.project_status = 'approved'
+        record_project_status(project, 'approved', current_user)
         project.approved_at = now
         project.approved_by_id = current_user.id
 
@@ -267,7 +268,7 @@ def posm_prompt_response(project_id):
     now = datetime.utcnow()
 
     if action == 'add_posm':
-        project.project_status = 'in_progress'
+        record_project_status(project, 'in_progress', current_user)
         db.session.commit()
         log_activity(
             'posm_pending',
@@ -279,7 +280,7 @@ def posm_prompt_response(project_id):
         return jsonify({'success': True, 'redirect': url_for('project_detail.detail', project_id=project.id)})
 
     elif action == 'pause':
-        project.project_status = 'awaiting_posm_details'
+        record_project_status(project, 'awaiting_posm_details', current_user)
         db.session.commit()
         log_activity(
             'posm_pending',
@@ -290,7 +291,7 @@ def posm_prompt_response(project_id):
         return jsonify({'success': True})
 
     else:  # approve
-        project.project_status = 'approved'
+        record_project_status(project, 'approved', current_user)
         project.approved_at = now
         project.approved_by_id = current_user.id
         db.session.commit()
@@ -329,13 +330,13 @@ def approve_direct(project_id):
     actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
 
     # Lock the project
-    project.project_status = 'approved'
+    record_project_status(project, 'approved', actor)
     project.approved_at = now
     project.approved_by_id = actor.id
 
     # Approve all standard deliverables
     for deliverable in project.project_deliverables:
-        deliverable.status = 'approved'
+        record_deliverable_status(deliverable, 'approved', actor)
 
     # Approve C&KV if present
     if project.has_concept:
@@ -390,14 +391,14 @@ def unapprove_project(project_id):
     actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
 
     # Reset project-level approval
-    project.project_status = 'submitted_to_client'
+    record_project_status(project, 'submitted_to_client', actor)
     project.approved_at = None
     project.approved_by_id = None
 
     # Reset all approved deliverables
     for deliverable in project.project_deliverables:
         if deliverable.status == 'approved':
-            deliverable.status = 'submitted_to_client'
+            record_deliverable_status(deliverable, 'submitted_to_client', actor)
 
     # Reset concept/KV if approved
     if project.concept_status == 'approved':
@@ -427,6 +428,122 @@ def unapprove_project(project_id):
     log_activity(
         'project_unapproved',
         f'"{project.name}" approval reversed by {actor.name} — returned to Submitted to Client',
+        user=actor, entity_type='project',
+        entity_name=project.name, entity_id=project.id
+    )
+
+    return jsonify({'success': True})
+
+
+@approval_bp.route('/projects/<int:project_id>/unapprove-ckv', methods=['POST'])
+@login_required
+@role_required('admin')
+def unapprove_ckv(project_id):
+    """Admin reverses a C&KV approval, returning it (and the project if fully approved)
+    to submitted_to_client."""
+    project = Project.query.get_or_404(project_id)
+    if project.concept_status != 'approved':
+        return jsonify({'success': False, 'error': 'Concept & KV is not approved'}), 400
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    project.concept_status = 'submitted_to_client'
+    if project.kv_status == 'approved':
+        project.kv_status = 'submitted_to_client'
+    project.concept_approved_at = None
+    project.concept_approved_by_id = None
+
+    # If the whole project was locked, pull it back too
+    if project.project_status == 'approved':
+        record_project_status(project, 'submitted_to_client', actor)
+        project.approved_at = None
+        project.approved_by_id = None
+
+    db.session.commit()
+
+    if project.cs_lead and project.cs_lead.id != actor.id:
+        create_notification(
+            recipient=project.cs_lead,
+            message=f'Concept & KV approval on "{project.name}" has been reversed by {actor.name}.',
+            notification_type='project_assigned',
+            project=project,
+            triggered_by=actor
+        )
+
+    log_activity(
+        'ckv_unapproved',
+        f'Concept & KV approval reversed on "{project.name}" by {actor.name}',
+        user=actor, entity_type='project',
+        entity_name=project.name, entity_id=project.id
+    )
+
+    return jsonify({'success': True})
+
+
+@approval_bp.route('/projects/<int:project_id>/unapprove-channel/<int:channel_id>', methods=['POST'])
+@login_required
+@role_required('admin')
+def unapprove_channel(project_id, channel_id):
+    """Admin reverses a single POSM channel approval. Resets the channel and all its
+    deliverables back to submitted_to_client. Also unlocks the project if it was fully approved."""
+    project = Project.query.get_or_404(project_id)
+    channel = ProjectPosmChannel.query.filter_by(
+        id=channel_id, project_id=project_id
+    ).first_or_404()
+
+    if channel.status != 'approved':
+        return jsonify({'success': False, 'error': 'Channel is not approved'}), 400
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    channel.status = 'submitted_to_client'
+    channel.approved_at = None
+    channel.approved_by_id = None
+
+    # Reset deliverables that belong to this channel
+    if channel.posm_customer_id:
+        # UAE: deliverables for this specific customer
+        deliverables = Deliverable.query.filter_by(
+            project_id=project_id,
+            project_customer_id=channel.posm_customer_id
+        ).all()
+    else:
+        # Gulf: deliverables across all non-cancelled customers in this region
+        region_pc_ids = [
+            pc.id for pc in project.project_customers
+            if pc.customer.region == channel.posm_country and not pc.cancelled
+        ]
+        deliverables = Deliverable.query.filter(
+            Deliverable.project_id == project_id,
+            Deliverable.project_customer_id.in_(region_pc_ids)
+        ).all() if region_pc_ids else []
+
+    for d in deliverables:
+        if d.status == 'approved':
+            record_deliverable_status(d, 'submitted_to_client', actor)
+
+    # If the whole project was locked, pull it back too
+    if project.project_status == 'approved':
+        record_project_status(project, 'submitted_to_client', actor)
+        project.approved_at = None
+        project.approved_by_id = None
+
+    db.session.commit()
+
+    if project.cs_lead and project.cs_lead.id != actor.id:
+        create_notification(
+            recipient=project.cs_lead,
+            message=f'A POSM channel approval on "{project.name}" has been reversed by {actor.name}.',
+            notification_type='project_assigned',
+            project=project,
+            triggered_by=actor
+        )
+
+    log_activity(
+        'channel_unapproved',
+        f'POSM channel ({channel.posm_country}) approval reversed on "{project.name}" by {actor.name}',
         user=actor, entity_type='project',
         entity_name=project.name, entity_id=project.id
     )
@@ -464,11 +581,12 @@ def resume_posm_project(project_id):
         flash('Project is not awaiting POSM details.', 'error')
         return redirect(url_for('project_detail.detail', project_id=project_id))
 
-    project.project_status = 'in_progress'
-
-    # Emulation-aware actor, per CLAUDE.md pattern
+    # Emulation-aware actor, per CLAUDE.md pattern — resolved before the
+    # status change now, since record_project_status() needs it as an argument
     emulating_id = session.get('emulating_user_id')
     actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    record_project_status(project, 'in_progress', actor)
 
     log_activity(
         'posm_resumed',

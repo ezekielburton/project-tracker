@@ -541,7 +541,7 @@ function initPostContent(postId) {
         })
             .then(function (r) { return r.json(); })
             .then(function (res) {
-                if (!res.success) { alert('Save failed.'); return; }
+                if (!res.success) { showToast('Save failed.', 'error'); return; }
                 var postId = isEdit ? EDIT_POST_ID : res.post_id;
                 if (andPublish) {
                     fetch('/blog/posts/' + postId + '/publish', {
@@ -549,11 +549,14 @@ function initPostContent(postId) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ send_email: data.send_email })
                     })
-                        .then(function () { window.location.href = '/blog#post-' + postId; });
+                        .then(function (r) { return r.json(); })
+                        .then(function () { window.location.href = '/blog#post-' + postId; })
+                        .catch(function () { showToast('Post saved but could not publish. Try again.', 'error'); });
                 } else {
                     window.location.href = '/blog#post-' + postId;
                 }
-            });
+            })
+            .catch(function () { showToast('Could not save post. Check your connection.', 'error'); });
     }
 
     document.getElementById('save-draft-btn').addEventListener('click', function () { save(false); });

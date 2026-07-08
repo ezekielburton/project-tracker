@@ -1271,7 +1271,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
                     '</div></div>';
                     
                 row.querySelector('.account-cancel-edit-btn').addEventListener('click', function () {
-                    renderPTDeliverableRows(ptAllDeliverableTypes);
+                    filterPTDeliverables();
                 });
                 row.querySelector('.pt-del-save-btn').addEventListener('click', function () {
                     var name = row.querySelector('.pt-del-name-input').value.trim();
@@ -1302,7 +1302,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
                                         if (imageKeyProvided) ptAllDeliverableTypes[idx].reference_image = referenceImage;
                                         if (templateKeyProvided) ptAllDeliverableTypes[idx].template_filename = templateFilename;
                                     }
-                                    renderPTDeliverableRows(ptAllDeliverableTypes);
+                                    filterPTDeliverables();
                                 } else {
                                     showToast(data.error || 'Could not save.', 'error');
                                     btnDone(saveBtn);

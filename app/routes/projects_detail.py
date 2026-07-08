@@ -388,40 +388,14 @@ def detail(project_id):
         ),
     )
 
-@detail_bp.route('/projects/<int:project_id>/update-status', methods=['POST'])
-@login_required
-@role_required('admin')
-def update_status(project_id):
-    project = Project.query.get_or_404(project_id)
-    new_status = request.form.get('status')
-
-    TIMER_ACTIVE = {'In Progress', 'Revision in Progress'}
-
-    was_active = project.status in TIMER_ACTIVE
-    now_active = new_status in TIMER_ACTIVE
-
-    if not was_active and now_active:
-        if project.timer_started_at is None and project.hours_accumulated == 0:
-            project.design_start_date = datetime.now()
-        project.timer_started_at = datetime.now()
-
-    if was_active and not now_active:
-        if project.timer_started_at:
-            from app.utils import work_hours_between
-            project.hours_accumulated += work_hours_between(project.timer_started_at, datetime.now())
-            project.timer_started_at = None
-    
-    project.status = new_status
-    db.session.commit()
-
-    flash(f'Project status updated to "{new_status}".', 'success')
-    return redirect(url_for('project_detail.detail', project_id=project.id))
-
 @detail_bp.route('/projects/<int:project_id>/set-status', methods=['POST'])
 @login_required
 @role_required('admin', 'cs', 'management', 'designer', 'team_lead')
 def set_project_status(project_id):
     from app.utils import log_activity
+    from app.status_tracking import record_project_status
+
+
     project = Project.query.get_or_404(project_id)
     data = request.get_json()
     new_status = data.get('status')
@@ -434,7 +408,7 @@ def set_project_status(project_id):
         return jsonify({'error': 'Invalid status'}), 400
 
     old_status = project.project_status
-    project.project_status = new_status
+    record_project_status(project, new_status, current_user)
     db.session.commit()
 
     log_activity(
@@ -448,6 +422,7 @@ def set_project_status(project_id):
 @login_required
 def toggle_hold(project_id):
     from app.utils import log_activity
+    from app.status_tracking import record_project_status
     from flask import session as flask_session
     project = Project.query.get_or_404(project_id)
 
@@ -472,7 +447,7 @@ def toggle_hold(project_id):
     if project.project_status == 'on_hold':
         # Resume: restore previous status (fall back to briefed)
         restore_to = project.held_from_status or 'briefed'
-        project.project_status = restore_to
+        record_project_status(project, restore_to, effective_user)
         project.held_from_status = None
         log_activity('project_resumed', f'Project "{project.name}" resumed (status: {restore_to})',
                      user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
@@ -480,7 +455,7 @@ def toggle_hold(project_id):
     else:
         # Put on hold: save current status first
         project.held_from_status = project.project_status
-        project.project_status = 'on_hold'
+        record_project_status(project, 'on_hold', effective_user)
         log_activity('project_on_hold', f'Project "{project.name}" put on hold',
                      user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
         flash('Project put on hold.', 'success')
@@ -495,6 +470,7 @@ def toggle_hold(project_id):
 def set_customer_status(project_id, pc_id):
     from app.utils import log_activity
     from app.models import ProjectCustomer
+    from app.status_tracking import record_customer_status, record_deliverable_status
     project = Project.query.get_or_404(project_id)
     pc = ProjectCustomer.query.get_or_404(pc_id)
     data = request.get_json()
@@ -506,12 +482,12 @@ def set_customer_status(project_id, pc_id):
         return jsonify({'error': 'Invalid status'}), 400
 
     old_status = pc.status
-    pc.status = new_status
+    record_customer_status(pc, new_status, current_user)
 
     # Cascade: approving a customer approves all its deliverables too
     if new_status == 'approved':
         for deliverable in pc.deliverables:
-            deliverable.status = 'approved'
+            record_deliverable_status(deliverable, 'approved', current_user)
 
     db.session.commit()
 
@@ -625,6 +601,7 @@ def cancel_customer(project_id, pc_id):
 def set_deliverable_status(project_id, d_id):
     from app.utils import log_activity
     from app.models import Deliverable
+    from app.status_tracking import record_deliverable_status
     project = Project.query.get_or_404(project_id)
     deliverable = Deliverable.query.get_or_404(d_id)
     data = request.get_json()
@@ -640,7 +617,7 @@ def set_deliverable_status(project_id, d_id):
     from app.models import Deliverable as Del
 
     old_status = deliverable.status
-    deliverable.status = new_status
+    record_deliverable_status(deliverable, new_status, current_user)
 
     revision_completed = False
 
@@ -686,12 +663,13 @@ def set_deliverable_status(project_id, d_id):
 @role_required('admin', 'cs', 'management')
 def flag_deliverable_revision(project_id, d_id):
     from app.models import Deliverable
+    from app.status_tracking import record_project_status, record_deliverable_status
     project = Project.query.get_or_404(project_id)
     deliverable = Deliverable.query.get_or_404(d_id)
 
     deliverable.flagged_for_revision = True
-    deliverable.status = 'revision_in_queue'
-    project.project_status = 'revision_in_queue'
+    record_deliverable_status(deliverable, 'revision_in_queue', current_user)
+    record_project_status(project, 'revision_in_queue', current_user)
 
     db.session.commit()
 
@@ -999,6 +977,7 @@ def assign_lead(project_id):
 @detail_bp.route('/projects/<int:project_id>/start-project', methods=['POST'])
 @login_required
 def start_project(project_id):
+    from app.status_tracking import record_project_status
     project = Project.query.get_or_404(project_id)
 
     # Resolve the effective actor to respect admin emulation
@@ -1015,7 +994,7 @@ def start_project(project_id):
         return jsonify({'success': False, 'error': 'Project is not in Briefed status.'}), 400
 
     # Transition status
-    project.project_status = 'in_progress'
+    record_project_status(project, 'in_progress', actor)
 
     # Auto-assign the actor as lead for their team
     if actor.team:

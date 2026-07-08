@@ -72,8 +72,8 @@
 </div>
 
 <script>
-    const EDIT_POST_ID = {{ post.id | tojson if post else 'null' }};
-    const EDIT_POST_DATA = {{ post.sections_json | tojson if post else '[]' }};
+    var EDIT_POST_ID = {{ post.id | tojson if post else 'null' }};
+    var EDIT_POST_DATA = {{ post.sections_json | tojson if post else '[]' }};
 </script>
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/blog.css') }}">

@@ -31,3 +31,24 @@ that needs a clickable, badge-aware avatar. #}
             {{ user_avatar_visual(user, size) }}
         </a>
         {% endmacro %}
+
+        {% macro deliverable_tag(deliverable, checkbox_class, state, status_label=None) %}
+        {# Renders one deliverable as a clickable tag instead of a plain checkbox row.
+           state is one of:
+             'locked'     — already approved: checked+disabled, pine fill, checkmark
+             'selectable' — checked, clickable, tangerine when checked (the normal case)
+             'disabled'   — some other status: unchecked+disabled, muted, shows status_label
+           Every existing script that reads `.checked` / `data-deliverable-id` off
+           these checkboxes keeps working unchanged — only the wrapper markup differs. #}
+        <label
+            class="deliverable-tag{% if state == 'locked' %} deliverable-tag--locked{% elif state == 'disabled' %} deliverable-tag--disabled{% endif %}">
+            <input type="checkbox" class="{{ checkbox_class }}" data-deliverable-id="{{ deliverable.id }}"
+                {% if state=='locked' %}checked disabled{% elif state=='selectable' %}checked{% else %}disabled{% endif %}>
+            <span>{{ deliverable.name }}</span>
+            {% if state == 'locked' %}
+            <span class="deliverable-tag-status">✓</span>
+            {% elif state == 'disabled' and status_label %}
+            <span class="deliverable-tag-status">{{ status_label }}</span>
+            {% endif %}
+        </label>
+        {% endmacro %}

@@ -1176,6 +1176,82 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     white-space: nowrap;
 }
 
+/* ── Deliverable tags ──────────────────────────────────────────
+   Same checkbox-based pill mechanism as .team-tag-toggle above (hidden
+   checkbox, :has(input:checked) drives the active look) — reused here so
+   every existing script that reads `.checked` / `data-deliverable-id` off
+   these inputs keeps working untouched; only the visual wrapper changes.
+
+   Three states a deliverable can render in:
+   - default / selectable   → looks like .team-tag-toggle, fills tangerine when checked
+   - --locked   (approved)  → checked+disabled checkbox, pine fill, checkmark, not clickable
+   - --disabled (other status) → unchecked+disabled checkbox, muted grey, status label inline, not clickable
+*/
+.deliverable-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.9rem;
+    border: 2px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    background: var(--surface-hover);
+    user-select: none;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.deliverable-tag input[type="checkbox"] {
+    display: none;
+}
+
+.deliverable-tag:has(input:checked) {
+    border-color: var(--tangerine);
+    background: var(--tangerine);
+    color: white;
+}
+
+.deliverable-tag:hover:not(:has(input:checked)):not(.deliverable-tag--locked):not(.deliverable-tag--disabled) {
+    border-color: var(--grey-mid);
+    background: var(--grey-light);
+}
+
+/* These two come after the :has() rule on purpose — same specificity
+   (two classes vs. one class + one pseudo-class), so source order is what
+   makes them win regardless of the checkbox's checked state. */
+.deliverable-tag--locked {
+    cursor: default;
+    border-color: var(--pine);
+    background: var(--pine);
+    color: white;
+}
+
+.deliverable-tag--disabled {
+    cursor: default;
+    border-color: var(--grey-light);
+    background: var(--grey-light);
+    color: var(--text-muted);
+}
+
+.deliverable-tag-status {
+    font-size: 0.7rem;
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+/* Concept/KV rows get a pine accent when unchecked, so they read as a
+   distinct category from regular deliverables in the same picker. When
+   checked, the normal tangerine "selected" fill takes over untouched. */
+.deliverable-tag--campaign:not(:has(input:checked)) {
+    border-color: var(--pine);
+    color: var(--pine);
+    font-weight: 700;
+}
+
 .form-actions {
     display: flex;
     align-items: center;

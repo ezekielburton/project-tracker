@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from '_macros.html' import user_avatar %}
+{% from '_macros.html' import user_avatar, deliverable_tag %}
 
 {% block title %}{{ project.name }} — Vitamin-E{% endblock %}
 
@@ -986,6 +986,9 @@
             {% if project.concept_status == 'approved' %}
             {# Approved #}
             <div class="submission-status submission-status--approved" style="margin-top:0.5rem;">✓ Concept &amp; KV Approved</div>
+            {% if effective_user.role == 'admin' %}
+            <button type="button" class="btn-danger btn-sm" data-action="unapprove-ckv" data-project-id="{{ project.id }}" style="margin-top:0.5rem;">↩ Unapprove C&amp;KV</button>
+            {% endif %}
             {% elif project.concept_status == 'submitted_to_client' %}
             {# State: Submitted to Client — CS can approve or send a revision request #}
             {% if ckv_submission %}
@@ -1125,7 +1128,7 @@
             {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
             <div class="submission-picker" id="submissionPicker" style="margin-top:1rem;">
                 <p class="detail-label" style="margin-bottom:0.5rem;">Which deliverables are included in this deck?</p>
-                <div id="pickerList" data-ckv="true" style="display:flex;flex-direction:column;gap:0.4rem;">
+                <div id="pickerList" data-ckv="true" style="display:flex;flex-wrap:wrap;gap:0.4rem;">
                     {# Populated by JS — concept/KV checkboxes only; POSM picker NOT injected here #}
                 </div>
             </div>
@@ -1181,6 +1184,11 @@
                is what actually locks it. #}
             {% if ch.status == 'approved' %}
             <div class="submission-status submission-status--approved" style="margin-top:0.5rem;">✓ This channel has been fully approved and is locked.</div>
+            {% if effective_user.role == 'admin' %}
+            <button type="button" class="btn-danger btn-sm" data-action="unapprove-channel"
+                data-channel-id="{{ ch.id }}" data-project-id="{{ project.id }}"
+                data-label="{{ cd.label }}" style="margin-top:0.5rem;">↩ Unapprove</button>
+            {% endif %}
 
             {# State 3: In Internal Review — CS can approve or flag #}
             {% elif ch.status == 'internal_review' and ch_sub %}
@@ -1259,19 +1267,13 @@
             {% if ch_sub.included_deliverables %}
             <div style="margin-top:0.75rem;">
                 <p class="detail-label" style="margin-bottom:0.4rem;">Deliverables in this submission:</p>
-                <div style="display:flex;flex-direction:column;gap:0.3rem;">
+                <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
                     {% for link in ch_sub.included_deliverables %}{% if link.deliverable %}
-                    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:pointer;">
-                        <input type="checkbox" class="ch-deliverable-approve-cb"
-                            data-deliverable-id="{{ link.deliverable.id }}"
-                            {% if link.deliverable.status != 'approved' %}checked{% else %}checked disabled{% endif %}>
-                        <span {% if link.deliverable.status == 'approved' %}style="text-decoration:line-through;color:var(--pine);"{% endif %}>
-                            {{ link.deliverable.name }}
-                        </span>
-                        {% if link.deliverable.status == 'approved' %}
-                        <span class="customer-approved-badge" style="margin-left:0.25rem;">✓</span>
-                        {% endif %}
-                    </label>
+                    {% if link.deliverable.status == 'approved' %}
+                    {{ deliverable_tag(link.deliverable, 'ch-deliverable-approve-cb', 'locked') }}
+                    {% else %}
+                    {{ deliverable_tag(link.deliverable, 'ch-deliverable-approve-cb', 'selectable') }}
+                    {% endif %}
                     {% endif %}{% endfor %}
                 </div>
             </div>
@@ -1546,13 +1548,6 @@
             </div>
         </div>
         {% endfor %}
-        {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
-        <div class="attach-file-upload">
-            <input type="file" id="extraFileInput3" class="hidden">
-            <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ active_submission.id }}" data-input-id="extraFileInput3">Drop a file or click to attach...</button>
-            <span class="reference-file-upload-status" id="extraFileStatus3"></span>
-        </div>
-        {% endif %}
         <div class="submission-status submission-status--review" style="margin-top: 0.5rem;">🔍 In Internal Review. Awaiting Client Servicing approval</div>
         {% if active_submission.included_deliverables or active_submission.includes_concept or
         active_submission.includes_kv %}
@@ -1641,46 +1636,45 @@
             by {{ active_submission.submitted_by.name if active_submission.submitted_by else '—' }}
             {% if project.revision_count > 0 %} — Revision #{{ project.revision_count }}{% endif %}
         </div>
-        {# Deliverable approval picker — shows ALL project deliverables, not just those in this submission #}
-        {% if project.project_deliverables %}
-        <div style="margin-top:0.75rem;">
-            <p class="detail-label" style="margin-bottom:0.4rem;">Deliverables:</p>
-            <div style="display:flex;flex-direction:column;gap:0.3rem;">
-                {% for deliverable in project.project_deliverables %}
-                {% if deliverable.status == 'approved' %}
-                <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:default;">
-                    <input type="checkbox" class="std-deliverable-approve-cb"
-                        data-deliverable-id="{{ deliverable.id }}" checked disabled>
-                    <span style="text-decoration:line-through;color:var(--pine);">{{ deliverable.name }}</span>
-                    <span class="customer-approved-badge" style="margin-left:0.25rem;">✓</span>
-                </label>
-                {% elif deliverable.status == 'submitted_to_client' %}
-                <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:pointer;">
-                    <input type="checkbox" class="std-deliverable-approve-cb"
-                        data-deliverable-id="{{ deliverable.id }}" checked>
-                    <span>{{ deliverable.name }}</span>
-                </label>
-                {% else %}
-                <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:default;">
-                    <input type="checkbox" class="std-deliverable-approve-cb"
-                        data-deliverable-id="{{ deliverable.id }}" disabled>
-                    <span style="color:var(--text-muted);">{{ deliverable.name }}</span>
-                    <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.25rem;">{{ deliverable.status | replace('_', ' ') | title }}</span>
-                </label>
-                {% endif %}
-                {% endfor %}
+        {# Deliverable approval picker — shows ALL project deliverables, not just
+           those in this submission. Wrapped (together with the action buttons
+           below) in #submissionApprovalSection so JS can hide the whole thing
+           at once when "Send for Revision" is clicked, and restore it on
+           Cancel — instead of the old behavior where the revision form just
+           appeared underneath everything else. #}
+        <div id="submissionApprovalSection">
+            {% if project.project_deliverables %}
+            <div style="margin-top:0.75rem;">
+                <p class="detail-label" style="margin-bottom:0.4rem;">Deliverables:</p>
+                <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+                    {% for deliverable in project.project_deliverables %}
+                    {% if deliverable.status == 'approved' %}
+                    {{ deliverable_tag(deliverable, 'std-deliverable-approve-cb', 'locked') }}
+                    {% elif deliverable.status == 'submitted_to_client' %}
+                    {{ deliverable_tag(deliverable, 'std-deliverable-approve-cb', 'selectable') }}
+                    {% else %}
+                    {{ deliverable_tag(deliverable, 'std-deliverable-approve-cb', 'disabled', deliverable.status | replace('_', ' ') | title) }}
+                    {% endif %}
+                    {% endfor %}
+                </div>
             </div>
+            {% endif %}
+
+            {% if effective_user.role in ['admin', 'cs'] %}
+            <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <button type="button" class="btn-danger btn-sm" id="sendRevisionBtn">↩ Send for Revision</button>
+                <button type="button" class="btn-secondary btn-sm" id="approveSelectedBtn" data-project-id="{{ project.id }}">✓ Approve Selected</button>
+                <button type="button" class="btn-primary btn-sm" id="approveBtn" data-project-id="{{ project.id }}">✓
+                    Approve All</button>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
-        {# CS can send a revision request or approve the project #}
+
+        {# Revision form — sits OUTSIDE #submissionApprovalSection on purpose: JS
+           hides that whole section and shows this in its place, and reverses
+           it on Cancel. If it were nested inside, hiding the section would
+           hide the form too. #}
         {% if effective_user.role in ['admin', 'cs'] %}
-        <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-            <button type="button" class="btn-danger btn-sm" id="sendRevisionBtn">↩ Send for Revision</button>
-            <button type="button" class="btn-secondary btn-sm" id="approveSelectedBtn" data-project-id="{{ project.id }}">✓ Approve Selected</button>
-            <button type="button" class="btn-primary btn-sm" id="approveBtn" data-project-id="{{ project.id }}">✓
-                Approve All</button>
-        </div>
-        {# Revision form — hidden until CS clicks the button above #}
         <div id="sendRevisionForm" class="hidden" style="margin-top: 1rem;">
             <textarea id="revisionMessage" class="form-input"
                 placeholder="Describe what needs to be revised for the client..." rows="4"
@@ -1693,7 +1687,7 @@
                 <button type="button" class="btn-secondary btn-sm" id="revisionPickerDeselectAll">Deselect All</button>
             </div>
             <div id="revisionPickerList"
-                style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem;">
+                style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem;">
                 {# Populated by JS using window.PAGE.projectDeliverables when form is shown #}
             </div>
             <div style="display: flex; gap: 0.5rem;">
@@ -1767,28 +1761,14 @@
         {% if approvable %}
         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--sandstone);">
             <p class="detail-label" style="margin-bottom: 0.4rem;">Deliverables available to approve:</p>
-            <div style="display:flex;flex-direction:column;gap:0.3rem;margin-bottom:0.75rem;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.75rem;">
                 {% for deliverable in project.project_deliverables %}
                 {% if deliverable.status == 'approved' %}
-                <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:default;">
-                    <input type="checkbox" class="std-deliverable-approve-cb"
-                        data-deliverable-id="{{ deliverable.id }}" checked disabled>
-                    <span style="text-decoration:line-through;color:var(--pine);">{{ deliverable.name }}</span>
-                    <span class="customer-approved-badge" style="margin-left:0.25rem;">✓</span>
-                </label>
+                {{ deliverable_tag(deliverable, 'std-deliverable-approve-cb', 'locked') }}
                 {% elif deliverable.status == 'submitted_to_client' %}
-                <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:pointer;">
-                    <input type="checkbox" class="std-deliverable-approve-cb"
-                        data-deliverable-id="{{ deliverable.id }}" checked>
-                    <span>{{ deliverable.name }}</span>
-                </label>
+                {{ deliverable_tag(deliverable, 'std-deliverable-approve-cb', 'selectable') }}
                 {% elif deliverable.status == 'revision_in_queue' %}
-                <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:default;">
-                    <input type="checkbox" class="std-deliverable-approve-cb"
-                        data-deliverable-id="{{ deliverable.id }}" disabled>
-                    <span style="color:var(--text-muted);">{{ deliverable.name }}</span>
-                    <span style="font-size:0.75rem;color:var(--rose);margin-left:0.25rem;">↩ Revision</span>
-                </label>
+                {{ deliverable_tag(deliverable, 'std-deliverable-approve-cb', 'disabled', '↩ Revision') }}
                 {% endif %}
                 {% endfor %}
             </div>
@@ -1921,7 +1901,7 @@
                 <button type="button" class="btn-secondary btn-sm" id="pickerSelectAll">Select All</button>
                 <button type="button" class="btn-secondary btn-sm" id="pickerDeselectAll">Deselect All</button>
             </div>
-            <div id="pickerList" style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <div id="pickerList" style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
                 {# Populated by submission JS using window.PAGE.projectDeliverables #}
             </div>
         </div>
@@ -2181,6 +2161,9 @@
             </button>
             <button type="button" class="btn-danger" data-action="posm-prompt-approve">
                 No — Approve &amp; Lock Project
+            </button>
+            <button type="button" class="btn-secondary" data-action="posm-prompt-cancel" style="justify-content:center;margin-top:0.25rem;opacity:0.7;">
+                ← Go Back
             </button>
         </div>
     </div>

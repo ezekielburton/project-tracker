@@ -223,7 +223,7 @@ function openNasLink(btn) {
         // One checkbox row: a <label class="picker-row"> containing a checkbox + name span.
         function makeRow(d) {
             var label = document.createElement('label');
-            label.className = 'picker-row';
+            label.className = 'deliverable-tag'; // was 'picker-row' — same DOM shape (label > checkbox + span), new CSS
             var cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = d.id;
@@ -300,6 +300,25 @@ function openNasLink(btn) {
         }
     }
 
+// Shared by the submission-time picker (Step 2) and the revision picker
+// (Step 5) — was two identical copies (makeCampaignRow / makeRevCampaignRow),
+// now one, so a future markup change can't let the two flows drift apart.
+function makeCampaignRow(value, label) {
+    var lbl = document.createElement('label');
+    lbl.className = 'deliverable-tag deliverable-tag--campaign';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = value;
+    cb.checked = true;
+    var span = document.createElement('span');
+    span.textContent = label;
+    lbl.appendChild(cb);
+    lbl.appendChild(span);
+    return lbl;
+}
+
+    
+
     // ── Step 2: Deliverable picker (submission) ───────────────────────────────────
     // Shown in State 2 (deck uploaded, not yet in review).
     // For CCM briefs this is the concept/KV phase — only Concept and Initial KV
@@ -315,19 +334,6 @@ function openNasLink(btn) {
 
         if (window.PAGE.projectHasConcept || window.PAGE.projectHasKV) {
             // CCM concept/KV phase: only show campaign asset checkboxes
-            function makeCampaignRow(value, label) {
-                var lbl = document.createElement('label');
-                lbl.className = 'picker-row picker-row--campaign';
-                var cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.value = value;
-                cb.checked = true;
-                var span = document.createElement('span');
-                span.textContent = label;
-                lbl.appendChild(cb);
-                lbl.appendChild(span);
-                return lbl;
-            }
             if (window.PAGE.projectHasConcept && window.PAGE.projectHasKV) {
                 pickerList.appendChild(makeCampaignRow('__concept__', 'Concept & KV'));
             } else {
@@ -539,6 +545,7 @@ function openNasLink(btn) {
         var sendRevisionCancel = document.getElementById('sendRevisionCancel');
         var sendRevisionConfirm = document.getElementById('sendRevisionConfirm');
         var revisionPickerList = document.getElementById('revisionPickerList');
+        var submissionApprovalSection = document.getElementById('submissionApprovalSection');
 
         if (!sendRevisionBtn) return; // not in submitted_to_client state
 
@@ -546,7 +553,10 @@ function openNasLink(btn) {
 
         sendRevisionBtn.addEventListener('click', function () {
             sendRevisionForm.classList.remove('hidden');
-            sendRevisionBtn.classList.add('hidden');
+            // Hide the whole approval section (deliverables + buttons) instead of
+            // just this one button — the button now lives inside that section,
+            // so hiding it takes the button with it automatically.
+            if (submissionApprovalSection) submissionApprovalSection.classList.add('hidden');
 
             // Build the revision picker the first time the form is opened.
             // C&CM concept/KV phase: only Concept and/or KV can be revised (deliverables
@@ -554,24 +564,11 @@ function openNasLink(btn) {
             // show the full deliverable picker via buildPickerInto.
             if (!pickerBuilt && revisionPickerList) {
                 if (!window.PAGE.posmActive && (window.PAGE.projectHasConcept || window.PAGE.projectHasKV)) {
-                    function makeRevCampaignRow(value, label) {
-                        var lbl = document.createElement('label');
-                        lbl.className = 'picker-row picker-row--campaign';
-                        var cb = document.createElement('input');
-                        cb.type = 'checkbox';
-                        cb.value = value;
-                        cb.checked = true;
-                        var span = document.createElement('span');
-                        span.textContent = label;
-                        lbl.appendChild(cb);
-                        lbl.appendChild(span);
-                        return lbl;
-                    }
                     if (window.PAGE.projectHasConcept && window.PAGE.projectHasKV) {
-                        revisionPickerList.appendChild(makeRevCampaignRow('__concept__', 'Concept & KV'));
+                        revisionPickerList.appendChild(makeCampaignRow('__concept__', 'Concept & KV'));
                     } else {
-                        if (window.PAGE.projectHasConcept) revisionPickerList.appendChild(makeRevCampaignRow('__concept__', 'Concept'));
-                        if (window.PAGE.projectHasKV) revisionPickerList.appendChild(makeRevCampaignRow('__kv__', 'Initial KV'));
+                        if (window.PAGE.projectHasConcept) revisionPickerList.appendChild(makeCampaignRow('__concept__', 'Concept'));
+                        if (window.PAGE.projectHasKV) revisionPickerList.appendChild(makeCampaignRow('__kv__', 'Initial KV'));
                     }
                     var revSelAll = document.getElementById('revisionPickerSelectAll');
                     var revDeselAll = document.getElementById('revisionPickerDeselectAll');
@@ -589,7 +586,8 @@ function openNasLink(btn) {
         if (sendRevisionCancel) {
             sendRevisionCancel.addEventListener('click', function () {
                 sendRevisionForm.classList.add('hidden');
-                sendRevisionBtn.classList.remove('hidden');
+                // Restore the approval section instead of un-hiding the button directly.
+                if (submissionApprovalSection) submissionApprovalSection.classList.remove('hidden');
                 document.getElementById('revisionMessage').value = '';
             });
         }
@@ -1422,6 +1420,69 @@ document.addEventListener('click', function (e) {
     }
     if (e.target.closest('[data-action="posm-prompt-approve"]')) {
         sendPosmPromptResponse('approve'); return;
+    }
+    if (e.target.closest('[data-action="posm-prompt-cancel"]')) {
+        // C&KV is already approved in the DB — just close the modal and reload
+        // so the page reflects the approved C&KV without taking any further action.
+        closePosmPromptModal();
+        window.location.reload();
+        return;
+    }
+
+    // ── Unapprove C&KV (admin only) ───────────────────────────────────────────
+    var unapproveKvBtn = e.target.closest('[data-action="unapprove-ckv"]');
+    if (unapproveKvBtn) {
+        var projectId = unapproveKvBtn.dataset.projectId;
+        openApprovalModal(
+            'Reverse C&KV Approval?',
+            'This will move Concept & KV back to Submitted to Client. If the project was fully approved it will also be unlocked. The CS lead will be notified.',
+            function () {
+                fetch('/projects/' + projectId + '/unapprove-ckv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.success) {
+                            showToast('C&KV approval reversed', 'warning');
+                            setTimeout(function () { location.reload(); }, 800);
+                        } else {
+                            showToast(data.error || 'Something went wrong', 'error');
+                        }
+                    })
+                    .catch(function () { showToast('Something went wrong', 'error'); });
+            }
+        );
+        return;
+    }
+
+    // ── Unapprove POSM channel (admin only) ───────────────────────────────────
+    var unapproveChBtn = e.target.closest('[data-action="unapprove-channel"]');
+    if (unapproveChBtn) {
+        var channelId = unapproveChBtn.dataset.channelId;
+        var projectId = unapproveChBtn.dataset.projectId;
+        var label     = unapproveChBtn.dataset.label || 'this channel';
+        openApprovalModal(
+            'Reverse Channel Approval?',
+            'This will move "' + label + '" back to Submitted to Client and reset its deliverables. If the project was fully approved it will also be unlocked. The CS lead will be notified.',
+            function () {
+                fetch('/projects/' + projectId + '/unapprove-channel/' + channelId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.success) {
+                            showToast('Channel approval reversed', 'warning');
+                            setTimeout(function () { location.reload(); }, 800);
+                        } else {
+                            showToast(data.error || 'Something went wrong', 'error');
+                        }
+                    })
+                    .catch(function () { showToast('Something went wrong', 'error'); });
+            }
+        );
+        return;
     }
 
     // ── POSM submission history toggle ────────────────────────────────────────

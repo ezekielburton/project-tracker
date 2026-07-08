@@ -19,6 +19,7 @@ from app.notifications import (
     notify_cs_of_lead_change
 )
 from app.utils import log_activity
+from app.status_tracking import record_project_status, record_customer_status, record_deliverable_status
 
 brief_bp = Blueprint('brief', __name__)
 
@@ -175,6 +176,13 @@ def update_project(project_id):
     if current_user.role == 'cs' and project.cs_lead_id != current_user.id and not is_secondary_cs:
         abort(403)
 
+    # Emulation-aware actor — resolved here (rather than down near the
+    # notification code, where it used to live) since the customer/deliverable
+    # upsert logic below now needs it for record_customer_status() /
+    # record_deliverable_status() calls.
+    emulating_id = flask.session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
     # Snapshot taken BEFORE any mutation below — used after the customer
     # upsert to detect "this edit is the one that came out of Pause" (see
     # notify_of_posm_details_added call further down). Both conditions have
@@ -299,7 +307,7 @@ def update_project(project_id):
                     d.design_deadline_time = del_time
                     d.teams = del_teams
                 else:
-                    db.session.add(Deliverable(
+                    new_std_deliverable = Deliverable(
                         project_id=project.id,
                         project_customer_id=None,
                         deliverable_type_id=None,
@@ -309,7 +317,10 @@ def update_project(project_id):
                         teams=del_teams,
                         status='in_queue',
                         created_by=current_user
-                    ))
+                    )
+                    db.session.add(new_std_deliverable)
+                    db.session.flush()  # need its id for the status log row
+                    record_deliverable_status(new_std_deliverable, 'in_queue', actor)
         else:
             ProjectRegion.query.filter_by(project_id=project.id).delete()
             for region_name in data.get('regions', []):
@@ -346,6 +357,8 @@ def update_project(project_id):
                 raw_time = dates.get('design_deadline_time')
                 parsed_time = datetime.strptime(raw_time, '%H:%M').time() if raw_time else None
 
+                is_new_pc = False  # reset every iteration — only True when the else branch below runs
+
                 if customer_id in existing_pcs:
                     # Preserve the row and its ID. Update deadline fields
                     pc = existing_pcs[customer_id]
@@ -362,8 +375,14 @@ def update_project(project_id):
                         installation_date=parse_date(dates.get('installation_date')),
                     )
                     db.session.add(pc)
-                
+                    is_new_pc = True
+
                 db.session.flush()
+                if is_new_pc:
+                    # Seed the status log for a brand-new customer row — need
+                    # the flush above first so pc.id exists.
+                    record_customer_status(pc, pc.status, actor)
+                    is_new_pc = False
                 customer_map[customer_id] = pc.id
             
             # --- Stage 3: rebuild deliverables for surviving customers ---
@@ -385,14 +404,17 @@ def update_project(project_id):
 
             for item in data.get('deliverables', []):
                 customer_id = int(item['customer_id'])
-                db.session.add(Deliverable (
+                new_ccm_deliverable = Deliverable(
                     project_id=project.id,
                     project_customer_id=customer_map[customer_id],
                     deliverable_type_id=int(item['type_id']) if item.get('type_id') and item['type_id'] != 'custom' else None,
                     name=item['name'],
                     created_by=current_user
-                ))
-                
+                )
+                db.session.add(new_ccm_deliverable)
+                db.session.flush()  # need its id for the status log row
+                record_deliverable_status(new_ccm_deliverable, new_ccm_deliverable.status, actor)
+
         db.session.commit()
 
         # Sync NAS folder tree in background — creates any folders added by this edit.
@@ -403,10 +425,6 @@ def update_project(project_id):
         from app.models import Project as _Project
         _app_obj = _app._get_current_object()
         _run_in_background(_app_obj, lambda: create_project_folders(_Project.query.get(_pid)))
-
-        # -- Emulation-aware actor -----
-        emulating_id = flask.session.get('emulating_user_id')
-        actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
 
         # -- POSM resume notification ---
         # Fires exactly once: when this project was paused (awaiting_posm_details)
@@ -486,6 +504,7 @@ def autosave():
             )
             db.session.add(draft)
             db.session.flush()
+            record_project_status(draft, 'draft', current_user)
 
         draft.name = data.get('name', '').strip() or 'Untitled Draft'
 

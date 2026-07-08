@@ -60,13 +60,6 @@ def create_app():
     app.register_blueprint(wizard_bp)
     app.register_blueprint(file_templates_bp)
    
-
-    from app.utils import calculate_project_hours
-    
-    @app.context_processor
-    def utility_processor():
-        return dict(calculate_hours=calculate_project_hours)
-    
     @app.context_processor
     @app.context_processor
     def inject_notifications():
