@@ -898,31 +898,24 @@ def notify_admin_of_new_feedback(item_type, title, submitted_by, url_path):
 def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=True):
     """
     Notify all users of a new or updated blog post.
-    send_inapp: create in-app notifications (skips the author)
-    send_email: send HTML email to all users (skips the author)
+    send_inapp: create in-app notifications (skips the author) — runs synchronously.
+    send_email: send HTML email to all users (skips the author) — runs in a background
+                thread so slow SMTP never blocks the request worker.
     """
+    import threading
     from flask import current_app
 
     message = f'New app update posted: {post.title}'
     blog_url = f'https://app.vitamin-e.work/blog#post-{post.id}'
     email_enabled = str(current_app.config.get('MAIL_ENABLED', 'false')).lower() == 'true'
 
-    mail_obj = None
-    MailMessage = None
-    if send_email and email_enabled:
-        try:
-            from flask_mail import Message as MailMessage
-            from app import mail as mail_obj
-        except Exception:
-            send_email = False
-
     users = User.query.all()
 
-    for user in users:
-        if user.id == triggered_by.id:
-            continue
-
-        if send_inapp:
+    # ── In-app notifications (fast DB writes — keep synchronous) ──────────────
+    if send_inapp:
+        for user in users:
+            if user.id == triggered_by.id:
+                continue
             notif = Notification(
                 recipient_id=user.id,
                 message=message,
@@ -931,10 +924,35 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
                 link=f'/blog#post-{post.id}'
             )
             db.session.add(notif)
+        db.session.commit()
 
-        if send_email and email_enabled and user.email and mail_obj and MailMessage:
-            version_line = f'<p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:13px;color:#F27F55;letter-spacing:2px;text-transform:uppercase;">{post.version_tag}</p>' if post.version_tag else ''
-            html_body = f"""
+    # ── Email notifications (slow SMTP — run in background thread) ────────────
+    if send_email and email_enabled:
+        # Collect everything we need as plain values before leaving the request context.
+        post_title   = post.title
+        post_id      = post.id
+        version_tag  = post.version_tag or ''
+        email_targets = [(u.name, u.email) for u in users
+                         if u.id != triggered_by.id and u.email]
+
+        app = current_app._get_current_object()
+
+        def _send_emails():
+            with app.app_context():
+                try:
+                    from flask_mail import Message as MailMessage
+                    from app import mail as mail_obj
+                except Exception:
+                    app.logger.warning('notify_all_of_new_blog_post: flask_mail not available')
+                    return
+
+                version_line = (
+                    f'<p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:13px;'
+                    f'color:#F27F55;letter-spacing:2px;text-transform:uppercase;">{version_tag}</p>'
+                ) if version_tag else ''
+
+                for name, email in email_targets:
+                    html_body = f"""
             <table width="100%" cellpadding="0" cellspacing="0" border="0"
                    style="background-color:#F5F0E8;">
                 <tr><td align="center" style="padding:48px 20px;">
@@ -951,10 +969,10 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
                             <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:11px;color:#bbb;
                                        letter-spacing:2px;text-transform:uppercase;">App Update</p>
                             <p style="margin:0 0 20px;font-family:Arial,sans-serif;font-size:17px;
-                                       font-weight:bold;color:#1A1A1A;">Hi {user.name},</p>
+                                       font-weight:bold;color:#1A1A1A;">Hi {name},</p>
                             {version_line}
                             <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:19px;
-                                       font-weight:bold;color:#1A1A1A;">{post.title}</p>
+                                       font-weight:bold;color:#1A1A1A;">{post_title}</p>
                             <p style="margin:0 0 28px;font-family:Arial,sans-serif;font-size:15px;
                                        line-height:1.7;color:#444444;">
                                 A new update has been posted to Vitamin-E. Click below to read it.
@@ -975,14 +993,16 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
                 </td></tr>
             </table>"""
 
-            try:
-                msg = MailMessage(
-                    subject=f'Vitamin-E Update — {post.title}',
-                    recipients=[user.email],
-                    html=html_body
-                )
-                mail_obj.send(msg)
-            except Exception as e:
-                current_app.logger.warning(f'notify_all_of_new_blog_post: email failed for {user.email}: {e}')
+                    try:
+                        msg = MailMessage(
+                            subject=f'Vitamin-E Update — {post_title}',
+                            recipients=[email],
+                            html=html_body
+                        )
+                        mail_obj.send(msg)
+                    except Exception as e:
+                        app.logger.warning(
+                            f'notify_all_of_new_blog_post: email failed for {email}: {e}'
+                        )
 
-    db.session.commit()
+        threading.Thread(target=_send_emails, daemon=True).start()
