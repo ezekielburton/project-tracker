@@ -882,6 +882,7 @@ function createPTDeliverableType(name, clientId, customerId, disciplines, isCust
         .then(function (res) { return res.json(); })
         .then(function (data) {
             if (data.success) {
+                btnDone(submitBtn);
                 ptAddDelForm.classList.add('hidden');
                 ptAddDelForm.reset();
                 ptAllDeliverableTypes.push(data.type);
