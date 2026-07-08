@@ -136,3 +136,26 @@ def download_all_region_templates(region_key):
 
     zip_id = build_zip(zip_files, f'{region_label} - Templates.zip')
     return jsonify({'success': True, 'download_url': url_for('api.zip_download', zip_id=zip_id)})
+
+@file_templates_bp.route('/file-templates/simulatin-files-link')
+@login_required
+def get_simulation_files_link():
+    """
+    Returns a File Station deep link for the fixed Simulation Files folder on the NAS - not project-specific, unlike projects_detail.py's 
+    get_nas_link(), but the same URL-building logic.
+    """
+    import urllib.parse
+    from flask import current_app, jsonify
+
+    folder_path = '/Docs and Templates/Templates/Simulation Files'
+
+    base = (current_app.config.get('NAS_WEB_URL') or f"https://{current_app.config['NAS_HOST']}:{current_app.config['NAS_PORT']}")
+
+    path_encoded = urllib.parse.quote(folder_path, safe='/')
+    launch_param = urllib.parse.quote(f"opendir={path_encoded}", safe='/')
+
+    url = (f"{base}/index.cgi"
+           f"?launchApp=SYNO.SDS.App.FileStation3.Instance"
+           f"&launchParam={launch_param}")
+    
+    return jsonify({'success': True, 'url': url, 'path': folder_path})

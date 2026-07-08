@@ -366,6 +366,74 @@ def approve_direct(project_id):
     return jsonify({'success': True})
 
 
+@approval_bp.route('/projects/<int:project_id>/unapprove', methods=['POST'])
+@login_required
+@role_required('admin')
+def unapprove_project(project_id):
+    """Admin reverses a project approval — moves project back to submitted_to_client.
+
+    Resets:
+    - project.project_status → 'submitted_to_client'
+    - project.approved_at / approved_by_id → None
+    - All 'approved' deliverables → 'submitted_to_client'
+    - concept_status / kv_status if 'approved' → 'submitted_to_client'
+    - Any approved POSM channels → 'submitted_to_client'
+
+    Notifies the CS lead that re-approval is needed."""
+    project = Project.query.get_or_404(project_id)
+
+    if project.project_status != 'approved':
+        return jsonify({'success': False, 'error': 'Project is not approved'}), 400
+
+    # Emulation-aware actor (CLAUDE.md pattern)
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    # Reset project-level approval
+    project.project_status = 'submitted_to_client'
+    project.approved_at = None
+    project.approved_by_id = None
+
+    # Reset all approved deliverables
+    for deliverable in project.project_deliverables:
+        if deliverable.status == 'approved':
+            deliverable.status = 'submitted_to_client'
+
+    # Reset concept/KV if approved
+    if project.concept_status == 'approved':
+        project.concept_status = 'submitted_to_client'
+    if project.kv_status == 'approved':
+        project.kv_status = 'submitted_to_client'
+
+    # Reset approved POSM channels
+    for channel in project.posm_channels:
+        if channel.status == 'approved':
+            channel.status = 'submitted_to_client'
+            channel.approved_at = None
+            channel.approved_by_id = None
+
+    db.session.commit()
+
+    # Notify CS lead
+    if project.cs_lead and project.cs_lead.id != actor.id:
+        create_notification(
+            recipient=project.cs_lead,
+            message=f'"{project.name}" approval has been reversed by {actor.name}. Please re-approve when ready.',
+            notification_type='project_assigned',
+            project=project,
+            triggered_by=actor
+        )
+
+    log_activity(
+        'project_unapproved',
+        f'"{project.name}" approval reversed by {actor.name} — returned to Submitted to Client',
+        user=actor, entity_type='project',
+        entity_name=project.name, entity_id=project.id
+    )
+
+    return jsonify({'success': True})
+
+
 @approval_bp.route('/projects/<int:project_id>/resume-posm', methods=['POST'])
 @login_required
 def resume_posm_project(project_id):

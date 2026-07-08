@@ -52,6 +52,11 @@ function restoreFileTemplatesCollapseState() {
 function initFileTemplatesPage() {
     if (!document.querySelector('.ft-region-block')) return; // not on this page
     restoreFileTemplatesCollapseState();
+
+    var simBtn = document.getElementById('open-simulation-files-btn');
+    if (simBtn) {
+        simBtn.addEventListener('click', function () { openNasLink(simBtn); });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', initFileTemplatesPage);

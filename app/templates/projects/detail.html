@@ -934,6 +934,9 @@
                 {% if effective_user.role in ['admin', 'cs'] and project.project_status != 'approved' %}
                 <button type="button" id="approveDirectBtn" class="btn-approve-direct" data-project-id="{{ project.id }}">✓ Approve Project</button>
                 {% endif %}
+                {% if effective_user.role == 'admin' and project.project_status == 'approved' %}
+                <button type="button" id="unapproveBtn" class="btn-danger btn-sm" data-project-id="{{ project.id }}">↩ Unapprove</button>
+                {% endif %}
             </div>
         </div>
 
@@ -1511,6 +1514,9 @@
             </h2>
             {% if effective_user.role in ['admin', 'cs'] and project.project_status != 'approved' %}
             <button type="button" id="approveDirectBtn" class="btn-approve-direct" data-project-id="{{ project.id }}">✓ Approve Project</button>
+            {% endif %}
+            {% if effective_user.role == 'admin' and project.project_status == 'approved' %}
+            <button type="button" id="unapproveBtn" class="btn-danger btn-sm" data-project-id="{{ project.id }}">↩ Unapprove</button>
             {% endif %}
         </div>
 
@@ -2867,6 +2873,34 @@
                             .then(function (data) {
                                 if (data.success) {
                                     showToast('Project approved', 'success');
+                                    setTimeout(function () { location.reload(); }, 800);
+                                } else {
+                                    showToast(data.error || 'Something went wrong', 'error');
+                                }
+                            })
+                            .catch(function () { showToast('Something went wrong', 'error'); });
+                    }
+                );
+            });
+        }
+
+        // ── Unapprove button (admin only — reverses a mistaken approval) ────────
+        var unapproveBtn = document.getElementById('unapproveBtn');
+        if (unapproveBtn) {
+            unapproveBtn.addEventListener('click', function () {
+                var projectId = this.dataset.projectId;
+                openApprovalModal(
+                    'Reverse Approval?',
+                    'This will move the project back to Submitted to Client and reset all approved deliverables. The CS lead will be notified. You can re-approve from there.',
+                    function () {
+                        fetch('/projects/' + projectId + '/unapprove', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                        })
+                            .then(function (r) { return r.json(); })
+                            .then(function (data) {
+                                if (data.success) {
+                                    showToast('Approval reversed', 'warning');
                                     setTimeout(function () { location.reload(); }, 800);
                                 } else {
                                     showToast(data.error || 'Something went wrong', 'error');

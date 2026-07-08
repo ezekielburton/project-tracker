@@ -124,6 +124,34 @@ function triggerZipDownload(btn) {
             .catch(function () { showToast('Something went wrong', 'error'); });
     }
 
+// Generic "fetch a NAS deep-link and open it in a new tab" handler. Any
+// button with a data-url pointing at a route that returns {success, url}
+// can use this — currently the project detail page's own NAS-folder
+// button (wired separately, inline in detail.html) and the File Templates
+// page's Simulation Files button both need this exact mechanism.
+function openNasLink(btn) {
+    var url = btn.dataset.url;
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Opening…';
+    fetch(url)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.success) {
+                window.open(data.url, '_blank');
+            } else {
+                showToast('Could not open NAS folder: ' + (data.error || 'Unknown error'), 'error');
+            }
+        })
+        .catch(function () {
+            showToast('Could not reach the NAS. Are you on the network?', 'error');
+        })
+        .finally(function () {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        });
+}
+
     // ── Client Submission ─────────────────────────────────────────────────────────
 
     // ── Client Submission Flow ────────────────────────────────────────────────────
