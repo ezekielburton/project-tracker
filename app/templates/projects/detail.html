@@ -2385,6 +2385,10 @@
     }
 
     function approveCKV(projectId) {
+        // Pause polling before the fetch so a fingerprint change (concept_status → approved)
+        // can't trigger a page reload in the gap between the response arriving and the
+        // POSM prompt modal opening. If no prompt is needed, we reload manually anyway.
+        if (window.helixPolling) window.helixPolling.pause();
         fetch('/projects/' + projectId + '/concept-kv/approve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -2393,15 +2397,21 @@
         .then(function (data) {
             if (data.success) {
                 if (data.show_posm_prompt) {
+                    // openPosmPromptModal keeps polling paused until the user picks an option
                     openPosmPromptModal(projectId);
                 } else {
+                    // No prompt needed — reload to pick up new state
                     window.location.reload();
                 }
             } else {
+                if (window.helixPolling) window.helixPolling.resume();
                 showToast(data.error || 'Could not approve Concept & KV.', 'error');
             }
         })
-        .catch(function () { showToast('Something went wrong.', 'error'); });
+        .catch(function () {
+            if (window.helixPolling) window.helixPolling.resume();
+            showToast('Something went wrong.', 'error');
+        });
     }
 
     function sendPosmPromptResponse(action) {
