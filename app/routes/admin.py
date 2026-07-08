@@ -454,7 +454,7 @@ def upload_deliverable_type_template():
         return jsonify({'success': False, 'error': 'No file provided'}), 400
 
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if ext != 'ai':
+    if ext not in ('ai', 'zip'):
         return jsonify({'success': False, 'error': 'Only .ai files are supported'}), 400
 
     stored_filename = f'{uuid.uuid4().hex[:8]}.{ext}'
