@@ -47,15 +47,26 @@ USER_NOTIFICATIONS_CHANNEL = 'user_notifications'
 # could widen all it wants and still never see these changes, since Stage 3
 # would never even get told about them in the first place.
 _PROJECT_ID_GETTERS = {
-    'Project':               lambda obj: obj.id,
-    'ProjectCustomer':       lambda obj: obj.project_id,
-    'Deliverable':           lambda obj: obj.project_id,
-    'ProjectDesigner':       lambda obj: obj.project_id,
-    'BriefFlag':             lambda obj: obj.project_id,
-    'ProjectSubmission':     lambda obj: obj.project_id,
-    'ProjectFile':           lambda obj: obj.project_id,
-    'ProjectRegion':         lambda obj: obj.project_id,
-    'ProjectRevision':       lambda obj: obj.project_id,
+    'Project':                lambda obj: obj.id,
+    'ProjectCustomer':        lambda obj: obj.project_id,
+    'Deliverable':            lambda obj: obj.project_id,
+    'ProjectDesigner':        lambda obj: obj.project_id,
+    'BriefFlag':              lambda obj: obj.project_id,
+    'ProjectSubmission':      lambda obj: obj.project_id,
+    'ProjectFile':            lambda obj: obj.project_id,
+    'ProjectRegion':          lambda obj: obj.project_id,
+    'ProjectRevision':        lambda obj: obj.project_id,
+    # Secondary CS add/remove/region-subscription routes only ever touch
+    # these two tables in isolation (no other model changes in the same
+    # commit) — without entries here, those actions produced ZERO live
+    # update signal, on any tab, ever.
+    'ProjectSecondaryCS':       lambda obj: obj.project_id,
+    'ProjectSecondaryCsRegion': lambda obj: obj.project_id,
+    # POSM channel approval/reset routes often also touch Deliverable rows
+    # in the same commit (already watched), so this worked by accident most
+    # of the time — but not always (e.g. resetting a channel with no linked
+    # deliverables). Watching it directly removes that fragility.
+    'ProjectPosmChannel':     lambda obj: obj.project_id,
     # DeliverableAssignment has no project_id column of its own — it hangs
     # off a Deliverable, which does. Assigning a designer to a specific
     # deliverable (as opposed to the project-level ProjectDesigner) needs

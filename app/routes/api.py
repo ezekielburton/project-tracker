@@ -68,9 +68,18 @@ def _detail_fingerprint(p):
         for f in p.brief_flags
     ])
 
-    # Each submission encoded as "id:<active><flagged>" — two boolean digits
+    # Each submission encoded as "id:<active><flagged>:submitted_at" — the
+    # submitted_to_client_at timestamp is included separately from the two
+    # boolean digits because submitting a deck to the client sets that
+    # timestamp on the SAME row without necessarily flipping is_active or
+    # is_flagged — without it here, that transition was invisible to the
+    # fingerprint (this was the actual cause of the submission card not
+    # refreshing live, even though the underlying NOTIFY fired correctly).
     sub_states = sorted([
-        '{}:{}{}'.format(s.id, 1 if s.is_active else 0, 1 if s.is_flagged else 0)
+        '{}:{}{}:{}'.format(
+            s.id, 1 if s.is_active else 0, 1 if s.is_flagged else 0,
+            s.submitted_to_client_at.isoformat() if s.submitted_to_client_at else ''
+        )
         for s in p.submissions
     ])
 
@@ -94,12 +103,13 @@ def _detail_fingerprint(p):
     ])
 
     # C&CM structure: which customers/regions are on this project and their
-    # own per-customer status/dates (region assignment itself rarely changes
-    # but is cheap to include)
+    # own per-customer status/dates/POSM revision count (region assignment
+    # itself rarely changes but is cheap to include)
     customer_states = sorted([
-        '{}:{}:{}:{}:{}:{}'.format(
+        '{}:{}:{}:{}:{}:{}:{}:{}'.format(
             pc.id, pc.customer_id, pc.status or '', _d(pc.design_deadline),
-            _d(pc.installation_date), 1 if pc.cancelled else 0
+            pc.design_deadline_time.isoformat() if pc.design_deadline_time else '',
+            _d(pc.installation_date), 1 if pc.cancelled else 0, pc.posm_revision_count or 0
         )
         for pc in p.project_customers
     ])
@@ -108,12 +118,36 @@ def _detail_fingerprint(p):
     # Reference files — just the sorted ID list, enough to detect additions/removals
     file_ids = sorted([f.id for f in p.reference_files])
 
-    # Revision requests sent to the designer (message text hashed — see _texthash above)
+    # Revision requests sent to the designer (message text hashed — see
+    # _texthash above). Includes the sorted list of deliverable IDs attached
+    # to each revision (ProjectRevisionDeliverable) — without this, adding/
+    # removing a deliverable from an existing revision request wouldn't
+    # register as a change.
     revision_states = sorted([
-        '{}:{}{}:{}'.format(
-            r.id, 1 if r.includes_concept else 0, 1 if r.includes_kv else 0, _texthash(r.message)
+        '{}:{}{}:{}:{}'.format(
+            r.id, 1 if r.includes_concept else 0, 1 if r.includes_kv else 0, _texthash(r.message),
+            ','.join(map(str, sorted([rd.deliverable_id for rd in r.revision_deliverables])))
         )
         for r in p.revisions
+    ])
+
+    # Secondary CS — who's assigned, plus each one's own C&CM region
+    # subscription filter (affects what THEY see/get notified about, so a
+    # secondary CS updating this in one tab should refresh their other tabs too)
+    secondary_cs_states = sorted([
+        '{}'.format(a.user_id) for a in p.secondary_cs_assignments
+    ])
+    secondary_cs_region_states = sorted([
+        '{}:{}'.format(r.user_id, r.region) for r in p.secondary_cs_regions
+    ])
+
+    # POSM channels — one row per parallel Gulf/UAE submission pipeline
+    posm_channel_states = sorted([
+        '{}:{}:{}:{}:{}'.format(
+            c.id, c.posm_country, c.posm_customer_id or '', c.status or '',
+            1 if c.approved_at else 0
+        )
+        for c in p.posm_channels
     ])
 
     return '|'.join([
@@ -126,6 +160,9 @@ def _detail_fingerprint(p):
         str(p.kv_status or ''),
         str(p.concept_designer_id or ''),
         str(p.kv_designer_id or ''),
+        # Final approval info
+        str(1 if p.approved_at else 0),
+        str(p.approved_by_id or ''),
         # Project info — standard brief fields
         p.name or '',
         p.job_number or '',
@@ -152,6 +189,10 @@ def _detail_fingerprint(p):
         ','.join(region_states),
         ','.join(map(str, file_ids)),
         ','.join(revision_states),
+        # Secondary CS / POSM channels
+        ','.join(secondary_cs_states),
+        ','.join(secondary_cs_region_states),
+        ','.join(posm_channel_states),
     ])
 
 
