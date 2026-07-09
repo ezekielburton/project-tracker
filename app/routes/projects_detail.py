@@ -504,18 +504,18 @@ def set_customer_status(project_id, pc_id):
 def remove_customer(project_id, pc_id):
     from app.utils import log_activity
     from app.notifications import create_notification
-    from app.models import ProjectCustomer, ProjectSubmission, DeliverableAssignment, User as UserModel
+    from app.models import ProjectCustomer, ProjectSubmission, DeliverableAssignment, ProjectPosmChannel, User as UserModel
     project = Project.query.get_or_404(project_id)
     pc = ProjectCustomer.query.get_or_404(pc_id)
 
     if project.project_status == 'approved':
         return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
-    
+
     # Guard: refuse if submissions exist - we use cancel instead
     has_submissions = ProjectSubmission.query.filter_by(posm_customer_id=pc.id).first()
     if has_submissions:
         return jsonify({'success': False, 'error': 'Customer has submissions. Use cancel instead.'}), 400
-    
+
     customer_name = pc.customer.name
 
     # Collect designers to notify (lead + deliverable assignees), deduplicated
@@ -525,6 +525,11 @@ def remove_customer(project_id, pc_id):
     for d in pc.deliverables:
         for assignment in DeliverableAssignment.query.filter_by(deliverable_id=d.id).all():
             notify_ids.add(assignment.designer_id)
+
+    # Delete any UAE POSM channels tied to this customer before deleting the customer —
+    # project_posm_channels.posm_customer_id is a FK with no cascade, so Postgres
+    # will block the DELETE otherwise.
+    ProjectPosmChannel.query.filter_by(posm_customer_id=pc.id).delete(synchronize_session=False)
 
     db.session.delete(pc)
     db.session.commit()

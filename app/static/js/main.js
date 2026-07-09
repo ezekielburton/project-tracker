@@ -1321,6 +1321,7 @@ function syncTableScrollers(viewEl) {
                     .then(function (res) { return res.json(); })
                     .then(function (data) {
                         if (data.success) {
+                            btnDone(confirmYes);
                             var ov = document.getElementById('draftConfirmOverlay');
                             if (ov) ov.classList.add('hidden');
                             if (pendingRow) {
