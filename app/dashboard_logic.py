@@ -154,13 +154,54 @@ def get_project_rag(project):
     return rag_for_deadline(nearest_deadline(project))
 
 
+def _clash_severity(deliverables):
+    """
+    Classifies a same-designer, same-day group of 2+ deliverables (added
+    10 Jul 2026, per Ezekiel's exact rule):
+
+    'clash'     — a real, certain conflict: the group spans MORE THAN ONE
+                  PROJECT (a designer can't split themselves across two
+                  different projects' client-facing work on the same day,
+                  no matter what time either is actually due), OR every
+                  deliverable is on the SAME project AND shares the exact
+                  same design_deadline_time.
+    'potential' — everything else: same project, same day, but different
+                  (or missing/unset) times. This MIGHT be fine depending on
+                  how much daylight sits between the two times, so it's
+                  flagged as worth a second look rather than a certain
+                  conflict — deliberately NOT treated as equal to 'clash'.
+
+    A missing time on either side counts as "not the same time" (falls
+    through to 'potential') rather than being treated as a match — no time
+    set isn't evidence the two ARE at the same time, it's just unknown, and
+    a false "clash" is worse than a false "potential" here (the whole point
+    of the two-tier system is not crying wolf on every same-day pairing).
+    """
+    project_ids = {d.project_id for d in deliverables}
+    if len(project_ids) > 1:
+        return 'clash'
+
+    times = {d.design_deadline_time for d in deliverables}
+    if len(times) == 1 and None not in times:
+        return 'clash'
+
+    return 'potential'
+
+
 def compute_clashes(projects):
     """
     Two designers can be double-booked two ways:
       by_deliverable — same designer assigned (via DeliverableAssignment) to
-                        2+ deliverables due the same day
+                        2+ deliverables due the same day. Each group also
+                        carries a 'severity' — see _clash_severity() above —
+                        distinguishing a certain 'clash' from a same-project,
+                        different-time 'potential' one.
       by_project     — same designer assigned (via ProjectDesigner) to 2+
-                        projects sharing the same Final Deadline (execution_date)
+                        projects sharing the same Final Deadline (execution_date).
+                        No severity split here — execution_date has no time
+                        component at all, so there's no "same time" case to
+                        distinguish a potential clash from a real one; every
+                        group here is treated as a real clash.
 
     `projects` is whatever list the caller already scoped by role — this
     function doesn't do its own querying, so the same result is reusable by
@@ -189,7 +230,12 @@ def compute_clashes(projects):
                 deliverable_groups[(designer_id, d.design_deadline)].append(d)
 
     by_deliverable = [
-        {'designer_id': designer_id, 'date': dl_date, 'deliverables': deliverables}
+        {
+            'designer_id': designer_id,
+            'date': dl_date,
+            'deliverables': deliverables,
+            'severity': _clash_severity(deliverables),
+        }
         for (designer_id, dl_date), deliverables in deliverable_groups.items()
         if len(deliverables) > 1
     ]

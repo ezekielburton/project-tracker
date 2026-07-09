@@ -32,9 +32,20 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card, dash_due_row %}
 
-{% call dash_card('summary', 'My Today / My Week',
-    summary.due_today ~ ' item' ~ ('s' if summary.due_today != 1 else '') ~ ' due today, '
-    ~ summary.my_actions ~ ' action' ~ ('s' if summary.my_actions != 1 else '') ~ ' needed from you',
+{# Collapsed summary reworked 10 Jul 2026 — was a single grey sentence
+   ("N items due today, M actions needed from you"), now two colour-coded
+   pills matching the language used everywhere else on this dashboard: a
+   rag-badge for due_today (red when there's anything due, green as an
+   "all clear" signal at zero — same convention the Decisions Needed card
+   below uses), and a tangerine owner-tag for my_actions since that number
+   is specifically "on you", same colour dash-owner-tag uses for a person's
+   name elsewhere on this page. #}
+{% set summary_pills %}
+<span class="rag-badge rag-{{ 'red' if summary.due_today > 0 else 'green' }}">{{ summary.due_today }} Due Today</span>
+<span class="dash-owner-tag">{{ summary.my_actions }} Needed From You</span>
+{% endset %}
+
+{% call dash_card('summary', 'My Today / My Week', summary_pills,
     expanded=(initial_expanded_card == 'summary'), full=True) %}
 
     <div class="dash-two-col">

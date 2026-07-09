@@ -30,8 +30,16 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
-{% call dash_card('what_changed', 'What Changed',
-    what_changed|length ~ ' update' ~ ('s' if what_changed|length != 1 else '') ~ ' since yesterday',
+{# Collapsed summary reworked 10 Jul 2026 — single ashen action-tag pill
+   instead of a grey sentence. Deliberately NOT a rag-badge (red/green) —
+   this card is purely informational, not urgent (see the big comment
+   above on why it just shows free-text activity, never a severity), so it
+   keeps the neutral action-tag colour regardless of count. #}
+{% set what_changed_summary %}
+<span class="dash-action-tag">{{ what_changed|length }} Update{{ 's' if what_changed|length != 1 else '' }}</span>
+{% endset %}
+
+{% call dash_card('what_changed', 'What Changed', what_changed_summary,
     expanded=(initial_expanded_card == 'what_changed')) %}
 
     {% if what_changed %}
@@ -40,14 +48,22 @@
                 <span class="dash-row-main">
                     <span class="dash-row-title">{{ entry.project_name }}</span>
                     <span class="dash-row-sub">{{ entry.description }}</span>
+                    {# Who made the change — an owner-tag now (reworked 10 Jul
+                       2026, matching Due/Next Actions/Decisions) instead of
+                       plain "by X" text stacked under the timestamp. Omitted
+                       entirely for system-triggered entries (no changed_by). #}
+                    {% if entry.changed_by %}
+                    <span class="dash-row-tags">
+                        <span class="dash-owner-tag">{{ entry.changed_by }}</span>
+                    </span>
+                    {% endif %}
                 </span>
-                {# Right-aligned meta block: when it happened + who did it.
-                   dubai_time converts the stored UTC timestamp to the
-                   office's local time zone — same filter used everywhere
-                   else in this app that shows a timestamp to a user. #}
+                {# Right-aligned timestamp — a stamp, not a labelled fact, so
+                   it stays plain text rather than becoming a tag. dubai_time
+                   converts the stored UTC timestamp to the office's local
+                   time zone — same filter used everywhere else in this app. #}
                 <span style="text-align: right; flex-shrink: 0; font-size: 0.8rem; color: var(--grey-dark);">
-                    {{ entry.timestamp | dubai_time }}<br>
-                    {% if entry.changed_by %}by {{ entry.changed_by }}{% else %}&nbsp;{% endif %}
+                    {{ entry.timestamp | dubai_time }}
                 </span>
             </a>
         {% endfor %}

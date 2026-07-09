@@ -13,8 +13,11 @@
 
    Expanded: the queue itself, oldest flag first (already sorted server-side
    — see nullslast(Project.decision_raised_at.asc()) in _compute_decisions).
-   Each row shows: project name, who raised it, when (Dubai local time),
-   the decision note, and how many days it's been waiting.
+   Each row shows: project name, the decision note, who raised it and how
+   many days it's been waiting (both as small tags, reworked 10 Jul 2026 —
+   see dash-owner-tag/dash-action-tag in dashboard.css — instead of stacked
+   plain-grey text), and when it was raised (Dubai local time, kept as a
+   plain timestamp on the right — it's a stamp, not a labelled fact).
 
    "Flag a Project" button: per spec, CS/Designer/Team Lead get a button
    here that opens the Flag to Management modal; Management/Admin get none
@@ -31,8 +34,16 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
-{% call dash_card('decisions', 'Decisions Needed',
-    decisions|length ~ ' project' ~ ('s' if decisions|length != 1 else '') ~ ' flagged',
+{# Collapsed summary reworked 10 Jul 2026 — single rag-badge pill instead
+   of a grey sentence: red when anything's flagged, green as an "all
+   clear" signal at zero (same convention the Summary card above uses for
+   due_today). refreshDecisionsCard() in dashboard.js rebuilds this exact
+   markup after a new flag is submitted — keep the two in sync. #}
+{% set decisions_summary %}
+<span class="rag-badge rag-{{ 'red' if decisions|length > 0 else 'green' }}">{{ decisions|length }} Flagged</span>
+{% endset %}
+
+{% call dash_card('decisions', 'Decisions Needed', decisions_summary,
     expanded=(initial_expanded_card == 'decisions')) %}
 
     {% if effective_role in ('cs', 'designer', 'team_lead') %}
@@ -56,13 +67,15 @@
                 <span class="dash-row-main">
                     <span class="dash-row-title">{{ d.project_name }}</span>
                     <span class="dash-row-sub">{{ d.note }}</span>
+                    <span class="dash-row-tags">
+                        {% if d.raised_by %}<span class="dash-owner-tag">{{ d.raised_by.name }}</span>{% endif %}
+                        {% if d.days_waiting is not none %}
+                        <span class="dash-action-tag">{{ d.days_waiting }} day{{ 's' if d.days_waiting != 1 else '' }} waiting</span>
+                        {% endif %}
+                    </span>
                 </span>
                 <span style="text-align: right; flex-shrink: 0; font-size: 0.8rem; color: var(--grey-dark);">
-                    {% if d.raised_by %}Raised by {{ d.raised_by.name }}<br>{% endif %}
-                    {{ d.raised_at | dubai_time }}<br>
-                    {% if d.days_waiting is not none %}
-                        {{ d.days_waiting }} day{{ 's' if d.days_waiting != 1 else '' }} waiting
-                    {% endif %}
+                    {{ d.raised_at | dubai_time }}
                 </span>
             </a>
             {% endfor %}

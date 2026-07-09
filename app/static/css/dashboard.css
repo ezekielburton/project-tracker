@@ -2,8 +2,11 @@
    Role-based dashboard — card grid, expand/collapse mechanic, RAG badges,
    and the deep-dive zone. Reuses established Helix tokens/components
    throughout (--tangerine/--sandstone/--pine/--rose/--canary, .team-tag-btn
-   for pills, .modal-overlay/.modal for the Flag to Management modal,
-   .data-table for the deep-dive tables) — no new design language. */
+   for pills, .modal-overlay/.modal for the Flag to Management modal) — no
+   new design language. The deep-dive zone used .data-table for a wide
+   browsable projects/deliverables grid until 10 Jul 2026, when it was cut
+   down to at-risk-only .dash-row lists (same component every card on this
+   page uses) — see the big comment on the deep-dive zone in dashboard.html. */
 
 /* ── Cards zone ───────────────────────────────────────────────────────── */
 
@@ -197,10 +200,91 @@ a.dash-row:hover {
     color: var(--black);
 }
 
+/* Second half of a row's title, e.g. "— Technical for sensitive and beads"
+   on a deliverable/customer row — lighter weight and colour than the
+   project name so the eye reads "which project, THEN which specific
+   piece" instead of one flat run of bold black text. */
+.dash-row-title .dash-row-title-detail {
+    font-weight: 400;
+    color: var(--grey-dark);
+}
+
 .dash-row-sub {
     font-size: 0.8rem;
     color: var(--grey-dark);
     margin-top: 0.1rem;
+}
+
+/* Action/owner tag row — replaces a plain "guidance · owner" text line
+   (Due card, Next Actions card) with two small colour-coded pills so the
+   two pieces of information ("what needs doing" vs. "who's doing it") are
+   visually distinct at a glance instead of running together as one grey
+   sentence. */
+.dash-row-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.3rem;
+}
+
+.dash-action-tag,
+.dash-owner-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 0.15rem 0.6rem;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+/* What needs doing — neutral/informational tone (ashen tint), not an
+   urgency colour, since guidance text isn't itself a severity signal
+   (the RAG badge already covers urgency). */
+.dash-action-tag {
+    background: rgba(148, 180, 187, 0.22);
+    color: #3E5E66;
+}
+
+/* Who's doing it — tangerine tint (the app's primary accent) so a name
+   reads as "the actionable person" and pulls the eye differently than
+   the action tag next to it. */
+.dash-owner-tag {
+    background: rgba(242, 127, 85, 0.14);
+    color: var(--tangerine);
+}
+
+/* Clashing Projects card — "Clash Detected" vs "Potential Clash" (see
+   _clash_severity() in dashboard_logic.py). Reuses the same rag-red/
+   rag-yellow colours the rest of the dashboard already uses for urgency,
+   so red/amber means the same thing everywhere on this page — a real,
+   certain conflict is exactly as alarming as an overdue deadline; a
+   same-project-different-time pairing is exactly as "worth a look, not
+   yet a fire" as a due-in-2-days item. */
+.dash-clash-severity-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.6rem;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.dash-clash-severity-tag--detected {
+    background: var(--rose);
+    color: var(--white);
+}
+
+.dash-clash-severity-tag--potential {
+    background: var(--canary);
+    color: var(--black);
 }
 
 .dash-empty-state {
@@ -289,32 +373,28 @@ a.dash-row:hover {
     margin-bottom: 1rem;
 }
 
-/* CLAUDE.md's documented "Dashboard sort toggle" pattern — a wrapper
-   carrying data-tbody, holding a row of data-deadline-sort pills. First
-   real implementation of it in the codebase (see the big comment on this
-   block in dashboard.html) — reuses .team-tag-btn/.active for the pills
-   themselves, so this rule only needs to lay out the row. */
-.deadline-sort-wrap {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+/* Small caption above the deep-dive zone's tab panels, added 10 Jul 2026
+   when the zone was cut down to at-risk-only rows — spells out the scope
+   change explicitly (a wide browsable table quietly becoming a narrow
+   at-risk list is the kind of thing people notice and wonder if something
+   broke) and points at the old Projects page for anyone who wants the full
+   directory instead. See the big comment on the deep-dive zone in
+   dashboard.html / _is_at_risk() in dashboard.py for the full reasoning. */
+.dash-deep-dive-caption {
+    font-size: 0.85rem;
+    color: var(--grey-dark);
     margin-bottom: 1rem;
 }
 
-/* Small "at a glance" risk indicator used on deep-dive zone table rows —
-   deliberately NOT the full .rag-badge component above (that one's sized
-   and coloured to also hold a deadline label, e.g. "09 Jul 2026"; here
-   there's no label, just a quick colour cue in its own narrow column). */
-.dash-rag-dot {
-    display: inline-block;
-    width: 0.65rem;
-    height: 0.65rem;
-    border-radius: 50%;
+.dash-deep-dive-caption a {
+    color: var(--tangerine);
+    font-weight: 600;
+    text-decoration: none;
 }
 
-.dash-rag-dot.rag-red { background: var(--rose); }
-.dash-rag-dot.rag-yellow { background: var(--canary); }
-.dash-rag-dot.rag-green { background: var(--pine); }
+.dash-deep-dive-caption a:hover {
+    text-decoration: underline;
+}
 
 /* Groups one designer + one clashing date's rows together inside the
    Clashing Projects card's expanded body (see clashes.html) — just
@@ -329,14 +409,9 @@ a.dash-row:hover {
     margin-bottom: 0;
 }
 
-/* C&CM "X of Y customers" status-column summary pill */
-.dash-customer-progress {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--grey-dark);
-    background: var(--surface-hover);
-    border-radius: 999px;
-    padding: 0.25rem 0.7rem;
-    display: inline-block;
-}
+/* NOTE: .dash-customer-progress (C&CM "X of Y customers" pill) was removed
+   10 Jul 2026 — it only ever existed for the deep-dive zone's old wide
+   Projects table, which no longer shows that field (see the big comment on
+   the deep-dive zone in dashboard.html). If a C&CM customer-progress pill
+   is needed again somewhere on this page, it's cheap to re-add; check git
+   history for the exact rule. */

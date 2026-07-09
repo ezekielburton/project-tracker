@@ -32,9 +32,17 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
-{% call dash_card('next_actions', 'Next Actions',
-    summary.my_actions ~ ' action' ~ ('s' if summary.my_actions != 1 else '') ~ ' needed from me, '
-    ~ summary.others_actions ~ ' waiting on others',
+{# Collapsed summary reworked 10 Jul 2026 — was one grey sentence, now two
+   pills reusing the same owner-tag ("on me") / action-tag ("informational,
+   not on me") colour language the expanded rows below already use. Kept
+   flat-coloured regardless of count (unlike the rag-badge cards) since
+   these two colours encode CATEGORY here — mine vs. others' — not urgency. #}
+{% set next_actions_summary %}
+<span class="dash-owner-tag">{{ summary.my_actions }} Needed From Me</span>
+<span class="dash-action-tag">{{ summary.others_actions }} Waiting on Others</span>
+{% endset %}
+
+{% call dash_card('next_actions', 'Next Actions', next_actions_summary,
     expanded=(initial_expanded_card == 'next_actions')) %}
 
     <div class="dash-filter-chips">
@@ -54,7 +62,14 @@
                 <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline if item.deadline else 'No deadline' }}</span>
                 <span class="dash-row-main">
                     <span class="dash-row-title">{{ item.project_name }}</span>
-                    <span class="dash-row-sub">{{ item.guidance }}</span>
+                    {# No owner tag here — this is always the 'mine' list (see
+                       next_actions_default above), so the owner is always
+                       "you"; showing an owner tag on your own list would just
+                       repeat that. renderNextActionRow() in dashboard.js adds
+                       one when the Others' Actions tab is active instead. #}
+                    <span class="dash-row-tags">
+                        <span class="dash-action-tag">{{ item.guidance }}</span>
+                    </span>
                 </span>
             </a>
             {% endfor %}

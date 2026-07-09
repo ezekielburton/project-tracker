@@ -37,21 +37,24 @@ def detail(project_id):
     # Back navigation: which page linked here, so the back button returns
     # the user to where they actually came from instead of always dumping
     # them on /projects.
-    # 'dashboard' means the NEW role-based dashboard (app/routes/dashboard.py,
-    # registered blueprint name 'projects' — see the NOTE at the top of that
-    # file) — every row link across dashboard.html and its card partials
-    # appends ?from=dashboard. This used to point at main.projects (the OLD
-    # dashboard) because the new /dashboard page had no HTML built yet when
-    # this was first written; that's been true since UI Chunk 1, so this now
-    # correctly sends users back to the real page they came from.
+    #
+    # 'dashboard' TEMPORARILY has no special case (9 Jul 2026 rollback,
+    # matching auth.py's login redirect and base.html's sidebar link) — a
+    # ?from=dashboard link (still appended by every row on the new
+    # role-based dashboard, which is still reachable directly at /dashboard,
+    # just hidden from normal navigation until after Ezekiel shows it to
+    # management) now falls through to the plain 'Back to Projects' default
+    # below instead of getting its own "Back to Dashboard" label/button. To
+    # restore: re-add an `if from_param == 'dashboard':` branch above the
+    # 'deliverables' one, setting back_label/back_url to
+    # ('Back to Dashboard', url_for('projects.index')).
+    #
     # 'deliverables' is a SEPARATE, older thing — the OLD role dashboards'
     # Deliverable View tab (cs.html/designer.html/team_lead.html) links here
     # with ?from=deliverables, and that view only exists on main.projects,
-    # so that branch is correctly left pointing there.
+    # so that branch is unaffected by any of the above.
     from_param = request.args.get('from')
-    if from_param == 'dashboard':
-        back_label, back_url = 'Back to Dashboard', url_for('projects.index')
-    elif from_param == 'deliverables':
+    if from_param == 'deliverables':
         back_label, back_url = 'Back to Deliverables', url_for('main.projects')
     else:
         back_label, back_url = 'Back to Projects', url_for('main.projects')

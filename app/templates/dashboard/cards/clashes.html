@@ -31,12 +31,42 @@
    (or projects) that collide on it — grouped visually under a small
    "designer — date" heading rather than flattened into individual rows,
    so it's clear at a glance WHY these items are listed together.
+
+   Severity (added 10 Jul 2026, By Deliverable only — see _clash_severity()
+   in dashboard_logic.py): each by-deliverable group carries a
+   'clash'/'potential' severity, shown as a "Clash Detected" (red) or
+   "Potential Clash" (amber) tag next to the designer's name. 'clash' means
+   either the group spans more than one project, or every deliverable in it
+   shares the exact same delivery TIME on the same project — a certain
+   conflict either way. 'potential' means same project, same day, but
+   different (or unset) times — might be fine, worth a second look, not a
+   sure thing. That's also why each deliverable row now shows its own time
+   (or "No time set") — without it there'd be no way to see WHY a group
+   only rated "potential". By Project has no severity split: execution_date
+   has no time component, so there's nothing to distinguish there — every
+   by-project group is a plain, certain clash.
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 {% set clash_count = clashes.by_deliverable|length + clashes.by_project|length %}
 
-{% call dash_card('clashes', 'Clashing Projects',
-    (clash_count ~ ' clash' ~ ('es' if clash_count != 1 else '') ~ ' detected') if clash_count > 0 else 'No clashes',
+{# Collapsed summary reworked 10 Jul 2026 — broken into "N Detected" /
+   "M Potential" pills reusing the exact same severity-tag styling as the
+   expanded groups below, instead of one flattened "N clashes detected"
+   sentence. by_project clashes have no potential/detected split (see the
+   big comment above — execution_date has no time component) so they
+   always count toward "Detected". dashboard.js's SSE live-refresh rebuilds
+   this same markup from /dashboard/api/summary's clashes_detected/
+   clashes_potential fields — keep the two in sync. #}
+{% set detected_count = clashes.by_project|length + (clashes.by_deliverable | selectattr('severity', 'equalto', 'clash') | list | length) %}
+{% set potential_count = clashes.by_deliverable | selectattr('severity', 'equalto', 'potential') | list | length %}
+
+{% set clashes_summary %}
+    {% if detected_count > 0 %}<span class="dash-clash-severity-tag dash-clash-severity-tag--detected">{{ detected_count }} Detected</span>{% endif %}
+    {% if potential_count > 0 %}<span class="dash-clash-severity-tag dash-clash-severity-tag--potential">{{ potential_count }} Potential</span>{% endif %}
+    {% if clash_count == 0 %}No clashes{% endif %}
+{% endset %}
+
+{% call dash_card('clashes', 'Clashing Projects', clashes_summary,
     expanded=(initial_expanded_card == 'clashes'), muted=(clash_count == 0)) %}
 
     <div class="dash-filter-chips">
@@ -52,14 +82,20 @@
         {% if clashes.by_deliverable %}
             {% for c in clashes.by_deliverable %}
             <div class="dash-clash-group">
-                <div class="dash-col-heading">
-                    {{ c.designer.name if c.designer else 'Unassigned' }} &middot; {{ c.date }}
+                <div class="dash-col-heading" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                    <span class="dash-owner-tag">{{ c.designer.name if c.designer else 'Unassigned' }}</span>
+                    <span class="dash-clash-severity-tag dash-clash-severity-tag--{{ 'detected' if c.severity == 'clash' else 'potential' }}">
+                        {{ 'Clash Detected' if c.severity == 'clash' else 'Potential Clash' }}
+                    </span>
+                    <span>{{ c.date }}</span>
                 </div>
                 {% for d in c.deliverables %}
                 <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
                     <span class="dash-row-main">
-                        <span class="dash-row-title">{{ d.project_name }}</span>
-                        <span class="dash-row-sub">{{ d.name }}</span>
+                        <span class="dash-row-title">{{ d.project_name }} <span class="dash-row-title-detail">&mdash; {{ d.name }}</span></span>
+                        <span class="dash-row-tags">
+                            <span class="dash-action-tag">{{ d.time if d.time else 'No time set' }}</span>
+                        </span>
                     </span>
                 </a>
                 {% endfor %}
@@ -74,8 +110,10 @@
         {% if clashes.by_project %}
             {% for c in clashes.by_project %}
             <div class="dash-clash-group">
-                <div class="dash-col-heading">
-                    {{ c.designer.name if c.designer else 'Unassigned' }} &middot; {{ c.date }}
+                <div class="dash-col-heading" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                    <span class="dash-owner-tag">{{ c.designer.name if c.designer else 'Unassigned' }}</span>
+                    <span class="dash-clash-severity-tag dash-clash-severity-tag--detected">Clash Detected</span>
+                    <span>{{ c.date }}</span>
                 </div>
                 {% for proj in c.projects %}
                 <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=proj.id) }}?from=dashboard">

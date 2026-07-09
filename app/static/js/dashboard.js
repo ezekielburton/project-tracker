@@ -65,8 +65,12 @@
 
     // ── Deep-dive zone: tab switching + side-by-side toggle ─────────────
     // Just the shell mechanic (tab buttons, panel visibility, side-by-side
-    // layout toggle) — table CONTENT filtering/sorting is its own section
-    // further down (applyDeepDiveFilter()/sortDashboardTable()).
+    // layout toggle). There used to be a second section down here for
+    // table content filtering/sorting (applyDeepDiveFilter()/
+    // sortDashboardTable()) — removed 10 Jul 2026 when the deep-dive zone
+    // became an always-at-risk-only row list (see the big comment above
+    // _is_at_risk() in app/routes/dashboard.py): nothing left to filter
+    // (every row already IS "at risk") or sort (already server-sorted).
 
     function switchTab(tabName) {
         document.querySelectorAll('.dash-tab-btn[data-tab]').forEach(function (btn) {
@@ -125,15 +129,25 @@
     }
 
     // Builds the exact same markup dash_due_row() produces server-side —
-    // see the comment above this section for why these two must be kept in sync.
+    // see the comment above this section for why these two must be kept in
+    // sync. Reworked 10 Jul 2026 alongside the macro: title's deliverable/
+    // customer detail gets its own lighter-weight span
+    // (.dash-row-title-detail), and guidance/owner render as two separate
+    // colour-coded pills (.dash-action-tag / .dash-owner-tag) instead of
+    // one grey "guidance · owner" sentence — see dashboard.css for the
+    // actual colours and dash_due_row's comment for why.
     function renderDueRow(item) {
-        var title = item.project_name;
-        if (item.type === 'deliverable') title += ' — ' + item.deliverable_name;
-        if (item.type === 'customer' && item.customer_name) title += ' — ' + item.customer_name;
+        var title = escapeHtml(item.project_name);
+        if (item.type === 'deliverable') {
+            title += ' <span class="dash-row-title-detail">— ' + escapeHtml(item.deliverable_name) + '</span>';
+        }
+        if (item.type === 'customer' && item.customer_name) {
+            title += ' <span class="dash-row-title-detail">— ' + escapeHtml(item.customer_name) + '</span>';
+        }
 
-        var subParts = [item.guidance];
+        var tags = '<span class="dash-action-tag">' + escapeHtml(item.guidance) + '</span>';
         var owners = ownerNames(item.owner);
-        if (owners) subParts.push(owners);
+        if (owners) tags += '<span class="dash-owner-tag">' + escapeHtml(owners) + '</span>';
 
         // NOTE: this URL is hardcoded to match project_detail.detail's
         // route (/projects/<id>) rather than built with Flask's url_for —
@@ -143,8 +157,8 @@
         return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
             '<span class="rag-badge rag-' + item.rag + '">' + escapeHtml(item.deadline) + '</span>' +
             '<span class="dash-row-main">' +
-            '<span class="dash-row-title">' + escapeHtml(title) + '</span>' +
-            '<span class="dash-row-sub">' + escapeHtml(subParts.join(' · ')) + '</span>' +
+            '<span class="dash-row-title">' + title + '</span>' +
+            '<span class="dash-row-tags">' + tags + '</span>' +
             '</span>' +
             '</a>';
     }
@@ -197,13 +211,15 @@
     // duplication tradeoff documented on renderDueRow() above (Jinja
     // macros only run server-side, so there's no way to share the literal
     // template between SSR and this client-side re-render). Keep both in
-    // sync if you change what a decision row looks like.
+    // sync if you change what a decision row looks like. Reworked 10 Jul
+    // 2026 alongside decisions.html: raised-by and days-waiting are now
+    // tags (.dash-owner-tag / .dash-action-tag) instead of stacked plain
+    // text; the raised-at timestamp stays plain on the right as a stamp.
     function renderDecisionRow(item) {
-        var meta = '';
-        if (item.raised_by) meta += 'Raised by ' + escapeHtml(item.raised_by.name) + '<br>';
-        meta += escapeHtml(formatDubaiTime(item.raised_at)) + '<br>';
+        var tags = '';
+        if (item.raised_by) tags += '<span class="dash-owner-tag">' + escapeHtml(item.raised_by.name) + '</span>';
         if (item.days_waiting !== null && item.days_waiting !== undefined) {
-            meta += item.days_waiting + ' day' + (item.days_waiting !== 1 ? 's' : '') + ' waiting';
+            tags += '<span class="dash-action-tag">' + item.days_waiting + ' day' + (item.days_waiting !== 1 ? 's' : '') + ' waiting</span>';
         }
 
         // Same hardcoded-URL caveat as renderDueRow() above — no url_for()
@@ -212,8 +228,10 @@
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
             '<span class="dash-row-sub">' + escapeHtml(item.note) + '</span>' +
+            '<span class="dash-row-tags">' + tags + '</span>' +
             '</span>' +
-            '<span style="text-align:right; flex-shrink:0; font-size:0.8rem; color:var(--grey-dark);">' + meta + '</span>' +
+            '<span style="text-align:right; flex-shrink:0; font-size:0.8rem; color:var(--grey-dark);">' +
+            escapeHtml(formatDubaiTime(item.raised_at)) + '</span>' +
             '</a>';
     }
 
@@ -231,7 +249,11 @@
                 var card = document.querySelector('.dash-card[data-card="decisions"]');
                 var summaryEl = card ? card.querySelector('.dash-card-summary') : null;
                 if (summaryEl) {
-                    summaryEl.textContent = items.length + ' project' + (items.length !== 1 ? 's' : '') + ' flagged';
+                    // Matches decisions.html's decisions_summary block
+                    // (reworked 10 Jul 2026 — rag-badge pill, red/green by
+                    // count, instead of a plain sentence). Keep in sync.
+                    summaryEl.innerHTML = '<span class="rag-badge rag-' + (items.length > 0 ? 'red' : 'green') + '">' +
+                        items.length + ' Flagged</span>';
                 }
 
                 var list = document.getElementById('dash-decisions-list');
@@ -366,22 +388,24 @@
     // Hand-written JS mirror of the row markup in next_actions.html — same
     // duplication tradeoff as renderDueRow()/renderDecisionRow() above.
     // Unlike those two, this render function needs to know which tab is
-    // active: the owner's name is only ever shown on the Others' Actions
+    // active: the owner tag is only ever shown on the Others' Actions
     // tab (see the big comment in next_actions.html for why), so
     // fetchAndRenderNextActions() passes the current filter through.
+    // Reworked 10 Jul 2026 alongside renderDueRow() — guidance/owner are now
+    // separate colour-coded pills (.dash-action-tag / .dash-owner-tag)
+    // instead of stacked plain-text lines.
     function renderNextActionRow(item, filterType) {
-        var ownerLine = '';
+        var tags = '<span class="dash-action-tag">' + escapeHtml(item.guidance) + '</span>';
         if (filterType === 'others') {
             var owners = ownerNames(item.owner);
-            ownerLine = '<span class="dash-row-sub">' + escapeHtml(owners || 'Unassigned') + '</span>';
+            tags += '<span class="dash-owner-tag">' + escapeHtml(owners || 'Unassigned') + '</span>';
         }
 
         return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
             '<span class="rag-badge rag-' + item.rag + '">' + escapeHtml(item.deadline || 'No deadline') + '</span>' +
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
-            '<span class="dash-row-sub">' + escapeHtml(item.guidance) + '</span>' +
-            ownerLine +
+            '<span class="dash-row-tags">' + tags + '</span>' +
             '</span>' +
             '</a>';
     }
@@ -424,55 +448,6 @@
         document.querySelectorAll('[data-clashes-panel]').forEach(function (panel) {
             panel.classList.toggle('hidden', panel.dataset.clashesPanel !== filterValue);
         });
-    }
-
-    // ── Deep-dive zone: filter chips + deadline sort ─────────────────────
-    //
-    // Both #dash-deep-dive-projects-tbody and #dash-deep-dive-deliverables-tbody
-    // are fully server-rendered with every scoped row already in the DOM
-    // (see _compute_deep_dive_projects()/_compute_deep_dive_deliverables()
-    // in dashboard.py) — same convention the OLD role dashboards use for
-    // their own project tables (app/templates/dashboards/cs.html). Both
-    // the "All"/"At Risk" filter chips and the deadline sort act entirely
-    // against each row's data-* attributes already sitting in the DOM —
-    // no fetch, nothing to re-render, just show/hide and reorder.
-
-    // "All" / "At Risk" chips. `scope` is 'projects' or 'deliverables' —
-    // each table has its own independent pair of chips (see data-scope on
-    // the buttons in dashboard.html), so filtering one tab never touches
-    // the other's rows.
-    function applyDeepDiveFilter(scope, filterValue) {
-        var tbody = document.getElementById('dash-deep-dive-' + scope + '-tbody');
-        if (!tbody) return;
-        Array.from(tbody.rows).forEach(function (row) {
-            var show = filterValue === 'all' || row.dataset.atRisk === 'true';
-            row.classList.toggle('hidden', !show);
-        });
-    }
-
-    // CLAUDE.md documents a "Dashboard sort toggle" pattern — a
-    // .deadline-sort-wrap[data-tbody] holding data-deadline-sort pills —
-    // as already "used on all dashboards". It turns out nothing in this
-    // codebase actually implements it yet (checked: zero matches for
-    // data-deadline-sort anywhere before this chunk); the OLD dashboards
-    // sort via a <select> dropdown wired to sortTableBy() in main.js
-    // instead. This function is that documented pattern's first real
-    // implementation, and deliberately reuses main.js's exact algorithm
-    // (read row.dataset[field], '9999-12-31' fallback for a missing date,
-    // localeCompare on the resulting ISO strings) so sorting behaves
-    // identically everywhere in the app — it just doesn't need
-    // sortTableBy()'s expansion-row-grouping step, since no table on this
-    // new dashboard has expansion rows.
-    function sortDashboardTable(tbodyId, field) {
-        var tbody = document.getElementById(tbodyId);
-        if (!tbody) return;
-        var rows = Array.from(tbody.rows);
-        rows.sort(function (a, b) {
-            var aVal = a.dataset[field] || '9999-12-31';
-            var bVal = b.dataset[field] || '9999-12-31';
-            return aVal.localeCompare(bVal);
-        });
-        rows.forEach(function (row) { tbody.appendChild(row); });
     }
 
     // ── SSE integration: refresh hook called by polling.js ───────────────
@@ -518,26 +493,48 @@
                         '<span class="rag-badge rag-yellow">' + summary.due_week + ' This Week</span>';
                 }
 
+                // Matches next_actions.html's next_actions_summary block
+                // (reworked 10 Jul 2026 — owner-tag/action-tag pills
+                // instead of a plain sentence). Keep in sync.
                 var nextActionsSummaryEl = document.querySelector('.dash-card[data-card="next_actions"] .dash-card-summary');
                 if (nextActionsSummaryEl) {
-                    nextActionsSummaryEl.textContent =
-                        summary.my_actions + ' action' + (summary.my_actions !== 1 ? 's' : '') + ' needed from me, ' +
-                        summary.others_actions + ' waiting on others';
+                    nextActionsSummaryEl.innerHTML =
+                        '<span class="dash-owner-tag">' + summary.my_actions + ' Needed From Me</span>' +
+                        '<span class="dash-action-tag">' + summary.others_actions + ' Waiting on Others</span>';
                 }
 
+                // Matches what_changed.html's what_changed_summary block
+                // (reworked 10 Jul 2026 — single ashen action-tag pill
+                // instead of a plain sentence). Keep in sync.
                 var whatChangedSummaryEl = document.querySelector('.dash-card[data-card="what_changed"] .dash-card-summary');
                 if (whatChangedSummaryEl) {
-                    whatChangedSummaryEl.textContent =
-                        summary.what_changed + ' update' + (summary.what_changed !== 1 ? 's' : '') + ' since yesterday';
+                    whatChangedSummaryEl.innerHTML =
+                        '<span class="dash-action-tag">' + summary.what_changed + ' Update' + (summary.what_changed !== 1 ? 's' : '') + '</span>';
                 }
 
+                // Matches clashes.html's clashes_summary block (reworked 10
+                // Jul 2026 — split into Detected/Potential severity pills
+                // instead of one flattened sentence; needs the
+                // clashes_detected/clashes_potential fields _compute_summary()
+                // now returns alongside the plain clashes total). Keep in sync.
                 var clashesCardEl = document.querySelector('.dash-card[data-card="clashes"]');
                 if (clashesCardEl) {
                     var clashesSummaryEl = clashesCardEl.querySelector('.dash-card-summary');
                     if (clashesSummaryEl) {
-                        clashesSummaryEl.textContent = summary.clashes > 0
-                            ? (summary.clashes + ' clash' + (summary.clashes !== 1 ? 'es' : '') + ' detected')
-                            : 'No clashes';
+                        if (summary.clashes > 0) {
+                            var clashPills = '';
+                            if (summary.clashes_detected > 0) {
+                                clashPills += '<span class="dash-clash-severity-tag dash-clash-severity-tag--detected">' +
+                                    summary.clashes_detected + ' Detected</span>';
+                            }
+                            if (summary.clashes_potential > 0) {
+                                clashPills += '<span class="dash-clash-severity-tag dash-clash-severity-tag--potential">' +
+                                    summary.clashes_potential + ' Potential</span>';
+                            }
+                            clashesSummaryEl.innerHTML = clashPills;
+                        } else {
+                            clashesSummaryEl.textContent = 'No clashes';
+                        }
                     }
                     // NOTE: this toggles the muted VISUAL state live, but the
                     // header <button>'s disabled attribute (set server-side
@@ -679,32 +676,12 @@
             var clashesBtn = e.target.closest('[data-action="clashes-tab"]');
             if (clashesBtn) { switchClashesTab(clashesBtn.dataset.filter); return; }
 
-            var deepDiveFilterBtn = e.target.closest('[data-action="deep-dive-filter"]');
-            if (deepDiveFilterBtn) {
-                var ddScope = deepDiveFilterBtn.dataset.scope;
-                // Scoped to [data-scope="..."] so toggling the Projects
-                // tab's chips never touches the Deliverables tab's chips.
-                document.querySelectorAll('[data-action="deep-dive-filter"][data-scope="' + ddScope + '"]').forEach(function (btn) {
-                    btn.classList.toggle('active', btn === deepDiveFilterBtn);
-                });
-                applyDeepDiveFilter(ddScope, deepDiveFilterBtn.dataset.filter);
-                return;
-            }
-
-            // CLAUDE.md's documented data-deadline-sort pattern — see the
-            // big comment on sortDashboardTable() above. data-tbody comes
-            // off the closest .deadline-sort-wrap, exactly as documented.
-            var deadlineSortBtn = e.target.closest('[data-deadline-sort]');
-            if (deadlineSortBtn) {
-                var sortWrap = deadlineSortBtn.closest('.deadline-sort-wrap');
-                if (sortWrap) {
-                    sortWrap.querySelectorAll('[data-deadline-sort]').forEach(function (btn) {
-                        btn.classList.toggle('active', btn === deadlineSortBtn);
-                    });
-                    sortDashboardTable(sortWrap.dataset.tbody, deadlineSortBtn.dataset.deadlineSort);
-                }
-                return;
-            }
+            // NOTE: the deep-dive zone's "All"/"At Risk" filter chips and
+            // deadline-sort pills were removed 10 Jul 2026 along with their
+            // handlers here — see the comment above the tab-switching
+            // section further up for why. If you're looking for
+            // applyDeepDiveFilter()/sortDashboardTable(), they're gone;
+            // check git history if you need to resurrect that mechanic.
 
             var sideBtn = e.target.closest('[data-action="toggle-side-by-side"]');
             if (sideBtn) {

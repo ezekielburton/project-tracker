@@ -81,13 +81,10 @@ def index():
         # (Management has no reason to flag something to itself), so skip
         # the extra query entirely for roles that can't open the modal.
         flaggable_projects=_compute_flaggable_projects(user) if user.role in ('cs', 'designer', 'team_lead') else [],
-        # Deep-dive zone (UI Chunk 8) — unlike every card above, these two
-        # are consumed as fully server-rendered rows with data-* attributes,
-        # same convention the OLD role dashboards use (app/templates/
-        # dashboards/cs.html etc.). Filtering/sorting both happen entirely
-        # client-side against those attributes — see dashboard.js — so
-        # there's no SSR-default-then-fetch split like due_default/
-        # next_actions_default above; this IS the complete dataset.
+        # Deep-dive zone — at-risk-only extension of the cards above (see the
+        # big comment on _is_at_risk()/_compute_deep_dive_projects() further
+        # down for the 10 Jul 2026 rework). Fully server-rendered, no
+        # client-side filter/sort left to do — this IS the complete dataset.
         deep_dive_projects=_compute_deep_dive_projects(user),
         deep_dive_deliverables=_compute_deep_dive_deliverables(user),
     )
@@ -190,7 +187,17 @@ def _compute_summary(user):
     ).count()
 
     clashes = compute_clashes(active_projects)
-    clash_count = len(clashes['by_deliverable']) + len(clashes['by_project'])
+    # Broken out by severity (not just a total) so the collapsed Clashing
+    # Projects pill — and dashboard.js's SSE live-refresh of that same pill,
+    # which reuses this endpoint — can show "N Detected" / "M Potential"
+    # separately, matching the severity language already used inside the
+    # expanded card (see _clash_severity() in dashboard_logic.py). by_project
+    # clashes have no potential/detected split (execution_date has no time
+    # component — every by_project group is a certain clash), so they always
+    # count toward "detected".
+    clash_detected = len(clashes['by_project']) + sum(1 for c in clashes['by_deliverable'] if c['severity'] == 'clash')
+    clash_potential = sum(1 for c in clashes['by_deliverable'] if c['severity'] == 'potential')
+    clash_count = clash_detected + clash_potential
 
     return {
         'what_changed': what_changed,
@@ -200,7 +207,9 @@ def _compute_summary(user):
         'decisions_needed': decisions_needed,
         'my_actions': my_actions,
         'others_actions': others_actions,
-        'clashes': clash_count
+        'clashes': clash_count,
+        'clashes_detected': clash_detected,
+        'clashes_potential': clash_potential,
     }
 
 
@@ -466,8 +475,22 @@ def _compute_clashes_response(user):
             {
                 'designer': _serialize_user(User.query.get(c['designer_id'])),
                 'date': c['date'].isoformat(),
+                # 'clash' | 'potential' — see _clash_severity() in
+                # dashboard_logic.py for the exact rule. Rendered as
+                # "Clash Detected" / "Potential Clash" in clashes.html.
+                'severity': c['severity'],
                 'deliverables': [
-                    {'id': d.id, 'name': d.name, 'project_id': d.project_id, 'project_name': d.project.name}
+                    {
+                        'id': d.id,
+                        'name': d.name,
+                        'project_id': d.project_id,
+                        'project_name': d.project.name,
+                        # Shown alongside each deliverable now that severity
+                        # depends on whether times actually match — None
+                        # stays None (not '—') so the template can decide
+                        # how to phrase "no time set" itself.
+                        'time': d.design_deadline_time.strftime('%H:%M') if d.design_deadline_time else None,
+                    }
                     for d in c['deliverables']
                 ]
             }
@@ -490,28 +513,43 @@ def api_clashes():
     return jsonify(_compute_clashes_response(get_actor()))
 
 
-# ── Deep-dive zone (UI Chunk 8) ──────────────────────────────────────────
-# Projects/Deliverables tabs at the bottom of the dashboard. Everything
-# above this point follows a "compute function -> SSR AND JSON API, JS
-# fetches on filter/toggle" pattern. This section is different on purpose:
-# both tables are fully server-rendered with rich data-* attributes (same
-# convention the OLD role dashboards already use — see
-# app/templates/dashboards/cs.html's project rows) and BOTH the "At Risk"
-# filter chip AND the deadline sort are handled entirely in dashboard.js
-# against those attributes, with no round trip to the server — there's
-# nothing here worth fetching-on-demand since the full scoped list is
-# never large enough to matter. The /api/deep-dive/* routes below return
-# the identical data as JSON anyway, since the SSE integration chunk
-# (Task #17) will want a way to ask "did anything in this zone change"
-# without a full page reload.
+# ── Deep-dive zone ────────────────────────────────────────────────────────
+# Projects/Deliverables tabs at the bottom of the dashboard.
+#
+# REWORKED 10 Jul 2026 — originally an all-scoped-projects browsable table
+# (every column: job number, type, teams, CS Lead, status, an "All"/"At Risk"
+# filter chip, a deadline-sort toggle — see git history / UI Chunk 8 for that
+# version). That table substantially duplicated the OLD Projects page
+# (main.projects — cs.html/designer.html/team_lead.html), which already does
+# full search + CS Lead/Status/Designer filtering + multiple views, and doing
+# it BETTER than a cut-down copy ever would. Two "browse all projects"
+# screens meant neither was fully trusted, and the wide table also couldn't
+# fit in the side-by-side layout without horizontal overflow.
+#
+# Decision (discussed with Ezekiel 10 Jul 2026): draw a hard line —
+# Dashboard = at-a-glance, "here's what needs your eyes"; old Projects page =
+# where you go to actually search/filter/manage/edit. So the deep-dive zone
+# stopped being a second directory and became a narrow extension of the
+# cards above it: ONLY at-risk projects/deliverables (same _is_at_risk() rule
+# already used elsewhere on this page), rendered as compact .dash-row rows
+# (like every other card) instead of a wide <table>, with no filter chip
+# (there's only ever one thing to show now) and no deadline-sort toggle
+# (already pre-sorted by nearest deadline, same as Due/Next Actions). This
+# also fixed the side-by-side overflow — a .dash-row wraps in a narrow
+# column; a multi-column <table> didn't.
+#
+# Both compute functions below are still fully server-rendered with no
+# separate filter/sort JS — there's just nothing left to filter or sort
+# client-side now that "at risk" is the only state a row can be in.
 
 def _is_at_risk(project, rag):
     """
-    "At Risk" as you defined it when I asked: an open (unresolved) BriefFlag
-    on the project, OR decision_needed=True, OR the deadline this row is
-    judging itself by is today or already passed ("less than a day away" —
-    that's rag == 'red', reusing whatever RAG was already computed for this
-    row rather than re-deriving deadline math a second time here).
+    "At Risk" as defined when this was originally built: an open
+    (unresolved) BriefFlag on the project, OR decision_needed=True, OR the
+    deadline this row is judging itself by is today or already passed
+    ("less than a day away" — that's rag == 'red', reusing whatever RAG was
+    already computed for this row rather than re-deriving deadline math a
+    second time here).
 
     Takes `rag` as a parameter rather than computing it internally because
     the two callers below need DIFFERENT deadlines for it: a project row's
@@ -519,6 +557,10 @@ def _is_at_risk(project, rag):
     deliverable row's rag is based on that ONE deliverable's own deadline
     (rag_for_deadline(d.design_deadline)) — the "at risk" RULE is identical
     either way, only which deadline feeds it differs per caller.
+
+    Since 10 Jul 2026 this isn't just a per-row flag anymore — it's the
+    actual FILTER for whether a project/deliverable appears in the deep-dive
+    zone at all (see the section comment above).
     """
     has_open_flag = any(not f.is_resolved for f in project.brief_flags)
     return has_open_flag or bool(project.decision_needed) or rag == 'red'
@@ -526,48 +568,32 @@ def _is_at_risk(project, rag):
 
 def _compute_deep_dive_projects(user):
     """
-    One row per scoped active project — feeds the deep-dive zone's Projects
-    tab. See the section comment above for why this is SSR-only with no
-    separate filter/sort API traffic.
+    Deep-dive zone's Projects panel — ONE row per AT-RISK scoped project
+    only (see the big section comment above for why). Deliberately reuses
+    get_next_action_owner() and nearest_deadline() — the exact same calls
+    the Next Actions card uses — so a project's guidance/owner text here
+    always agrees with what that card says about the same project. This is
+    NOT a general "list every project" view; the old Projects page
+    (main.projects) is where that lives.
     """
     results = []
     for p in _scoped_projects(user, active_only=True).all():
         rag = get_project_rag(p)
+        if not _is_at_risk(p, rag):
+            continue
 
-        entry = {
+        owner_info = get_next_action_owner(p)
+        deadline = nearest_deadline(p)
+        results.append({
             'project_id': p.id,
             'name': p.name,
-            'job_number': p.job_number,
-            'status': p.project_status,
-            'brief_type': p.brief_type,
-            'cs_lead': _serialize_user(p.cs_lead),
-            'secondary_cs': [_serialize_user(a.user) for a in p.secondary_cs_assignments],
-            'teams': [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()],
-            'designers': [
-                {'id': pd.designer.id, 'name': pd.designer.name, 'team': pd.team}
-                for pd in p.assigned_designers
-            ],
             'rag': rag,
-            'at_risk': _is_at_risk(p, rag),
-            'first_output_deadline': p.first_output_deadline.isoformat() if p.first_output_deadline else None,
-            'final_deadline': p.execution_date.isoformat() if p.execution_date else None,
-        }
+            'deadline': deadline.isoformat() if deadline else None,
+            'guidance': owner_info['guidance'],
+            'owner': _serialize_owner(owner_info['user']),
+        })
 
-        # C&CM "X of Y customers" pill (see .dash-customer-progress in
-        # dashboard.css — that class was staged in an earlier chunk
-        # specifically for this). Cancelled customers don't count toward
-        # either number — same convention _compute_due() already uses for
-        # deciding which customers are still "live" on a project.
-        if p.brief_type == 'ccm':
-            active_customers = [pc for pc in p.project_customers if not pc.cancelled]
-            approved_customers = [pc for pc in active_customers if pc.status == 'approved']
-            entry['customer_progress'] = {'approved': len(approved_customers), 'total': len(active_customers)}
-        else:
-            entry['customer_progress'] = None
-
-        results.append(entry)
-
-    results.sort(key=lambda r: r['first_output_deadline'] or '9999-12-31')
+    results.sort(key=lambda r: r['deadline'] or '9999-12-31')
     return results
 
 
@@ -579,8 +605,9 @@ def api_deep_dive_projects():
 
 def _compute_deep_dive_deliverables(user):
     """
-    One row per deliverable belonging to a scoped active project — feeds
-    the deep-dive zone's Deliverables tab.
+    Deep-dive zone's Deliverables panel — ONE row per AT-RISK deliverable
+    belonging to a scoped active project (same at-risk-only narrowing as
+    _compute_deep_dive_projects() above).
 
     Team-matching for Designer/Team Lead: _scoped_projects() only scopes at
     the PROJECT level (via ProjectDesigner), which isn't tight enough here
@@ -633,22 +660,24 @@ def _compute_deep_dive_deliverables(user):
         deadline = d.design_deadline or (d.project_customer.design_deadline if d.project_customer else None)
         rag = rag_for_deadline(deadline)
 
+        # "At risk" for a deliverable row rides on its PARENT project's
+        # flag/decision state (a flag is raised against the project or a
+        # specific deliverable, but either way it's the whole project's
+        # next action that's blocked) combined with this deliverable's OWN
+        # deadline urgency, not the project's nearest deadline overall. This
+        # is now a hard filter, not just a data-* attribute — see the
+        # section comment above.
+        if not _is_at_risk(p, rag):
+            continue
+
         results.append({
             'deliverable_id': d.id,
             'project_id': d.project_id,
             'project_name': p.name,
             'name': d.name,
-            'status': d.status,
             'teams': sorted(d_teams),
             'deadline': deadline.isoformat() if deadline else None,
             'rag': rag,
-            # "At risk" for a deliverable row rides on its PARENT project's
-            # flag/decision state (a flag is raised against the project or
-            # a specific deliverable, but either way it's the whole
-            # project's next action that's blocked) combined with this
-            # deliverable's OWN deadline urgency, not the project's nearest
-            # deadline overall.
-            'at_risk': _is_at_risk(p, rag),
         })
 
     results.sort(key=lambda r: r['deadline'] or '9999-12-31')
