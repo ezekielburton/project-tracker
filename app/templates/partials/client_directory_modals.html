@@ -1,0 +1,91 @@
+{# app/templates/partials/client_directory_modals.html
+
+   Add Company / Add Contact modals - shared between the Client Directory
+   page (app/templates/client_directory/index.html) and the brief form
+   (app/templates/projects/create.html), per the spec's "share the same
+   modal HTML and JS - don't duplicate it" requirement.
+
+   Included via {% include %} rather than copy-pasted into both templates -
+   if these fields ever change (a new field added, a label reworded), there
+   is exactly one place to edit instead of two copies quietly drifting apart.
+
+   All the JS that opens/closes these and handles their Save buttons lives
+   in client_directory.js, NOT here - this file is markup only. Both pages
+   that include this partial must also load client_directory.js themselves.
+
+   Uses the existing .modal-overlay / .modal-box / .modal-title /
+   .modal-actions classes already defined in main.css (same ones the
+   Review & Submit modal on the brief form and the achievement/wipe modals
+   elsewhere use) - no new modal chrome invented here, per the "no new
+   design language" instruction. #}
+
+<div id="add-company-modal" class="modal-overlay hidden"
+     onclick="if(event.target===this) window.ClientDirectoryModals.closeAddCompanyModal()">
+    <div class="modal-box">
+        <h3 class="modal-title">Add Company</h3>
+
+        <div class="form-group">
+            <label class="form-label">Company Name</label>
+            <input type="text" id="addCompanyName" class="form-input" placeholder="e.g. Acme Corp">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Aliases</label>
+            <input type="text" id="addCompanyAliases" class="form-input" placeholder="e.g. Acme, Acme Industries">
+            <span class="form-hint">separate with commas</span>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Office Location</label>
+            <input type="text" id="addCompanyOfficeLocation" class="form-input" placeholder="e.g. DIFC, Dubai">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Installation Locations</label>
+            <input type="text" id="addCompanyInstallationLocations" class="form-input" placeholder="e.g. MOE, DCC, MCC">
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="btn btn--secondary btn--sm" id="cancelAddCompanyModal">Cancel</button>
+            <button type="button" class="btn btn--primary btn--sm" id="confirmAddCompanyModal">Save</button>
+        </div>
+    </div>
+</div>
+
+<div id="add-contact-modal" class="modal-overlay hidden"
+     onclick="if(event.target===this) window.ClientDirectoryModals.closeAddContactModal()">
+    <div class="modal-box">
+        <h3 class="modal-title">Add Contact</h3>
+
+        {# Set by JS right before the modal is opened - the caller (directory
+           page company row, or the brief form's Contact dropdown) always
+           knows which company this new contact belongs to, so this is never
+           user-editable, just a carrier for that value into the POST body. #}
+        <input type="hidden" id="addContactClientId">
+
+        <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" id="addContactName" class="form-input" placeholder="e.g. John Smith">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" id="addContactPhone" class="form-input" placeholder="Optional">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="text" id="addContactEmail" class="form-input" placeholder="Optional">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Location</label>
+            <input type="text" id="addContactLocation" class="form-input" placeholder="e.g. DIFC, Dubai">
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="btn btn--secondary btn--sm" id="cancelAddContactModal">Cancel</button>
+            <button type="button" class="btn btn--primary btn--sm" id="confirmAddContactModal">Save</button>
+        </div>
+    </div>
+</div>

@@ -87,7 +87,7 @@
                            Inline customer expansion has been removed; the detail page shows all info. #}
                         {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                         <tr class="clickable {% if is_overdue %}overdue{% endif %}"
-                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
+                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}?from=dashboard"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
                             data-status="{{ project.project_status }}"
@@ -206,7 +206,7 @@
                         ] | join('|') %}
                         {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                         <tr class="clickable {% if is_overdue %}overdue{% endif %}"
-                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
+                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}?from=dashboard"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
                             data-status="{{ project.project_status }}"
@@ -316,7 +316,7 @@
                             {% endfor %}
                         </td>
                         <td>
-                            <a href="{{ url_for('project_detail.detail', project_id=d.project_id) }}"
+                            <a href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=deliverables"
                                class="btn btn--secondary sidebar-item--nav">Go to Project</a>
                         </td>
                     </tr>
@@ -366,7 +366,7 @@
             "approved_at": {{ p.approved_at.strftime('%Y-%m-%dT%H:%M:%S') | tojson }},
             "approved_at_display": {{ p.approved_at | dubai_time | tojson }},
             "assigned_designers": [{% for a in p.assigned_designers %}{{ a.designer.name | tojson }}{% if not loop.last %},{% endif %}{% endfor %}],
-            "url": {{ url_for('project_detail.detail', project_id=p.id) | tojson }}
+            "url": {{ (url_for('project_detail.detail', project_id=p.id) + '?from=dashboard') | tojson }}
     }{% if not loop.last %},{% endif %}
 
         {% endfor %}

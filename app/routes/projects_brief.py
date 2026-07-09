@@ -225,6 +225,18 @@ def update_project(project_id):
 
         project.name = data['name']
         project.client_id = int(data['client_id']) if data.get('client_id') else project.client_id
+
+        # contact_id deliberately does NOT follow the "fall back to the existing
+        # value" pattern used for client_id just above. collectFormData() on the
+        # frontend always sends this key explicitly - either a real id, or null
+        # if the placeholder option is selected - so a falsy value here means
+        # "the user actively has no contact selected right now" (e.g. they
+        # switched Client and haven't repicked a contact for the new one yet),
+        # not "this field wasn't touched". Falling back to project.contact_id
+        # like client_id does would leave a contact from a PREVIOUSLY selected
+        # client silently attached to the project after switching clients.
+        project.contact_id = int(data['contact_id']) if data.get('contact_id') else None
+
         # Only the CS lead themselves, admin, or management can reassign the CS lead.
         # Secondary CS users editing a project must not be able to take ownership.
         if current_user.role in ['admin', 'management'] or current_user.id == project.cs_lead_id:
@@ -523,6 +535,17 @@ def autosave():
 
         if data.get('client_id'):
             draft.client_id = int(data['client_id'])
+
+        # contact_id is optional (Project.contact_id is nullable=True) - unlike
+        # client_id above, we also need to handle it being explicitly cleared:
+        # if the frontend sends contact_id: null (e.g. the user picked a contact,
+        # then switched Client and never repicked a new one), this branch runs
+        # the "falsy" path and sets draft.contact_id back to None, rather than
+        # silently leaving a contact_id from the PREVIOUS client sitting there.
+        if data.get('contact_id'):
+            draft.contact_id = int(data['contact_id'])
+        else:
+            draft.contact_id = None
 
         if data.get('job_number'):
             job_num = data['job_number'].strip()

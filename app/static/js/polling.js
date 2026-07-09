@@ -1,6 +1,7 @@
 // app/static/js/polling.js
 //
-// Live updates for the dashboard and project detail pages.
+// Live updates for the old role dashboards, the project detail page, and
+// (as of UI Chunk 9) the new role-based dashboard (app/templates/dashboard.html).
 // Runs silently — no spinners or loading states shown to the user.
 // All network errors are swallowed so a brief blip never breaks the UI.
 //
@@ -15,9 +16,11 @@
 // setInterval polling until SSE recovers, so this never becomes a hard
 // dependency on the new transport.
 //
-// Dashboard: patches changed status badges in-place.
-//            Falls back to a full reload only if a project was added or removed.
-// Detail:    reloads the page if anything in its fingerprint changed.
+// Old dashboard: patches changed status badges in-place.
+//                Falls back to a full reload only if a project was added or removed.
+// Detail:        reloads the page if anything in its fingerprint changed.
+// New dashboard: refresh logic lives in dashboard.js, not here — see the
+//                big comment on the .dash-cards-grid check in init() below.
 //
 // SPA-aware: sidebar.js dispatches 'helix:navigated' after every content swap.
 // init() is called on both the initial page load and after every navigation,
@@ -31,6 +34,13 @@
     // between pages would stack up duplicate connections/intervals.
     var _dashboardStream = null;
     var _detailStream    = null;
+    // Separate from _dashboardStream above on purpose, even though the two
+    // can never both be open at once (the OLD dashboard and the NEW
+    // role-based dashboard are different pages/routes) — keeping them in
+    // distinct variables avoids any ambiguity about which page's stream is
+    // being torn down, and matches this file's existing one-variable-per-
+    // page-type convention (_dashboardStream / _detailStream).
+    var _roleDashboardStream = null;
 
     // How often the fallback interval polls, when SSE isn't available or
     // has dropped — matches the cadence the old setInterval-only design used.
@@ -295,6 +305,10 @@
             _detailStream.close();
             _detailStream = null;
         }
+        if (_roleDashboardStream !== null) {
+            _roleDashboardStream.close();
+            _roleDashboardStream = null;
+        }
     }
 
 
@@ -323,6 +337,30 @@
             var projectId = pathMatch[1];
             _detailStream = _connectLiveStream('/sse/projects/' + projectId, function () {
                 pollDetail(projectId);
+            }, _FALLBACK_INTERVAL_MS);
+        }
+
+        // New role-based dashboard (app/templates/dashboard.html): identified
+        // by .dash-cards-grid, unique to that page (same idea as the old
+        // dashboard's container-ID check above — pick a marker that can't
+        // also appear on other pages). Reuses the SAME /sse/dashboard route
+        // the old dashboard subscribes to above — sse.py's dashboard_stream()
+        // is a generic "something about some project changed" doorbell (see
+        // CLAUDE.md's Live Updates section), not tied to either dashboard's
+        // specific markup, so both pages can safely listen to it at once
+        // (never simultaneously in practice, since they're different pages,
+        // but nothing here assumes otherwise).
+        //
+        // Unlike pollDashboard()/pollDetail() above, this page's own refresh
+        // logic doesn't live in this file — it's owned by dashboard.js
+        // (which already has every fetch/render function this page needs,
+        // built up over UI Chunks 1-8) via window.helixDashboardRefresh().
+        // polling.js deliberately doesn't know anything about this new
+        // dashboard's cards/DOM beyond "does this marker exist" — same
+        // separation-of-concerns sse.py's own comment describes for itself.
+        if (document.querySelector('.dash-cards-grid')) {
+            _roleDashboardStream = _connectLiveStream('/sse/dashboard', function () {
+                if (window.helixDashboardRefresh) window.helixDashboardRefresh();
             }, _FALLBACK_INTERVAL_MS);
         }
     }

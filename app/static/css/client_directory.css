@@ -1,0 +1,278 @@
+/* app/static/css/client_directory.css
+ *
+ * Client Directory page - two-column master-detail layout, plus the
+ * brief-form-side tweaks needed for the shared "add new company/contact"
+ * dropdown options. Built entirely from tokens already defined in
+ * main.css's :root (--tangerine, --sandstone, --pine, --white, --black,
+ * --font-body, --font-mono, --radius, --grey-*) - no new colors, fonts, or
+ * radii introduced here, per the "feel like existing Helix UI" instruction.
+ *
+ * Loaded globally via base.html's <head>, same as every other feature
+ * stylesheet (blog.css, wiki.css, achievements.css, etc.) - not
+ * conditionally included per-page.
+ */
+
+/* ── Page header row ──────────────────────────────────────────────────────
+   NOTE: wiki/editor_dashboard.html uses a class called .page-header for
+   this same "title + action button" row, but that class has no actual CSS
+   backing anywhere in the currently-loaded stylesheets (it only exists in
+   main_backup.css, which isn't linked from base.html) - so reusing it here
+   would silently inherit nothing. Defining a real, working class instead
+   rather than copying a pattern that turns out to already be broken. */
+.directory-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+/* ── Two-column layout ────────────────────────────────────────────────────
+   Left panel: fixed width, its own scroll region (so a long company list
+   scrolls independently of the right panel detail view). Right panel:
+   fills whatever space is left. */
+.directory-layout {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    height: calc(100vh - 180px);
+    /* 180px roughly clears the sidebar header + page title above this
+       layout - matches the "fixed width, scrollable" left panel spec
+       without the whole page itself needing to scroll. */
+}
+
+.directory-left-panel {
+    width: 340px;
+    flex-shrink: 0;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.directory-search-input {
+    margin-bottom: 0.75rem;
+    flex-shrink: 0;
+}
+
+.directory-list {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.directory-empty {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--grey-mid);
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.directory-right-panel {
+    flex: 1;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.5rem 2rem;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.directory-placeholder {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--grey-mid);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+}
+
+/* ── Left panel rows: company (expandable) + contact (nested) ───────────
+   Same expand/collapse mechanic as the project table's expansion-row
+   (this.nextElementSibling toggle, per CLAUDE.md's "Expandable rows"
+   pattern) - .directory-contact-list is the sibling that gets toggled,
+   never looked up by ID, so there's no risk of duplicate-ID collisions
+   between company blocks the way there would be with getElementById. */
+.directory-company-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.5rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: var(--black);
+}
+
+.directory-company-row:hover,
+.directory-contact-row:hover {
+    background: var(--sandstone);
+}
+
+.directory-company-row.active,
+.directory-contact-row.active {
+    background: var(--sandstone);
+    border-left: 3px solid var(--tangerine);
+}
+
+/* Chevron rotates open/closed - same rotated-class toggle used by
+   detail.js elsewhere in this app, just scoped to this page's own icon. */
+.directory-chevron {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--grey-mid);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+.directory-chevron.rotated {
+    transform: rotate(90deg);
+}
+
+.directory-contact-list {
+    /* This is the "expansion-row"-equivalent sibling that gets its
+       .hidden class toggled - collapsed by default so the list doesn't
+       start fully expanded for every company on page load. */
+    padding-left: 1.5rem;
+}
+
+.directory-contact-row {
+    display: block;
+    padding: 0.45rem 0.5rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--grey-dark);
+}
+
+/* Search highlight - wraps the matched substring in the rendered name,
+   not a separate overlay, so it reflows naturally with the text. */
+.directory-highlight {
+    background: color-mix(in srgb, var(--canary) 45%, transparent);
+    border-radius: 2px;
+}
+
+/* ── Right panel: detail view ─────────────────────────────────────────── */
+.directory-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+}
+
+.directory-detail-header h2 {
+    /* Global h1-h6 { text-transform: uppercase } is overridden here per
+       CLAUDE.md's CSS Facts - a company/contact name should render exactly
+       as typed, not shouted in caps. */
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: var(--font-body);
+    font-size: 1.4rem;
+    color: var(--black);
+}
+
+.directory-detail-field {
+    margin-bottom: 1rem;
+}
+
+.directory-detail-field label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--grey-mid);
+    margin-bottom: 0.25rem;
+}
+
+.directory-detail-value {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--black);
+}
+
+.directory-detail-value.empty {
+    color: var(--grey-mid);
+    font-style: italic;
+}
+
+/* ── Projects-linked list ────────────────────────────────────────────────
+   Read-only for every role, per the spec - no edit affordance, no delete,
+   just a name + status badge + link. */
+.directory-projects-section {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--grey-light);
+}
+
+.directory-projects-section h3 {
+    text-transform: none;
+    letter-spacing: normal;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--black);
+    margin-bottom: 0.75rem;
+}
+
+.directory-project-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.75rem;
+    border-radius: var(--radius-sm);
+    background: var(--sandstone);
+    margin-bottom: 0.5rem;
+    text-decoration: none;
+}
+
+.directory-project-row-name {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--black);
+}
+
+.directory-no-projects {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--grey-mid);
+}
+
+/* ── Add Company button above the left panel list ──────────────────────── */
+#btnAddCompanyDirectory {
+    white-space: nowrap;
+}
+
+/* ── Add Contact button inside an expanded company block ─────────────────
+   Sits below the contact rows, indented to match them. */
+.directory-add-contact-btn {
+    margin-left: 1.5rem;
+    margin-top: 0.25rem;
+}
+
+/* ── Responsive: stack the two panels on narrow screens ──────────────────
+   Matches the existing .form-row breakpoint further down in main.css
+   (grid-template-columns: 1fr on narrow viewports) rather than inventing a
+   different breakpoint value for this one layout. */
+@media (max-width: 768px) {
+    .directory-layout {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .directory-left-panel {
+        width: 100%;
+        height: 400px;
+    }
+
+    .directory-right-panel {
+        height: auto;
+        min-height: 300px;
+    }
+}

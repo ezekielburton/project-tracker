@@ -7,7 +7,7 @@
 from flask import Blueprint, jsonify, session
 from flask_login import login_required, current_user
 from app import db
-from app.models import Project, User, ProjectDesigner, ProjectSecondaryCS
+from app.models import Project, User, ProjectDesigner, ProjectSecondaryCS, Client, Contact
 
 # Register this as a blueprint with the /api prefix.
 # All routes in this file will be under /api/...
@@ -29,6 +29,112 @@ def zip_download(zip_id):
     if response is None:
         abort(404)
     return response
+
+
+@api_bp.route('/clients/<int:client_id>/contacts')
+@login_required
+def client_contacts(client_id):
+    """
+    GET /api/clients/<client_id>/contacts
+
+    Returns the contacts belonging to one Client as a plain JSON list:
+    [{"id": 1, "name": "John Smith"}, ...] - deliberately just id + name,
+    nothing more, because the only planned consumer right now is a cascading
+    <select> on the brief form (pick a Client, this list populates the
+    contact dropdown) which only needs an id to submit and a name to display.
+
+    This route used to be /api/companies/<company_id>/contacts, querying a
+    standalone Company model. That model was retired (9 Jul 2026) once it
+    became clear the brief form's existing Client dropdown already served
+    as "the company" - so this endpoint now keys off Client directly instead
+    of a second, parallel concept. Renamed the URL and the function itself
+    (company_contacts -> client_contacts) to match, rather than leaving a
+    "client_id" parameter behind a URL that still said "companies" - a
+    mismatched name there would be a small but real trap for whoever reads
+    this route next.
+
+    login_required only, no role check - any logged-in user filling out a
+    brief needs to be able to hit this, unlike the /admin/api/* routes in
+    admin.py which also require the admin role.
+    """
+    from flask import abort
+
+    # get_or_404 (used elsewhere, e.g. WikiArticle.query.get_or_404) would also
+    # work here, but the spec calls for a 404 specifically when the client
+    # isn't found - being explicit with get() + abort(404) makes that
+    # requirement visible in the route itself rather than relying on a
+    # Flask-SQLAlchemy default message.
+    client = Client.query.get(client_id)
+    if not client:
+        abort(404)
+
+    # Contact.client_id (not company_id) is the FK now - see the model and
+    # the retire_company_directory.py migration for the column rename.
+    contacts = Contact.query.filter_by(client_id=client.id).order_by(Contact.name).all()
+    return jsonify([{'id': c.id, 'name': c.name} for c in contacts])
+
+
+def _directory_project_entry(p):
+    """
+    Shared shape for both "linked projects" endpoints below - just enough
+    for the directory page's read-only Projects list: a name to display, a
+    status to color the badge, and a human-readable label for that status.
+
+    status_label is computed the same way every dashboard template already
+    formats project_status for display ({{ status | replace('_', ' ') |
+    title }}), just done here in Python instead of Jinja since this data
+    goes out as JSON, not rendered server-side - keeping both in sync means
+    "in_queue" reads as "In Queue" here exactly like it does everywhere else
+    in the app, not a differently-cased one-off.
+    """
+    return {
+        'id': p.id,
+        'name': p.name,
+        'status': p.project_status,
+        'status_label': (p.project_status or '').replace('_', ' ').title(),
+    }
+
+
+@api_bp.route('/clients/<int:client_id>/projects')
+@login_required
+def client_projects(client_id):
+    """
+    GET /api/clients/<client_id>/projects
+
+    Every project where project.client_id matches - the Client Directory
+    page's "Projects" section for a company detail view. login_required
+    only, no role check: per the spec, every role (including Designers, who
+    get a read-only directory) can see this list, only editing is
+    restricted.
+    """
+    from flask import abort
+
+    client = Client.query.get(client_id)
+    if not client:
+        abort(404)
+
+    projects = Project.query.filter_by(client_id=client.id).order_by(Project.created_at.desc()).all()
+    return jsonify([_directory_project_entry(p) for p in projects])
+
+
+@api_bp.route('/contacts/<int:contact_id>/projects')
+@login_required
+def contact_projects(contact_id):
+    """
+    GET /api/contacts/<contact_id>/projects
+
+    Same idea as client_projects() above, but for a single Contact -
+    every project where project.contact_id matches, for the directory
+    page's contact detail view.
+    """
+    from flask import abort
+
+    contact = Contact.query.get(contact_id)
+    if not contact:
+        abort(404)
+
+    projects = Project.query.filter_by(contact_id=contact.id).order_by(Project.created_at.desc()).all()
+    return jsonify([_directory_project_entry(p) for p in projects])
 
 def _detail_fingerprint(p):
     """

@@ -1,0 +1,100 @@
+{# Shared card shell used by every card partial in app/templates/dashboard/cards/.
+   {% call %} lets each card partial supply its expanded body as a block of
+   arbitrary HTML while this macro owns the collapse/expand wrapper markup,
+   so the mechanic (dashboard.css / dashboard.js) only has to be written once.
+
+   key         — matches a CARD_ORDER entry in dashboard.py; also the
+                 data-card value dashboard.js and localStorage key off of.
+   title       — card header title.
+   summary_html — collapsed-state summary content (numbers/pills). Passed
+                 as a string and rendered with |safe since it's usually a
+                 small chunk of markup (e.g. RAG pills), not plain text.
+   expanded    — True if this card should start open (matches
+                 initial_expanded_card from the ?view= redirect).
+   muted       — True renders the card visually de-emphasized with no
+                 chevron (used by the Clashing Projects card at zero clashes).
+   full        — True spans both grid columns (the Summary card only). #}
+{% macro dash_card(key, title, summary_html, expanded=False, muted=False, full=False) %}
+<div class="dash-card{% if expanded %} expanded{% endif %}{% if muted %} dash-card--muted{% endif %}{% if full %} dash-card--full{% endif %}" data-card="{{ key }}">
+    <button type="button" class="dash-card-header" data-action="toggle-card" {% if muted %}disabled{% endif %}>
+        <span class="dash-card-title">{{ title }}</span>
+        <span class="dash-card-summary">{{ summary_html | safe }}</span>
+        {% if not muted %}<span class="dash-card-chevron">&rsaquo;</span>{% endif %}
+    </button>
+    <div class="dash-card-body">
+        <div class="dash-card-body-inner">
+            {{ caller() }}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+
+{#
+   dash_due_row(item)
+   ───────────────────
+   Renders ONE clickable row for a single "due item" dict, as returned by
+   dashboard.py's _compute_due(user, filter_type) — the same function backs
+   the /dashboard/api/due JSON endpoint, the Due card's default view, AND
+   both columns of the Summary card. This macro is the one place that turns
+   one of those dicts into HTML, so all three call sites render a due item
+   identically. If you ever need to change how a due row LOOKS, this is the
+   only file to touch — don't copy/paste this markup into a card partial.
+
+   Expected shape of `item` (see _compute_due in app/routes/dashboard.py):
+     item.type            — 'deliverable' | 'customer' | 'project'
+     item.project_id       — int, used to build the link to project detail
+     item.project_name     — str
+     item.deliverable_name — str, only present when type == 'deliverable'
+     item.customer_name    — str or None, only present when type == 'customer'
+     item.deadline         — ISO date string 'YYYY-MM-DD' (already
+                              .isoformat()'d in Python before it got here)
+     item.rag               — 'red' | 'yellow' | 'green', from get_project_rag()
+     item.guidance          — free text from get_next_action_owner(), e.g.
+                              "Submit work" or "Review flag and adjust work"
+     item.owner              — the OTHER half of get_next_action_owner()'s
+                              result, run through _serialize_owner() so it's
+                              JSON-safe. Polymorphic on purpose (matches
+                              get_next_action_owner's own docstring):
+                                - None            — nobody assigned yet
+                                - {'id':.., 'name':..}      — one specific person
+                                - [{'id':..,'name':..}, ...] — every designer
+                                  assigned to a specific deliverable a flag
+                                  was raised against (one per team, e.g. 3D + Technical)
+
+   NOTE on the link: project_detail.detail's route is /projects/<id> — we
+   append ?from=dashboard by hand (string concat) rather than via url_for's
+   kwargs, because `from` is a reserved word in Python/Jinja and can't be
+   passed as a normal keyword argument. This is the exact same ?from=
+   back-navigation pattern used everywhere else in the app (see
+   cs.html/designer.html/team_lead.html) — clicking this row and then
+   clicking "Back" on the project detail page returns here, not to /projects.
+
+   IMPORTANT for later chunks: dashboard.js's renderDueRow() (used by the
+   Due card's filter pills to re-render this same list via JSON, without a
+   page reload) is a hand-written JS mirror of this exact macro. If you
+   change what this macro outputs, you MUST make the same change in
+   renderDueRow() in dashboard.js, or the JS-filtered view will silently
+   look different from the server-rendered one. There's no way around this
+   duplication with Jinja macros — they only run server-side.
+#}
+{% macro dash_due_row(item) %}
+<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">
+            {{ item.project_name }}
+            {%- if item.type == 'deliverable' %} &mdash; {{ item.deliverable_name }}{% endif -%}
+            {%- if item.type == 'customer' and item.customer_name %} &mdash; {{ item.customer_name }}{% endif -%}
+        </span>
+        <span class="dash-row-sub">
+            {{ item.guidance }}
+            {%- if item.owner %}
+                {%- if item.owner is mapping %} &middot; {{ item.owner.name }}
+                {%- else %} &middot; {{ item.owner | map(attribute='name') | join(', ') }}
+                {%- endif -%}
+            {%- endif -%}
+        </span>
+    </span>
+</a>
+{% endmacro %}

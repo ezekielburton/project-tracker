@@ -1,0 +1,342 @@
+/* app/static/css/dashboard.css
+   Role-based dashboard — card grid, expand/collapse mechanic, RAG badges,
+   and the deep-dive zone. Reuses established Helix tokens/components
+   throughout (--tangerine/--sandstone/--pine/--rose/--canary, .team-tag-btn
+   for pills, .modal-overlay/.modal for the Flag to Management modal,
+   .data-table for the deep-dive tables) — no new design language. */
+
+/* ── Cards zone ───────────────────────────────────────────────────────── */
+
+.dash-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+/* Summary card spans both columns and always sits first — see dashboard.html */
+.dash-card--full {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+    .dash-cards-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.dash-card-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.1rem 1.4rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-body);
+}
+
+.dash-card-title {
+    font-family: var(--font-headline);
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+    color: var(--black);
+    flex-shrink: 0;
+}
+
+.dash-card-summary {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    color: var(--grey-dark);
+    font-size: 0.9rem;
+}
+
+.dash-card-chevron {
+    flex-shrink: 0;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--grey-mid);
+    transition: transform 0.2s ease;
+}
+
+.dash-card.expanded .dash-card-chevron {
+    transform: rotate(90deg);
+    color: var(--tangerine);
+}
+
+/* Height-transition expand, not display:none — animates smoothly.
+   9999px is arbitrary-large-enough rather than measuring actual content
+   height in JS; the transition duration is what makes this look smooth
+   either way since the visible portion always animates in that time. */
+.dash-card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.dash-card.expanded .dash-card-body {
+    max-height: 9999px;
+}
+
+.dash-card-body-inner {
+    padding: 0 1.4rem 1.4rem;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 1.2rem;
+}
+
+/* Muted state — Clashing Projects card at zero clashes. No chevron
+   (rendered conditionally by the macro), reduced opacity, not clickable. */
+.dash-card--muted {
+    opacity: 0.55;
+}
+
+.dash-card--muted .dash-card-header {
+    cursor: default;
+}
+
+/* ── RAG badges ───────────────────────────────────────────────────────── */
+/* Used on project rows, deliverable rows, and inside card summaries.
+   Fixed size/font so they read consistently everywhere they appear. */
+
+.rag-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 4.5rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.rag-red {
+    background: var(--rose);
+    color: var(--white);
+}
+
+.rag-yellow {
+    background: var(--canary);
+    color: var(--black);
+}
+
+.rag-green {
+    background: var(--pine);
+    color: var(--white);
+}
+
+/* ── Two-column expanded layout (Today / This Week, My Actions / Others') */
+
+.dash-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .dash-two-col {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-col-heading {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+    margin-bottom: 0.6rem;
+}
+
+/* Generic row used inside expanded card bodies (Due, Next Actions, What
+   Changed, Decisions) — a lightweight alternative to the full .data-table
+   used in the deep-dive zone, since these are short summary lists, not
+   sortable/filterable tables. */
+.dash-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+    text-decoration: none;
+    color: inherit;
+}
+
+.dash-row:last-child {
+    border-bottom: none;
+}
+
+a.dash-row:hover {
+    background: var(--surface-hover);
+}
+
+.dash-row-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.dash-row-title {
+    font-weight: 600;
+    color: var(--black);
+}
+
+.dash-row-sub {
+    font-size: 0.8rem;
+    color: var(--grey-dark);
+    margin-top: 0.1rem;
+}
+
+.dash-empty-state {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 0.5rem 0;
+}
+
+/* ── Deep-dive zone ───────────────────────────────────────────────────── */
+
+.dash-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2rem 0;
+}
+
+.dash-tab-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.dash-tabs {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.dash-tab-btn {
+    padding: 0.5rem 1.2rem;
+    border: none;
+    background: none;
+    font-family: var(--font-headline);
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--grey-dark);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+}
+
+.dash-tab-btn.active {
+    color: var(--tangerine);
+    border-bottom-color: var(--tangerine);
+}
+
+.dash-deep-dive-panels {
+    display: block;
+}
+
+/* Explicit base rule (found missing during the UI verification pass,
+   Chunk 10) — single-tab mode was already working fine without this,
+   since block is a <div>'s default display anyway and .hidden (global
+   utility class) does the actual show/hide, but leaving it implicit made
+   it look like this class carried no rules of its own at all. Stated
+   here for clarity; the side-by-side override below still needs
+   !important to win over whichever of .hidden / this rule applies. */
+.dash-tab-panel {
+    display: block;
+}
+
+/* Side-by-side mode: both tab panels visible as two columns instead of
+   switching. .dash-side-by-side is toggled on the panels container by
+   dashboard.js; individual panel show/hide (single-tab mode) is handled
+   by toggling .hidden on each panel directly. */
+.dash-deep-dive-panels.dash-side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.dash-deep-dive-panels.dash-side-by-side .dash-tab-panel {
+    display: block !important;
+}
+
+@media (max-width: 1200px) {
+    .dash-deep-dive-panels.dash-side-by-side {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-filter-chips {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+/* CLAUDE.md's documented "Dashboard sort toggle" pattern — a wrapper
+   carrying data-tbody, holding a row of data-deadline-sort pills. First
+   real implementation of it in the codebase (see the big comment on this
+   block in dashboard.html) — reuses .team-tag-btn/.active for the pills
+   themselves, so this rule only needs to lay out the row. */
+.deadline-sort-wrap {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+/* Small "at a glance" risk indicator used on deep-dive zone table rows —
+   deliberately NOT the full .rag-badge component above (that one's sized
+   and coloured to also hold a deadline label, e.g. "09 Jul 2026"; here
+   there's no label, just a quick colour cue in its own narrow column). */
+.dash-rag-dot {
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+}
+
+.dash-rag-dot.rag-red { background: var(--rose); }
+.dash-rag-dot.rag-yellow { background: var(--canary); }
+.dash-rag-dot.rag-green { background: var(--pine); }
+
+/* Groups one designer + one clashing date's rows together inside the
+   Clashing Projects card's expanded body (see clashes.html) — just
+   breathing room between groups; .dash-col-heading (already defined above
+   for the Summary/Next Actions two-col layout) supplies the "designer —
+   date" label styling, reused as-is rather than duplicated. */
+.dash-clash-group {
+    margin-bottom: 1.25rem;
+}
+
+.dash-clash-group:last-child {
+    margin-bottom: 0;
+}
+
+/* C&CM "X of Y customers" status-column summary pill */
+.dash-customer-progress {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--grey-dark);
+    background: var(--surface-hover);
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    display: inline-block;
+}

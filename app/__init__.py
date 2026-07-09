@@ -47,6 +47,8 @@ def create_app():
     from app.routes.wizard import wizard_bp
     from app.routes.file_templates import file_templates_bp
     from app.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
+    from app.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
+    from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -65,6 +67,8 @@ def create_app():
     app.register_blueprint(wizard_bp)
     app.register_blueprint(file_templates_bp)
     app.register_blueprint(sse_bp)
+    app.register_blueprint(client_directory_bp)
+    app.register_blueprint(dashboard_bp)
    
     @app.context_processor
     @app.context_processor
@@ -250,6 +254,16 @@ def create_app():
     def dubai_time(dt):
         if dt is None:
             return '_'
+        # Accept an ISO-format string too, not just a real datetime object.
+        # Added for dashboard.py's What Changed card: _compute_what_changed()
+        # returns 'timestamp' as e.created_at.isoformat() (a plain string)
+        # because that same dict is also returned as-is from the JSON API
+        # endpoint (jsonify can't serialize a raw datetime). Every OTHER
+        # existing caller of this filter passes a real datetime and hits the
+        # isinstance check below as False, so their behavior is unchanged —
+        # this is purely additive.
+        if isinstance(dt, str):
+            dt = datetime.fromisoformat(dt)
         dubai_tz = timezone(timedelta(hours=4))
         return dt.replace(tzinfo=timezone.utc).astimezone(dubai_tz).strftime('%d %b %Y, %H:%M')
     

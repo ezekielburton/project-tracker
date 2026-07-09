@@ -1,0 +1,59 @@
+{#
+   app/templates/dashboard/cards/due.html
+   ─────────────────────────────────────
+   Due Today / Week / Overdue card.
+
+   Collapsed summary: three colour-coded pills using the SAME summary dict
+   every other card reads from (summary.overdue / .due_today / .due_week —
+   from _compute_summary(), Chunk 1). Not recomputed here.
+
+   Expanded body: three filter pills (Overdue / Due Today / Due This Week)
+   above a list of due items. On page load the list is server-rendered from
+   `due_default` (= _compute_due(user, 'overdue_today') — the "Overdue +
+   Due Today combined" default the spec asks for), with the Overdue and Due
+   Today pills both shown active to visually match that combined view.
+
+   Clicking any ONE pill afterwards switches to single-category mode: only
+   that pill goes active, and dashboard.js fetches
+   GET /dashboard/api/due?filter=<overdue|today|week> and replaces the list
+   client-side — no page reload. This is a deliberate simplification: the
+   backend only has a named 'overdue_today' combo for the default view, not
+   general multi-select combining, so past the initial load these three
+   pills behave like radio buttons, not independent toggles.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_card, dash_due_row %}
+
+{% set due_summary %}
+<span class="rag-badge rag-red">{{ summary.overdue }} Overdue</span>
+<span class="rag-badge rag-red">{{ summary.due_today }} Today</span>
+<span class="rag-badge rag-yellow">{{ summary.due_week }} This Week</span>
+{% endset %}
+
+{% call dash_card('due', 'Due Today / Week / Overdue', due_summary,
+    expanded=(initial_expanded_card == 'due')) %}
+
+    {# data-filter values match _compute_due()'s filter_type strings
+       exactly ('overdue' | 'today' | 'week') — dashboard.js passes
+       whatever's in data-filter straight through to the API call, no
+       translation needed. #}
+    <div class="dash-filter-chips">
+        <button type="button" class="team-tag-btn active" data-action="due-filter" data-filter="overdue">Overdue</button>
+        <button type="button" class="team-tag-btn active" data-action="due-filter" data-filter="today">Due Today</button>
+        <button type="button" class="team-tag-btn" data-action="due-filter" data-filter="week">Due This Week</button>
+    </div>
+
+    {# dashboard.js replaces THIS element's innerHTML wholesale when a
+       filter pill is clicked (see fetchAndRenderDue() in dashboard.js,
+       which looks it up via document.getElementById('dash-due-list')) —
+       this id is load-bearing, don't rename without updating the JS to match. #}
+    <div id="dash-due-list">
+        {% if due_default %}
+            {% for item in due_default %}
+                {{ dash_due_row(item) }}
+            {% endfor %}
+        {% else %}
+            <p class="dash-empty-state">Nothing overdue or due today.</p>
+        {% endif %}
+    </div>
+
+{% endcall %}

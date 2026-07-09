@@ -9,13 +9,24 @@ New Features:
 
 - Instant updates. The app now auto refreshes when there are updates. 
 True live updating is in the works, but will take a while on the backend. This is a temporary solution.
+- Client directory has been added. Links to the clients. Contacts now optional additional to a project. 
+The directory stores each clients address - typical install locations. Contacts for each client include their name, number, email and location.
+
 
 Adjustments:
 
-- Adjusted size of pics of staff in the projects table
+- Adjusted size of pictures of staff in the projects table.
+- Concept and Kv assignments now instantly update.
+- Deliverables can be edited in the brief page.
+- You can now drag and drop images into feedback and flagging boxes, they embed just like in outlook and are resizable
+ 
 
 Bug Fixes:
 
+- Fixed customer deletion not working.
+- Fixed draft deletion not working.
+- FIxed concept and kv assignment not instantly updating.
+- Fixed lots of buttons across the site not working without a page refresh.
 
 ================================================================================
 v2.2 - Large feature update

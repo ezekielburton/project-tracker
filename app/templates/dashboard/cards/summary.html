@@ -1,0 +1,74 @@
+{#
+   app/templates/dashboard/cards/summary.html
+   ───────────────────────────────────────────
+   The "My Today / My Week Summary" card — full-width, always rendered
+   FIRST regardless of role (see dashboard.html — this include is outside
+   the role-ordered card_order loop).
+
+   Data comes from dashboard.py's index() route, computed server-side
+   BEFORE the page renders (no client-side fetch/spinner — matches how
+   every other page in this app works, e.g. cs.html/designer.html):
+
+     summary          — dict from _compute_summary(user). We only use
+                         .due_today / .my_actions here, for the collapsed
+                         one-line greeting. The rest of that dict (overdue,
+                         due_week, decisions_needed, others_actions,
+                         clashes) is used by OTHER cards, not this one.
+     due_today_items   — list from _compute_due(user, 'today') — every
+                         deliverable/customer/project due exactly today,
+                         already role-scoped and sorted by deadline.
+     due_week_items    — list from _compute_due(user, 'week') — everything
+                         due from today through 7 days out. NOTE this
+                         OVERLAPS with due_today_items on purpose (today's
+                         items legitimately belong in "this week" too) —
+                         that's why the same item can appear in both
+                         columns. That's intentional, not a bug: Today is
+                         the urgent highlight, This Week is the broader
+                         look-ahead.
+
+   Both columns render their rows with the shared dash_due_row(item) macro
+   (see _dashboard_macros.html) — that macro is also what the Due card
+   (UI Chunk 4) uses, so a due item looks identical everywhere it shows up.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_card, dash_due_row %}
+
+{% call dash_card('summary', 'My Today / My Week',
+    summary.due_today ~ ' item' ~ ('s' if summary.due_today != 1 else '') ~ ' due today, '
+    ~ summary.my_actions ~ ' action' ~ ('s' if summary.my_actions != 1 else '') ~ ' needed from you',
+    expanded=(initial_expanded_card == 'summary'), full=True) %}
+
+    <div class="dash-two-col">
+
+        {# ── LEFT COLUMN: Today ─────────────────────────────────────── #}
+        <div>
+            <div class="dash-col-heading">Today</div>
+
+            {% if due_today_items %}
+                {% for item in due_today_items %}
+                    {{ dash_due_row(item) }}
+                {% endfor %}
+            {% else %}
+                {# Nothing due today for this user — friendly empty state
+                   rather than just showing a blank column. #}
+                <p class="dash-empty-state">Nothing due today.</p>
+            {% endif %}
+        </div>
+
+        {# ── RIGHT COLUMN: This Week ───────────────────────────────────
+           Same rendering (dash_due_row), different source list
+           (due_week_items instead of due_today_items). #}
+        <div>
+            <div class="dash-col-heading">This Week</div>
+
+            {% if due_week_items %}
+                {% for item in due_week_items %}
+                    {{ dash_due_row(item) }}
+                {% endfor %}
+            {% else %}
+                <p class="dash-empty-state">Nothing due this week.</p>
+            {% endif %}
+        </div>
+
+    </div>
+
+{% endcall %}

@@ -2100,6 +2100,12 @@ function syncTableScrollers(viewEl) {
                 draft_id: currentDraftId,
                 name: document.getElementById('project_name').value.trim(),
                 client_id: document.getElementById('client_id').value || null,
+                // contact_id is optional (unlike client_id) - a brief can be saved
+                // with a client but no specific contact person picked yet, so this
+                // guards for the element existing at all (defensive, same pattern
+                // used for every other optional field below) AND falls back to null
+                // when the placeholder ("— Select Contact —") is still selected.
+                contact_id: document.getElementById('contact_id') ? document.getElementById('contact_id').value || null : null,
                 cs_lead_id: document.getElementById('cs_lead_id').value || null,
                 job_number: document.getElementById('job_number').value.trim() || null,
                 design_teams: teams,
@@ -2180,61 +2186,32 @@ function syncTableScrollers(viewEl) {
             autosaveTimeout = setTimeout(autosave, 2000);
         }
 
-        // ── Add New Client ────────────────────────────────────────
-        function setupAddClient() {
-            var btnAdd = document.getElementById('btnAddClient');
-            var addForm = document.getElementById('addClientForm');
-            var confirmBtn = document.getElementById('confirmAddClient');
-            var cancelBtn = document.getElementById('cancelAddClient');
-            var nameInput = document.getElementById('newClientName');
-            var select = document.getElementById('client_id');
+        // Exposed on window so client_directory.js (a separate file/closure,
+        // loaded further down this same page) can trigger these after it
+        // programmatically adds/selects an option - e.g. right after a new
+        // company is created via the shared Add Company modal and selected
+        // in #client_id. Everything else in THIS closure already calls them
+        // as plain local functions; this is purely an external hook.
+        window.calculateCompletion = calculateCompletion;
+        window.scheduleAutosave = scheduleAutosave;
 
-            if (!btnAdd) return;
-
-            btnAdd.addEventListener('click', function () {
-                addForm.classList.remove('hidden');
-                nameInput.focus();
-            });
-
-            cancelBtn.addEventListener('click', function () {
-                addForm.classList.add('hidden');
-                nameInput.value = '';
-            });
-
-            confirmBtn.addEventListener('click', function () {
-                var name = nameInput.value.trim();
-                if (!name) return;
-                btnLoading(confirmBtn);
-
-                fetch('/clients/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name })
-                })
-                    .then(function (res) { return res.json(); })
-                    .then(function (data) {
-                        if (data.success) {
-                            var option = document.createElement('option');
-                            option.value = data.client.id;
-                            option.textContent = data.client.name;
-                            option.selected = true;
-                            select.appendChild(option);
-                            addForm.classList.add('hidden');
-                            nameInput.value = '';
-                            calculateCompletion();
-                            scheduleAutosave();
-                            btnDone(confirmBtn);
-                        } else {
-                            showToast(data.error || 'Could not add client.', 'error');
-                            btnDone(confirmBtn);
-                        }
-                    })
-                    .catch(function () {
-                        showToast('Something went wrong. Please try again.', 'error');
-                        btnDone(confirmBtn);
-                    });
-            });
-        }
+        // ── Add New Client / Add New Contact: RETIRED ──────────────────
+        //
+        // setupAddClient(), fetchContactsForClient(), setupContactCascade(),
+        // and setupAddContact() used to live here - a button + inline
+        // reveal-form next to #client_id, and the same next to #contact_id.
+        // Both were replaced (Client Directory UI work) by a single shared
+        // pattern: a "+ Add new company…" / "+ Add new contact…" sentinel
+        // option at the bottom of each select, which opens the same Add
+        // Company / Add Contact modal used on the Client Directory page
+        // instead of a per-page reveal-form. That logic - including the
+        // #client_id -> #contact_id cascade fetch, which still needs to
+        // happen, just from a different owner now - lives in
+        // client_directory.js's initBriefFormIntegration() function.
+        //
+        // If you're looking for the old reveal-form markup (#btnAddClient /
+        // #addClientForm / #btnAddContact / #addContactForm), it's gone
+        // from create.html too - removed in the same change.
 
         // ── Submit Form ───────────────────────────────────────────
         function showSubmitBlockedMessage() {
@@ -2688,7 +2665,9 @@ function syncTableScrollers(viewEl) {
             });
         }
 
-        setupAddClient();
+        // setupAddClient() / setupContactCascade() / setupAddContact() used
+        // to be called here - all three retired, see the comment block
+        // above scheduleAutosave() for where that logic moved to.
 
         var urlParams = new URLSearchParams(window.location.search);
         var draftIdParam = urlParams.get('draft_id');

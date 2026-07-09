@@ -1,0 +1,66 @@
+{#
+   app/templates/dashboard/cards/next_actions.html
+   ──────────────────────────────────────────────
+   Next Actions card.
+
+   Collapsed: "N action(s) needed from me, M waiting on others" — reuses
+   summary.my_actions / summary.others_actions from _compute_summary()
+   (Chunk 1/2), unchanged from the stub. Deliberately NOT recomputed from
+   next_actions_default below — see _compute_next_actions()'s docstring in
+   dashboard.py for why the two are guaranteed to agree (same _is_owner()
+   check backs both).
+
+   Expanded: two tab-style pills, "My Actions" / "Others' Actions" — unlike
+   the Due card's three filter pills (which start with two active
+   together, representing a combined default), these behave like a strict
+   two-way toggle: exactly one is ever active, there's no combined view.
+   "My Actions" is the default on first paint (see next_actions_default in
+   dashboard.py / index()) since that's the more actionable of the two —
+   "Others' Actions" is fetched on demand via GET
+   /dashboard/api/next-actions?filter=others the first time that pill is
+   clicked (see dashboard.js).
+
+   ONE ROW PER PROJECT here (not per-deliverable/customer like the Due
+   card) — get_next_action_owner() gives one verdict per whole project, so
+   that's what each row represents. Each row shows: RAG badge + deadline
+   (or "No deadline" — unlike the Due card, a project can legitimately have
+   no deadline yet and still need someone's next action, e.g. a fresh brief
+   sitting 'in_queue'), project name, the guidance text explaining WHAT
+   needs doing, and — only on the Others' Actions tab — WHO it's waiting
+   on. Showing "Assigned to: you" on your own My Actions tab would just be
+   noise, so the owner name is only rendered when filter == 'others'.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+
+{% call dash_card('next_actions', 'Next Actions',
+    summary.my_actions ~ ' action' ~ ('s' if summary.my_actions != 1 else '') ~ ' needed from me, '
+    ~ summary.others_actions ~ ' waiting on others',
+    expanded=(initial_expanded_card == 'next_actions')) %}
+
+    <div class="dash-filter-chips">
+        <button type="button" class="team-tag-btn active" data-action="next-actions-tab" data-filter="mine">My Actions</button>
+        <button type="button" class="team-tag-btn" data-action="next-actions-tab" data-filter="others">Others' Actions</button>
+    </div>
+
+    {# Server-rendered with the 'mine' list on first load (next_actions_default
+       = _compute_next_actions(user, 'mine') in dashboard.py). Switching to
+       the Others' Actions pill replaces this element's innerHTML wholesale
+       via dashboard.js's fetchAndRenderNextActions() — same "id is
+       load-bearing" note as dash-due-list in due.html. #}
+    <div id="dash-next-actions-list">
+        {% if next_actions_default %}
+            {% for item in next_actions_default %}
+            <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+                <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+                <span class="dash-row-main">
+                    <span class="dash-row-title">{{ item.project_name }}</span>
+                    <span class="dash-row-sub">{{ item.guidance }}</span>
+                </span>
+            </a>
+            {% endfor %}
+        {% else %}
+            <p class="dash-empty-state">Nothing needs your action right now.</p>
+        {% endif %}
+    </div>
+
+{% endcall %}

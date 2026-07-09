@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Vitamin-E{% endblock %}
+
+{% block content %}
+
+<div class="page-container">
+
+    <div class="dashboard-header" style="margin-bottom: 1.5rem;">
+        <h1 class="dashboard-greeting">Welcome, <span>{{ effective_user.name.split()[0] }}</span></h1>
+    </div>
+
+    {# Cards zone. Summary always renders first, full-width, regardless of
+       role — card_order (role-dependent, see dashboard.py CARD_ORDER) only
+       controls the remaining cards in the two-column grid below it. #}
+    <div class="dash-cards-grid">
+        {% include 'dashboard/cards/summary.html' %}
+
+        {% for card_key in card_order %}
+            {% include 'dashboard/cards/' + card_key + '.html' %}
+        {% endfor %}
+    </div>
+
+    <hr class="dash-divider">
+
+    {# ── Deep-dive zone ───────────────────────────────────────────────
+       Tab bar + side-by-side toggle (mechanic wired in dashboard.js,
+       UI Chunk 1) plus the Projects/Deliverables tables themselves
+       (UI Chunk 8, below inside #dash-deep-dive-panels). #}
+    <div class="dash-tab-bar">
+        <div class="dash-tabs">
+            <button type="button" class="dash-tab-btn{% if default_tab == 'projects' %} active{% endif %}"
+                    data-action="switch-tab" data-tab="projects">Projects</button>
+            <button type="button" class="dash-tab-btn{% if default_tab == 'deliverables' %} active{% endif %}"
+                    data-action="switch-tab" data-tab="deliverables">Deliverables</button>
+        </div>
+        <button type="button" class="team-tag-btn" id="dash-side-by-side-toggle" data-action="toggle-side-by-side">
+            Side by Side
+        </button>
+    </div>
+
+    <div class="dash-deep-dive-panels" id="dash-deep-dive-panels">
+
+        {#
+           ── Projects tab ──────────────────────────────────────────────
+           Fully server-rendered from deep_dive_projects (see
+           _compute_deep_dive_projects() in dashboard.py) — every scoped
+           active project is already a row in the DOM below. The "All" /
+           "At Risk" chips and the deadline-sort pills both act ENTIRELY
+           client-side against each row's data-* attributes (dashboard.js)
+           — no fetch, same convention the old role dashboards
+           (app/templates/dashboards/cs.html) already use for their own
+           project tables, just reused here instead of reinvented.
+        #}
+        <div class="dash-tab-panel{% if default_tab != 'projects' %} hidden{% endif %}" data-panel="projects">
+
+            <div class="dash-filter-chips">
+                <button type="button" class="team-tag-btn active" data-action="deep-dive-filter" data-scope="projects" data-filter="all">All</button>
+                <button type="button" class="team-tag-btn" data-action="deep-dive-filter" data-scope="projects" data-filter="at-risk">At Risk</button>
+            </div>
+
+            {# CLAUDE.md documents this exact "deadline-sort-wrap +
+               data-deadline-sort buttons" pattern as "used on all
+               dashboards" — it turns out nothing in the codebase actually
+               implements it yet (verified: zero matches for
+               data-deadline-sort anywhere before this chunk); the old
+               dashboards sort via a <select> dropdown + sortTableBy()
+               instead (see main.js). This is that documented pattern's
+               first real implementation — dashboard.js's click handler
+               below reads data-tbody off the wrapping .deadline-sort-wrap
+               to know which table to reorder, exactly as documented. #}
+            <div class="deadline-sort-wrap" data-tbody="dash-deep-dive-projects-tbody">
+                <button type="button" class="team-tag-btn active" data-deadline-sort="firstDeadline">First Output Deadline</button>
+                <button type="button" class="team-tag-btn" data-deadline-sort="finalDeadline">Final Deadline</button>
+            </div>
+
+            {% if deep_dive_projects %}
+            <div class="table-wrapper table-wrapper--card">
+                <table class="data-table data-table--with-chevron data-table--card-rows">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th></th>
+                            <th>Project Name</th>
+                            <th>Job Number</th>
+                            <th>Type</th>
+                            <th>First Output Deadline</th>
+                            <th>Final Deadline</th>
+                            <th>Teams</th>
+                            <th>Assigned Designers</th>
+                            <th>CS Lead</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-deep-dive-projects-tbody">
+                        {% for p in deep_dive_projects %}
+                        <tr class="clickable"
+                            data-href="{{ url_for('project_detail.detail', project_id=p.project_id) }}?from=dashboard"
+                            data-project-id="{{ p.project_id }}"
+                            data-at-risk="{{ 'true' if p.at_risk else 'false' }}"
+                            data-first-deadline="{{ p.first_output_deadline or '' }}"
+                            data-final-deadline="{{ p.final_deadline or '' }}">
+                            <td class="chevron-cell"></td>
+                            <td>
+                                {# Small colour dot, not the full rag-badge component (that one's
+                                   sized/labelled for showing a deadline string, e.g. on the Due
+                                   card — here it's just a quick-glance risk indicator, see the new
+                                   .dash-rag-dot rule in dashboard.css). #}
+                                <span class="dash-rag-dot rag-{{ p.rag }}" title="{{ p.rag | capitalize }}"></span>
+                            </td>
+                            <td>{{ p.name }}</td>
+                            <td class="mono">{{ p.job_number or '—' }}</td>
+                            <td>{{ 'C&CM' if p.brief_type == 'ccm' else 'Standard' }}</td>
+                            <td class="mono">{{ p.first_output_deadline or '—' }}</td>
+                            <td class="mono">{{ p.final_deadline or '—' }}</td>
+                            <td>
+                                {% for team in p.teams %}
+                                <span class="team-tag team-{{ team | lower }}">{{ team }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {# Plain text, no avatar — _compute_deep_dive_projects() serializes
+                                   designers as plain {id, name, team} dicts (it also backs the JSON
+                                   API endpoint, so it can't return real User objects), and the
+                                   user_avatar() macro needs a real User for its avatar_filename/
+                                   badge lookups. Matches how every other card on THIS dashboard
+                                   (Due, Next Actions, Decisions) already shows names anyway — no
+                                   avatars anywhere else here either, so this isn't a step down. #}
+                                {% for d in p.designers %}
+                                <span class="team-tag team-{{ d.team | lower }}">{{ d.name }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <div class="cs-lead-stack">
+                                    {{ p.cs_lead.name if p.cs_lead else '—' }}
+                                    {% if p.secondary_cs %}
+                                    <div style="font-size: 0.78rem; color: var(--grey-dark);">
+                                        {% for s in p.secondary_cs %}+{{ s.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {# C&CM projects show the "X of Y customers" progress pill
+                                   INSTEAD of the plain status badge — more informative for a
+                                   brief type where "status" isn't one value but a per-customer
+                                   thing. Standard projects keep the normal status badge. #}
+                                {% if p.customer_progress %}
+                                <span class="dash-customer-progress">{{ p.customer_progress.approved }} of {{ p.customer_progress.total }} customers</span>
+                                {% else %}
+                                <span class="status-badge s-{{ p.status }}">{{ p.status | replace('_', ' ') | title }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="dash-empty-state">No projects to show.</p>
+            {% endif %}
+        </div>
+
+        {#
+           ── Deliverables tab ──────────────────────────────────────────
+           Same SSR-with-data-attributes approach as Projects above. One
+           row per DELIVERABLE (not grouped by project) — see
+           _compute_deep_dive_deliverables()'s docstring in dashboard.py
+           for the Designer/Team Lead team-matching rule (a designer only
+           sees deliverables for the team(s) they're actually assigned to
+           on that specific project, not every deliverable on every
+           project they touch). No deadline-sort-wrap here — unlike a
+           project, a deliverable only has ONE deadline field, so it's
+           already sorted by that (ascending) server-side and there's
+           nothing to toggle between.
+        #}
+        <div class="dash-tab-panel{% if default_tab != 'deliverables' %} hidden{% endif %}" data-panel="deliverables">
+
+            <div class="dash-filter-chips">
+                <button type="button" class="team-tag-btn active" data-action="deep-dive-filter" data-scope="deliverables" data-filter="all">All</button>
+                <button type="button" class="team-tag-btn" data-action="deep-dive-filter" data-scope="deliverables" data-filter="at-risk">At Risk</button>
+            </div>
+
+            {% if deep_dive_deliverables %}
+            <div class="table-wrapper table-wrapper--card">
+                <table class="data-table data-table--card-rows">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Deliverable</th>
+                            <th>Project</th>
+                            <th>Team(s)</th>
+                            <th>Deadline</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-deep-dive-deliverables-tbody">
+                        {% for d in deep_dive_deliverables %}
+                        <tr class="clickable"
+                            data-href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard"
+                            data-deliverable-id="{{ d.deliverable_id }}"
+                            data-at-risk="{{ 'true' if d.at_risk else 'false' }}"
+                            data-deadline="{{ d.deadline or '' }}">
+                            <td><span class="dash-rag-dot rag-{{ d.rag }}" title="{{ d.rag | capitalize }}"></span></td>
+                            <td>{{ d.name }}</td>
+                            <td>{{ d.project_name }}</td>
+                            <td>
+                                {% for t in d.teams %}
+                                <span class="team-tag team-{{ t | lower }}">{{ t }}</span>
+                                {% endfor %}
+                            </td>
+                            <td class="mono">{{ d.deadline or '—' }}</td>
+                            <td><span class="status-badge s-{{ d.status }}">{{ d.status | replace('_', ' ') | title }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="dash-empty-state">No deliverables to show.</p>
+            {% endif %}
+        </div>
+
+    </div>
+
+</div>
+
+{#
+   Flag to Management modal — CS/Designer/Team Lead only (the "Flag a
+   Project" button in decisions.html that opens this is itself
+   role-gated, so this markup only ever gets a real trigger for those
+   roles, but there's no harm rendering the (invisible) modal shell
+   regardless — it stays hidden unless something calls the open action).
+
+   Structure mirrors the existing "Flag an Issue" modal on the project
+   detail page (app/templates/projects/detail.html, ~line 2160) — same
+   .modal-overlay / .modal-box / .modal-title / .modal-actions classes,
+   same close-on-overlay-click pattern via data-action="close-*-overlay"
+   checked against e.target === overlay in the click handler (dashboard.js)
+   so clicks INSIDE the modal box don't bubble up and close it.
+
+   Project field: this modal supports TWO ways of knowing which project is
+   being flagged, because there are two different launch points per the
+   spec ("triggered from the Decisions Needed card... or from the project
+   detail page") and only one of those actually has a project already in
+   hand when the modal opens:
+     - From the Decisions Needed card's "Flag a Project" button, no
+       project is implied — dashboard.js shows the <select> below,
+       populated from flaggable_projects (this user's own active,
+       not-already-flagged projects — see _compute_flaggable_projects in
+       dashboard.py) so the user picks one.
+     - A future per-project "Flag to Management" trigger (e.g. from the
+       detail page) can instead call openFlagManagementModal(id, name)
+       with both arguments — dashboard.js then hides the <select> and
+       shows projectId/name as plain read-only text, matching the spec's
+       "read-only project name field" description exactly. That trigger
+       isn't built in this chunk (out of scope — the detail page isn't
+       being touched here), but the modal is ready for it.
+#}
+<div id="flag-management-modal" class="modal-overlay hidden" data-action="close-flag-management-overlay">
+    <div class="modal-box">
+        <h3 class="modal-title">Flag to Management</h3>
+
+        <div class="form-group">
+            <label>Project</label>
+            {# Read-only display — shown instead of the <select> below when
+               the modal is opened already knowing its project (see the
+               big comment above). Hidden by default; dashboard.js toggles
+               which of these two the user sees. #}
+            <p id="flag-management-project-readonly" class="hidden" style="margin:0; padding:0.65rem 0.85rem; border:1.5px solid var(--grey-light); border-radius: var(--radius); background: var(--sandstone);"></p>
+            <select id="flag-management-project-select" class="form-input">
+                <option value="">Select a project…</option>
+                {% for p in flaggable_projects %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Decision Note</label>
+            <textarea id="flag-management-note" rows="4" placeholder="What decision or information is needed?"></textarea>
+        </div>
+
+        <p id="flag-management-error" class="hidden" style="color: var(--rose); font-size: 0.85rem; margin: -0.75rem 0 1rem;"></p>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-action="close-flag-management-modal">Cancel</button>
+            <button type="button" class="btn-primary" data-action="submit-flag-management">Submit</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+{% endblock %}

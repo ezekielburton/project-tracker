@@ -57,7 +57,16 @@
     --sidebar-max: 340px;
     --sidebar-transition: 0.25s ease;
     --radius: 6px;
+    --radius-sm: 4px;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+    /* Semantic aliases */
+    --color-text:   #1A1A1A;
+    --text-primary: #1A1A1A;
+    --text-muted:   #888888;
+    --border:        #D4CCBE;
+    --border-subtle: #EDE8E0;
+    --surface-hover: #EDEAE4;
 }
 
 /* =====================
@@ -3768,11 +3777,13 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     border-bottom: none; /* card-rows have no header separator line */
 }
 
-/* Each cell carries the card shadow, no borders */
+/* Each cell: white background, no borders, no per-cell shadow.
+   Row separation comes from border-spacing: 0 6px — the gap shows the page background.
+   Per-cell shadows were removed because they bled between adjacent cells, creating
+   visible column seams within each row. */
 .data-table--card-rows tbody td {
     background: var(--white);
     border: none;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 /* Override the base sticky-cell white background */
@@ -5279,49 +5290,69 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     resize: vertical;
 }
 
-/* Standard deliverable chips (create form) */
+/* Standard deliverable chips (create/edit form) — layout via brief-deliverable-row */
 .std-del-chip {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0.35rem 0.7rem;
-    width: fit-content;
-    max-width: 560px;
-}
-
-.std-del-chip-name {
-    font-size: 0.85rem;
-    color: var(--text-primary);
-    flex: 1;
-}
-
-.std-del-chip-remove {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-    padding: 0 0.1rem;
-}
-
-.std-del-chip-remove:hover {
-    color: var(--rose);
-}
-
-.std-del-chip-teams {
-    display: inline-flex;
-    gap: 0.25rem;
-    flex-shrink: 0;
+    /* JS selector hook only — visual styles come from brief-deliverable-row */
 }
 
 .std-del-chip-deadline {
     font-size: 0.8rem;
     color: var(--text-muted);
     white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Right-aligned action buttons (Edit + Remove) */
+.std-del-chip-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* Inline edit state — full-width row with editable inputs */
+.std-del-chip--editing {
+    width: 100%;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 0.6rem 0.75rem;
+    gap: 0.5rem;
+    border-color: var(--tangerine) !important;
+    background: var(--sandstone) !important;
+}
+
+/* Team picker in edit mode — wrap the group in a visible pill container */
+.std-del-chip--editing .std-del-edit-teams {
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 999px;
+    padding: 0.15rem 0.3rem;
+    gap: 0.2rem;
+    margin-top: 0;
+}
+
+.std-del-edit-name {
+    max-width: 200px !important;
+    font-size: 0.85rem !important;
+    padding: 0.35rem 0.6rem !important;
+}
+
+.std-del-edit-deadline {
+    max-width: 148px !important;
+    font-size: 0.85rem !important;
+    padding: 0.35rem 0.6rem !important;
+}
+
+.std-del-edit-time {
+    max-width: 108px !important;
+    font-size: 0.85rem !important;
+    padding: 0.35rem 0.6rem !important;
+}
+
+.std-del-chip-teams {
+    display: inline-flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
 }
 
 .std-deadline-label {

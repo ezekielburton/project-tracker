@@ -1,0 +1,94 @@
+{#
+   app/templates/dashboard/cards/clashes.html
+   ─────────────────────────────────────────
+   Clashing Projects card.
+
+   Collapsed: clash count, or "No clashes" when there are none — unchanged
+   from the stub. At zero clashes the card renders MUTED (see dash_card's
+   muted=True in _dashboard_macros.html): no chevron, not clickable, body
+   permanently collapsed. That's handled entirely by the macro + dashboard.js's
+   click handler (which already skips toggling any .dash-card--muted card) —
+   nothing in this file needs to special-case zero clashes itself.
+
+   Expanded: "By Deliverable" / "By Project" toggle — the two ways a
+   designer can be double-booked (see compute_clashes() in
+   dashboard_logic.py):
+     - By Deliverable: same designer assigned to 2+ DELIVERABLES (possibly
+       across different projects) due the same day.
+     - By Project: same designer assigned to 2+ WHOLE PROJECTS sharing the
+       same Final Deadline (execution_date).
+
+   Unlike the Due/Next Actions/Decisions cards, this toggle does NOT fetch
+   anything — `clashes` (from _compute_clashes_response(user), already a
+   context var on every render) contains BOTH breakdowns in full up front,
+   since clash lists are always small (a handful of entries at most, not
+   something worth paginating or filtering server-side). Both panels are
+   server-rendered here; dashboard.js just shows/hides between them, the
+   same "toggle a stored .active/.hidden pair" mechanic already used for
+   the deep-dive zone's Projects/Deliverables tabs (switchTab()).
+
+   Each clash is a GROUP: one designer, one date, and the 2+ deliverables
+   (or projects) that collide on it — grouped visually under a small
+   "designer — date" heading rather than flattened into individual rows,
+   so it's clear at a glance WHY these items are listed together.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+{% set clash_count = clashes.by_deliverable|length + clashes.by_project|length %}
+
+{% call dash_card('clashes', 'Clashing Projects',
+    (clash_count ~ ' clash' ~ ('es' if clash_count != 1 else '') ~ ' detected') if clash_count > 0 else 'No clashes',
+    expanded=(initial_expanded_card == 'clashes'), muted=(clash_count == 0)) %}
+
+    <div class="dash-filter-chips">
+        <button type="button" class="team-tag-btn active" data-action="clashes-tab" data-filter="deliverable">By Deliverable</button>
+        <button type="button" class="team-tag-btn" data-action="clashes-tab" data-filter="project">By Project</button>
+    </div>
+
+    {# Both panels render fully server-side every load — see the big
+       comment above for why this doesn't need a fetch-on-toggle like the
+       Due/Next Actions cards. dashboard.js's switchClashesTab() just
+       toggles which one has the .hidden class. #}
+    <div id="dash-clashes-by-deliverable" data-clashes-panel="deliverable">
+        {% if clashes.by_deliverable %}
+            {% for c in clashes.by_deliverable %}
+            <div class="dash-clash-group">
+                <div class="dash-col-heading">
+                    {{ c.designer.name if c.designer else 'Unassigned' }} &middot; {{ c.date }}
+                </div>
+                {% for d in c.deliverables %}
+                <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
+                    <span class="dash-row-main">
+                        <span class="dash-row-title">{{ d.project_name }}</span>
+                        <span class="dash-row-sub">{{ d.name }}</span>
+                    </span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="dash-empty-state">No deliverable-level clashes.</p>
+        {% endif %}
+    </div>
+
+    <div id="dash-clashes-by-project" data-clashes-panel="project" class="hidden">
+        {% if clashes.by_project %}
+            {% for c in clashes.by_project %}
+            <div class="dash-clash-group">
+                <div class="dash-col-heading">
+                    {{ c.designer.name if c.designer else 'Unassigned' }} &middot; {{ c.date }}
+                </div>
+                {% for proj in c.projects %}
+                <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=proj.id) }}?from=dashboard">
+                    <span class="dash-row-main">
+                        <span class="dash-row-title">{{ proj.name }}</span>
+                    </span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="dash-empty-state">No project-level clashes.</p>
+        {% endif %}
+    </div>
+
+{% endcall %}

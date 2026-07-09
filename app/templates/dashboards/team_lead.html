@@ -105,7 +105,7 @@
                         ] | join('|') %}
                         {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                         <tr class="clickable {% if is_overdue %}overdue{% endif %}"
-                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
+                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}?from=dashboard"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
                             data-status="{{ project.project_status }}"
@@ -238,7 +238,7 @@
                         ] | join('|') %}
                         {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
                         <tr class="clickable {% if is_overdue %}overdue{% endif %}"
-                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
+                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}?from=dashboard"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
                             data-status="{{ project.project_status }}"
@@ -326,7 +326,7 @@
                     <td class="mono">{{ _dl_time.strftime('%H:%M') if _dl_time else '—' }}</td>
                     <td><span class="status-badge s-{{ d.status }}">{{ d.status | replace('_', ' ') | title }}</span></td>
                     <td><div class="cs-lead-stack">{% if d.project.cs_lead %}{{ user_avatar(d.project.cs_lead, 'sm') }} {{ d.project.cs_lead.name }}{% else %}—{% endif %}</div></td>
-                    <td><a href="{{ url_for('project_detail.detail', project_id=d.project_id) }}" class="btn btn--secondary sidebar-item--nav">Go to Project</a></td>
+                    <td><a href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=deliverables" class="btn btn--secondary sidebar-item--nav">Go to Project</a></td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -378,7 +378,7 @@
         "approved_at_display": {{ p.approved_at | dubai_time | tojson }},
         "briefing_date": {{ (p.briefing_date.strftime('%d %b %Y') if p.briefing_date else '') | tojson }},
         "assigned_designers": [{% for a in p.assigned_designers %}{{ a.designer.name | tojson }}{% if not loop.last %},{% endif %}{% endfor %}],
-        "url": {{ url_for('project_detail.detail', project_id=p.id) | tojson }}
+        "url": {{ (url_for('project_detail.detail', project_id=p.id) + '?from=dashboard') | tojson }}
     }{% if not loop.last %},{% endif %}
 
     {% endfor %}

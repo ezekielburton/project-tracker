@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{# Real Client Directory UI. Two-column master-detail layout:
+   - .directory-left-panel: search box + the grouped company/contact list
+   - .directory-right-panel: detail view for whatever was last clicked
+
+   Almost none of this is rendered by Jinja loops - the left panel list, the
+   search filtering, and the right panel's contents are all built and swapped
+   by client_directory.js from the DIRECTORY_DATA blob below. Jinja's job here
+   is just: lay out the two panels, embed the data, and gate the "Add
+   Company" button behind CAN_EDIT. Everything dynamic after that is JS. #}
+
+{% block title %}Client Directory{% endblock %}
+
+{% block content %}
+<div class="directory-page-header">
+    <h1>Client Directory</h1>
+    {% if can_edit %}
+    <button type="button" class="btn-primary" id="btnAddCompanyDirectory">+ Add Company</button>
+    {% endif %}
+</div>
+
+<div class="directory-layout">
+    {# ── Left panel: search + grouped list ── #}
+    <div class="directory-left-panel">
+        <input
+            type="text"
+            id="directorySearchInput"
+            class="form-input directory-search-input"
+            placeholder="Search companies, aliases, or contacts...">
+
+        {# Populated entirely by renderDirectoryList() in client_directory.js
+           on page load, then re-rendered (visibility/highlight only, not
+           rebuilt) every time the search input changes. Starts empty in the
+           HTML itself - there is no server-rendered fallback list, since
+           without JS the Add/Edit/search features wouldn't work anyway. #}
+        <div id="directoryList" class="directory-list"></div>
+
+        {# Shown by JS when a search has zero matches across every company -
+           kept in the DOM from the start (rather than injected on demand)
+           so client_directory.js only ever needs to toggle a "hidden" class
+           on it, same show/hide approach used throughout this codebase for
+           empty-state messaging. #}
+        <p id="directoryNoResults" class="directory-empty hidden">No matches found.</p>
+    </div>
+
+    {# ── Right panel: detail view for whatever was clicked ── #}
+    <div class="directory-right-panel" id="directoryRightPanel">
+        <div class="directory-placeholder" id="directoryPlaceholder">
+            <p>Select a company or contact from the list to view details.</p>
+        </div>
+        {# JS replaces/hides directoryPlaceholder and injects the
+           company-detail or contact-detail markup into this same panel
+           element (#directoryRightPanel) once something is clicked. #}
+    </div>
+</div>
+
+{# Add Company / Add Contact modals - shared markup with the brief form,
+   see the partial itself for why this isn't duplicated inline here. #}
+{% include 'partials/client_directory_modals.html' %}
+
+<script>
+    // Per CLAUDE.md's "JS in templates" rule: embedded data always goes into
+    // a <script> constant, never a tojson'd value inside an HTML attribute -
+    // Flask's tojson filter doesn't escape " for that context, so any
+    // company/contact field containing a quote character would silently
+    // break JSON.parse if this were, say, a data-* attribute instead.
+    //
+    // var, not const - this <script> tag gets recreated and re-executed
+    // every time the page is reached via SPA navigation (sidebar.js's
+    // execScripts()), but the page's global scope persists across that
+    // navigation (unlike its DOM, which does get replaced). A const/let
+    // re-declared a second time throws "Identifier has already been
+    // declared" and silently aborts, leaving the FIRST visit's stale data
+    // behind. var re-declaration is a no-op re-assignment - exactly what's
+    // needed here, since each navigation should overwrite these with that
+    // page load's fresh values.
+    var DIRECTORY_DATA = {{ directory_data | tojson }};
+    var CAN_EDIT = {{ can_edit | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/client_directory.js') }}"></script>
+{% endblock %}

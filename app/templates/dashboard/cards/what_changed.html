@@ -1,0 +1,58 @@
+{#
+   app/templates/dashboard/cards/what_changed.html
+   ─────────────────────────────────────────────────
+   "What Changed" card. Collapsed shows a count; expanded shows an activity
+   feed — timestamp, project name (linked, ?from=dashboard), what changed,
+   who changed it. Newest first.
+
+   Data: the `what_changed` context var IS the list _compute_what_changed(user)
+   returns (see app/routes/dashboard.py) — already:
+     - role-scoped (CS sees only their own accounts' projects; management/
+       admin see everything) — that filtering happens inside _scoped_projects()
+       inside _compute_what_changed(), NOT here. This template doesn't do any
+       role-checking itself because it doesn't need to — by the time this
+       list reaches the template, it's already the correct list for
+       whoever's looking at the page.
+     - sorted newest-first (ActivityLog.created_at.desc() in the query)
+     - capped to "since yesterday" (see the query's created_at >= yesterday filter)
+
+   Each entry dict has: project_id, project_name, description, timestamp
+   (ISO string), changed_by (a name string, or None if the ActivityLog row
+   has no user_id — e.g. a system-triggered change).
+
+   IMPORTANT — this card intentionally shows the free-text `description`
+   field as-is, NOT a structured "field changed: old value -> new value".
+   ActivityLog only ever stored a human-readable sentence (e.g. "3D
+   reassigned to Sarah on 'Acme Rebrand' by John") — there's no separate
+   old_value/new_value column to pull apart. This was a deliberate decision
+   made earlier in the project (see project memory / prior conversation),
+   not something skipped here by accident.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+
+{% call dash_card('what_changed', 'What Changed',
+    what_changed|length ~ ' update' ~ ('s' if what_changed|length != 1 else '') ~ ' since yesterday',
+    expanded=(initial_expanded_card == 'what_changed')) %}
+
+    {% if what_changed %}
+        {% for entry in what_changed %}
+            <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=entry.project_id) }}?from=dashboard">
+                <span class="dash-row-main">
+                    <span class="dash-row-title">{{ entry.project_name }}</span>
+                    <span class="dash-row-sub">{{ entry.description }}</span>
+                </span>
+                {# Right-aligned meta block: when it happened + who did it.
+                   dubai_time converts the stored UTC timestamp to the
+                   office's local time zone — same filter used everywhere
+                   else in this app that shows a timestamp to a user. #}
+                <span style="text-align: right; flex-shrink: 0; font-size: 0.8rem; color: var(--grey-dark);">
+                    {{ entry.timestamp | dubai_time }}<br>
+                    {% if entry.changed_by %}by {{ entry.changed_by }}{% else %}&nbsp;{% endif %}
+                </span>
+            </a>
+        {% endfor %}
+    {% else %}
+        <p class="dash-empty-state">No changes since yesterday.</p>
+    {% endif %}
+
+{% endcall %}

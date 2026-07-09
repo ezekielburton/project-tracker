@@ -101,7 +101,27 @@ def login():
             next_page = parsed.path + ('?' + parsed.query if parsed.query else '')
         if next_page and next_page.startswith('/'):
             return redirect(next_page)
-        return redirect(url_for('main.index'))
+
+        # Role-based default landing page — replaces the old blanket
+        # redirect to main.index (which just forwarded to the placeholder
+        # main.projects router). Admin falls through to plain /dashboard.
+        #
+        # TEMPORARILY DISABLED (9 Jul 2026) — new dashboard is feature-complete
+        # (all 9 UI chunks + verification pass done) but Ezekiel wants it held
+        # back until after showing it to management. Login goes to the OLD
+        # dashboard (main.projects) for now. To re-enable: delete the
+        # `return redirect(url_for('main.projects'))` line right below and
+        # un-comment the two lines under it — nothing else needs to change.
+        return redirect(url_for('main.projects'))
+        # role_views = {
+        #     'management': 'decisions',
+        #     'cs': 'due',
+        #     'designer': 'my-week',
+        #     'team_lead': 'my-week',
+        # }
+        # if user.role in role_views:
+        #     return redirect(url_for('projects.index', view=role_views[user.role]))
+        # return redirect(url_for('projects.index'))
 
     return render_template('auth/login.html', next=request.args.get('next', ''))
 
@@ -176,7 +196,7 @@ def save_notification_prefs():
         'new_project', 'lead_assigned', 'concept_kv_assigned', 'revision_flag',
         'flag_reply', 'flag_resolved', 'brief_flag', 'revision_submitted',
         'project_started', 'lead_changed', 'deliverable_status',
-        'project_submitted_client', 'project_approved'
+        'project_submitted_client', 'project_approved', 'email_decision_flag'
     }
     # Build a clean dict of only known keys with boolean values
     prefs = {k: bool(v) for k, v in data.items() if k in valid_keys}

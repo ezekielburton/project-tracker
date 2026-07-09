@@ -19,6 +19,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/drag-drop.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/file-templates.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 </head>
 
 {# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}
@@ -68,7 +70,14 @@
                 <span class="sidebar-section-label">Internal Tools</span>
                 <div class="sidebar-grid">
 
-                    {# Dashboard — unlinked until built, use <span> not <a> #}
+                            {# Dashboard — TEMPORARILY greyed out (9 Jul 2026): new dashboard is
+                               feature-complete but Ezekiel wants it held back until after showing
+                               it to management. Same disabled-item pattern as Color Directory /
+                               Production Directory / etc. below (span, sidebar-item--unlinked, no
+                               href) rather than deleting anything. To re-enable: swap this <span>
+                               back for the <a href="{{ url_for('projects.index') }}"
+                               class="sidebar-item sidebar-item--nav" data-link="dashboard"> version —
+                               same title/SVG/label, just a real internal nav link again. #}
                             <span class="sidebar-item sidebar-item--unlinked" data-link="dashboard" title="Dashboard">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -219,8 +228,14 @@
                         <span class="sidebar-item-label">Color Directory</span>
                     </span>
 
-                    <span class="sidebar-item sidebar-item--unlinked" data-link="client-directory"
-                        title="Client Directory">
+                    {# Client Directory — was an unlinked placeholder icon (span, no href)
+                       until the Client Directory page/blueprint existed. Now that
+                       app/routes/client_directory.py's index() route is real, this
+                       follows the same "internal nav link, JS intercepts and loads
+                       without refresh" pattern as Wiki/File Templates above: a real
+                       <a href> with class sidebar-item--nav instead of --unlinked. #}
+                    <a href="{{ url_for('client_directory.index') }}" class="sidebar-item sidebar-item--nav"
+                        data-link="client-directory" title="Client Directory">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -229,7 +244,7 @@
                             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                         </svg>
                         <span class="sidebar-item-label">Client Directory</span>
-                    </span>
+                    </a>
 
                     <span class="sidebar-item sidebar-item--unlinked" data-link="production-directory"
                         title="Production Directory">
@@ -1106,6 +1121,7 @@
     <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/detail.js') }}"></script>
     <script src="{{ url_for('static', filename='js/drag-drop.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/rich-editor.js') }}"></script>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
     {% endif %}

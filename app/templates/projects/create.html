@@ -5,12 +5,23 @@
 
 {# Pass customer and deliverable data to JavaScript as JSON #}
 <script>
-    const CUSTOMERS_BY_REGION = {{ customers_by_region | tojson }};
-    const EDIT_MODE = {{ edit_mode | tojson if edit_mode is defined else 'false' }};
-    const EDIT_PROJECT_ID = {{ edit_project_id | tojson if edit_project_id is defined else 'null' }};
-    const EXISTING_CUSTOMERS = {{ existing_customers | tojson if existing_customers is defined else '[]' }};
-    const EXISTING_DELIVERABLES = {{ existing_deliverables | tojson if existing_deliverables is defined else '[]' }};
-    const EXISTING_STANDARD_DELIVERABLES = {{ existing_standard_deliverables | tojson if existing_standard_deliverables is defined else '[]' }};
+    // var, not const - this page is reachable via SPA nav (sidebar/internal
+    // links), and sidebar.js's execScripts() re-runs this exact <script> tag
+    // on every such navigation without resetting the page's global scope.
+    // A const/let re-declared a second time throws "Identifier has already
+    // been declared" and silently aborts, leaving the FIRST visit's stale
+    // values (wrong customers/deliverables, stale EDIT_MODE/EDIT_PROJECT_ID)
+    // in place on every subsequent visit. var re-declaration is a no-op
+    // reassignment, which is what's actually wanted: each navigation should
+    // overwrite these with that load's fresh values. See
+    // feedback_spa_navigation_js.md for the full writeup - this was the
+    // known pre-existing instance flagged there, now fixed.
+    var CUSTOMERS_BY_REGION = {{ customers_by_region | tojson }};
+    var EDIT_MODE = {{ edit_mode | tojson if edit_mode is defined else 'false' }};
+    var EDIT_PROJECT_ID = {{ edit_project_id | tojson if edit_project_id is defined else 'null' }};
+    var EXISTING_CUSTOMERS = {{ existing_customers | tojson if existing_customers is defined else '[]' }};
+    var EXISTING_DELIVERABLES = {{ existing_deliverables | tojson if existing_deliverables is defined else '[]' }};
+    var EXISTING_STANDARD_DELIVERABLES = {{ existing_standard_deliverables | tojson if existing_standard_deliverables is defined else '[]' }};
 </script>
 
 <div class="create-page">
@@ -42,6 +53,14 @@
             <div class="form-row">
                 <div class="form-group">
                     <label class="form-label">Client / Brand</label>
+                    {# "+ Add new company..." lives as the LAST <option> in this same
+                       select, rather than a separate button + inline reveal-form like
+                       this field used to have. That older button/reveal-form pattern
+                       (#btnAddClient / #addClientForm) is retired as of the Client
+                       Directory UI work - client_directory.js now owns picking this
+                       sentinel option out of a 'change' event and opening the shared
+                       Add Company modal instead. See client_directory.js's
+                       initBriefFormIntegration() for the wiring. #}
                     <select id="client_id" name="client_id" class="form-select">
                         <option value="">— Select Client —</option>
                         {% for client in clients %}
@@ -50,15 +69,41 @@
                             {{ client.name }}
                         </option>
                         {% endfor %}
+                        <option value="__add_new__">+ Add new company…</option>
                     </select>
-                    <button type="button" class="btn-add-inline" id="btnAddClient">
-                        + Add New Client
-                    </button>
-                    <div class="inline-add-form hidden" id="addClientForm">
-                        <input type="text" id="newClientName" placeholder="Client name" class="form-input">
-                        <button type="button" class="btn btn--primary btn--sm" id="confirmAddClient">Add</button>
-                        <button type="button" class="btn btn--secondary btn--sm" id="cancelAddClient">Cancel</button>
-                    </div>
+                </div>
+
+                {# ── Contact picker ──
+                   Cascades off the Client select above: options here are populated
+                   either server-side on first load (if a draft already has a client
+                   + contact set - see the Jinja loop below) or client-side via
+                   client_directory.js whenever #client_id changes. Kept as its own
+                   form-group (not nested inside the Client one) so it lays out as a
+                   normal sibling field in the same .form-row grid, same as every
+                   other field pair on this page.
+
+                   Like the Client field above, "+ Add new contact..." is a sentinel
+                   option at the end of THIS select rather than a separate button -
+                   the old #btnAddContact / #addContactForm reveal-form is retired,
+                   replaced by the same shared Add Company/Add Contact modal used on
+                   the Client Directory page. #}
+                <div class="form-group">
+                    <label class="form-label">Contact</label>
+                    <select id="contact_id" name="contact_id" class="form-select">
+                        <option value="">— Select Contact —</option>
+                        {# Only pre-render options if we already know the client (edit
+                           mode / a resumed draft) - otherwise the list starts empty
+                           (plus the sentinel option below) and gets filled in by JS
+                           the moment a client is picked. #}
+                        {% if draft and draft.client_brand %}
+                        {% for contact in draft.client_brand.contacts %}
+                        <option value="{{ contact.id }}" {% if draft.contact_id==contact.id %}selected{% endif %}>
+                            {{ contact.name }}
+                        </option>
+                        {% endfor %}
+                        {% endif %}
+                        <option value="__add_new__">+ Add new contact…</option>
+                    </select>
                 </div>
 
                 <div class="form-group">
@@ -249,8 +294,7 @@
                     <button type="button" class="btn btn--tangerine" onclick="addStandardDeliverableToList()">+ Add Deliverable</button>
                     <button type="button" class="btn btn--tangerine btn--sm" onclick="applyDeadlineToAll()">Apply date to all</button>
                 </div>
-                <div id="standardDeliverablesList"
-                    style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem;"></div>
+                <div id="standardDeliverablesList" class="brief-deliverables" style="margin-top: 0.75rem;"></div>
                 <input type="hidden" id="standard_deliverables_json"
                     value="{{ existing_standard_deliverables | tojson if existing_standard_deliverables is defined else '[]' }}">
             </div>
@@ -595,26 +639,116 @@
         document.querySelectorAll('#standardDeliverableTeams .team-tag-btn').forEach(function (b) { b.classList.remove('active'); });
     }
 
-    function renderStandardDeliverableRow(item) {
-        var list = document.getElementById('standardDeliverablesList');
-        var row = document.createElement('div');
-        row.className = 'std-del-chip';
+    // Escape HTML entities so deliverable names with & or < can't break innerHTML.
+    function escHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
+    }
+
+    // Build <option> tags for the time select (00:00 – 23:00).
+    function buildTimeOptions(selected) {
+        var html = '<option value="">— Any —</option>';
+        for (var h = 0; h < 24; h++) {
+            var val = (h < 10 ? '0' : '') + h + ':00';
+            html += '<option value="' + val + '"' + (selected === val ? ' selected' : '') + '>' + val + '</option>';
+        }
+        return html;
+    }
+
+    // Render a chip in display (read-only) mode and wire its buttons.
+    // Called both on initial render and after save/cancel in edit mode.
+    function renderRowContent(row, item) {
+        row.className = 'brief-deliverable-row std-del-chip';
         row.dataset.name = item.name;
         var deadlineText = item.design_deadline
             ? formatDeadlineDisplay(item.design_deadline, item.design_deadline_time || null)
             : '<span class="muted">No deadline</span>';
         var teams = item.teams || [];
-        var teamTags = teams.map(function (t) { return '<span class="std-del-team-tag">' + t + '</span>'; }).join('');
+        var teamTags = teams.map(function (t) { return '<span class="std-del-team-tag">' + escHtml(t) + '</span>'; }).join('');
         row.innerHTML =
-            '<span class="std-del-chip-name">' + item.name + '</span>' +
-            (teamTags ? '<span class="std-del-chip-teams">' + teamTags + '</span>' : '') +
-            '<span class="std-del-chip-deadline">' + deadlineText + '</span>' +
-            '<button type="button" class="std-del-chip-remove" title="Remove">&times;</button>';
+            '<span class="brief-deliverable-name">' + escHtml(item.name) + (teamTags ? ' ' + teamTags : '') + '</span>' +
+            (deadlineText ? '<span class="std-del-chip-deadline">' + deadlineText + '</span>' : '') +
+            '<div class="std-del-chip-actions">' +
+                '<button type="button" class="btn-secondary btn-sm std-del-chip-edit">Edit</button>' +
+                '<button type="button" class="btn-danger btn-sm std-del-chip-remove">Remove</button>' +
+            '</div>';
+        row.querySelector('.std-del-chip-edit').addEventListener('click', function () {
+            startEditDeliverable(row, item);
+        });
         row.querySelector('.std-del-chip-remove').addEventListener('click', function () {
             var arr = getStandardDeliverables().filter(function (i) { return i.name !== item.name; });
             saveStandardDeliverables(arr);
             row.remove();
         });
+    }
+
+    // Expand a chip into an inline edit form.
+    function startEditDeliverable(row, originalItem) {
+        var oldName = originalItem.name;
+        var currentTeams = originalItem.teams || [];
+        var teamBtnsHtml = ['2D', '3D', 'Technical'].map(function (t) {
+            var active = currentTeams.indexOf(t) !== -1 ? ' active' : '';
+            return '<button type="button" class="team-tag-btn' + active + '" data-team="' + t + '">' + t + '</button>';
+        }).join('');
+
+        row.className = 'brief-deliverable-row std-del-chip std-del-chip--editing';
+        row.innerHTML =
+            '<input type="text" class="form-input std-del-edit-name" value="' + escHtml(originalItem.name) + '" placeholder="Name">' +
+            '<input type="date" class="form-input std-del-edit-deadline" value="' + (originalItem.design_deadline || '') + '">' +
+            '<select class="form-select std-del-edit-time">' + buildTimeOptions(originalItem.design_deadline_time || '') + '</select>' +
+            '<div class="team-tag-group std-del-edit-teams">' + teamBtnsHtml + '</div>' +
+            '<button type="button" class="btn btn--tangerine btn--sm std-del-edit-save">Save</button>' +
+            '<button type="button" class="btn-secondary btn--sm std-del-edit-cancel">Cancel</button>';
+
+        // Wire team toggles
+        row.querySelectorAll('.std-del-edit-teams .team-tag-btn').forEach(function (b) {
+            b.addEventListener('click', function () { b.classList.toggle('active'); });
+        });
+
+        // Save — update JSON in-place, re-render chip in display mode
+        row.querySelector('.std-del-edit-save').addEventListener('click', function () {
+            var newName = row.querySelector('.std-del-edit-name').value.trim();
+            if (!newName) { row.querySelector('.std-del-edit-name').focus(); return; }
+            // Duplicate name check (excluding ourselves)
+            var existing = getStandardDeliverables();
+            if (newName !== oldName && existing.some(function (i) { return i.name === newName; })) {
+                row.querySelector('.std-del-edit-name').select();
+                return;
+            }
+            var newItem = {
+                name: newName,
+                design_deadline: row.querySelector('.std-del-edit-deadline').value || null,
+                design_deadline_time: row.querySelector('.std-del-edit-time').value || null,
+                teams: Array.from(row.querySelectorAll('.std-del-edit-teams .team-tag-btn.active'))
+                    .map(function (b) { return b.dataset.team; })
+            };
+            var arr = existing.map(function (i) { return i.name === oldName ? newItem : i; });
+            saveStandardDeliverables(arr);
+            renderRowContent(row, newItem);
+        });
+
+        // Cancel — restore original chip display without changing JSON
+        row.querySelector('.std-del-edit-cancel').addEventListener('click', function () {
+            renderRowContent(row, originalItem);
+        });
+
+        // Focus name and select all for quick rename
+        var nameInput = row.querySelector('.std-del-edit-name');
+        nameInput.focus();
+        nameInput.select();
+
+        // Enter on name field saves
+        nameInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); row.querySelector('.std-del-edit-save').click(); }
+            if (e.key === 'Escape') { e.preventDefault(); row.querySelector('.std-del-edit-cancel').click(); }
+        });
+    }
+
+    function renderStandardDeliverableRow(item) {
+        var list = document.getElementById('standardDeliverablesList');
+        var row = document.createElement('div');
+        renderRowContent(row, item);
         list.appendChild(row);
     }
 
@@ -679,5 +813,10 @@
 
     }
 </script>
+
+{# Add Company / Add Contact modals - shared markup with the Client Directory
+   page, see the partial itself for why this isn't duplicated inline here. #}
+{% include 'partials/client_directory_modals.html' %}
+<script src="{{ url_for('static', filename='js/client_directory.js') }}"></script>
 
 {% endblock %}

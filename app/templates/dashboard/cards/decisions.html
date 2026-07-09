@@ -1,0 +1,74 @@
+{#
+   app/templates/dashboard/cards/decisions.html
+   ─────────────────────────────────────────────
+   Decisions Needed card.
+
+   Collapsed: just a count — "N project(s) flagged". The count is already
+   correctly role-scoped by the time it gets here: `decisions` (context var,
+   from _compute_decisions(user) in dashboard.py) only ever contains
+   projects inside THIS user's _scoped_projects() — Management/Admin see
+   every flagged project, CS sees only their own accounts' flagged
+   projects, Designer/Team Lead see only projects they're assigned to.
+   There's no extra role-filtering to do in this template for the count.
+
+   Expanded: the queue itself, oldest flag first (already sorted server-side
+   — see nullslast(Project.decision_raised_at.asc()) in _compute_decisions).
+   Each row shows: project name, who raised it, when (Dubai local time),
+   the decision note, and how many days it's been waiting.
+
+   "Flag a Project" button: per spec, CS/Designer/Team Lead get a button
+   here that opens the Flag to Management modal; Management/Admin get none
+   (they're the ones the flag is FOR, not the ones raising it). This
+   deliberately only appears in the EXPANDED body, not also as a small
+   shortcut next to the collapsed count — the spec describes both, but a
+   clickable button nested inside the card's own clickable header (the
+   whole header has data-action="toggle-card" on it, see
+   _dashboard_macros.html) would need real click-event surgery in
+   dashboard.js to stop the inner button's click from ALSO toggling the
+   card open/closed. One click, one unambiguous action, one tap away
+   (expand the card, then click the button) — not worth the fragility for
+   what's a very small UX convenience.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+
+{% call dash_card('decisions', 'Decisions Needed',
+    decisions|length ~ ' project' ~ ('s' if decisions|length != 1 else '') ~ ' flagged',
+    expanded=(initial_expanded_card == 'decisions')) %}
+
+    {% if effective_role in ('cs', 'designer', 'team_lead') %}
+    <button type="button" class="btn-secondary" data-action="open-flag-management-modal" style="margin-bottom: 1rem;">
+        Flag a Project
+    </button>
+    {% endif %}
+
+    {# This list is server-rendered once on page load, same as every other
+       card. Unlike the Due card, nothing here re-fetches on a filter click
+       — the only thing that changes this list client-side is a successful
+       flag submission, handled by refreshDecisionsCard() in dashboard.js,
+       which re-fetches GET /dashboard/api/decisions and rebuilds this exact
+       markup via renderDecisionRow() (a JS mirror of the row below — same
+       duplication tradeoff as dash_due_row/renderDueRow, documented in
+       _dashboard_macros.html). #}
+    <div id="dash-decisions-list">
+        {% if decisions %}
+            {% for d in decisions %}
+            <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
+                <span class="dash-row-main">
+                    <span class="dash-row-title">{{ d.project_name }}</span>
+                    <span class="dash-row-sub">{{ d.note }}</span>
+                </span>
+                <span style="text-align: right; flex-shrink: 0; font-size: 0.8rem; color: var(--grey-dark);">
+                    {% if d.raised_by %}Raised by {{ d.raised_by.name }}<br>{% endif %}
+                    {{ d.raised_at | dubai_time }}<br>
+                    {% if d.days_waiting is not none %}
+                        {{ d.days_waiting }} day{{ 's' if d.days_waiting != 1 else '' }} waiting
+                    {% endif %}
+                </span>
+            </a>
+            {% endfor %}
+        {% else %}
+            <p class="dash-empty-state">No decisions currently needed.</p>
+        {% endif %}
+    </div>
+
+{% endcall %}

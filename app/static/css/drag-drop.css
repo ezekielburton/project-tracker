@@ -4,3 +4,73 @@
     background: rgba(242, 127, 85, 0.05);
     border-radius: 4px;
 }
+
+/* ── Rich editor (contenteditable message / flag boxes) ─────────────────────── */
+.rich-editor {
+    min-height: 4.5rem;
+    overflow-y: auto;
+    word-break: break-word;
+    white-space: pre-wrap;
+    cursor: text;
+    resize: none; /* divs can't resize but suppress the CSS rule inherited from textarea */
+}
+
+/* Strip resize from flag-specific classes when applied to a div */
+div.flag-reply-input,
+div.flag-create-textarea {
+    resize: none;
+}
+
+/* Placeholder — shown via data-empty attribute, set/removed by rich-editor.js */
+.rich-editor[data-empty]::before {
+    content: attr(data-placeholder);
+    color: var(--grey-mid);
+    pointer-events: none;
+    display: block;
+    font-style: normal;
+}
+
+/* Images embedded inside a rich editor */
+.rich-editor img {
+    max-width: 100%;
+    height: auto;
+    cursor: pointer;
+    border-radius: 3px;
+    vertical-align: bottom;
+}
+
+/* ── Image resize overlay ────────────────────────────────────────────────────── */
+.img-resize-overlay {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9000;
+    box-shadow: 0 0 0 2px var(--tangerine);
+    border-radius: 3px;
+}
+
+.img-resize-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--white);
+    border: 2px solid var(--tangerine);
+    border-radius: 2px;
+    pointer-events: all;
+    box-sizing: border-box;
+}
+
+.img-resize-handle--nw { top:  -5px; left:  -5px;              cursor: nw-resize; }
+.img-resize-handle--n  { top:  -5px; left: calc(50% - 5px);   cursor: n-resize;  }
+.img-resize-handle--ne { top:  -5px; right: -5px;              cursor: ne-resize; }
+.img-resize-handle--e  { top: calc(50% - 5px); right: -5px;   cursor: e-resize;  }
+.img-resize-handle--se { bottom: -5px; right: -5px;            cursor: se-resize; }
+.img-resize-handle--s  { bottom: -5px; left: calc(50% - 5px); cursor: s-resize;  }
+.img-resize-handle--sw { bottom: -5px; left: -5px;             cursor: sw-resize; }
+.img-resize-handle--w  { top: calc(50% - 5px); left: -5px;    cursor: w-resize;  }
+
+/* Prevent text selection while dragging a resize handle */
+.img-resize-dragging,
+.img-resize-dragging * {
+    user-select: none;
+    -webkit-user-select: none;
+}

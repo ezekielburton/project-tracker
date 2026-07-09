@@ -7,6 +7,11 @@
 
 <div class="page-container">
 
+    {# Back nav — back_label/back_url are computed in project_detail.detail()
+       from ?from= (dashboard | deliverables | unset). See that route for why
+       both currently point at the same URL. #}
+    <a href="{{ back_url }}" class="back-link" style="display:inline-flex;align-items:center;gap:0.4rem;margin-bottom:1rem;text-decoration:none;color:var(--grey-dark);">&larr; {{ back_label }}</a>
+
     <div class="dashboard-header" style="margin-bottom: 1.5rem;">
         <h1 class="dashboard-greeting">{{ project.name }}</h1>
         <div style="display: flex; gap: 0.75rem; align-items: center;">
@@ -342,13 +347,17 @@
                         <span class="flag-message-author">{{ msg.author.name }}</span>
                         <span class="flag-message-time">{{ msg.created_at | dubai_time }} GST</span>
                     </div>
-                    <p class="flag-message-text">{{ msg.message }}</p>
+                    <div class="flag-message-text">{{ msg.message | safe }}</div>
                 </div>
                 {% endfor %}
             </div>
             <form method="POST" action="{{ url_for('project_detail.reply_flag', project_id=project.id, flag_id=flag.id) }}"
                 class="flag-reply-form">
-                <textarea name="message" class="flag-reply-input" placeholder="Write a response..."></textarea>
+                <div id="flag-reply-editor-{{ flag.id }}" contenteditable="true"
+                    data-rich-editor data-project-id="{{ project.id }}"
+                    class="flag-reply-input rich-editor"
+                    data-placeholder="Write a response..."></div>
+                <input type="hidden" name="message" class="rich-editor-value">
                 <div class="flag-reply-actions">
                     <button type="submit" class="btn-flag-reply-submit">Send Reply</button>
                 </div>
@@ -1012,8 +1021,11 @@
             </div>
             {# Revision message form — shown/hidden by JS #}
             <div id="ckvRevisionForm" class="hidden" style="margin-top:1rem;">
-                <textarea id="ckvRevisionMessage" class="form-input" placeholder="Describe the revision requested by the client..."
-                    rows="3" style="width:100%;margin-bottom:0.5rem;"></textarea>
+                <div id="ckvRevisionMessage" contenteditable="true"
+                    data-rich-editor data-project-id="{{ project.id }}"
+                    class="form-input rich-editor"
+                    data-placeholder="Describe the revision requested by the client..."
+                    style="width:100%;margin-bottom:0.5rem;min-height:5rem;"></div>
                 <div style="display:flex;gap:0.5rem;">
                     <button type="button" class="btn-danger btn-sm" id="ckvRevisionConfirm" data-project-id="{{ project.id }}">Send
                         Revision</button>
@@ -1030,7 +1042,7 @@
             {# Show the revision message so the designer knows what to fix #}
             <div class="revision-card" style="margin-top:0.5rem;">
                 <p class="detail-label" style="margin-bottom:0.25rem;">↩ Revision requested by {{ ckv_latest_revision.sent_by.name }}</p>
-                <div class="revision-message">{{ ckv_latest_revision.message }}</div>
+                <div class="revision-message">{{ ckv_latest_revision.message | safe }}</div>
             </div>
             {% endif %}
             {% if project.concept_status == 'revision_in_queue' %}
@@ -1085,7 +1097,11 @@
                 <button type="button" class="btn-danger btn-sm" id="submissionFlagBtn">Flag Issue</button>
             </div>
             <div id="submissionFlagForm" class="hidden" style="margin-top:1rem;">
-                <textarea id="submissionFlagMessage" class="form-input" placeholder="Describe the issue with this deck..." rows="3" style="width:100%;margin-bottom:0.5rem;"></textarea>
+                <div id="submissionFlagMessage" contenteditable="true"
+                    data-rich-editor data-project-id="{{ project.id }}"
+                    class="form-input rich-editor"
+                    data-placeholder="Describe the issue with this deck..."
+                    style="width:100%;margin-bottom:0.5rem;min-height:5rem;"></div>
                 <div style="display:flex;gap:0.5rem;">
                     <button type="button" class="btn-danger btn-sm" id="submissionFlagConfirm" data-project-id="{{ project.id }}">Send Flag</button>
                     <button type="button" class="btn-secondary btn-sm" id="submissionFlagCancel">Cancel</button>
@@ -1103,7 +1119,7 @@
                 <span class="reference-file-meta">Uploaded by {{ ckv_submission.uploaded_by.name }}</span>
             </div>
             <div class="submission-status submission-status--flagged" style="margin-top:0.5rem;">
-                ⚑ Flagged by {{ ckv_submission.flagged_by.name if ckv_submission.flagged_by else 'CS' }}: "{{ ckv_submission.flag_message }}"
+                ⚑ Flagged by {{ ckv_submission.flagged_by.name if ckv_submission.flagged_by else 'CS' }}: {{ ckv_submission.flag_message | safe }}
             </div>
             {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
             <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center;">
@@ -1210,9 +1226,11 @@
                     Issue</button>
             </div>
             <div class="ch-flag-form hidden" id="ch-flag-form-{{ ch.id }}" style="margin-top:1rem;">
-                <textarea class="form-input ch-flag-message" id="ch-flag-msg-{{ ch.id }}"
-                    placeholder="Describe the issue with this deck..." rows="3"
-                    style="width:100%;margin-bottom:0.5rem;"></textarea>
+                <div id="ch-flag-msg-{{ ch.id }}" contenteditable="true"
+                    data-rich-editor data-project-id="{{ project.id }}"
+                    class="form-input rich-editor ch-flag-message"
+                    data-placeholder="Describe the issue with this deck..."
+                    style="width:100%;margin-bottom:0.5rem;min-height:5rem;"></div>
                 <div style="display:flex;gap:0.5rem;">
                     <button type="button" class="btn-danger btn-sm ch-flag-confirm" data-channel-id="{{ ch.id }}"
                         data-project-id="{{ project.id }}">Send Flag</button>
@@ -1234,7 +1252,7 @@
             </div>
             <div class="submission-status submission-status--flagged" style="margin-top:0.5rem;">
                 ⚑ Flagged by {{ ch_sub.flagged_by.name if ch_sub.flagged_by else 'CS' }}:
-                "{{ ch_sub.flag_message }}"
+                {{ ch_sub.flag_message | safe }}
             </div>
             {% if effective_user.role in ['admin', 'designer', 'team_lead'] and not ch_readonly %}
             <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center;">
@@ -1288,9 +1306,11 @@
                     data-project-id="{{ project.id }}">✓ Approve All</button>
             </div>
             <div class="ch-send-revision-form hidden" id="ch-rev-form-{{ ch.id }}" style="margin-top:1rem;">
-                <textarea class="form-input ch-revision-message" id="ch-rev-msg-{{ ch.id }}"
-                    placeholder="Describe what needs to be revised for the client..." rows="4"
-                    style="width:100%;margin-bottom:0.75rem;"></textarea>
+                <div id="ch-rev-msg-{{ ch.id }}" contenteditable="true"
+                    data-rich-editor data-project-id="{{ project.id }}"
+                    class="form-input rich-editor ch-revision-message"
+                    data-placeholder="Describe what needs to be revised for the client..."
+                    style="width:100%;margin-bottom:0.75rem;min-height:6.5rem;"></div>
                 <div style="display:flex;gap:0.5rem;">
                     <button type="button" class="btn-danger btn-sm ch-send-revision-confirm"
                         data-channel-id="{{ ch.id }}" data-project-id="{{ project.id }}">Send Revision</button>
@@ -1305,7 +1325,7 @@
             {% if ch_rev %}
             <div class="revision-card">
                 <p class="detail-label" style="margin-bottom:0.4rem;">Revision Request from CS</p>
-                <div class="revision-message">{{ ch_rev.message }}</div>
+                <div class="revision-message">{{ ch_rev.message | safe }}</div>
                 <p class="revision-meta">Sent by {{ ch_rev.sent_by.name }} on {{ ch_rev.sent_at | dubai_time }} GST</p>
             </div>
             {% endif %}
@@ -1324,7 +1344,7 @@
             {% if ch_rev %}
             <div class="revision-card">
                 <p class="detail-label" style="margin-bottom:0.4rem;">Active Revision</p>
-                <div class="revision-message">{{ ch_rev.message }}</div>
+                <div class="revision-message">{{ ch_rev.message | safe }}</div>
                 <p class="revision-meta">Sent by {{ ch_rev.sent_by.name }} on {{ ch_rev.sent_at | dubai_time }} GST</p>
             </div>
             {% endif %}
@@ -1571,8 +1591,11 @@
             <button type="button" class="btn-danger btn-sm" id="submissionFlagBtn">Flag Issue</button>
         </div>
         <div id="submissionFlagForm" class="hidden" style="margin-top: 1rem;">
-            <textarea id="submissionFlagMessage" class="form-input" placeholder="Describe the issue with this deck..."
-                rows="3" style="width: 100%; margin-bottom: 0.5rem;"></textarea>
+            <div id="submissionFlagMessage" contenteditable="true"
+                data-rich-editor data-project-id="{{ project.id }}"
+                class="form-input rich-editor"
+                data-placeholder="Describe the issue with this deck..."
+                style="width:100%;margin-bottom:0.5rem;min-height:5rem;"></div>
             <div style="display: flex; gap: 0.5rem;">
                 <button type="button" class="btn-danger btn-sm" id="submissionFlagConfirm"
                     data-project-id="{{ project.id }}">Send Flag</button>
@@ -1594,7 +1617,7 @@
         </div>
         <div class="submission-status submission-status--flagged" style="margin-top: 0.5rem;">
             ⚑ Flagged by {{ active_submission.flagged_by.name if active_submission.flagged_by else 'CS' }}:
-            "{{ active_submission.flag_message }}"
+            {{ active_submission.flag_message | safe }}
         </div>
         {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
         <div style="margin-top: 1rem; display: flex; gap: 0.75rem; align-items: center;">
@@ -1676,9 +1699,11 @@
            hide the form too. #}
         {% if effective_user.role in ['admin', 'cs'] %}
         <div id="sendRevisionForm" class="hidden" style="margin-top: 1rem;">
-            <textarea id="revisionMessage" class="form-input"
-                placeholder="Describe what needs to be revised for the client..." rows="4"
-                style="width: 100%; margin-bottom: 0.75rem;"></textarea>
+            <div id="revisionMessage" contenteditable="true"
+                data-rich-editor data-project-id="{{ project.id }}"
+                class="form-input rich-editor"
+                data-placeholder="Describe what needs to be revised for the client..."
+                style="width:100%;margin-bottom:0.75rem;min-height:6.5rem;"></div>
             <p class="detail-label" style="margin-bottom: 0.5rem;">Which deliverables need revision?</p>
             <!-- Global controls for the revision picker -->
             <div style="margin-bottom: 0.75rem; display: flex; gap: 0.5rem; align-items: center;">
@@ -1703,7 +1728,7 @@
         {% if latest_revision %}
         <div class="revision-card">
             <p class="detail-label" style="margin-bottom: 0.4rem;">Revision Request from CS</p>
-            <div class="revision-message">{{ latest_revision.message }}</div>
+            <div class="revision-message">{{ latest_revision.message | safe }}</div>
             <div style="margin-top: 0.75rem;">
                 <p class="detail-label" style="margin-bottom: 0.4rem;">Items to revise:</p>
                 {% if latest_revision.includes_concept %}
@@ -1782,7 +1807,7 @@
         {% if latest_revision %}
         <div class="revision-card">
             <p class="detail-label" style="margin-bottom: 0.4rem;">Active Revision — #{{ project.revision_count }}</p>
-            <div class="revision-message">{{ latest_revision.message }}</div>
+            <div class="revision-message">{{ latest_revision.message | safe }}</div>
             <div style="margin-top: 0.75rem;">
                 <p class="detail-label" style="margin-bottom: 0.4rem;">Items in revision:</p>
                 {% if latest_revision.includes_concept %}
@@ -2077,7 +2102,7 @@
                             <span class="flag-message-author">{{ msg.author.name }}</span>
                             <span class="flag-message-time">{{ msg.created_at | dubai_time }} GST</span>
                         </div>
-                        <p class="flag-message-text">{{ msg.message }}</p>
+                        <div class="flag-message-text">{{ msg.message | safe }}</div>
                     </div>
                     {% endfor %}
                 </div>
@@ -2136,8 +2161,10 @@
     <div class="modal-box">
         <h3 class="modal-title">Flag an Issue</h3>
         <p class="flag-modal-context" id="flag-context-text"></p>
-        <textarea id="flag-message-input" class="flag-create-textarea"
-            placeholder="Describe the issue clearly..."></textarea>
+        <div id="flag-message-input" contenteditable="true"
+            data-rich-editor data-project-id=""
+            class="flag-create-textarea rich-editor"
+            data-placeholder="Describe the issue clearly..."></div>
         <div class="modal-actions">
             <button type="button" class="btn-secondary" data-action="close-flag-modal">Cancel</button>
             <button type="button" class="btn-brief-flag-submit" data-action="submit-flag">Submit Flag</button>
@@ -2191,7 +2218,10 @@
         _flagProjectId = btn.dataset.projectId;
         _flagDeliverableId = btn.dataset.deliverableId || null;
         document.getElementById('flag-context-text').textContent = 'Flagging: ' + btn.dataset.context;
-        document.getElementById('flag-message-input').value = '';
+        // Set project ID on the rich editor so image uploads know which project
+        var editor = document.getElementById('flag-message-input');
+        if (editor) editor.dataset.projectId = _flagProjectId;
+        if (window.clearRichContent) { clearRichContent('flag-message-input'); } else if (editor) { editor.innerHTML = ''; }
         document.getElementById('flag-create-modal').classList.remove('hidden');
         if (window.helixPolling) window.helixPolling.pause();
         setTimeout(function () { document.getElementById('flag-message-input').focus(); }, 100);
@@ -2203,7 +2233,7 @@
     }
 
     function submitFlag() {
-        var message = document.getElementById('flag-message-input').value.trim();
+        var message = window.getRichContent ? getRichContent('flag-message-input') : document.getElementById('flag-message-input').innerText.trim();
         if (!message) { document.getElementById('flag-message-input').focus(); return; }
         fetch('/projects/' + _flagProjectId + '/flags/create', {
             method: 'POST',

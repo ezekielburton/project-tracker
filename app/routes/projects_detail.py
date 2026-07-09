@@ -34,6 +34,28 @@ detail_bp = Blueprint('project_detail', __name__)
 def detail(project_id):
     project = Project.query.get_or_404(project_id)
 
+    # Back navigation: which page linked here, so the back button returns
+    # the user to where they actually came from instead of always dumping
+    # them on /projects.
+    # 'dashboard' means the NEW role-based dashboard (app/routes/dashboard.py,
+    # registered blueprint name 'projects' — see the NOTE at the top of that
+    # file) — every row link across dashboard.html and its card partials
+    # appends ?from=dashboard. This used to point at main.projects (the OLD
+    # dashboard) because the new /dashboard page had no HTML built yet when
+    # this was first written; that's been true since UI Chunk 1, so this now
+    # correctly sends users back to the real page they came from.
+    # 'deliverables' is a SEPARATE, older thing — the OLD role dashboards'
+    # Deliverable View tab (cs.html/designer.html/team_lead.html) links here
+    # with ?from=deliverables, and that view only exists on main.projects,
+    # so that branch is correctly left pointing there.
+    from_param = request.args.get('from')
+    if from_param == 'dashboard':
+        back_label, back_url = 'Back to Dashboard', url_for('projects.index')
+    elif from_param == 'deliverables':
+        back_label, back_url = 'Back to Deliverables', url_for('main.projects')
+    else:
+        back_label, back_url = 'Back to Projects', url_for('main.projects')
+
     from app.models import ProjectSubmission, ProjectRevision
     import json as _json
 
@@ -329,6 +351,8 @@ def detail(project_id):
     return render_template(
         'projects/detail.html',
         project=project,
+        back_label=back_label,
+        back_url=back_url,
         designers_by_team=designers_by_team,
         assignments_by_team=assignments_by_team,
         brief_sections=brief_sections,
@@ -847,6 +871,54 @@ def resolve_flag(project_id, flag_id):
     return jsonify({'success': True})
 
 
+# ── Decision Escalation (Management) ──────────────────────────────────────────
+
+@detail_bp.route('/projects/<int:project_id>/flag-management', methods=['POST'])
+@login_required
+@role_required('admin', 'cs', 'designer', 'team_lead', 'management')  # anyone can escalate a blocker to management
+def flag_management(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    # Approval lock guard — see CLAUDE.md: approved projects are frozen, no further state changes.
+    if project.project_status == 'approved':
+        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
+
+    data = request.get_json(silent=True) or {}
+    decision_note = (data.get('decision_note') or '').strip()
+    if not decision_note:
+        return jsonify({'success': False, 'error': 'decision_note is required'}), 400
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    project.decision_needed = True
+    project.decision_raised_by_id = actor.id
+    project.decision_raised_at = datetime.utcnow()
+    project.decision_note = decision_note
+    db.session.commit()
+
+    # create_notification() handles both the in-app notification (always
+    # created) and the email (only if the recipient hasn't opted out of
+    # email_decision_flag via /account/notification-prefs) — see app/notifications.py.
+    for recipient in User.query.filter_by(role='management').all():
+        create_notification(
+            recipient=recipient,
+            message=f'{actor.name} flagged "{project.name}" for a Management decision.',
+            notification_type='decision_flag',
+            project=project,
+            triggered_by=actor,
+            pref_key='email_decision_flag'
+        )
+
+    log_activity(
+        'decision_flagged',
+        f'{actor.name} flagged "{project.name}" for a Management decision: "{decision_note}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
+    )
+
+    return jsonify({'success': True})
+
+
 # ── Designer / Team assignment ───────────────────────────────────────────────
 
 @detail_bp.route('/projects/<int:project_id>/assign-designers', methods=['POST'])
@@ -1147,7 +1219,7 @@ def assign_concept_kv(project_id):
         if kv_designer:
             notify_designer_of_concept_kv_assignment(project, kv_designer, 'Key Visual', triggered_by=current_user)
             log_activity('designer_assigned', f'{kv_designer.name} assigned as KV designer on "{project.name}"', user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
-    return redirect(url_for('project_detail.detail', project_id=project.id))
+    return jsonify({'success': True})
 
 @detail_bp.route('/projects/<int:project_id>/standard-deliverables/add', methods=['POST'])
 @login_required
@@ -1438,6 +1510,35 @@ def delete_project_file(file_id):
     db.session.commit()
 
     return jsonify({'success': True})
+
+
+@detail_bp.route('/projects/<int:project_id>/inline-image', methods=['POST'])
+@login_required
+def upload_inline_image(project_id):
+    """Upload an inline image from a rich editor and return its static URL.
+    Images are stored in app/static/inline_images/<project_id>/ so they can
+    be served directly as <img src> without going through NAS."""
+    project = Project.query.get_or_404(project_id)
+
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+    allowed_exts = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in allowed_exts:
+        return jsonify({'success': False, 'error': 'Images only (PNG, JPG, GIF, WEBP)'}), 400
+
+    folder = os.path.join(current_app.root_path, 'static', 'inline_images', str(project_id))
+    os.makedirs(folder, exist_ok=True)
+
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(folder, filename))
+
+    static_url = url_for('static', filename=f'inline_images/{project_id}/{filename}')
+    return jsonify({'success': True, 'url': static_url})
 
 
 @detail_bp.route('/projects/<int:project_id>/nas-link', methods=['GET'])
