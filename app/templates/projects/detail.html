@@ -589,14 +589,14 @@
                     <button class="btn-customer-action btn-customer-cancel"
                         data-action="cancel-customer"
                         data-customer-id="{{ pc.id }}"
-                        data-customer-name="{{ pc.customer.name | tojson }}">
+                        data-customer-name="{{ pc.customer.name | tojson | forceescape }}">
                         Cancel Customer
                     </button>
                     {% else %}
                     <button class="btn-customer-action btn-customer-remove"
                         data-action="remove-customer"
                         data-customer-id="{{ pc.id }}"
-                        data-customer-name="{{ pc.customer.name | tojson }}">
+                        data-customer-name="{{ pc.customer.name | tojson | forceescape }}">
                         Remove Customer
                     </button>
                     {% endif %}

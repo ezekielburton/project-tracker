@@ -11,8 +11,8 @@ from app import db
 from app.models import (Project, ProjectDesigner, Scope, User, Client,
                         Customer, DeliverableType, DeliverableTypeDiscipline,
                         ProjectRegion, ProjectCustomer, Deliverable,
-                        DeliverableAssignment, DesignType, DesignDirection,
-                        ProjectSubmission)
+                        DeliverableAssignment, DeliverableStatusLog,
+                        DesignType, DesignDirection, ProjectSubmission)
 from app.decorators import role_required
 from app.notifications import (
     notify_team_leads_of_new_project, notify_cs_lead_of_assignment,
@@ -225,7 +225,10 @@ def update_project(project_id):
 
         project.name = data['name']
         project.client_id = int(data['client_id']) if data.get('client_id') else project.client_id
-        project.cs_lead_id = int(data['cs_lead_id']) if data.get('cs_lead_id') else project.cs_lead_id
+        # Only the CS lead themselves, admin, or management can reassign the CS lead.
+        # Secondary CS users editing a project must not be able to take ownership.
+        if current_user.role in ['admin', 'management'] or current_user.id == project.cs_lead_id:
+            project.cs_lead_id = int(data['cs_lead_id']) if data.get('cs_lead_id') else project.cs_lead_id
         job_num = data.get('job_number')
         if job_num:
             conflict = Project.query.filter(
@@ -386,16 +389,23 @@ def update_project(project_id):
                 customer_map[customer_id] = pc.id
             
             # --- Stage 3: rebuild deliverables for surviving customers ---
-            # Must delete assignments first — bulk SQL DELETE bypasses ORM cascade,
-            # so Postgres raises a FK violation if assignments still reference the deliverables.
+            # Bulk SQL DELETE bypasses ORM cascade, so any table with a FK →
+            # deliverables.id must be cleared manually first or Postgres will
+            # raise a ForeignKeyViolation.  Two tables reference deliverables:
+            #   • deliverable_assignments  (DeliverableAssignment)
+            #   • deliverable_status_logs  (DeliverableStatusLog)  ← added 2026-07-09
             for pc_id in customer_map.values():
                 deliverable_ids = [
                     row.id for row in
                     Deliverable.query.filter_by(project_customer_id=pc_id).with_entities(Deliverable.id)
                 ]
                 if deliverable_ids:
+                    # Delete child rows in FK-dependency order before the parent.
                     DeliverableAssignment.query.filter(
                         DeliverableAssignment.deliverable_id.in_(deliverable_ids)
+                    ).delete(synchronize_session=False)
+                    DeliverableStatusLog.query.filter(
+                        DeliverableStatusLog.deliverable_id.in_(deliverable_ids)
                     ).delete(synchronize_session=False)
                 Deliverable.query.filter_by(
                     project_customer_id=pc_id

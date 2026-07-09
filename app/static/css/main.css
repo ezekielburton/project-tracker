@@ -6035,13 +6035,18 @@ select.s-awaiting_posm_details {
 }
 
 .user-avatar-link.user-avatar--sm {
-    width: 32px;
-    height: 32px;
+    width: 64px;
+    height: 64px;
 }
 
 .user-avatar-link.user-avatar--xs {
-    width: 18px;
-    height: 18px;
+    width: 26px;
+    height: 26px;
+}
+
+.user-avatar-link.user-avatar--profile {
+    width: 32px;
+    height: 32px;
 }
 
 .user-avatar-img {
@@ -6062,7 +6067,7 @@ select.s-awaiting_posm_details {
 }
 
 .user-avatar--xs .user-avatar-initials {
-    font-size: 0.55rem;
+    font-size: 1.05rem;
 }
 
 .user-avatar-badge {

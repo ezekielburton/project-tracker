@@ -35,12 +35,30 @@ def _detail_fingerprint(p):
     Compute a short string that captures everything visible on the detail page.
     If any of these values change between polls, polling.js reloads the page.
 
-    Covers: status, assigned designers, brief flags (open/resolved),
-    submissions (active/flagged), revision count, concept/KV state.
+    Covers: status, assigned designers (project- and deliverable-level),
+    brief flags (open/resolved), submissions (active/flagged), revision
+    count and revision requests, concept/KV state, project info fields
+    (name, job number, client, teams, dates, brief text), every
+    deliverable's own status/dates/teams (standard AND C&CM — a C&CM
+    deliverable is just a Deliverable row with project_customer_id set, so
+    p.project_deliverables already covers both), the project_customers/
+    regions structure, and reference file uploads.
 
     Kept as a plain string rather than a hash so it's easy to debug in the
-    browser — just inspect data-fp on #section-assignments.
+    browser — just inspect data-fp on #section-assignments. Long free-text
+    fields are hashed (short, stable md5 prefix) rather than embedded in
+    full, to keep the response small — Python's built-in hash() is NOT used
+    here since it's randomized per-process and would cause false-positive
+    "changed" detections whenever two different Gunicorn workers computed it.
     """
+    import hashlib
+
+    def _texthash(s):
+        return hashlib.md5((s or '').encode('utf-8')).hexdigest()[:8]
+
+    def _d(dt):
+        return dt.isoformat() if dt else ''
+
     # Sorted user IDs so the fingerprint is order-independent
     designer_ids = sorted([pd.user_id for pd in p.assigned_designers])
 
@@ -56,6 +74,48 @@ def _detail_fingerprint(p):
         for s in p.submissions
     ])
 
+    # Each deliverable — standard AND C&CM alike — encoded as
+    # "id:status:design_deadline:installation_deadline:teams:flagged:revcount"
+    deliverable_states = sorted([
+        '{}:{}:{}:{}:{}:{}:{}'.format(
+            d.id, d.status or '', _d(d.design_deadline), _d(d.installation_deadline),
+            d.teams or '', 1 if d.flagged_for_revision else 0, d.revision_count or 0
+        )
+        for d in p.project_deliverables
+    ])
+
+    # Deliverable-level assignments (as opposed to the project-level
+    # ProjectDesigner rows already covered by designer_ids above) —
+    # "deliverable_id:designer_id" pairs
+    deliverable_assignments = sorted([
+        '{}:{}'.format(da.deliverable_id, da.designer_id)
+        for d in p.project_deliverables
+        for da in d.disciplines
+    ])
+
+    # C&CM structure: which customers/regions are on this project and their
+    # own per-customer status/dates (region assignment itself rarely changes
+    # but is cheap to include)
+    customer_states = sorted([
+        '{}:{}:{}:{}:{}:{}'.format(
+            pc.id, pc.customer_id, pc.status or '', _d(pc.design_deadline),
+            _d(pc.installation_date), 1 if pc.cancelled else 0
+        )
+        for pc in p.project_customers
+    ])
+    region_states = sorted([r.region for r in p.project_regions])
+
+    # Reference files — just the sorted ID list, enough to detect additions/removals
+    file_ids = sorted([f.id for f in p.reference_files])
+
+    # Revision requests sent to the designer (message text hashed — see _texthash above)
+    revision_states = sorted([
+        '{}:{}{}:{}'.format(
+            r.id, 1 if r.includes_concept else 0, 1 if r.includes_kv else 0, _texthash(r.message)
+        )
+        for r in p.revisions
+    ])
+
     return '|'.join([
         p.project_status or '',
         ','.join(map(str, designer_ids)),
@@ -66,6 +126,32 @@ def _detail_fingerprint(p):
         str(p.kv_status or ''),
         str(p.concept_designer_id or ''),
         str(p.kv_designer_id or ''),
+        # Project info — standard brief fields
+        p.name or '',
+        p.job_number or '',
+        p.client or '',
+        p.design_teams_requested or '',
+        str(p.importance or ''),
+        str(p.urgency or ''),
+        p.required_output or '',
+        str(p.design_type_id or ''),
+        str(p.design_direction_id or ''),
+        _texthash(p.client_expectation),
+        _texthash(p.what_to_avoid),
+        _texthash(p.additional_information),
+        _texthash(p.campaign_notes),
+        _texthash(p.kv_requirements),
+        # Dates
+        _d(p.design_needed_by), _d(p.execution_date), _d(p.briefing_date),
+        _d(p.first_output_deadline), _d(p.installation_date),
+        _d(p.concept_deadline), _d(p.kv_deadline),
+        # Deliverable / assignment / C&CM structure / reference files
+        ','.join(deliverable_states),
+        ','.join(deliverable_assignments),
+        ','.join(customer_states),
+        ','.join(region_states),
+        ','.join(map(str, file_ids)),
+        ','.join(revision_states),
     ])
 
 
@@ -76,15 +162,32 @@ def _project_entry(p):
     Includes:
       - id: used to detect rows added/removed (triggers a reload)
       - status: used for in-place badge patching when only status changed
-      - fp: fingerprint of designer assignments — sorted user IDs joined by comma.
-            A fingerprint change means designers were assigned/removed, which
-            triggers a full reload (badge patching can't update designer avatar rows).
+      - fp: fingerprint of everything else shown on the dashboard row —
+            designer assignment, name, job number, teams, CS lead, and the
+            two deadline dates. A change to any of these triggers a full
+            reload (badge patching only handles the status text itself;
+            everything else here would require re-rendering the whole row).
+
+    fp's field order/format MUST exactly match the _dfp Jinja fingerprint
+    computed in the dashboard templates (cs.html, team_lead.html,
+    designer.html) — these are plain string comparisons, so any drift
+    between the two would make every poll look like a mismatch even when
+    nothing actually changed.
     """
     designer_ids = sorted([pd.user_id for pd in p.assigned_designers])
+    fp = '|'.join([
+        ','.join(map(str, designer_ids)),
+        p.name or '',
+        p.job_number or '',
+        p.design_teams_requested or '',
+        str(p.cs_lead_id or ''),
+        p.first_output_deadline.isoformat() if p.first_output_deadline else '',
+        p.execution_date.isoformat() if p.execution_date else '',
+    ])
     return {
         'id': p.id,
         'status': p.project_status,
-        'fp': ','.join(map(str, designer_ids)),
+        'fp': fp,
     }
 
 

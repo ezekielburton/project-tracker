@@ -562,6 +562,7 @@ if (addSoundForm) {
         else if (name === 'deliverables') loadPTDeliverables();
         else if (name === 'design-types') loadPTDesignTypes();
         else if (name === 'design-directions') loadPTDesignDirections();
+        else if (name === 'job-numbers') loadPTJobNumbers(); // Job Numbers tab
     }
 
     // ── Clients ───────────────────────────────────────────────────
@@ -763,6 +764,9 @@ if (addSoundForm) {
     }
 
     // ── Drafts ────────────────────────────────────────────────────
+    // Shows all draft-status projects.  Deleting a draft here removes the whole
+    // project row, which also frees the job_number (it lives on the same row and
+    // has a UNIQUE constraint — once the row is gone the number is available again).
 
     function loadPTDrafts() {
         fetch('/admin/api/drafts')
@@ -774,10 +778,13 @@ if (addSoundForm) {
                     return;
                 }
                 list.innerHTML = drafts.map(function (d) {
+                    // Show job number in the subtitle so admin can see which number
+                    // will be freed when a draft is deleted.
+                    var subtitle = d.cs_lead + (d.job_number ? ' · ' + d.job_number : '');
                     return '<div class="account-user-row" id="pt-draft-' + d.id + '">' +
                         '<div class="account-user-info">' +
                         '<span class="account-user-name">' + d.name + '</span>' +
-                        '<span class="account-user-role">' + d.cs_lead + '</span>' +
+                        '<span class="account-user-role">' + subtitle + '</span>' +
                         '</div>' +
                         '<div class="account-user-actions">' +
                         '<button type="button" class="account-delete-btn" data-id="' + d.id + '" data-name="' + d.name + '">&times;</button>' +
@@ -787,7 +794,7 @@ if (addSoundForm) {
                     btn.addEventListener('click', function () {
                         var name = this.dataset.name;
                         var id   = this.dataset.id;
-                        showConfirm('Delete draft "' + name + '"?', function () {
+                        showConfirm('Delete draft "' + name + '"? This also frees its job number.', function () {
                             fetch('/admin/api/drafts/' + id, { method: 'DELETE' })
                                 .then(function (res) { return res.json(); })
                                 .then(function (data) {
@@ -795,6 +802,94 @@ if (addSoundForm) {
                                     else { showToast(data.error || 'Could not delete draft.', 'error'); }
                                 });
                         });
+                    });
+                });
+            });
+    }
+
+    // ── Job Numbers ───────────────────────────────────────────────
+    // Lists every project that has a job_number set.  The "Clear" button sets
+    // the number to NULL (freeing the UNIQUE slot) WITHOUT deleting the project.
+    // Useful when a draft was left half-created and needs its number recycled.
+
+    function loadPTJobNumbers() {
+        fetch('/admin/api/job-numbers')
+            .then(function (res) { return res.json(); })
+            .then(function (items) {
+                var list = document.getElementById('pt-job-numbers-list');
+                if (items.length === 0) {
+                    list.innerHTML = '<p class="empty-state">No job numbers assigned.</p>';
+                    return;
+                }
+
+                // Human-readable labels for every possible project status.
+                var statusLabel = {
+                    draft:                  'Draft',
+                    briefed:                'Briefed',
+                    in_queue:               'In Queue',
+                    in_progress:            'In Progress',
+                    submitted:              'Submitted',
+                    awaiting_review:        'Awaiting Review',
+                    revision_requested:     'Revision Requested',
+                    re_submitted:           'Re-submitted',
+                    cs_approved:            'CS Approved',
+                    revision_in_queue:      'Rev. in Queue',
+                    revision_in_progress:   'Rev. in Progress',
+                    on_hold:                'On Hold',
+                    awaiting_posm_details:  'Awaiting POSM',
+                    approved:               'Approved',
+                };
+
+                list.innerHTML = items.map(function (item) {
+                    // Show the number prominently as the title; project info in the subtitle.
+                    var subtitle = item.name + ' · ' + item.cs_lead + ' · ' + (statusLabel[item.status] || item.status);
+                    return '<div class="account-user-row" id="pt-jobn-' + item.id + '">' +
+                        '<div class="account-user-info">' +
+                        '<span class="account-user-name">' + item.job_number + '</span>' +
+                        '<span class="account-user-role">' + subtitle + '</span>' +
+                        '</div>' +
+                        '<div class="account-user-actions">' +
+                        // "Clear" removes just the number, not the project — text reflects this.
+                        '<button type="button" class="account-delete-btn"' +
+                        ' data-id="' + item.id + '"' +
+                        ' data-name="' + item.job_number + '"' +
+                        ' data-project="' + item.name.replace(/"/g, '&quot;') + '">' +
+                        'Clear</button>' +
+                        '</div></div>';
+                }).join('');
+
+                list.querySelectorAll('.account-delete-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        /* Capture all values before the async confirm opens — 'this' won't
+                           be available inside the callback after the modal is shown. */
+                        var id      = this.dataset.id;
+                        var jobn    = this.dataset.name;
+                        var project = this.dataset.project;
+
+                        showConfirm(
+                            'Clear job number "' + jobn + '" from "' + project + '"?\n' +
+                            'The project stays — only the number is freed.',
+                            function () {
+                                fetch('/admin/api/job-numbers/' + id, { method: 'DELETE' })
+                                    .then(function (res) { return res.json(); })
+                                    .then(function (data) {
+                                        if (data.success) {
+                                            // Remove this row from the list.
+                                            var row = document.getElementById('pt-jobn-' + id);
+                                            if (row) row.remove();
+                                            // If the list is now empty show the empty state.
+                                            if (!document.querySelector('[id^="pt-jobn-"]')) {
+                                                document.getElementById('pt-job-numbers-list').innerHTML =
+                                                    '<p class="empty-state">No job numbers assigned.</p>';
+                                            }
+                                        } else {
+                                            showToast(data.error || 'Could not clear job number.', 'error');
+                                        }
+                                    })
+                                    .catch(function () { showToast('Something went wrong.', 'error'); });
+                            },
+                            'Clear Job Number'
+                        );
                     });
                 });
             });

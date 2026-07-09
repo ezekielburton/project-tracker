@@ -1280,99 +1280,102 @@ function syncTableScrollers(viewEl) {
     // ============================================================
     // DRAFTS PAGE
     // ============================================================
+    // All listeners are delegated on document so they survive SPA navigation —
+    // sidebar.js replaces innerHTML without re-running main.js, so caching
+    // elements at parse time (the old pattern) meant listeners were never wired
+    // after navigating to /projects/drafts via the sidebar.
+    // _draftPageWired prevents the single handler from being stacked on re-runs.
 
-    const draftItems = document.querySelectorAll('.draft-item');
-    const draftConfirmOverlay = document.getElementById('draftConfirmOverlay');
-    const draftConfirmYes = document.getElementById('draftConfirmYes');
-    const draftConfirmCancel = document.getElementById('draftConfirmCancel');
+    if (!window._draftPageWired) {
+        window._draftPageWired = true;
 
-    if (draftItems.length > 0) {
-
-        let pendingDeleteId = null;
-        let pendingDeleteRow = null;
-
-        draftItems.forEach(function (item) {
-            item.addEventListener('click', function () {
-                const isActive = this.classList.contains('active');
-                draftItems.forEach(function (i) { i.classList.remove('active'); });
-                if (!isActive) {
-                    this.classList.add('active');
-                }
-            });
-        });
+        var _draftPendingId  = null;
+        var _draftPendingRow = null;
 
         document.addEventListener('click', function (e) {
-            if (!e.target.closest('.draft-item')) {
-                draftItems.forEach(function (i) { i.classList.remove('active'); });
+
+            // ── Delete button → open confirm overlay ──────────────
+            // Check this FIRST so clicking Delete doesn't also toggle the item.
+            var deleteBtn = e.target.closest('.draft-delete-btn');
+            if (deleteBtn) {
+                _draftPendingId  = deleteBtn.dataset.draftId;
+                _draftPendingRow = deleteBtn.closest('.draft-item');
+                var overlay = document.getElementById('draftConfirmOverlay');
+                if (overlay) overlay.classList.remove('hidden');
+                return;
             }
-        });
 
-        document.querySelectorAll('.draft-delete-btn').forEach(function (btn) {
-            btn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                pendingDeleteId = this.dataset.draftId;
-                pendingDeleteRow = this.closest('.draft-item');
-                if (draftConfirmOverlay) {
-                    draftConfirmOverlay.classList.remove('hidden');
-                }
-            });
-        });
+            // ── Confirm Yes → perform delete ─────────────────────
+            if (e.target.id === 'draftConfirmYes') {
+                if (!_draftPendingId) return;
+                var confirmYes = e.target;
+                btnLoading(confirmYes);
 
-        if (draftConfirmYes) {
-            draftConfirmYes.addEventListener('click', function () {
-                if (!pendingDeleteId) return;
-                btnLoading(draftConfirmYes);
+                var pendingId  = _draftPendingId;
+                var pendingRow = _draftPendingRow;
 
-                fetch('/projects/drafts/' + pendingDeleteId + '/delete', {
+                fetch('/projects/drafts/' + pendingId + '/delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 })
                     .then(function (res) { return res.json(); })
                     .then(function (data) {
                         if (data.success) {
-                            if (draftConfirmOverlay) {
-                                draftConfirmOverlay.classList.add('hidden');
-                            }
-                            if (pendingDeleteRow) {
-                                const rowHeight = pendingDeleteRow.offsetHeight;
-                                pendingDeleteRow.style.transition = 'opacity 0.25s ease, max-height 0.35s ease 0.2s, margin-bottom 0.35s ease 0.2s, padding 0.35s ease 0.2s';
-                                pendingDeleteRow.style.overflow = 'hidden';
-                                pendingDeleteRow.style.maxHeight = rowHeight + 'px';
-                                pendingDeleteRow.style.opacity = '0';
+                            var ov = document.getElementById('draftConfirmOverlay');
+                            if (ov) ov.classList.add('hidden');
+                            if (pendingRow) {
+                                var rowHeight = pendingRow.offsetHeight;
+                                pendingRow.style.transition = 'opacity 0.25s ease, max-height 0.35s ease 0.2s, margin-bottom 0.35s ease 0.2s, padding 0.35s ease 0.2s';
+                                pendingRow.style.overflow = 'hidden';
+                                pendingRow.style.maxHeight = rowHeight + 'px';
+                                pendingRow.style.opacity = '0';
                                 setTimeout(function () {
-                                    pendingDeleteRow.style.maxHeight = '0';
-                                    pendingDeleteRow.style.marginBottom = '0';
-                                    pendingDeleteRow.style.padding = '0';
+                                    pendingRow.style.maxHeight = '0';
+                                    pendingRow.style.marginBottom = '0';
+                                    pendingRow.style.padding = '0';
                                 }, 250);
                                 setTimeout(function () {
-                                    pendingDeleteRow.remove();
-                                    const remaining = document.querySelectorAll('.draft-item');
-                                    if (remaining.length === 0) {
+                                    pendingRow.remove();
+                                    if (document.querySelectorAll('.draft-item').length === 0) {
                                         window.location.href = '/';
                                     }
                                 }, 850);
                             }
-                            pendingDeleteId = null;
-                            pendingDeleteRow = null;
+                            _draftPendingId  = null;
+                            _draftPendingRow = null;
+                        } else {
+                            showToast(data.error || 'Could not delete draft.', 'error');
+                            btnDone(confirmYes);
                         }
                     })
                     .catch(function (err) {
                         console.error('Draft delete failed:', err);
-                        btnDone(draftConfirmYes);
+                        btnDone(document.getElementById('draftConfirmYes'));
                     });
-            });
-        }
+                return;
+            }
 
-        if (draftConfirmCancel) {
-            draftConfirmCancel.addEventListener('click', function () {
-                if (draftConfirmOverlay) {
-                    draftConfirmOverlay.classList.add('hidden');
-                }
-                pendingDeleteId = null;
-                pendingDeleteRow = null;
-            });
-        }
+            // ── Confirm Cancel → dismiss ──────────────────────────
+            if (e.target.id === 'draftConfirmCancel') {
+                var ov2 = document.getElementById('draftConfirmOverlay');
+                if (ov2) ov2.classList.add('hidden');
+                _draftPendingId  = null;
+                _draftPendingRow = null;
+                return;
+            }
 
+            // ── Draft item click → toggle active ─────────────────
+            var item = e.target.closest('.draft-item');
+            if (item) {
+                var isActive = item.classList.contains('active');
+                document.querySelectorAll('.draft-item').forEach(function (i) { i.classList.remove('active'); });
+                if (!isActive) item.classList.add('active');
+                return;
+            }
+
+            // ── Click outside → deactivate all ───────────────────
+            document.querySelectorAll('.draft-item').forEach(function (i) { i.classList.remove('active'); });
+        });
     }
 
     // ── Toast Notifications ──────────────────────────────────────

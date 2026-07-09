@@ -17,6 +17,10 @@ def create_app():
     db.init_app(app)
     login_manager.init_app(app)
     mail.init_app(app)
+    from app.live_events import init_live_events
+    init_live_events()
+    from app.sse_relay import init_sse_relay
+    init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
 
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'
@@ -42,6 +46,7 @@ def create_app():
     from app.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel (Phase 7)
     from app.routes.wizard import wizard_bp
     from app.routes.file_templates import file_templates_bp
+    from app.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -59,6 +64,7 @@ def create_app():
     app.register_blueprint(admin_achievements_bp)
     app.register_blueprint(wizard_bp)
     app.register_blueprint(file_templates_bp)
+    app.register_blueprint(sse_bp)
    
     @app.context_processor
     @app.context_processor

@@ -1,6 +1,22 @@
 ================================================================================
 VITAMIN HELIX — CHANGELOG
 ===============================================================================
+
+================================================================================
+v2.2.1 - Instant Updates Patch & Small Adjustments
+================================================================================
+New Features:
+
+- Instant updates. The app now auto refreshes when there are updates. 
+True live updating is in the works, but will take a while on the backend. This is a temporary solution.
+
+Adjustments:
+
+- Adjusted size of pics of staff in the projects table
+
+Bug Fixes:
+
+
 ================================================================================
 v2.2 - Large feature update
 ================================================================================

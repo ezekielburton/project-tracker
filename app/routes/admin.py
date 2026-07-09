@@ -373,8 +373,14 @@ def delete_project(project_id):
 @login_required
 @admin_required
 def list_drafts():
+    # Include job_number so the admin drafts panel can display and distinguish them.
     drafts = Project.query.filter_by(project_status='draft').order_by(Project.name).all()
-    return jsonify([{'id': d.id, 'name': d.name, 'cs_lead': d.cs_lead.name if d.cs_lead else '—'} for d in drafts])
+    return jsonify([{
+        'id': d.id,
+        'name': d.name,
+        'job_number': d.job_number or '',
+        'cs_lead': d.cs_lead.name if d.cs_lead else '—'
+    } for d in drafts])
 
 @admin_bp.route('/admin/api/drafts/<int:draft_id>', methods=['DELETE'])
 @login_required
@@ -382,9 +388,61 @@ def list_drafts():
 def delete_draft_admin(draft_id):
     draft = Project.query.get_or_404(draft_id)
     name = draft.name
+    # Deleting the project row also removes the job_number (UNIQUE column lives on
+    # the same row), so no separate step is needed to free the number.
     db.session.delete(draft)
     db.session.commit()
     log_activity('draft_deleted', f'Draft "{name}" deleted', user=current_user, entity_type='project', entity_name=name)
+    return jsonify({'success': True})
+
+
+# ── Job Numbers ────────────────────────────────────────────────────────────────
+# Admin can see every project that has a job number assigned and clear individual
+# numbers (set to NULL) without deleting the project itself.  Useful when a
+# draft was abandoned without being deleted, leaving its number reserved.
+
+@admin_bp.route('/admin/api/job-numbers', methods=['GET'])
+@login_required
+@admin_required
+def list_job_numbers():
+    """Return every project that has a job_number set, sorted by number."""
+    projects = (
+        Project.query
+        .filter(Project.job_number != None)  # noqa: E711 — SQLAlchemy IS NOT NULL
+        .order_by(Project.job_number)
+        .all()
+    )
+    return jsonify([{
+        'id':         p.id,
+        'name':       p.name,
+        'job_number': p.job_number,
+        'status':     p.project_status,
+        'cs_lead':    p.cs_lead.name if p.cs_lead else '—',
+    } for p in projects])
+
+
+@admin_bp.route('/admin/api/job-numbers/<int:project_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def clear_job_number(project_id):
+    """Clear (set to NULL) the job_number field on a project.
+    The project itself is NOT deleted — only the number is freed so it can be
+    reassigned.  Use the Projects or Drafts tab to delete the project itself.
+    """
+    project = Project.query.get_or_404(project_id)
+    old_number = project.job_number
+    if not old_number:
+        return jsonify({'success': False, 'error': 'This project has no job number.'}), 400
+    project.job_number = None
+    db.session.commit()
+    log_activity(
+        'job_number_cleared',
+        f'Job number "{old_number}" cleared from "{project.name}"',
+        user=current_user,
+        entity_type='project',
+        entity_name=project.name,
+        entity_id=project.id
+    )
     return jsonify({'success': True})
 
 @admin_bp.route('/admin/api/deliverable-types', methods=['GET'])

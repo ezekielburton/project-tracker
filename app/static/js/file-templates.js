@@ -22,6 +22,11 @@ if (!window._ftDispatcherWired) {
 
         var customerToggle = e.target.closest('[data-action="toggle-ft-customer"]');
         if (customerToggle) { toggleFtSection(customerToggle); return; }
+
+        // Simulation Files button — wired here (not on the element directly) so it
+        // survives SPA navigation replacing the DOM.
+        var simBtn = e.target.closest('#open-simulation-files-btn');
+        if (simBtn) { openNasLink(simBtn); return; }
     });
 }
 
@@ -52,11 +57,7 @@ function restoreFileTemplatesCollapseState() {
 function initFileTemplatesPage() {
     if (!document.querySelector('.ft-region-block')) return; // not on this page
     restoreFileTemplatesCollapseState();
-
-    var simBtn = document.getElementById('open-simulation-files-btn');
-    if (simBtn) {
-        simBtn.addEventListener('click', function () { openNasLink(simBtn); });
-    }
+    // simBtn click handled by the delegated listener above — no direct binding needed.
 }
 
 document.addEventListener('DOMContentLoaded', initFileTemplatesPage);

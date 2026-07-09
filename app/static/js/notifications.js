@@ -72,9 +72,15 @@ function helixShowBrowserNotification(message) {
     });
 }
 
-// ── Notification Polling (every 30 seconds) ──────────────────────────────────
+// ── Notification Live Updates ────────────────────────────────────────────────
 // Polls /notifications/poll?since=<ISO> for new unread notifications.
 // On first load, sets the baseline timestamp so we only alert about NEW arrivals.
+//
+// SSE redesign (Stage 5): pollNotifications() itself is unchanged — what
+// triggers it now is an EventSource on /sse/notifications (pushed the
+// moment a new Notification row commits, via Stages 2-4) instead of a
+// fixed 30s timer. Falls back to the original 30s setInterval automatically
+// if SSE isn't supported or the connection drops, until it recovers.
 (function () {
     // Initialise the "last polled" time to now so we don't re-fire existing notifications
     if (!localStorage.getItem('helix_last_poll')) {
@@ -144,10 +150,39 @@ function helixShowBrowserNotification(message) {
             });
     }
 
-    // Start polling 5s after page load (avoid hitting server during initial render)
+    // Fallback interval — only runs when SSE is unavailable or has dropped.
+    var _fallbackInterval = null;
+    function _startFallback() {
+        if (_fallbackInterval !== null) return;
+        _fallbackInterval = setInterval(pollNotifications, 30000);
+    }
+    function _stopFallback() {
+        if (_fallbackInterval !== null) {
+            clearInterval(_fallbackInterval);
+            _fallbackInterval = null;
+        }
+    }
+
+    // Start 5s after page load (avoid hitting server during initial render)
     setTimeout(function () {
-        pollNotifications();
-        setInterval(pollNotifications, 30000); // every 30 seconds
+        pollNotifications(); // one baseline check, same as before
+
+        if (typeof EventSource === 'undefined') {
+            _startFallback(); // no SSE support in this browser — poll like before
+            return;
+        }
+
+        var source = new EventSource('/sse/notifications');
+        source.onopen = _stopFallback;
+        source.onmessage = function () {
+            _stopFallback();
+            pollNotifications();
+        };
+        source.onerror = function () {
+            // SSE dropped or failed to (re)connect — keep notifications live
+            // via polling until it recovers.
+            _startFallback();
+        };
     }, 5000);
 })();
 

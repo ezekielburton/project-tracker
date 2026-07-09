@@ -1,25 +1,93 @@
 // app/static/js/polling.js
 //
-// Background polling for the dashboard and project detail pages.
+// Live updates for the dashboard and project detail pages.
 // Runs silently — no spinners or loading states shown to the user.
 // All network errors are swallowed so a brief blip never breaks the UI.
 //
-// Dashboard: polls every 30s. Patches changed status badges in-place.
+// SSE redesign (Stage 5): the actual fetch/compare/patch logic below
+// (pollDashboard, pollDetail, and their helpers) is UNCHANGED from the old
+// setInterval-based design — only what TRIGGERS them changed. Each page
+// now opens an EventSource to the matching /sse/... route (Stage 4), which
+// pushes a tiny "something changed" ping the moment a Postgres NOTIFY
+// fires (Stage 2/3) instead of waiting for a timer. If the SSE connection
+// ever fails — old browser, proxy that blocks streaming, network hiccup —
+// _connectLiveStream() transparently falls back to the original 1s
+// setInterval polling until SSE recovers, so this never becomes a hard
+// dependency on the new transport.
+//
+// Dashboard: patches changed status badges in-place.
 //            Falls back to a full reload only if a project was added or removed.
-// Detail:    polls every 15s. Updates the status badge and on-hold banner.
+// Detail:    reloads the page if anything in its fingerprint changed.
 //
 // SPA-aware: sidebar.js dispatches 'helix:navigated' after every content swap.
 // init() is called on both the initial page load and after every navigation,
-// so the right poller is always running for whichever page is currently visible.
+// so the right stream is always running for whichever page is currently visible.
 
 (function () {
     'use strict';
 
-    // Track the active interval IDs so teardown() can clear them before
+    // Track the active stream handles so teardown() can close them before
     // init() sets up new ones for the next page. Without this, navigating
-    // between pages would stack up duplicate intervals.
-    var _dashboardInterval = null;
-    var _detailInterval    = null;
+    // between pages would stack up duplicate connections/intervals.
+    var _dashboardStream = null;
+    var _detailStream    = null;
+
+    // How often the fallback interval polls, when SSE isn't available or
+    // has dropped — matches the cadence the old setInterval-only design used.
+    var _FALLBACK_INTERVAL_MS = 1000;
+
+    // Opens an EventSource at `url` and calls `onEvent` every time it pushes
+    // a message. If EventSource isn't supported at all, or the connection
+    // errors out (proxy issue, network blip, server restart), falls back to
+    // calling `onEvent` on a plain setInterval every `intervalMs` — the
+    // exact behavior this file used before SSE existed — until/unless the
+    // stream reconnects on its own (native EventSource retries
+    // automatically) or a fresh message arrives, at which point the
+    // fallback interval is cleared again.
+    //
+    // Returns { close } so callers can tear everything down on navigation.
+    function _connectLiveStream(url, onEvent, intervalMs) {
+        var fallbackInterval = null;
+
+        function startFallback() {
+            if (fallbackInterval !== null) return; // already running
+            fallbackInterval = setInterval(onEvent, intervalMs);
+        }
+
+        function stopFallback() {
+            if (fallbackInterval !== null) {
+                clearInterval(fallbackInterval);
+                fallbackInterval = null;
+            }
+        }
+
+        if (typeof EventSource === 'undefined') {
+            // No SSE support at all in this browser — just poll like before.
+            startFallback();
+            return { close: stopFallback };
+        }
+
+        var source = new EventSource(url);
+
+        source.onopen = stopFallback;
+        source.onmessage = function () {
+            stopFallback();
+            onEvent();
+        };
+        source.onerror = function () {
+            // SSE dropped or failed to (re)connect — keep the UI live via
+            // polling as a safety net. Worst case during a brief reconnect
+            // blip is a redundant poll or two running alongside SSE.
+            startFallback();
+        };
+
+        return {
+            close: function () {
+                source.close();
+                stopFallback();
+            }
+        };
+    }
 
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -214,30 +282,30 @@
 
 
     // ─────────────────────────────────────────────────────────────────────────
-    // TEARDOWN — clear any running intervals from the previous page
+    // TEARDOWN — close any running stream/interval from the previous page
     // Called at the start of init() so navigating never stacks up duplicates
     // ─────────────────────────────────────────────────────────────────────────
 
     function teardown() {
-        if (_dashboardInterval !== null) {
-            clearInterval(_dashboardInterval);
-            _dashboardInterval = null;
+        if (_dashboardStream !== null) {
+            _dashboardStream.close();
+            _dashboardStream = null;
         }
-        if (_detailInterval !== null) {
-            clearInterval(_detailInterval);
-            _detailInterval = null;
+        if (_detailStream !== null) {
+            _detailStream.close();
+            _detailStream = null;
         }
     }
 
 
     // ─────────────────────────────────────────────────────────────────────────
-    // INIT — detect which page is showing and start the right poller
+    // INIT — detect which page is showing and start the right live stream
     // Called on initial page load AND after every SPA navigation
     // ─────────────────────────────────────────────────────────────────────────
 
     function init() {
-        // Always tear down before reinitialising — prevents duplicate intervals
-        // when the user navigates between pages via the sidebar
+        // Always tear down before reinitialising — prevents duplicate
+        // streams/intervals when the user navigates via the sidebar
         teardown();
 
         // Dashboard: identified by one of the view container IDs that only exist
@@ -245,7 +313,7 @@
         // class is also on the notification panel in base.html, which would make
         // this condition true on every page including project detail.
         if (document.querySelector('#my-projects-view, #all-projects-view, #team-view, #personal-view')) {
-            _dashboardInterval = setInterval(pollDashboard, 1000);
+            _dashboardStream = _connectLiveStream('/sse/dashboard', pollDashboard, _FALLBACK_INTERVAL_MS);
         }
 
         // Detail page: identified by #section-assignments (unique to detail.html)
@@ -253,10 +321,9 @@
         var pathMatch = window.location.pathname.match(/\/projects\/(\d+)/);
         if (document.querySelector('#section-assignments') && pathMatch) {
             var projectId = pathMatch[1];
-            // Wrap pollDetail in a closure so the projectId is captured correctly
-            _detailInterval = setInterval(function () {
+            _detailStream = _connectLiveStream('/sse/projects/' + projectId, function () {
                 pollDetail(projectId);
-            }, 1000);
+            }, _FALLBACK_INTERVAL_MS);
         }
     }
 

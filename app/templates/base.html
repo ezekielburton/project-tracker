@@ -391,7 +391,7 @@
 
         <div class="account-menu">
             <button type="button" id="account-trigger" class="account-trigger topbar-btn">
-                {{ user_avatar_visual(current_user, 'sm') }}
+                {{ user_avatar_visual(current_user, 'profile') }}
                 <span class="account-name">{{ current_user.name.split()[0] }}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -568,6 +568,7 @@
                     <button class="pt-tab-btn" data-pt="deliverables">Del. Types</button>
                     <button class="pt-tab-btn" data-pt="design-types">Design Types</button>
                     <button class="pt-tab-btn" data-pt="design-directions">Directions</button>
+                    <button class="pt-tab-btn" data-pt="job-numbers">Job #s</button>
                 </div>
                 <div class="pt-panel" id="pt-panel-clients">
                     <button type="button" class="accounts-add-btn" id="pt-add-client-toggle">+ Add Client</button>
@@ -679,6 +680,12 @@
                         </div>
                     </form>
                     <div id="pt-design-types-list" class="accounts-user-list"></div>
+                </div>
+                {# Job Numbers panel — lists every project with a job number so admin
+                   can clear individual numbers without deleting the project.
+                   Populated by loadPTJobNumbers() in admin.js. #}
+                <div class="pt-panel hidden" id="pt-panel-job-numbers">
+                    <div id="pt-job-numbers-list" class="accounts-user-list"></div>
                 </div>
                 <div class="pt-panel hidden" id="pt-panel-design-directions">
                     <button type="button" class="accounts-add-btn" id="pt-add-dd-toggle">+ Add Direction</button>

@@ -88,8 +88,22 @@
                     <tbody id="designer-team-tbody">
                         {% for project in team_projects %}
                         {% set is_overdue = project.design_needed_by and project.design_needed_by < today %}
-                        {# _dfp: sorted designer user IDs — fingerprint for polling.js assignment-change detection #}
-                        {% set _dfp = project.assigned_designers | map(attribute='user_id') | sort | join(',') %}
+                        {# _dfp: fingerprint of everything that should trigger a live reload —
+                           designer assignment, name, job number, teams, CS lead, and the two
+                           deadline dates. Status is deliberately excluded since polling.js
+                           patches status badges in-place without needing a reload. Field
+                           order/format here MUST match _project_entry() in app/routes/api.py
+                           exactly, or every poll would look like a mismatch even when nothing
+                           actually changed. #}
+                        {% set _dfp = [
+                            project.assigned_designers | map(attribute='user_id') | sort | join(','),
+                            project.name or '',
+                            project.job_number or '',
+                            project.design_teams_requested or '',
+                            project.cs_lead_id or '',
+                            project.first_output_deadline.isoformat() if project.first_output_deadline else '',
+                            project.execution_date.isoformat() if project.execution_date else ''
+                        ] | join('|') %}
                         {% if project.brief_type=='ccm' and project.project_customers %} <tr
                             class="expandable-row {% if is_overdue %}overdue{% endif %}"
                             data-expand="team_{{ project.id }}"
@@ -286,8 +300,22 @@
                     <tbody id="designer-personal-tbody">
                         {% for project in projects %}
                         {% set is_overdue = project.design_needed_by and project.design_needed_by < today %}
-                        {# _dfp: sorted designer user IDs — fingerprint for polling.js assignment-change detection #}
-                        {% set _dfp = project.assigned_designers | map(attribute='user_id') | sort | join(',') %}
+                        {# _dfp: fingerprint of everything that should trigger a live reload —
+                           designer assignment, name, job number, teams, CS lead, and the two
+                           deadline dates. Status is deliberately excluded since polling.js
+                           patches status badges in-place without needing a reload. Field
+                           order/format here MUST match _project_entry() in app/routes/api.py
+                           exactly, or every poll would look like a mismatch even when nothing
+                           actually changed. #}
+                        {% set _dfp = [
+                            project.assigned_designers | map(attribute='user_id') | sort | join(','),
+                            project.name or '',
+                            project.job_number or '',
+                            project.design_teams_requested or '',
+                            project.cs_lead_id or '',
+                            project.first_output_deadline.isoformat() if project.first_output_deadline else '',
+                            project.execution_date.isoformat() if project.execution_date else ''
+                        ] | join('|') %}
                         {% if project.brief_type=='ccm' and project.project_customers %} <tr
                             class="expandable-row {% if is_overdue %}overdue{% endif %}"
                             data-expand="{{ project.id }}"
