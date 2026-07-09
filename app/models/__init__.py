@@ -534,7 +534,7 @@ class ProjectStatusLog(db.Model):
     ended_at = db.Column(db.DateTime, nullable=True)
     changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    project = db.relationship('Project', backref='status_logs')
+    project = db.relationship('Project', backref=db.backref('status_logs', cascade='all, delete-orphan'))
     changed_by = db.relationship('User', foreign_keys=[changed_by_id])
 
     def __repr__(self):
@@ -551,7 +551,7 @@ class ProjectCustomerStatusLog(db.Model):
     ended_at = db.Column(db.DateTime, nullable=True)
     changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    project_customer = db.relationship('ProjectCustomer', backref='status_logs')
+    project_customer = db.relationship('ProjectCustomer', backref=db.backref('status_logs', cascade='all, delete-orphan'))
     changed_by = db.relationship('User', foreign_keys=[changed_by_id])
 
     def __repr__(self):
@@ -568,7 +568,7 @@ class DeliverableStatusLog(db.Model):
     ended_at = db.Column(db.DateTime, nullable=True)
     changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    deliverable = db.relationship('Deliverable', backref='status_logs')
+    deliverable = db.relationship('Deliverable', backref=db.backref('status_logs', cascade='all, delete-orphan'))
     changed_by = db.relationship('User', foreign_keys=[changed_by_id])
 
     def __repr__(self):

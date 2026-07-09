@@ -524,8 +524,8 @@ def remove_customer(project_id, pc_id):
         notify_ids.add(project.lead_designer_id)
     for d in pc.deliverables:
         for assignment in DeliverableAssignment.query.filter_by(deliverable_id=d.id).all():
-            notify_ids.add(assignment.user_id)
-    
+            notify_ids.add(assignment.designer_id)
+
     db.session.delete(pc)
     db.session.commit()
 
@@ -571,7 +571,7 @@ def cancel_customer(project_id, pc_id):
         notify_ids.add(project.lead_designer_id)
     for d in pc.deliverables:
         for assignment in DeliverableAssignment.query.filter_by(deliverable_id=d.id).all():
-            notify_ids.add(assignment.user_id)
+            notify_ids.add(assignment.designer_id)
 
     db.session.commit()
 
