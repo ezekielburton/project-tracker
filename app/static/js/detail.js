@@ -12,18 +12,26 @@
         showToast(decodeURIComponent(toastMsg), 'success');
     }
 
-    // ── Expandable customer rows ──────────────────────────────
-    document.querySelectorAll('tr[data-expand]').forEach(function (row) {
-        row.addEventListener('click', function (e) {
+    // ── Expandable rows (expand/collapse) ────────────────────
+    // Delegated to document so it survives SPA navigation (sidebar.js replaces
+    // innerHTML; direct element listeners on querySelectorAll results are lost).
+    // _expandRowsWired prevents stacking a duplicate listener on re-navigation.
+    // Rows that carry data-href are handled by the navigation handler in
+    // notifications.js and are intentionally skipped here — they navigate instead.
+    if (!window._expandRowsWired) {
+        window._expandRowsWired = true;
+        document.addEventListener('click', function (e) {
             if (e.target.closest('a, button, select')) return;
-            var expandRow = this.nextElementSibling;
+            var row = e.target.closest('tr[data-expand]');
+            // Skip rows that have a navigation target — those navigate, not expand
+            if (!row || row.dataset.href) return;
+            var expandRow = row.nextElementSibling;
             if (!expandRow || !expandRow.classList.contains('expansion-row')) return;
             expandRow.classList.toggle('hidden');
-            var icon = this.querySelector('.chevron-icon');
+            var icon = row.querySelector('.chevron-icon');
             if (icon) icon.classList.toggle('rotated');
-            var expandRow = this.nextElementSibling;
         });
-    });
+    }
 
 // ── "Download All" zip download — shared by reference files and submission
 // history buttons. Both just point data-zip-build-url at their own backend

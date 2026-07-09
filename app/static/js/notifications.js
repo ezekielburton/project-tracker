@@ -186,13 +186,27 @@ function helixShowBrowserNotification(message) {
     }, 5000);
 })();
 
-// Clickable row logic
-document.querySelectorAll('.clickable').forEach(row => {
-    row.addEventListener('click', function (e) {
+// Clickable row navigation — delegated to document so it survives SPA navigation.
+// The old pattern (querySelectorAll + forEach) attached listeners to specific DOM nodes
+// that get destroyed when sidebar.js swaps innerHTML on navigation. By delegating to
+// document (which is never destroyed) we catch clicks on any tr[data-href] regardless
+// of when those rows were added to the DOM.
+// _clickableRowsWired prevents stacking a second listener if helix:navigated fires again.
+if (!window._clickableRowsWired) {
+    window._clickableRowsWired = true;
+    document.addEventListener('click', function (e) {
+        // Never intercept clicks inside interactive child elements (buttons, links, selects)
         if (e.target.closest('a, button, select')) return;
-        if (window.navigateTo) { window.navigateTo(this.dataset.href); } else { window.location.href = this.dataset.href; }
+        // Find the nearest ancestor <tr> that carries a data-href navigation target
+        var row = e.target.closest('tr[data-href]');
+        if (!row) return;
+        if (window.navigateTo) {
+            window.navigateTo(row.dataset.href);
+        } else {
+            window.location.href = row.dataset.href;
+        }
     });
-});
+}
 
 // Notification panel elements
 const bell = document.getElementById('notification-bell');

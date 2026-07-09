@@ -82,7 +82,6 @@
                             <th>CS Lead</th>
                             <th>Assigned Designers</th>
                             <th>Status</th>
-                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="tl-team-tbody">
@@ -104,9 +103,9 @@
                             project.first_output_deadline.isoformat() if project.first_output_deadline else '',
                             project.execution_date.isoformat() if project.execution_date else ''
                         ] | join('|') %}
-                        {% if project.brief_type=='ccm' and project.project_customers %} <tr
-                            class="expandable-row {% if is_overdue %}overdue{% endif %}"
-                            data-expand="tl_team_{{ project.id }}"
+                        {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
+                        <tr class="clickable {% if is_overdue %}overdue{% endif %}"
+                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
                             data-status="{{ project.project_status }}"
@@ -114,8 +113,7 @@
                             data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                             data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                             data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
-                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
-                            <td class="chevron-cell"><span class="chevron-icon">▶</span></td>
+                            <td class="chevron-cell"></td>
                             <td>{{ project.name }}</td>
                             <td class="mono">{{ project.briefing_date.strftime('%d %b %Y') if project.briefing_date else '—' }}</td>
                             <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
@@ -152,88 +150,8 @@
                                       data-status="{{ project.project_status }}">{{ project.project_status |
                                     replace('_', ' ') | title }}</span>
                             </td>
-                            <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
-                                    class="btn btn--secondary sidebar-item--nav">View Details</a></td>
-                            </tr>
-                            <tr class="expansion-row hidden" id="expand_tl_team_{{ project.id }}">
-                                <td colspan="9">
-                                    <table class="customer-sub-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Customer</th>
-                                                <th>Design Deadline</th>
-                                                <th>Installation</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for pc in project.project_customers %}
-                                            <tr>
-                                                <td>{{ pc.customer.name }}</td>
-                                                <td class="mono">{% if pc.design_deadline %}{{ pc.design_deadline.strftime('%d %b %Y') }}{% if pc.design_deadline_time %} · {{ pc.design_deadline_time.strftime('%H:%M') }}{% endif %}{% else %}—{% endif %}</td>
-                                                <td class="mono">{{ pc.installation_date.strftime('%d %b %Y') if
-                                                    pc.installation_date else '—' }}</td>
-                                                <td><span class="status-badge">{{ pc.status.replace('_', ' ').title() if
-                                                        pc.status else '—' }}</span></td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </td>
-                            </tr>
-                            {% else %}
-                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
-                            <tr class="clickable {% if is_overdue %}overdue{% endif %}"
-                                data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
-                                data-project-id="{{ project.id }}"
-                                data-fp="{{ _dfp }}"
-                                data-status="{{ project.project_status }}"
-                                data-name="{{ project.name }}"
-                                data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
-                                data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
-                                data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
-                                <td class="chevron-cell"></td>
-                                <td>{{ project.name }}</td>
-                                <td class="mono">{{ project.briefing_date.strftime('%d %b %Y') if project.briefing_date else '—' }}</td>
-                                <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
-                                <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if project.execution_date else '—' }}</td>
-                                <td>
-                                    <div class="cs-lead-stack">
-                                    {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'sm') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
-                                    {% if project.secondary_cs_assignments %}
-                                    <div style="font-size: 0.78rem; color: var(--grey-dark);">
-                                        {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not
-                                        loop.last %}, {% endif %}{% endfor %}
-                                    </div>
-                                    {% endif %}
-                                    </div>
-                                </td>
-                                <td>
-                                    {% set has_assignment = [] %}
-                                    {% for a in project.assigned_designers %}
-                                    {% if a.team == effective_user.team %}
-                                    {% if has_assignment.append(1) %}{% endif %}
-                                    <span class="team-tag team-{{ a.team|lower }}">
-                                        {{ user_avatar(a.designer, 'xs') }} {{ a.designer.name }}
-                                    </span>
-                                    {% endif %}
-                                    {% endfor %}
-                                    {% if not has_assignment %}
-                                    <span class="badge badge-rose">Pending</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {# Status is read-only — shown as a static label, not an editable dropdown #}
-                                    {# data-status: holds the raw value so polling.js can compare without parsing the text #}
-                                    <span class="status-badge s-{{ project.project_status }}"
-                                          data-status="{{ project.project_status }}">{{ project.project_status
-                                        | replace('_', ' ') | title }}</span>
-                                </td>
-                                <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
-                                        class="btn btn--secondary sidebar-item--nav">View Details</a></td>
-                            </tr>
-                            {% endif %}
-                            {% endfor %}
+                        </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -297,7 +215,6 @@
                             <th>CS Lead</th>
                             <th>Assigned Designers</th>
                             <th>Status</th>
-                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="tl-personal-tbody">
@@ -319,9 +236,9 @@
                             project.first_output_deadline.isoformat() if project.first_output_deadline else '',
                             project.execution_date.isoformat() if project.execution_date else ''
                         ] | join('|') %}
-                        {% if project.brief_type=='ccm' and project.project_customers %} <tr
-                            class="expandable-row {% if is_overdue %}overdue{% endif %}"
-                            data-expand="tl_personal_{{ project.id }}"
+                        {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
+                        <tr class="clickable {% if is_overdue %}overdue{% endif %}"
+                            data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
                             data-project-id="{{ project.id }}"
                             data-fp="{{ _dfp }}"
                             data-status="{{ project.project_status }}"
@@ -329,8 +246,7 @@
                             data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
                             data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
                             data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
-                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
-                            <td class="chevron-cell"><span class="chevron-icon">▶</span></td>
+                            <td class="chevron-cell"></td>
                             <td>{{ project.name }}</td>
                             <td class="mono">{{ project.briefing_date.strftime('%d %b %Y') if project.briefing_date else '—' }}</td>
                             <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
@@ -340,8 +256,8 @@
                                 {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'sm') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
                                 {% if project.secondary_cs_assignments %}
                                 <div style="font-size: 0.78rem; color: var(--grey-dark);">
-                                    {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not loop.last
-                                    %}, {% endif %}{% endfor %}
+                                    {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not
+                                    loop.last %}, {% endif %}{% endfor %}
                                 </div>
                                 {% endif %}
                                 </div>
@@ -365,86 +281,8 @@
                                       data-status="{{ project.project_status }}">{{ project.project_status |
                                     replace('_', ' ') | title }}</span>
                             </td>
-                            <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
-                                    class="btn btn--secondary sidebar-item--nav">View Details</a></td>
-                            </tr>
-                            <tr class="expansion-row hidden" id="expand_tl_personal_{{ project.id }}">
-                                <td colspan="9">
-                                    <table class="customer-sub-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Customer</th>
-                                                <th>Design Deadline</th>
-                                                <th>Installation</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for pc in project.project_customers %}
-                                            <tr>
-                                                <td>{{ pc.customer.name }}</td>
-                                                <td class="mono">{% if pc.design_deadline %}{{ pc.design_deadline.strftime('%d %b %Y') }}{% if pc.design_deadline_time %} · {{ pc.design_deadline_time.strftime('%H:%M') }}{% endif %}{% else %}—{% endif %}</td>
-                                                <td class="mono">{{ pc.installation_date.strftime('%d %b %Y') if
-                                                    pc.installation_date else '—' }}</td>
-                                                <td><span class="status-badge">{{ pc.status.replace('_', ' ').title() if
-                                                        pc.status else '—' }}</span></td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </td>
-                            </tr>
-                            {% else %}
-                            {# data-project-id + data-fp: used by polling.js to match and fingerprint this row #}
-                            <tr class="clickable {% if is_overdue %}overdue{% endif %}"
-                                data-href="{{ url_for('project_detail.detail', project_id=project.id) }}"
-                                data-project-id="{{ project.id }}"
-                                data-fp="{{ _dfp }}"
-                                data-status="{{ project.project_status }}"
-                                data-name="{{ project.name }}"
-                                data-cs-lead="{{ project.cs_lead.name if project.cs_lead else '' }}"
-                                data-first-deadline="{{ project.first_output_deadline.isoformat() if project.first_output_deadline else '' }}"
-                                data-final-deadline="{{ project.execution_date.isoformat() if project.execution_date else '' }}">
-                                <td class="chevron-cell"></td>
-                                <td>{{ project.name }}</td>
-                                <td class="mono">{{ project.briefing_date.strftime('%d %b %Y') if project.briefing_date else '—' }}</td>
-                                <td class="mono">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else '—' }}</td>
-                                <td class="mono">{{ project.execution_date.strftime('%d %b %Y') if project.execution_date else '—' }}</td>
-                                <td>
-                                    <div class="cs-lead-stack">
-                                    {% if project.cs_lead %}{{ user_avatar(project.cs_lead, 'sm') }} {{ project.cs_lead.name }}{% else %}—{% endif %}
-                                    {% if project.secondary_cs_assignments %}
-                                    <div style="font-size: 0.78rem; color: var(--grey-dark);">
-                                        {% for a in project.secondary_cs_assignments %}+{{ a.user.name }}{% if not
-                                        loop.last %}, {% endif %}{% endfor %}
-                                    </div>
-                                    {% endif %}
-                                    </div>
-                                </td>
-                                <td>
-                                    {% set has_assignment = [] %}
-                                    {% for a in project.assigned_designers %}
-                                    {% if has_assignment.append(1) %}{% endif %}
-                                    <span class="team-tag team-{{ a.team|lower }}">
-                                        {{ user_avatar(a.designer, 'xs') }} {{ a.designer.name }}
-                                    </span>
-                                    {% endfor %}
-                                    {% if not has_assignment %}
-                                    <span class="badge badge-rose">None yet</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {# Status is read-only — shown as a static label, not an editable dropdown #}
-                                    {# data-status: holds the raw value so polling.js can compare without parsing the text #}
-                                    <span class="status-badge s-{{ project.project_status }}"
-                                          data-status="{{ project.project_status }}">{{ project.project_status
-                                        | replace('_', ' ') | title }}</span>
-                                </td>
-                                <td><a href="{{ url_for('project_detail.detail', project_id=project.id) }}"
-                                        class="btn btn--secondary sidebar-item--nav">View Details</a></td>
-                            </tr>
-                            {% endif %}
-                            {% endfor %}
+                        </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>

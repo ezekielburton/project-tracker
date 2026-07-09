@@ -106,7 +106,13 @@ def _listen_loop(app):
             cur = conn.cursor()
             cur.execute(f'LISTEN {PROJECT_CHANGES_CHANNEL};')
             cur.execute(f'LISTEN {USER_NOTIFICATIONS_CHANNEL};')
-            app.logger.info('SSE relay: LISTEN connection established.')
+            # .warning() rather than .info() deliberately — Flask's app.logger
+            # defaults to WARNING level outside debug mode, so an .info() call
+            # here would be silently dropped in production even though the
+            # relay started fine. This line is really an operational status
+            # ping, not a true warning, but needs the higher severity to
+            # actually show up in journalctl.
+            app.logger.warning('SSE relay: LISTEN connection established.')
 
             while True:
                 # select() on a psycopg2 connection blocks (cooperatively,
