@@ -46,47 +46,152 @@ DEFAULT_TAB = {
 }
 
 
+# ── Management/admin view-switcher (added 11 Jul 2026, extended to admin
+#    12 Jul 2026) ───────────────────────────────────────────────────────
+# A tab bar at the top of the dashboard, MANAGEMENT AND ADMIN ONLY, that
+# lets the viewer preview this same page scoped to a different set of
+# eyes — their own CS-Lead-style slice, any individual CS lead's exact
+# view, or the full unfiltered view (today's only behaviour, still the
+# default for every other role — cs/designer/team_lead never see this tab
+# bar at all).
+#
+# IMPORTANT — this is NOT the existing "emulation-aware actor" pattern
+# documented in CLAUDE.md (session['emulating_user_id'], used so an admin's
+# WRITE actions get logged/notified as the person they're emulating). This
+# is read-only, doesn't touch the session, and never changes who a write
+# action is attributed to — get_actor() and effective_role are completely
+# untouched by it. It only changes what _scoped_projects() considers "my
+# projects" for the DATA this page queries. Conflating the two would be a
+# mistake — don't reach for session['emulating_user_id'] here.
+_SCOPE_SWITCHER_ROLES = ('management', 'admin')
+class _ScopeUser:
+    """
+    Duck-types a real User for _scoped_projects()'s .id/.role checks (and
+    _is_owner()'s .id check) ONLY — nothing else on this page ever looks at
+    it. Lets _resolve_dashboard_scope() hand back "pretend you're CS lead
+    X" without constructing (or worse, actually querying-as) a real
+    Flask-Login session for that user.
+    """
+    def __init__(self, id, role):
+        self.id = id
+        self.role = role
+
+
+def _resolve_dashboard_scope(user):
+    """
+    Reads the ?scope= query param and decides whose eyes to scope the
+    dashboard's data through. Only ever branches for user.role in
+    _SCOPE_SWITCHER_ROLES ('management', 'admin') — every other role gets
+    scope_mode=None and the real `user` object back unchanged, so
+    _scoped_projects() and everything downstream behaves EXACTLY as it did
+    before this feature existed for them.
+
+    Modes:
+      'my'  (default) — projects this viewer is personally involved in. In
+             this app's data model the only way a non-designer "owns" a
+             project is being CS Lead or secondary CS on it (see
+             CLAUDE.md's "Management role in CS pickers" — management AND
+             admin users are both valid CS Lead picks), so this reuses
+             _scoped_projects()'s existing 'cs' branch with the real
+             viewer's own id. Decisions Needed is the one exception,
+             widened to EVERY flagged project company-wide by the
+             all_flags=True path on _compute_decisions() below — per spec
+             this tab shows "ALL flags raised", not just the ones on
+             projects this particular viewer happens to lead.
+      'cs_<id>' — exactly what that CS lead's own dashboard shows them:
+             same 'cs' branch, but with THAT user's id. Decisions stays
+             normally scoped here (not widened) — this is a preview of
+             their real page, not a management/admin-specific view.
+      'all' — today's original behaviour: everything, unfiltered.
+
+    Returns (scope_mode, scope_user, cs_leads) — cs_leads (every role='cs'
+    user, for building one tab per lead) is returned even when scope_mode
+    is None since dashboard.html needs it any time it's rendering for a
+    management/admin user, and computing it here once is cheaper than
+    every caller re-querying it.
+    """
+    cs_leads = User.query.filter_by(role='cs').order_by(User.name.asc()).all()
+
+    if user.role not in _SCOPE_SWITCHER_ROLES:
+        return None, user, cs_leads
+
+    requested = request.args.get('scope', 'my')
+
+    if requested == 'all':
+        return 'all', user, cs_leads
+
+    if requested.startswith('cs_'):
+        try:
+            target_id = int(requested[3:])
+        except ValueError:
+            target_id = None
+        target = next((c for c in cs_leads if c.id == target_id), None)
+        if target:
+            return requested, _ScopeUser(target.id, 'cs'), cs_leads
+        # Unknown/stale id (e.g. a CS lead removed since this URL/tab was
+        # bookmarked) — fall through to 'my' rather than 403ing or
+        # silently rendering the full unfiltered 'all' view.
+
+    return 'my', _ScopeUser(user.id, 'cs'), cs_leads
+
+
 @dashboard_bp.route('')
 @login_required
 def index():
     user = get_actor()
     initial_view = request.args.get('view', '')
+    scope_mode, scope_user, cs_leads = _resolve_dashboard_scope(user)
+
+    # Card order + deep-dive default tab normally follow the REAL role.
+    # Exception: previewing a specific CS lead's tab should look like
+    # their actual dashboard, ordering included — not management's own
+    # layout with someone else's data dropped into it. 'my' mode keeps
+    # management's own order (it's still fundamentally "my dashboard",
+    # just narrowed), only 'cs_<id>' borrows the 'cs' role's order.
+    layout_role = 'cs' if (scope_mode or '').startswith('cs_') else user.role
 
     return render_template(
         'dashboard.html',
         effective_role=user.role,
-        card_order=CARD_ORDER.get(user.role, CARD_ORDER['management']),
+        scope_mode=scope_mode,
+        cs_leads=cs_leads,
+        card_order=CARD_ORDER.get(layout_role, CARD_ORDER['management']),
         initial_expanded_card=VIEW_TO_CARD.get(initial_view),
-        default_tab=DEFAULT_TAB.get(user.role, 'projects'),
-        summary=_compute_summary(user),
-        what_changed=_compute_what_changed(user),
+        default_tab=DEFAULT_TAB.get(layout_role, 'projects'),
+        summary=_compute_summary(scope_user),
+        what_changed=_compute_what_changed(scope_user),
         # Due card's default filter is "Overdue + Due Today combined" per spec
-        due_default=_compute_due(user, 'overdue_today'),
+        due_default=_compute_due(scope_user, 'overdue_today'),
         # Summary card's two columns (UI Chunk 2) — separate from due_default
         # above: the Summary card wants a strict "Today" list and a "This
         # Week" list side by side, not the Due card's overdue+today merge.
         # Reuses the exact same _compute_due() the Due card and the
         # /api/due?filter= endpoint use, just called with different filter
         # values, so all three places agree on what counts as "due today".
-        due_today_items=_compute_due(user, 'today'),
-        due_week_items=_compute_due(user, 'week'),
-        decisions=_compute_decisions(user),
+        due_today_items=_compute_due(scope_user, 'today'),
+        due_week_items=_compute_due(scope_user, 'week'),
+        # all_flags=True only on the 'my' tab — see
+        # _resolve_dashboard_scope()'s docstring for why.
+        decisions=_compute_decisions(scope_user, all_flags=(scope_mode == 'my')),
         # Next Actions card defaults to the "My Actions" tab on first paint
         # (see next_actions.html) — "Others' Actions" is fetched client-side
         # on demand, same SSR-default-then-fetch-on-toggle split as the Due
         # card's due_default/fetchAndRenderDue().
-        next_actions_default=_compute_next_actions(user, 'mine'),
-        clashes=_compute_clashes_response(user),
+        next_actions_default=_compute_next_actions(scope_user, 'mine'),
+        clashes=_compute_clashes_response(scope_user),
         # Only CS/Designer/Team Lead ever see the "Flag a Project" button
         # (Management has no reason to flag something to itself), so skip
         # the extra query entirely for roles that can't open the modal.
+        # Deliberately keyed on the REAL user.role, not layout_role/scope —
+        # previewing a CS lead's tab must never grant management the
+        # ability to submit a flag as that person.
         flaggable_projects=_compute_flaggable_projects(user) if user.role in ('cs', 'designer', 'team_lead') else [],
         # Deep-dive zone — at-risk-only extension of the cards above (see the
         # big comment on _is_at_risk()/_compute_deep_dive_projects() further
         # down for the 10 Jul 2026 rework). Fully server-rendered, no
         # client-side filter/sort left to do — this IS the complete dataset.
-        deep_dive_projects=_compute_deep_dive_projects(user),
-        deep_dive_deliverables=_compute_deep_dive_deliverables(user),
+        deep_dive_projects=_compute_deep_dive_projects(scope_user),
+        deep_dive_deliverables=_compute_deep_dive_deliverables(scope_user),
     )
 
 
@@ -216,7 +321,13 @@ def _compute_summary(user):
 @dashboard_bp.route('/api/summary')
 @login_required
 def api_summary():
-    return jsonify(_compute_summary(get_actor()))
+    # Scope-aware since 11 Jul 2026 (management view-switcher) — the SSE
+    # live-refresh in dashboard.js hits this endpoint with whatever
+    # ?scope= the page currently has loaded (see HELIX_DASH_SCOPE in
+    # dashboard.html) so the collapsed pills never drift back to the
+    # unfiltered view mid-session. See _resolve_dashboard_scope().
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_summary(scope_user))
 
 
 def _compute_what_changed(user):
@@ -255,7 +366,8 @@ def _compute_what_changed(user):
 @dashboard_bp.route('/api/what-changed')
 @login_required
 def api_what_changed():
-    return jsonify(_compute_what_changed(get_actor()))
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_what_changed(scope_user))
 
 
 def _compute_due(user, filter_type):
@@ -339,11 +451,12 @@ def _compute_due(user, filter_type):
 @dashboard_bp.route('/api/due')
 @login_required
 def api_due():
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
     filter_type = request.args.get('filter', 'overdue_today')
-    return jsonify(_compute_due(get_actor(), filter_type))
+    return jsonify(_compute_due(scope_user, filter_type))
 
 
-def _compute_decisions(user):
+def _compute_decisions(user, all_flags=False):
     """
     "Decisions Needed" queue — every project in the user's scope that
     currently has decision_needed=True, oldest flag first (nullslast so a
@@ -356,8 +469,20 @@ def _compute_decisions(user):
     and doing it twice risks the two disagreeing by a day around midnight).
     One calculation, reused by the SSR page, the JSON API, and therefore
     also the JS re-render after a new flag is submitted.
+
+    all_flags=True (added 11 Jul 2026 for the "My View" tab, see
+    _resolve_dashboard_scope()) bypasses _scoped_projects() entirely and
+    returns EVERY flagged, non-draft project company-wide, regardless of
+    `user`. Per spec, My View's Decisions Needed shows "ALL flags raised"
+    — not narrowed to just the projects this particular viewer happens to
+    be CS Lead on, unlike every other card on that tab.
     """
-    projects = _scoped_projects(user, active_only=True).filter(
+    if all_flags:
+        base = Project.query.filter(Project.project_status != 'draft')
+    else:
+        base = _scoped_projects(user, active_only=True)
+
+    projects = base.filter(
         Project.decision_needed.is_(True)
     ).order_by(nullslast(Project.decision_raised_at.asc())).all()
 
@@ -379,7 +504,8 @@ def _compute_decisions(user):
 @dashboard_bp.route('/api/decisions')
 @login_required
 def api_decisions():
-    return jsonify(_compute_decisions(get_actor()))
+    scope_mode, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_decisions(scope_user, all_flags=(scope_mode == 'my')))
 
 
 def _compute_next_actions(user, filter_type):
@@ -441,8 +567,9 @@ def _compute_next_actions(user, filter_type):
 @dashboard_bp.route('/api/next-actions')
 @login_required
 def api_next_actions():
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
     filter_type = request.args.get('filter', 'mine')
-    return jsonify(_compute_next_actions(get_actor(), filter_type))
+    return jsonify(_compute_next_actions(scope_user, filter_type))
 
 
 def _compute_flaggable_projects(user):
@@ -510,7 +637,8 @@ def _compute_clashes_response(user):
 @dashboard_bp.route('/api/clashes')
 @login_required
 def api_clashes():
-    return jsonify(_compute_clashes_response(get_actor()))
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_clashes_response(scope_user))
 
 
 # ── Deep-dive zone ────────────────────────────────────────────────────────
@@ -600,7 +728,8 @@ def _compute_deep_dive_projects(user):
 @dashboard_bp.route('/api/deep-dive/projects')
 @login_required
 def api_deep_dive_projects():
-    return jsonify(_compute_deep_dive_projects(get_actor()))
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_deep_dive_projects(scope_user))
 
 
 def _compute_deep_dive_deliverables(user):
@@ -687,4 +816,5 @@ def _compute_deep_dive_deliverables(user):
 @dashboard_bp.route('/api/deep-dive/deliverables')
 @login_required
 def api_deep_dive_deliverables():
-    return jsonify(_compute_deep_dive_deliverables(get_actor()))
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_deep_dive_deliverables(scope_user))

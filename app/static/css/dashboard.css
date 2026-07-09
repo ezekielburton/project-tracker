@@ -8,6 +8,35 @@
    down to at-risk-only .dash-row lists (same component every card on this
    page uses) — see the big comment on the deep-dive zone in dashboard.html. */
 
+/* ── Management view-switcher (added 11 Jul 2026) ────────────────────────
+   My View / one tab per CS lead / All Projects — see the big comment on
+   _resolve_dashboard_scope() in dashboard.py. Reuses .dash-tab-btn as-is
+   (same look as the deep-dive zone's Projects/Deliverables tabs further
+   down) since these ARE real links causing full page loads, not a
+   client-toggled pair — .dash-tab-bar's flex-row layout is close but
+   assumes exactly two tabs plus a right-aligned toggle button, which
+   doesn't fit an arbitrary-length, left-aligned list of CS leads, hence
+   its own small wrapper rule instead of reusing that class outright. */
+.dash-view-tabs {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+/* "Previewing as X" line under the view-switcher when a management user
+   is on a specific CS lead's tab — exists so it's unmistakable that "3
+   actions needed from me" etc. below refers to that CS, not the
+   management user actually looking at the screen (see
+   _resolve_dashboard_scope()'s docstring on why ownership language fully
+   flips to the previewed CS's perspective on that tab). */
+.dash-previewing-as {
+    font-size: 0.85rem;
+    color: var(--grey-dark);
+    font-style: italic;
+    margin-bottom: 1.5rem;
+}
+
 /* ── Cards zone ───────────────────────────────────────────────────────── */
 
 .dash-cards-grid {
@@ -364,6 +393,21 @@ a.dash-row:hover {
     .dash-deep-dive-panels.dash-side-by-side {
         grid-template-columns: 1fr;
     }
+}
+
+/* Boxed-card look for each deep-dive panel (added 12 Jul 2026) — same
+   white/radius/shadow recipe as .dash-card above, so "Projects" and
+   "Deliverables" each read as their own distinct section instead of rows
+   floating directly on the page background. Matters most in side-by-side
+   mode, where both panels sit next to each other at once — the
+   .dash-col-heading label inside (see dashboard.html) is what actually
+   tells them apart there, since the tab buttons above stop being a
+   reliable "which one is this" cue once both are visible simultaneously. */
+.dash-deep-dive-box {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.2rem 1.4rem;
 }
 
 .dash-filter-chips {

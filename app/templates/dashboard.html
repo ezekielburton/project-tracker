@@ -11,6 +11,35 @@
         <h1 class="dashboard-greeting">Welcome, <span>{{ effective_user.name.split()[0] }}</span></h1>
     </div>
 
+    {# ── Management/admin view-switcher (added 11 Jul 2026, extended to
+       admin 12 Jul 2026) ──────────────────────────────────────────────
+       Management and admin only — see the big comment above
+       _resolve_dashboard_scope() in dashboard.py for the full reasoning
+       and why this is NOT the emulation system. Real <a> links, not a
+       client-toggled tab: switching scope changes almost every card's
+       data plus the deep-dive zone, so a full page reload is simpler and
+       more honest here than threading scope-awareness through every
+       card's individual JS re-render function on top of the filter/tab
+       state each of them already juggles. #}
+    {% if effective_role in ('management', 'admin') %}
+    <div class="dash-view-tabs">
+        <a href="{{ url_for('projects.index', scope='my') }}"
+           class="dash-tab-btn{% if scope_mode == 'my' %} active{% endif %}">My View</a>
+        {% for cs in cs_leads %}
+        <a href="{{ url_for('projects.index', scope='cs_' ~ cs.id) }}"
+           class="dash-tab-btn{% if scope_mode == ('cs_' ~ cs.id|string) %} active{% endif %}">{{ cs.name }}</a>
+        {% endfor %}
+        <a href="{{ url_for('projects.index', scope='all') }}"
+           class="dash-tab-btn{% if scope_mode == 'all' %} active{% endif %}">All Projects</a>
+    </div>
+    {% if scope_mode and scope_mode.startswith('cs_') %}
+        {% set previewed_cs = cs_leads | selectattr('id', 'equalto', scope_mode[3:] | int) | first %}
+        {% if previewed_cs %}
+        <p class="dash-previewing-as">Previewing {{ previewed_cs.name }}'s view — data and "my actions" below are theirs, not yours.</p>
+        {% endif %}
+    {% endif %}
+    {% endif %}
+
     {# Cards zone. Summary always renders first, full-width, regardless of
        role — card_order (role-dependent, see dashboard.py CARD_ORDER) only
        controls the remaining cards in the two-column grid below it. #}
@@ -59,15 +88,26 @@
            Fully server-rendered from deep_dive_projects (see
            _compute_deep_dive_projects() in dashboard.py) — already
            filtered to at-risk-only and sorted by nearest deadline, so
-           this loop has nothing left to do but render. #}
+           this loop has nothing left to do but render.
+
+           .dash-deep-dive-box (added 12 Jul 2026) gives this panel the
+           same boxed-card look (white bg, radius, shadow) as every card
+           above it, instead of rows floating directly on the page
+           background — and its .dash-col-heading label means the panel
+           still reads as "Projects" even in side-by-side mode, where
+           both panels are visible at once and the tab buttons above no
+           longer tell you which column is which. #}
         <div class="dash-tab-panel{% if default_tab != 'projects' %} hidden{% endif %}" data-panel="projects">
-            {% if deep_dive_projects %}
-                {% for p in deep_dive_projects %}
-                    {{ dash_deep_dive_project_row(p) }}
-                {% endfor %}
-            {% else %}
-            <p class="dash-empty-state">No at-risk projects right now.</p>
-            {% endif %}
+            <div class="dash-deep-dive-box">
+                <div class="dash-col-heading">Projects</div>
+                {% if deep_dive_projects %}
+                    {% for p in deep_dive_projects %}
+                        {{ dash_deep_dive_project_row(p) }}
+                    {% endfor %}
+                {% else %}
+                <p class="dash-empty-state">No at-risk projects right now.</p>
+                {% endif %}
+            </div>
         </div>
 
         {# ── Deliverables tab ──────────────────────────────────────────
@@ -78,13 +118,16 @@
            team(s) they're actually assigned to on that specific project,
            not every deliverable on every project they touch). #}
         <div class="dash-tab-panel{% if default_tab != 'deliverables' %} hidden{% endif %}" data-panel="deliverables">
-            {% if deep_dive_deliverables %}
-                {% for d in deep_dive_deliverables %}
-                    {{ dash_deep_dive_deliverable_row(d) }}
-                {% endfor %}
-            {% else %}
-            <p class="dash-empty-state">No at-risk deliverables right now.</p>
-            {% endif %}
+            <div class="dash-deep-dive-box">
+                <div class="dash-col-heading">Deliverables</div>
+                {% if deep_dive_deliverables %}
+                    {% for d in deep_dive_deliverables %}
+                        {{ dash_deep_dive_deliverable_row(d) }}
+                    {% endfor %}
+                {% else %}
+                <p class="dash-empty-state">No at-risk deliverables right now.</p>
+                {% endif %}
+            </div>
         </div>
 
     </div>
@@ -155,6 +198,23 @@
         </div>
     </div>
 </div>
+
+{# Script-block constant, not an HTML attribute (CLAUDE.md's "JS in
+   templates — JSON data" rule: tojson doesn't HTML-escape quotes, so
+   embedding it in value="" can silently break JSON.parse). Read by every
+   scope-aware fetch in dashboard.js (fetchAndRenderDue,
+   refreshDecisionsCard, fetchAndRenderNextActions, the SSE /api/summary
+   refresh) so live updates/filter clicks stay consistent with whichever
+   scope tab this page loaded with. None for every role except management
+   — dashboard.js treats a falsy value as "no scope param needed". #}
+<script>
+    // var, not const/let — this page is reachable via the SPA sidebar nav
+    // (sidebar.js re-executes <script> tags on renav without a full
+    // reload), and a const/let redeclaration in the same scope throws
+    // "Identifier has already been declared" on the second visit. var
+    // redeclaration is a silent no-op, which is what we want here.
+    var HELIX_DASH_SCOPE = {{ scope_mode | tojson }};
+</script>
 
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 

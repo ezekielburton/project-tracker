@@ -23,6 +23,24 @@
     var STORAGE_PREFIX = 'helixDashCard:';
     var SIDE_BY_SIDE_KEY = 'helixDashSideBySide';
 
+    // ── Management view-switcher: scope-aware fetch helper ──────────────
+    // Added 11 Jul 2026 alongside the ?scope= tab bar in dashboard.html
+    // (see the big comment on _resolve_dashboard_scope() in
+    // app/routes/dashboard.py). HELIX_DASH_SCOPE is a page-level var set
+    // by that template — null/undefined for every role except management,
+    // in which case this is a no-op and every URL below is untouched.
+    // Every dashboard.js fetch that re-queries card data (filter clicks,
+    // SSE live-refresh) needs to carry the SAME scope the page loaded
+    // with, or a management user previewing a CS lead's tab would see
+    // that tab's cards silently repopulate with the unfiltered "All
+    // Projects" data the moment they click a filter pill or an SSE event
+    // fires.
+    function withDashScope(url) {
+        if (typeof HELIX_DASH_SCOPE === 'undefined' || !HELIX_DASH_SCOPE) return url;
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        return url + sep + 'scope=' + encodeURIComponent(HELIX_DASH_SCOPE);
+    }
+
     function setStoredOpen(key, open) {
         localStorage.setItem(STORAGE_PREFIX + key, open ? '1' : '0');
     }
@@ -167,7 +185,7 @@
         var container = document.getElementById('dash-due-list');
         if (!container) return;
 
-        fetch('/dashboard/api/due?filter=' + encodeURIComponent(filterValue))
+        fetch(withDashScope('/dashboard/api/due?filter=' + encodeURIComponent(filterValue)))
             .then(function (r) { return r.json(); })
             .then(function (items) {
                 if (!items.length) {
@@ -243,7 +261,7 @@
     // ones already showing, so a full replace is simpler and always
     // correct — same reasoning fetchAndRenderDue() uses for the Due card.
     function refreshDecisionsCard() {
-        fetch('/dashboard/api/decisions')
+        fetch(withDashScope('/dashboard/api/decisions'))
             .then(function (r) { return r.json(); })
             .then(function (items) {
                 var card = document.querySelector('.dash-card[data-card="decisions"]');
@@ -414,7 +432,7 @@
         var container = document.getElementById('dash-next-actions-list');
         if (!container) return;
 
-        fetch('/dashboard/api/next-actions?filter=' + encodeURIComponent(filterType))
+        fetch(withDashScope('/dashboard/api/next-actions?filter=' + encodeURIComponent(filterType)))
             .then(function (r) { return r.json(); })
             .then(function (items) {
                 if (!items.length) {
@@ -478,7 +496,7 @@
     // simply call location.reload() here whenever one of those four happens
     // to be expanded at the moment a refresh fires.
     function refreshDashboardFromSSE() {
-        fetch('/dashboard/api/summary')
+        fetch(withDashScope('/dashboard/api/summary'))
             .then(function (r) { return r.json(); })
             .then(function (summary) {
                 // Due card's three collapsed pills — rebuilt wholesale from
