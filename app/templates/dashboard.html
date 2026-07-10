@@ -262,7 +262,8 @@
     // by dashboard.js's isManagementOrAdmin() to decide whether a
     // JS-rebuilt Decisions row (renderDecisionRow(), after resolving a
     // decision) should include the Resolve button, mirroring decisions.html's
-    // server-side `{% if effective_role in ('admin', 'management') %}` check.
+    // server-side admin/management role check (see decisions.html's
+    // Resolve-button gate).
     var HELIX_EFFECTIVE_ROLE = {{ effective_role | tojson }};
 </script>
 
