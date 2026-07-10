@@ -1,4 +1,5 @@
 import json
+import time
 import requests
 import urllib3
 from flask import current_app
@@ -258,39 +259,61 @@ def build_file_path(project, subfolder, filename):
     client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
     return f'{root}/{year}/{client_name}/{project.name}/{subfolder}/{filename}'
 
-def upload_app_file(file_bytes, nas_folder_path, filename):
+def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
     """
-    Upload file bytes directly to a NAS folder. Synchronous — raises on failure.
+    Upload file bytes directly to a NAS folder. Retries up to _max_attempts
+    times with exponential back-off on any transient error before raising.
 
     Args:
         file_bytes:      raw bytes of the file (call file.read() before passing)
         nas_folder_path: destination folder on NAS (not including filename)
         filename:        filename to use on the NAS
     """
-    sid, host, port = _get_session()
-    try:
-        resp = requests.post(
-            f'https://{host}:{port}/webapi/entry.cgi',
-            verify=False,
-            params={
-                'api':     'SYNO.FileStation.Upload',
-                'version': '2',
-                'method':  'upload',
-                '_sid':    sid,
-            },
-            data={
-                'path':           nas_folder_path,
-                'create_parents': 'true',
-                'overwrite':      'true',
-            },
-            files={'file': (filename, file_bytes)},
-            timeout=60,
-        )
-        data = resp.json()
-        if not data.get('success'):
-            raise RuntimeError(f'NAS upload failed: {data}')
-    finally:
-        _logout(host, port, sid)
+    last_exc = None
+    for attempt in range(1, _max_attempts + 1):
+        try:
+            sid, host, port = _get_session()
+            try:
+                resp = requests.post(
+                    f'https://{host}:{port}/webapi/entry.cgi',
+                    verify=False,
+                    params={
+                        'api':     'SYNO.FileStation.Upload',
+                        'version': '2',
+                        'method':  'upload',
+                        '_sid':    sid,
+                    },
+                    data={
+                        'path':           nas_folder_path,
+                        'create_parents': 'true',
+                        'overwrite':      'true',
+                    },
+                    files={'file': (filename, file_bytes)},
+                    timeout=60,
+                )
+                data = resp.json()
+                if not data.get('success'):
+                    raise RuntimeError(f'NAS upload failed: {data}')
+                return  # success — exit early
+            finally:
+                _logout(host, port, sid)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < _max_attempts:
+                delay = 2 ** attempt  # 2 s after attempt 1, 4 s after attempt 2
+                current_app.logger.warning(
+                    f'NAS upload attempt {attempt}/{_max_attempts} failed for '
+                    f'"{filename}" — retrying in {delay}s. Error: {exc}'
+                )
+                time.sleep(delay)
+
+    current_app.logger.error(
+        f'NAS upload permanently failed for "{filename}" after '
+        f'{_max_attempts} attempts: {last_exc}'
+    )
+    raise RuntimeError(
+        f'NAS upload failed after {_max_attempts} attempts: {last_exc}'
+    )
 
 def download_app_file(nas_file_path):
     """
@@ -317,9 +340,39 @@ def download_app_file(nas_file_path):
             cookies={'id': sid},
             timeout=60,
         )
-        # If something went wrong, NAS returns JSON instead of file bytes
-        if 'application/json' in resp.headers.get('Content-Type', ''):
-            raise RuntimeError(f'NAS download failed: {resp.json()}')
+        content_type = resp.headers.get('Content-Type', '')
+
+        # Synology FileStation API errors: HTTP 200 but JSON body
+        if 'application/json' in content_type:
+            err = resp.json()
+            current_app.logger.warning(
+                f'NAS download API error for {nas_file_path}: {err}'
+            )
+            raise RuntimeError(f'NAS download failed: {err}')
+
+        # DSM/nginx-level errors (502, 504, etc.) arrive as HTML with a
+        # non-200 status — these would otherwise be returned as file bytes,
+        # making the downloaded file appear corrupt/unopenable.
+        if not resp.ok:
+            current_app.logger.warning(
+                f'NAS download HTTP {resp.status_code} for {nas_file_path} '
+                f'(Content-Type: {content_type})'
+            )
+            raise RuntimeError(
+                f'NAS download HTTP {resp.status_code} for {nas_file_path}'
+            )
+
+        # Catch HTML error pages that slipped through with a 200 status
+        # (some DSM versions do this for internal errors).
+        if 'text/html' in content_type:
+            current_app.logger.warning(
+                f'NAS returned HTML instead of file bytes for {nas_file_path} '
+                f'(HTTP {resp.status_code})'
+            )
+            raise RuntimeError(
+                f'NAS returned an HTML error page for {nas_file_path}'
+            )
+
         return resp.content
     finally:
         _logout(host, port, sid)

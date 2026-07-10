@@ -45,8 +45,70 @@
         localStorage.setItem(STORAGE_PREFIX + key, open ? '1' : '0');
     }
 
+    // ── Smooth expand/collapse via JS-measured max-height ────────────────
+    // Added 12 Jul 2026 (second pass, replacing a CSS-only grid-template-
+    // rows attempt from earlier the same day) — see the big comment on
+    // .dash-card-body-content in dashboard.css for the full history: a
+    // fixed max-height (9999px) animated at a constant rate across the
+    // whole range so the visible portion barely moved, and the grid-rows
+    // trick that replaced it didn't reliably collapse to zero height in
+    // every browser, leaving body content visible and unboxed even when
+    // "closed". Measuring the real height with JS and animating max-height
+    // to that exact pixel value avoids both problems.
+    //
+    // bodyEl is whichever element actually carries the max-height CSS
+    // rule — .dash-card-body for Summary, .dash-card-body-content for
+    // every tile (see dashboard.css). Both used the same class name,
+    // .expanded, for their own "looks like an open card" styling (or, for
+    // Summary's body, harmlessly unused — its visuals key off the ANCESTOR
+    // .dash-card's .expanded class instead, toggled separately in
+    // applyOpenState() below), so these two helpers work for both without
+    // needing to know which one they were called on.
+    function expandBody(bodyEl) {
+        if (!bodyEl) return;
+        // Add .expanded FIRST — for tile bodies this turns on
+        // .dash-card-body-visual's padding/shadow (see dashboard.css),
+        // and scrollHeight needs to measure that fully-styled state, not
+        // a smaller pre-expansion one.
+        bodyEl.classList.add('expanded');
+        bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
+    }
+
+    function collapseBody(bodyEl) {
+        if (!bodyEl) return;
+        // Give max-height a concrete starting pixel value before dropping
+        // it to 0 — without this, a body that was server-rendered
+        // .expanded and never had JS set an inline height yet (see
+        // initCards() below) would have nothing to transition FROM and
+        // would just snap shut instead of animating.
+        bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
+        // Setting max-height to its own current value and then straight to
+        // 0 in the same synchronous block would collapse into one style
+        // recalc with nothing to interpolate between — the browser needs
+        // to actually PAINT the "open" value at least once before the next
+        // change can animate. requestAnimationFrame guarantees that.
+        requestAnimationFrame(function () {
+            bodyEl.style.maxHeight = '0px';
+        });
+        // Only strip .expanded once the height transition has actually
+        // finished — removing it immediately would make a tile body lose
+        // its card padding/shadow WHILE still visibly shrinking, which
+        // looks broken rather than smooth.
+        bodyEl.addEventListener('transitionend', function handler(e) {
+            if (e.propertyName !== 'max-height') return;
+            bodyEl.classList.remove('expanded');
+            bodyEl.removeEventListener('transitionend', handler);
+        });
+    }
+
     function applyOpenState(card, open) {
-        card.classList.toggle('expanded', open);
+        card.classList.toggle('expanded', open); // drives the chevron rotation/colour, unchanged
+        var body = card.querySelector('.dash-card-body');
+        if (open) {
+            expandBody(body);
+        } else {
+            collapseBody(body);
+        }
     }
 
     // ── Card expand/collapse + localStorage ─────────────────────────────
@@ -67,6 +129,20 @@
 
             var key = card.dataset.card;
 
+            // Sync the body's inline max-height to whatever .expanded
+            // already says, directly (not via expandBody/collapseBody) —
+            // this runs synchronously before first paint, so there's no
+            // "previous frame" for the CSS transition to animate from,
+            // meaning this appears instantly correct rather than growing
+            // into place. Needed because (since 12 Jul 2026) the visible
+            // height comes from an inline style JS sets, not a CSS rule
+            // keyed off the class, so an already-open card would otherwise
+            // render visually collapsed despite having .expanded on it.
+            var body = card.querySelector('.dash-card-body');
+            if (body && card.classList.contains('expanded')) {
+                body.style.maxHeight = body.scrollHeight + 'px';
+            }
+
             if (hasViewParam) {
                 setStoredOpen(key, card.classList.contains('expanded'));
                 return;
@@ -78,6 +154,16 @@
             }
             // No stored preference yet and no ?view= — leave the server
             // default, which is collapsed for every card.
+        });
+
+        // Tile bodies (every card except Summary) — same "sync inline
+        // height to whatever .expanded already says" idea, for whichever
+        // ONE card a ?view= deep link server-rendered as already open. No
+        // localStorage path here — see the big comment on the tile branch
+        // of the toggle-card click handler further down for why tiles
+        // always start fresh/minimized on load otherwise.
+        document.querySelectorAll('.dash-card-body-content.expanded').forEach(function (body) {
+            body.style.maxHeight = body.scrollHeight + 'px';
         });
     }
 
@@ -283,8 +369,8 @@
         fetch(withDashScope('/dashboard/api/decisions'))
             .then(function (r) { return r.json(); })
             .then(function (items) {
-                var card = document.querySelector('.dash-card[data-card="decisions"]');
-                var summaryEl = card ? card.querySelector('.dash-card-summary') : null;
+                var tile = document.querySelector('.dash-tile[data-card="decisions"]');
+                var summaryEl = tile ? tile.querySelector('.dash-tile-summary') : null;
                 if (summaryEl) {
                     // Matches decisions.html's decisions_summary block
                     // (reworked 12 Jul 2026 — RAG mini-stat, red/green by
@@ -517,11 +603,14 @@
         fetch(withDashScope('/dashboard/api/summary'))
             .then(function (r) { return r.json(); })
             .then(function (summary) {
-                // Due card's three collapsed pills — rebuilt wholesale from
+                // Due tile's three mini-stats — rebuilt wholesale from
                 // scratch rather than patched number-by-number; cheap, and
                 // guarantees this always matches due.html's exact original
-                // markup (see the due_summary Jinja block there).
-                var dueSummaryEl = document.querySelector('.dash-card[data-card="due"] .dash-card-summary');
+                // markup (see the due_summary Jinja block there). Selector
+                // targets .dash-tile (not .dash-card) — every card except
+                // Summary moved to the tile/row-expand layout 12 Jul 2026,
+                // see the big comment on .dash-row-group in dashboard.css.
+                var dueSummaryEl = document.querySelector('.dash-tile[data-card="due"] .dash-tile-summary');
                 if (dueSummaryEl) {
                     dueSummaryEl.innerHTML =
                         miniStat('red', summary.overdue, 'Overdue') +
@@ -533,7 +622,7 @@
                 // (reworked 12 Jul 2026 — RAG mini-stats, red=mine/
                 // yellow=others, instead of owner-tag/action-tag pills).
                 // Keep in sync.
-                var nextActionsSummaryEl = document.querySelector('.dash-card[data-card="next_actions"] .dash-card-summary');
+                var nextActionsSummaryEl = document.querySelector('.dash-tile[data-card="next_actions"] .dash-tile-summary');
                 if (nextActionsSummaryEl) {
                     nextActionsSummaryEl.innerHTML =
                         miniStat('red', summary.my_actions, 'Needed From Me') +
@@ -544,7 +633,7 @@
                 // (reworked 12 Jul 2026 — single green mini-stat instead of
                 // an ashen action-tag pill; still flat-coloured regardless
                 // of count — informational, not urgent). Keep in sync.
-                var whatChangedSummaryEl = document.querySelector('.dash-card[data-card="what_changed"] .dash-card-summary');
+                var whatChangedSummaryEl = document.querySelector('.dash-tile[data-card="what_changed"] .dash-tile-summary');
                 if (whatChangedSummaryEl) {
                     whatChangedSummaryEl.innerHTML =
                         miniStat('green', summary.what_changed, 'Update' + (summary.what_changed !== 1 ? 's' : ''));
@@ -555,9 +644,9 @@
                 // instead of severity-tag pills; needs the clashes_detected/
                 // clashes_potential fields _compute_summary() returns
                 // alongside the plain clashes total). Keep in sync.
-                var clashesCardEl = document.querySelector('.dash-card[data-card="clashes"]');
-                if (clashesCardEl) {
-                    var clashesSummaryEl = clashesCardEl.querySelector('.dash-card-summary');
+                var clashesTileEl = document.querySelector('.dash-tile[data-card="clashes"]');
+                if (clashesTileEl) {
+                    var clashesSummaryEl = clashesTileEl.querySelector('.dash-tile-summary');
                     if (clashesSummaryEl) {
                         if (summary.clashes > 0) {
                             var clashPills = '';
@@ -573,14 +662,15 @@
                         }
                     }
                     // NOTE: this toggles the muted VISUAL state live, but the
-                    // header <button>'s disabled attribute (set server-side
-                    // by the dash_card() macro, see _dashboard_macros.html)
-                    // is NOT re-toggled here — a card that goes from 0 to 1+
+                    // tile's data-action="toggle-card" attribute (set
+                    // server-side by the dash_card() macro, see
+                    // _dashboard_macros.html — only rendered when NOT muted)
+                    // is NOT re-added here — a card that goes from 0 to 1+
                     // clashes without a full page reload will look active but
                     // stay unclickable until the next reload. Small, known
                     // gap; not worth a bigger DOM-attribute dance for
                     // something that self-corrects on the user's next visit.
-                    clashesCardEl.classList.toggle('dash-card--muted', summary.clashes === 0);
+                    clashesTileEl.classList.toggle('dash-tile--muted', summary.clashes === 0);
                 }
             })
             .catch(function () {
@@ -610,20 +700,24 @@
             });
 
         // Due card's LIST: only worth refetching if actually expanded.
-        // Reads whichever filter pill(s) are currently active rather than
+        // Reads whichever filter pill is currently active rather than
         // tracking separate state — due-filter's click handler (below) is
-        // the only thing that ever changes which pills are active, so the
-        // DOM is always the source of truth. More than one active pill only
-        // happens in the untouched "Overdue + Today" combined default (see
-        // due.html) — the API's own combined value for that state is
-        // 'overdue_today', so that's what gets requested in that case.
-        var dueCardEl = document.querySelector('.dash-card[data-card="due"]');
-        if (dueCardEl && dueCardEl.classList.contains('expanded')) {
-            var activeDueBtns = dueCardEl.querySelectorAll('[data-action="due-filter"].active');
-            var dueFilterValue = activeDueBtns.length > 1
-                ? 'overdue_today'
-                : (activeDueBtns[0] && activeDueBtns[0].dataset.filter);
-            if (dueFilterValue) fetchAndRenderDue(dueFilterValue);
+        // the only thing that ever changes which pill is active, so the
+        // DOM is always the source of truth. Exactly one pill is ever
+        // active (see due.html's "All Today" pill, added 12 Jul 2026 —
+        // there used to be two pills active simultaneously to represent
+        // the combined default, which read as a conflict; that's now one
+        // explicit pill instead, still strictly single-select).
+        //
+        // Selector targets .dash-card-body-content, not .dash-tile — since
+        // 12 Jul 2026 the tile and its body are separate elements in
+        // different rows of the row-group (see dashboard.css), and
+        // .expanded plus the filter buttons both live on/in the body now,
+        // not the tile.
+        var dueBodyEl = document.querySelector('.dash-card-body-content[data-card="due"]');
+        if (dueBodyEl && dueBodyEl.classList.contains('expanded')) {
+            var activeDueBtn = dueBodyEl.querySelector('[data-action="due-filter"].active');
+            if (activeDueBtn) fetchAndRenderDue(activeDueBtn.dataset.filter);
         }
 
         // Decisions: refreshDecisionsCard() already updates both the
@@ -633,9 +727,9 @@
 
         // Next Actions' LIST: same "only if expanded" idea as Due above,
         // using whichever tab (My/Others) is currently active.
-        var nextActionsCardEl = document.querySelector('.dash-card[data-card="next_actions"]');
-        if (nextActionsCardEl && nextActionsCardEl.classList.contains('expanded')) {
-            var activeNextActionsBtn = nextActionsCardEl.querySelector('[data-action="next-actions-tab"].active');
+        var nextActionsBodyEl = document.querySelector('.dash-card-body-content[data-card="next_actions"]');
+        if (nextActionsBodyEl && nextActionsBodyEl.classList.contains('expanded')) {
+            var activeNextActionsBtn = nextActionsBodyEl.querySelector('[data-action="next-actions-tab"].active');
             if (activeNextActionsBtn) fetchAndRenderNextActions(activeNextActionsBtn.dataset.filter);
         }
     }
@@ -691,6 +785,41 @@
 
             var toggleHeader = e.target.closest('[data-action="toggle-card"]');
             if (toggleHeader) {
+                // Tile (every card except Summary, since 12 Jul 2026 — see
+                // the big comment on .dash-row-group in dashboard.css) —
+                // single-open-per-row: opening one tile in a row closes
+                // whichever OTHER tile in that same row was open, since
+                // they all share one .dash-row-expand band below the row.
+                // No localStorage here (unlike the old .dash-card path
+                // below) — tiles always start fresh/minimized on load,
+                // matching the wireframe's default state, except whichever
+                // one a ?view= deep link server-rendered as already open.
+                var tile = toggleHeader.closest('.dash-tile');
+                if (tile) {
+                    if (tile.classList.contains('dash-tile--muted')) return;
+                    var rowGroup = tile.closest('.dash-row-group');
+                    var wasActive = tile.classList.contains('active');
+
+                    if (rowGroup) {
+                        rowGroup.querySelectorAll('.dash-tile.active').forEach(function (t) {
+                            t.classList.remove('active');
+                        });
+                        rowGroup.querySelectorAll('.dash-card-body-content.expanded').forEach(function (b) {
+                            collapseBody(b);
+                        });
+                    }
+
+                    if (!wasActive) {
+                        tile.classList.add('active');
+                        var body = rowGroup && rowGroup.querySelector(
+                            '.dash-card-body-content[data-card="' + tile.dataset.card + '"]');
+                        expandBody(body);
+                    }
+                    return;
+                }
+
+                // Summary card only, from here on — original self-contained
+                // expand-in-place behaviour, unchanged.
                 var card = toggleHeader.closest('.dash-card');
                 if (card && !card.classList.contains('dash-card--muted')) {
                     var nowOpen = !card.classList.contains('expanded');
@@ -705,12 +834,14 @@
 
             var dueFilterBtn = e.target.closest('[data-action="due-filter"]');
             if (dueFilterBtn) {
-                // Radio-style: exactly one pill active at a time. The
-                // initial page load is the one exception — both Overdue
-                // and Due Today start active together (server-rendered, see
-                // due.html) to represent the "overdue_today" combined
-                // default — but the first click on ANY pill here collapses
-                // that back down to single-category mode.
+                // Radio-style: exactly one pill active at a time, including
+                // the default state — "All Today" (data-filter=
+                // "overdue_today") is the pill that starts active,
+                // server-rendered in due.html, standing in for what used to
+                // be two simultaneously-active pills (Overdue + Due Today)
+                // representing the same combined default. That looked like
+                // a conflicting/broken selection at a glance, so as of 12
+                // Jul 2026 there's always exactly one active pill, full stop.
                 document.querySelectorAll('[data-action="due-filter"]').forEach(function (btn) {
                     btn.classList.toggle('active', btn === dueFilterBtn);
                 });
@@ -720,9 +851,9 @@
 
             var nextActionsBtn = e.target.closest('[data-action="next-actions-tab"]');
             if (nextActionsBtn) {
-                // Strict two-way toggle — always exactly one active, unlike
-                // the Due card's "both start active, first click collapses
-                // to one" pattern (see the comment on due-filter above).
+                // Strict two-way toggle — always exactly one active, same
+                // single-select convention the Due card's pills use too
+                // (see the comment on due-filter above).
                 document.querySelectorAll('[data-action="next-actions-tab"]').forEach(function (btn) {
                     btn.classList.toggle('active', btn === nextActionsBtn);
                 });

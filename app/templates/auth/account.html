@@ -384,10 +384,21 @@
 
         if (Notification.permission === 'denied') {
             browserToggle.disabled = true;
+        } else {
+            browserToggle.disabled = false;
         }
     }
 
     syncUI();
+
+    // Re-sync whenever the user changes the permission from browser settings
+    // (e.g. unblocks after previously denying). Without this the toggle stays
+    // permanently greyed out even after the user grants the permission.
+    if ('permissions' in navigator) {
+        navigator.permissions.query({ name: 'notifications' }).then(function (status) {
+            status.addEventListener('change', function () { syncUI(); });
+        }).catch(function () { /* permissions API not available — silent */ });
+    }
 
     audioToggle.addEventListener('change', function () {
         audioOn = this.checked;

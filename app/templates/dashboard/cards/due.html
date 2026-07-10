@@ -7,19 +7,25 @@
    every other card reads from (summary.overdue / .due_today / .due_week —
    from _compute_summary(), Chunk 1). Not recomputed here.
 
-   Expanded body: three filter pills (Overdue / Due Today / Due This Week)
-   above a list of due items. On page load the list is server-rendered from
-   `due_default` (= _compute_due(user, 'overdue_today') — the "Overdue +
-   Due Today combined" default the spec asks for), with the Overdue and Due
-   Today pills both shown active to visually match that combined view.
+   Expanded body: four filter pills — All Today / Overdue / Due Today / Due
+   This Week — strictly single-select (radio-button behaviour, exactly one
+   active at a time), above a list of due items.
 
-   Clicking any ONE pill afterwards switches to single-category mode: only
-   that pill goes active, and dashboard.js fetches
-   GET /dashboard/api/due?filter=<overdue|today|week> and replaces the list
-   client-side — no page reload. This is a deliberate simplification: the
-   backend only has a named 'overdue_today' combo for the default view, not
-   general multi-select combining, so past the initial load these three
-   pills behave like radio buttons, not independent toggles.
+   REWORKED 12 Jul 2026 (management review) — this used to have only three
+   pills (Overdue / Due Today / Due This Week), with the default view
+   showing BOTH Overdue and Due Today as simultaneously "active" to
+   represent their combined list. That read as a conflict/bug at a glance
+   (two buttons visibly selected from a single click's worth of state), so
+   there's now a fourth, explicit "All Today" pill for that combined view —
+   it's the one that's active by default, and it's the ONLY one active at a
+   time, same as every other pill here. The underlying data didn't change:
+   `due_default` is still `_compute_due(user, 'overdue_today')`, and
+   data-filter="overdue_today" on this pill maps straight to that same
+   already-existing filter_type — see _compute_due()'s docstring in
+   dashboard.py.
+
+   Clicking any pill fetches GET /dashboard/api/due?filter=<value> and
+   replaces the list client-side — no page reload.
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card, dash_due_row %}
 
@@ -47,15 +53,17 @@
 {% endset %}
 
 {% call dash_card('due', 'Due Today / Week / Overdue', due_summary,
-    expanded=(initial_expanded_card == 'due')) %}
+    expanded=(initial_expanded_card == 'due'), mode=dash_render_mode) %}
 
     {# data-filter values match _compute_due()'s filter_type strings
-       exactly ('overdue' | 'today' | 'week') — dashboard.js passes
-       whatever's in data-filter straight through to the API call, no
-       translation needed. #}
+       exactly ('overdue_today' | 'overdue' | 'today' | 'week') —
+       dashboard.js passes whatever's in data-filter straight through to
+       the API call, no translation needed. Exactly one .active at a time —
+       "All Today" is it by default, matching due_default below. #}
     <div class="dash-filter-chips">
-        <button type="button" class="team-tag-btn active" data-action="due-filter" data-filter="overdue">Overdue</button>
-        <button type="button" class="team-tag-btn active" data-action="due-filter" data-filter="today">Due Today</button>
+        <button type="button" class="team-tag-btn active" data-action="due-filter" data-filter="overdue_today">All Today</button>
+        <button type="button" class="team-tag-btn" data-action="due-filter" data-filter="overdue">Overdue</button>
+        <button type="button" class="team-tag-btn" data-action="due-filter" data-filter="today">Due Today</button>
         <button type="button" class="team-tag-btn" data-action="due-filter" data-filter="week">Due This Week</button>
     </div>
 

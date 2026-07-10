@@ -3,7 +3,7 @@
    scoring doesn't exist yet; this card just reserves its place in the
    layout until that's built. #}
 {% call dash_card('brief_quality', 'Average Brief Quality', '– (coming soon)',
-    expanded=(initial_expanded_card == 'brief_quality')) %}
+    expanded=(initial_expanded_card == 'brief_quality'), mode=dash_render_mode) %}
 <p class="dash-empty-state">
     A brief quality metric will appear here once brief quality scoring is built.
 </p>

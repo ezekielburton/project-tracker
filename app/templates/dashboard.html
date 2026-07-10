@@ -67,16 +67,58 @@
         </div>
     </div>
 
-    {# Cards zone. Summary always renders first, full-width, regardless of
-       role — card_order (role-dependent, see dashboard.py CARD_ORDER) only
-       controls the remaining cards in the two-column grid below it. #}
+    {# Cards zone. Summary always renders first, full-width, and keeps its
+       original self-contained expand-in-place behaviour unchanged — it's
+       the one card the 12 Jul 2026 tile rework below deliberately left
+       alone (see the big comment on `mode` in _dashboard_macros.html's
+       dash_card()). #}
     <div class="dash-cards-grid">
         {% include 'dashboard/cards/summary.html' %}
-
-        {% for card_key in card_order %}
-            {% include 'dashboard/cards/' + card_key + '.html' %}
-        {% endfor %}
     </div>
+
+    {# ── Tile grid + shared row-expand band (added 12 Jul 2026) ──────────
+       Every OTHER card (card_order, role-dependent — see CARD_ORDER in
+       dashboard.py) is now a small fixed-size tile, 3 per row. Clicking a
+       tile doesn't grow the tile itself — it opens a full-width band BELOW
+       that row of 3 (.dash-row-expand) showing that card's body content.
+       Clicking a different tile in the SAME row swaps what's showing in
+       that row's band (single-open-per-row, like an accordion); a tile in
+       a DIFFERENT row opens its own row's band independently, so more than
+       one row can be expanded at once.
+
+       card_order|batch(3) (Jinja builtin) chunks the role's card list into
+       groups of 3 — pads the last group with `none` if it doesn't divide
+       evenly, hence the `if card_key` guard below. Every role currently
+       has exactly 6 cards (see CARD_ORDER), so in practice this is always
+       two clean rows, but the guard keeps this from breaking if that ever
+       changes.
+
+       Each card partial gets `{% include %}`'d TWICE per row — once with
+       dash_render_mode='tile' (renders just the small clickable box into
+       .dash-tiles-row), once with dash_render_mode='body' (renders the
+       actual body content into .dash-row-expand, collapsed unless that
+       card is the one currently open). See dash_card()'s `mode` param in
+       _dashboard_macros.html for how a single macro produces both. #}
+    {% for row in card_order | batch(3) %}
+    <div class="dash-row-group">
+        <div class="dash-tiles-row">
+            {% for card_key in row %}
+                {% if card_key %}
+                {% set dash_render_mode = 'tile' %}
+                {% include 'dashboard/cards/' + card_key + '.html' %}
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="dash-row-expand">
+            {% for card_key in row %}
+                {% if card_key %}
+                {% set dash_render_mode = 'body' %}
+                {% include 'dashboard/cards/' + card_key + '.html' %}
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
 
     <hr class="dash-divider">
 

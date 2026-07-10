@@ -737,13 +737,18 @@ if (addSoundForm) {
                 }
                 var statusLabel = { briefed: 'Briefed', in_queue: 'In Queue', in_progress: 'In Progress', submitted: 'Submitted', revision_in_queue: 'Revision in Queue', revision_in_progress: 'Revision in Progress', approved: 'Approved', completed: 'Completed' };
                 list.innerHTML = projects.map(function (p) {
+                    var statusText = statusLabel[p.status] || p.status;
                     return '<div class="account-user-row" id="pt-project-' + p.id + '">' +
-                        '<div class="account-user-info">' +
-                        '<span class="account-user-name">' + p.name + '</span>' +
-                        '<span class="account-user-role">' + (p.job_number || 'No job #') + ' · ' + p.cs_lead + ' · ' + (statusLabel[p.status] || p.status) + '</span>' +
+                        '<div class="pt-project-row-content">' +
+                        '<div class="pt-project-row-info">' +
+                        '<span class="pt-project-job-num">' + (p.job_number || 'No job #') + '</span>' +
+                        '<span class="pt-project-name">' + p.name + '</span>' +
+                        '<span class="pt-project-cs">' + p.cs_lead + '</span>' +
+                        '<span class="pt-project-status">' + statusText + '</span>' +
                         '</div>' +
                         '<div class="account-user-actions">' +
                         '<button type="button" class="account-delete-btn" data-id="' + p.id + '" data-name="' + p.name + '">&times;</button>' +
+                        '</div>' +
                         '</div></div>';
                 }).join('');
                 list.querySelectorAll('.account-delete-btn').forEach(function (btn) {
@@ -841,12 +846,14 @@ if (addSoundForm) {
                 };
 
                 list.innerHTML = items.map(function (item) {
-                    // Show the number prominently as the title; project info in the subtitle.
-                    var subtitle = item.name + ' · ' + item.cs_lead + ' · ' + (statusLabel[item.status] || item.status);
+                    var statusText = statusLabel[item.status] || item.status;
                     return '<div class="account-user-row" id="pt-jobn-' + item.id + '">' +
-                        '<div class="account-user-info">' +
-                        '<span class="account-user-name">' + item.job_number + '</span>' +
-                        '<span class="account-user-role">' + subtitle + '</span>' +
+                        '<div class="pt-project-row-content">' +
+                        '<div class="pt-project-row-info">' +
+                        '<span class="pt-project-job-num">' + item.job_number + '</span>' +
+                        '<span class="pt-project-name">' + item.name + '</span>' +
+                        '<span class="pt-project-cs">' + item.cs_lead + '</span>' +
+                        '<span class="pt-project-status">' + statusText + '</span>' +
                         '</div>' +
                         '<div class="account-user-actions">' +
                         // "Clear" removes just the number, not the project — text reflects this.
@@ -855,6 +862,7 @@ if (addSoundForm) {
                         ' data-name="' + item.job_number + '"' +
                         ' data-project="' + item.name.replace(/"/g, '&quot;') + '">' +
                         'Clear</button>' +
+                        '</div>' +
                         '</div></div>';
                 }).join('');
 

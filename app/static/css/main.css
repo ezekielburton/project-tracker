@@ -3061,13 +3061,6 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     padding: 0.2rem 0.5rem;
 }
 
-.chip-assign-form {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin-left: auto;
-}
-
 .assign-designer-row {
     display: inline-flex;
     align-items: center;
@@ -3079,6 +3072,10 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     min-width: 120px;
 }
 
+/* margin-left: auto used to live on the .chip-assign-form wrapper (removed
+   12 Jul 2026 along with the per-row submit button — see the bulk-assign
+   flow further down) so the chip's select stays pinned right; now that the
+   select isn't wrapped in a form, it needs that rule directly. */
 .chip-assign-select {
     font-family: var(--font-body);
     font-size: 0.72rem;
@@ -3089,6 +3086,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     color: var(--color-text);
     cursor: pointer;
     max-width: 120px;
+    margin-left: auto;
 }
 
 .chip-assign-select:focus {
@@ -3096,21 +3094,27 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     border-color: var(--tangerine);
 }
 
-.chip-assign-btn {
-    font-size: 0.75rem;
-    font-weight: 700;
-    background: var(--tangerine);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 0.15rem 0.4rem;
-    cursor: pointer;
-    line-height: 1.4;
-    transition: opacity 0.15s;
+/* ── Bulk deliverable-assignment flow (added 12 Jul 2026) ─────────────────
+   Replaces the old immediate-submit "pick a designer, click ✓" pattern
+   (.chip-assign-form/.chip-assign-btn, removed) — every assignment chip is
+   now a bare .chip-assign-select with no per-row button; a designer can
+   change several, then apply them all at once via one .bulk-assign-apply-btn
+   per section (Standard Brief Deliverables) / per customer-region block
+   (C&CM By Customer). See the bulk-assign JS near the bottom of detail.html. */
+.bulk-assign-select--dirty {
+    border-color: var(--tangerine);
+    background: rgba(242, 127, 85, 0.08);
 }
 
-.chip-assign-btn:hover {
-    opacity: 0.85;
+.bulk-assign-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
+}
+
+.bulk-assign-apply-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 
 .brief-assignment-name {
@@ -4750,6 +4754,49 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     gap: 0.25rem;
     flex-shrink: 0;
     margin-left: 0.5rem;
+}
+
+/* Project-Tracker panel — stacked project/job-number info rows */
+.pt-project-row-content {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.pt-project-row-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.pt-project-job-num {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--tangerine);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pt-project-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.pt-project-cs,
+.pt-project-status {
+    font-size: 0.72rem;
+    color: var(--grey-mid);
+}
+
+.pt-project-status {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .account-edit-btn {

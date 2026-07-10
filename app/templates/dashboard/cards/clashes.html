@@ -91,7 +91,7 @@
 {% endset %}
 
 {% call dash_card('clashes', 'Clashing Projects', clashes_summary,
-    expanded=(initial_expanded_card == 'clashes'), muted=(clash_count == 0)) %}
+    expanded=(initial_expanded_card == 'clashes'), muted=(clash_count == 0), mode=dash_render_mode) %}
 
     <div class="dash-filter-chips">
         <button type="button" class="team-tag-btn active" data-action="clashes-tab" data-filter="deliverable">By Deliverable</button>

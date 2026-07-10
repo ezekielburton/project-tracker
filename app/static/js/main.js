@@ -2717,7 +2717,11 @@ function syncTableScrollers(viewEl) {
                 })
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
-                        if (!data.success) { status.textContent = 'Error: ' + data.error; return; }
+                        if (!data.success) {
+                            status.textContent = 'Upload failed.';
+                            showToast(data.error || 'File could not be saved to storage.', 'error');
+                            return;
+                        }
                         status.textContent = 'Uploaded.';
                         setTimeout(function () { status.textContent = ''; }, 3000);
                         createRefFileInput.value = '';

@@ -612,7 +612,7 @@
                     {% endif %}
                 </div>
                 {% endif %}
-                <div class="brief-deliverables">
+                <div class="brief-deliverables" id="cust-deliverables-{{ pc.id }}">
                     {% for deliverable in pc.deliverables %}
                     <div class="brief-deliverable-row">
                         <span class="brief-deliverable-name">
@@ -636,19 +636,22 @@
                                     {% if asgn %}{{ user_avatar(asgn.designer, 'xs') }} {{ asgn.designer.name }}{% else %}Pending{% endif %}
                                 </span>
                                 {% if effective_user.role in ['admin', 'designer', 'team_lead'] and (not ch_locked or effective_user.role == 'admin') %}
-                                <form method="POST"
-                                    action="{{ url_for('project_detail.assign_deliverable', project_id=project.id, d_id=deliverable.id) }}"
-                                    class="chip-assign-form">
-                                    <input type="hidden" name="team" value="{{ d.team }}">
-                                    <select name="designer_id" class="chip-assign-select">
-                                        <option value="">— assign —</option>
-                                        {% for designer in designers_by_team.get(d.team, []) %}
-                                        <option value="{{ designer.id }}" {{ 'selected' if asgn and
-                                            asgn.designer_id==designer.id }}>{{ designer.name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <button type="submit" class="chip-assign-btn">✓</button>
-                                </form>
+                                {# Bare select, no per-row form/button — part of the bulk-assign
+                                   flow (see the 'Apply All Assignments' button below this
+                                   customer/region block and the bulk-assign JS at the bottom of
+                                   this file). data-team carries what the hidden "team" input used
+                                   to (this route assigns per discipline, not just per deliverable),
+                                   and data-original is the designer_id this select loaded with. #}
+                                <select class="chip-assign-select bulk-assign-select"
+                                    data-deliverable-id="{{ deliverable.id }}"
+                                    data-team="{{ d.team }}"
+                                    data-original="{{ asgn.designer_id if asgn else '' }}">
+                                    <option value="">— assign —</option>
+                                    {% for designer in designers_by_team.get(d.team, []) %}
+                                    <option value="{{ designer.id }}" {{ 'selected' if asgn and
+                                        asgn.designer_id==designer.id }}>{{ designer.name }}</option>
+                                    {% endfor %}
+                                </select>
                                 {% endif %}
                             </div>
                             {% endfor %}
@@ -701,6 +704,15 @@
                     </div>
                     {% endfor %}
                 </div>
+                {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
+                <div class="bulk-assign-bar">
+                    <button type="button" class="btn-primary btn-sm bulk-assign-apply-btn"
+                        data-scope="customer"
+                        data-target="cust-deliverables-{{ pc.id }}"
+                        data-project-id="{{ project.id }}"
+                        disabled>Apply All Assignments</button>
+                </div>
+                {% endif %}
             </div>{# /brief-customer-body #}
             </div>
             {% endfor %}
@@ -765,7 +777,7 @@
         <h3 class="brief-section-heading" style="margin-top: 1.5rem;">Deliverables</h3>
 
         {% if standard_deliverables %}
-        <div class="brief-deliverables" style="margin-top: 1rem;">
+        <div class="brief-deliverables" id="std-deliverables-{{ project.id }}" style="margin-top: 1rem;">
             {% for d in standard_deliverables %}
             {% set asgn = standard_assignments_by_deliverable.get(d.id) %}
             {% set d_open_flags = open_flags | selectattr('deliverable_id', 'equalto', d.id) | list %}
@@ -795,18 +807,21 @@
                             {% if asgn %}{{ user_avatar(asgn.designer, 'xs') }} {{ asgn.designer.name }}{% else %}Pending{% endif %}
                         </span>
                         {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
-                        <form method="POST"
-                            action="{{ url_for('project_detail.assign_standard_deliverable', project_id=project.id, d_id=d.id) }}"
-                            class="chip-assign-form">
-                            <select name="designer_id" class="chip-assign-select">
-                                <option value="">— assign —</option>
-                                {% for designer in d_designers %}
-                                <option value="{{ designer.id }}" {{ 'selected' if asgn and
-                                    asgn.designer_id==designer.id }}>{{ designer.name }}</option>
-                                {% endfor %}
-                            </select>
-                            <button type="submit" class="chip-assign-btn">✓</button>
-                        </form>
+                        {# Bare select, no per-row form/button — part of the bulk-assign
+                           flow (see the 'Apply All Assignments' button below the list and
+                           the bulk-assign JS at the bottom of this file). data-original
+                           is the designer_id this select loaded with, so the JS can tell
+                           "changed" apart from "already assigned" without a server round
+                           trip. #}
+                        <select class="chip-assign-select bulk-assign-select"
+                            data-deliverable-id="{{ d.id }}"
+                            data-original="{{ asgn.designer_id if asgn else '' }}">
+                            <option value="">— assign —</option>
+                            {% for designer in d_designers %}
+                            <option value="{{ designer.id }}" {{ 'selected' if asgn and
+                                asgn.designer_id==designer.id }}>{{ designer.name }}</option>
+                            {% endfor %}
+                        </select>
                         {% endif %}
                     </div>
                 </div>
@@ -854,10 +869,19 @@
             </div>
             {% endfor %}
         </div>
+        {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
+        <div class="bulk-assign-bar">
+            <button type="button" class="btn-primary btn-sm bulk-assign-apply-btn"
+                data-scope="standard"
+                data-target="std-deliverables-{{ project.id }}"
+                data-project-id="{{ project.id }}"
+                disabled>Apply All Assignments</button>
+        </div>
+        {% endif %}
         {% else %}
         <p class="muted" style="margin-top: 0.75rem;">No deliverables added yet.</p>
         {% endif %}
-        
+
     </div>
     {% endif %}
 
@@ -2740,8 +2764,9 @@
         }
 
         // ── Standard brief: Approve Selected deliverables ────────────────────
-        var approveSelectedBtn = document.getElementById('approveSelectedBtn');
-        if (approveSelectedBtn) {
+        // querySelectorAll because C&CM projects render this button twice (once
+        // in the C&KV section and once in the standard brief section).
+        document.querySelectorAll('[id="approveSelectedBtn"]').forEach(function (approveSelectedBtn) {
             approveSelectedBtn.addEventListener('click', function () {
                 var projectId = this.dataset.projectId;
                 var checked = document.querySelectorAll('.std-deliverable-approve-cb:checked:not(:disabled)');
@@ -2769,7 +2794,7 @@
                     }
                 );
             });
-        }
+        });
 
         // ── POSM channel: Approve Selected deliverables ───────────────────────
         document.addEventListener('click', function (e) {
@@ -2880,8 +2905,8 @@
         });
 
         // ── Direct approve button (bypasses submission pipeline) ─────────────
-        var approveDirectBtn = document.getElementById('approveDirectBtn');
-        if (approveDirectBtn) {
+        // querySelectorAll: C&CM projects render approveDirectBtn twice.
+        document.querySelectorAll('[id="approveDirectBtn"]').forEach(function (approveDirectBtn) {
             approveDirectBtn.addEventListener('click', function () {
                 var projectId = this.dataset.projectId;
                 openApprovalModal(
@@ -2905,11 +2930,11 @@
                     }
                 );
             });
-        }
+        });
 
         // ── Unapprove button (admin only — reverses a mistaken approval) ────────
-        var unapproveBtn = document.getElementById('unapproveBtn');
-        if (unapproveBtn) {
+        // querySelectorAll: C&CM projects render unapproveBtn twice.
+        document.querySelectorAll('[id="unapproveBtn"]').forEach(function (unapproveBtn) {
             unapproveBtn.addEventListener('click', function () {
                 var projectId = this.dataset.projectId;
                 openApprovalModal(
@@ -2933,7 +2958,7 @@
                     }
                 );
             });
-        }
+        });
 
         // ── Standard deliverable inline input: Enter key shortcut ────────────
         var stdInp = document.getElementById('newStandardDeliverable');
@@ -2951,29 +2976,100 @@
     document.addEventListener('DOMContentLoaded', _wireDetailPage);
     document.addEventListener('helix:navigated', _wireDetailPage);
 
-    // ── Chip-assign form delegation ────────────────────────────────────────
-    // Intercept .chip-assign-form submits so they go via fetch instead of
-    // navigating to the JSON endpoint. Guard prevents stacking on SPA re-runs.
-    if (!window._chipAssignWired) {
-        window._chipAssignWired = true;
-        document.addEventListener('submit', function (e) {
-            var form = e.target.closest('.chip-assign-form');
-            if (!form) return;
-            e.preventDefault();
-            var m = form.action.match(/\/projects\/(\d+)\//);
-            var projectId = m ? parseInt(m[1]) : null;
-            var section = form.closest('[id^="section-"]');
-            fetch(form.action, { method: 'POST', body: new FormData(form) })
+    // ── Bulk deliverable-assignment flow ─────────────────────────────────
+    // Replaces the old chip-assign-form delegation (immediate-submit on
+    // every single select) with a "pick several, then apply" flow: every
+    // assignment chip is now a bare <select> (no form, no per-row button)
+    // instead — see the Standard Brief Deliverables list and each C&CM
+    // customer/region block's markup. One "Apply All Assignments" button
+    // per section (Standard) / per customer-region block (C&CM) submits
+    // only whichever selects actually changed.
+    //
+    // data-original on each select holds the designer_id it loaded with
+    // (or '' if unassigned) — comparing the live value against THAT,
+    // rather than against "is it non-empty", is what lets an untouched
+    // already-assigned row get skipped even though its select still shows
+    // a value.
+    //
+    // Guard prevents stacking handlers on SPA re-runs, same pattern the
+    // old chip-assign delegation used.
+    if (!window._bulkAssignWired) {
+        window._bulkAssignWired = true;
+
+        function bulkAssignButtonFor(selectEl) {
+            var container = selectEl.closest('[id^="std-deliverables-"], [id^="cust-deliverables-"]');
+            if (!container) return null;
+            return document.querySelector('.bulk-assign-apply-btn[data-target="' + container.id + '"]');
+        }
+
+        // Tracks which selects have actually been touched — toggles a
+        // --dirty class (for the highlight style) and flips the section's
+        // Apply button disabled state based on whether ANY select in that
+        // section/block currently differs from its data-original.
+        document.addEventListener('change', function (e) {
+            var select = e.target.closest('.bulk-assign-select');
+            if (!select) return;
+
+            var isDirty = select.value !== (select.dataset.original || '');
+            select.classList.toggle('bulk-assign-select--dirty', isDirty);
+
+            var btn = bulkAssignButtonFor(select);
+            if (!btn) return;
+            var container = document.getElementById(btn.dataset.target);
+            btn.disabled = !(container && container.querySelector('.bulk-assign-select--dirty'));
+        });
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.bulk-assign-apply-btn');
+            if (!btn || btn.disabled) return;
+
+            var container = document.getElementById(btn.dataset.target);
+            if (!container) return;
+
+            var assignments = [];
+            container.querySelectorAll('.bulk-assign-select--dirty').forEach(function (select) {
+                // Skip clearing back to "— assign —" — like the old
+                // per-row flow, this only ever supports assigning, not
+                // un-assigning, so an empty value has nothing to send.
+                if (!select.value) return;
+                var item = {
+                    deliverable_id: parseInt(select.dataset.deliverableId, 10),
+                    designer_id: parseInt(select.value, 10)
+                };
+                if (select.dataset.team) item.team = select.dataset.team;
+                assignments.push(item);
+            });
+            if (!assignments.length) return;
+
+            var url = btn.dataset.scope === 'standard'
+                ? '/projects/' + btn.dataset.projectId + '/standard-deliverables/assign-bulk'
+                : '/projects/' + btn.dataset.projectId + '/deliverables/assign-bulk';
+            var originalLabel = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Applying…';
+
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignments: assignments })
+            })
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (d.success) {
-                        showToast((d.designer_name || 'Designer') + ' assigned.', 'success');
-                        if (projectId && section) refreshSection(projectId, section.id);
+                        showToast(d.count + ' assignment' + (d.count !== 1 ? 's' : '') + ' applied.', 'success');
+                        var section = btn.closest('[id^="section-"]');
+                        if (section) refreshSection(btn.dataset.projectId, section.id);
                     } else {
-                        showToast(d.error || 'Could not assign designer.', 'error');
+                        showToast(d.error || 'Could not apply assignments.', 'error');
+                        btn.disabled = false;
+                        btn.textContent = originalLabel;
                     }
                 })
-                .catch(function () { showToast('Could not assign designer.', 'error'); });
+                .catch(function () {
+                    showToast('Could not apply assignments.', 'error');
+                    btn.disabled = false;
+                    btn.textContent = originalLabel;
+                });
         });
     }
 

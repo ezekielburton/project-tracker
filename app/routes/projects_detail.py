@@ -763,6 +763,72 @@ def assign_deliverable(project_id, d_id):
     return jsonify({'success': True, 'designer_name': designer.name})
 
 
+@detail_bp.route('/projects/<int:project_id>/deliverables/assign-bulk', methods=['POST'])
+@login_required
+@role_required('admin', 'designer', 'team_lead')
+def assign_deliverables_bulk(project_id):
+    """Bulk version of assign_deliverable() for the "By Customer/Region"
+    deliverables list — the 'Apply All Assignments' button at the bottom of
+    each customer/region block. Body: {"assignments": [{deliverable_id,
+    team, designer_id}, ...]} — only rows the designer actually changed
+    (see bulk-assign-select--dirty tracking in detail.html's inline script),
+    not every row currently showing a value. Same per-row logic as the
+    single-item route (existing DeliverableAssignment for that
+    deliverable+team pair gets updated, otherwise a new one is created),
+    just looped and committed once instead of once per request."""
+    from app.models import Deliverable, DeliverableAssignment
+    project = Project.query.get_or_404(project_id)
+    data = request.get_json(silent=True) or {}
+    items = data.get('assignments') or []
+
+    applied = []  # (deliverable, designer, team, action_word) for logging after commit
+    for item in items:
+        d_id = item.get('deliverable_id')
+        team = item.get('team')
+        designer_id = item.get('designer_id')
+        if not d_id or not team or not designer_id:
+            continue
+
+        deliverable = Deliverable.query.get(d_id)
+        if not deliverable:
+            continue
+        designer = User.query.get(int(designer_id))
+        if not designer:
+            continue
+
+        existing = DeliverableAssignment.query.filter_by(
+            deliverable_id=d_id,
+            team=team
+        ).first()
+
+        if existing:
+            existing.designer_id = designer.id
+            existing.assigned_by_id = current_user.id
+            existing.assigned_at = datetime.utcnow()
+            action_word = 'reassigned'
+        else:
+            db.session.add(DeliverableAssignment(
+                deliverable_id=d_id,
+                designer_id=designer.id,
+                team=team,
+                assigned_by_id=current_user.id
+            ))
+            action_word = 'assigned'
+
+        applied.append((deliverable, designer, team, action_word))
+
+    db.session.commit()
+
+    for deliverable, designer, team, action_word in applied:
+        log_activity(
+            'deliverable_assigned',
+            f'{designer.name} {action_word} to "{deliverable.name}" ({team}) on "{project.name}" by {current_user.name}',
+            user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id
+        )
+
+    return jsonify({'success': True, 'count': len(applied)})
+
+
 # ── Brief Flag System ────────────────────────────────────────────────────────
 
 @detail_bp.route('/projects/<int:project_id>/flags/create', methods=['POST'])
@@ -1320,6 +1386,66 @@ def assign_standard_deliverable(project_id, d_id):
                  user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
     return jsonify({'success': True, 'designer_name': designer.name})
 
+
+@detail_bp.route('/projects/<int:project_id>/standard-deliverables/assign-bulk', methods=['POST'])
+@login_required
+@role_required('admin', 'designer', 'team_lead')
+def assign_standard_deliverables_bulk(project_id):
+    """Bulk version of assign_standard_deliverable() — the 'Apply All
+    Assignments' button under the Standard Brief Deliverables list. Body:
+    {"assignments": [{deliverable_id, designer_id}, ...]} — only rows the
+    designer actually changed (see bulk-assign-select--dirty tracking in
+    detail.html's inline script), not every row currently showing a value.
+    Same per-row logic as the single-item route (one assignment per
+    deliverable, replacing any existing one), just looped and committed
+    once instead of once per request."""
+    from app.models import DeliverableAssignment
+    project = Project.query.get_or_404(project_id)
+    data = request.get_json(silent=True) or {}
+    items = data.get('assignments') or []
+
+    applied = []  # (deliverable, designer) for logging after commit
+    for item in items:
+        d_id = item.get('deliverable_id')
+        designer_id = item.get('designer_id')
+        if not d_id or not designer_id:
+            continue
+
+        deliverable = Deliverable.query.filter_by(id=d_id, project_id=project_id).first()
+        if not deliverable:
+            continue
+        designer = User.query.get(int(designer_id))
+        if not designer:
+            continue
+        team = designer.team or 'General'
+
+        # One assignment per deliverable, replace any existing — same rule
+        # as the single-item route.
+        existing = DeliverableAssignment.query.filter_by(deliverable_id=d_id).first()
+        if existing:
+            existing.designer_id = designer.id
+            existing.team = team
+            existing.assigned_by_id = current_user.id
+            existing.assigned_at = datetime.utcnow()
+        else:
+            db.session.add(DeliverableAssignment(
+                deliverable_id=d_id,
+                designer_id=designer.id,
+                team=team,
+                assigned_by_id=current_user.id
+            ))
+
+        applied.append((deliverable, designer))
+
+    db.session.commit()
+
+    for deliverable, designer in applied:
+        log_activity('deliverable_assigned',
+                     f'{designer.name} assigned to "{deliverable.name}" on "{project.name}"',
+                     user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True, 'count': len(applied)})
+
 import uuid
 
 @detail_bp.route('/projects/<int:project_id>/upload-file', methods=['POST'])
@@ -1355,7 +1481,11 @@ def upload_project_file(project_id):
     from app.nas import upload_app_file, build_file_path
     nas_file_path = build_file_path(project, 'Reference Files', original_filename)
     nas_folder = nas_file_path.rsplit('/',1)[0]
-    upload_app_file(file_bytes, nas_folder, original_filename)
+    try:
+        upload_app_file(file_bytes, nas_folder, original_filename)
+    except RuntimeError as e:
+        current_app.logger.error(f'Reference file upload failed for project {project_id}: {e}')
+        return jsonify({'success': False, 'error': 'File could not be saved to storage. Please try again.'}), 502
 
     # Save record - Filename column stores the NAS filename (Same as original)
     project_file = ProjectFile(
@@ -1396,7 +1526,12 @@ def download_project_file(file_id):
     project = Project.query.get(project_file.project_id)
 
     nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
-    file_bytes = download_app_file(nas_path)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Reference file download failed (file_id={file_id}): {e}')
+        return ('File could not be retrieved from storage. '
+                'Please try again or contact support.', 502)
 
     return send_file(
         io.BytesIO(file_bytes),
@@ -1481,7 +1616,14 @@ def preview_project_file(file_id):
 
     project = Project.query.get(project_file.project_id)
     nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
-    file_bytes = download_app_file(nas_path)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Reference file preview failed (file_id={file_id}): {e}')
+        return jsonify({
+            'success': False,
+            'error': 'File could not be retrieved from storage. Try downloading it instead.'
+        }), 502
 
     return send_file(
         io.BytesIO(file_bytes),

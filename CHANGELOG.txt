@@ -19,6 +19,7 @@ Adjustments:
 - Concept and Kv assignments now instantly update.
 - Deliverables can be edited in the brief page.
 - You can now drag and drop images into feedback and flagging boxes, they embed just like in outlook and are resizable
+- Designers can now select multiple deliverable assignments and then assign with one "Assign All button", rather than having to assign each deliverable seperately
  
 
 Bug Fixes:
@@ -27,6 +28,7 @@ Bug Fixes:
 - Fixed draft deletion not working.
 - FIxed concept and kv assignment not instantly updating.
 - Fixed lots of buttons across the site not working without a page refresh.
+- Fixed some files still uploading when the upload gets corrupted. Now you will be notified and asked to reupload.
 
 ================================================================================
 v2.2 - Large feature update

@@ -104,10 +104,13 @@ function helixShowBrowserNotification(message) {
                 helixShowBrowserNotification(msg);
                 window.helixPlayNotificationSound();
 
-                // Achievement toast — show one per achievement in the batch
+                // Per-notification toasts for types that need immediate attention
                 data.notifications.forEach(function (n) {
                     if (n.notification_type === 'achievement_earned' && typeof showAchievementToast === 'function') {
                         showAchievementToast(n.message);
+                    }
+                    if (n.notification_type === 'nas_upload_failed' && typeof showToast === 'function') {
+                        showToast(n.message, 'error');
                     }
                 });
 

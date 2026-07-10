@@ -464,11 +464,31 @@ def upload_submission(project_id):
 
     # Upload to NAS in background thread
     from app.nas import upload_app_file, build_file_path, _run_in_background
-    _bg_folder   = build_file_path(project, 'Submissions', submission.original_filename).rsplit('/', 1)[0]
-    _bg_bytes    = file_bytes
-    _bg_filename = submission.original_filename
-    _bg_app      = current_app._get_current_object()
-    _run_in_background(_bg_app, lambda: upload_app_file(_bg_bytes, _bg_folder, _bg_filename))
+    _bg_folder      = build_file_path(project, 'Submissions', submission.original_filename).rsplit('/', 1)[0]
+    _bg_bytes       = file_bytes
+    _bg_filename    = submission.original_filename
+    _bg_app         = current_app._get_current_object()
+    _bg_uploader_id = current_user.id
+    _bg_project_id  = project.id
+
+    def _upload_submission_deck():
+        try:
+            upload_app_file(_bg_bytes, _bg_folder, _bg_filename)
+        except RuntimeError:
+            from app.models import User as _U, Project as _P
+            from app.notifications import create_notification
+            uploader = _U.query.get(_bg_uploader_id)
+            proj     = _P.query.get(_bg_project_id)
+            if uploader and proj:
+                create_notification(
+                    recipient=uploader,
+                    message=(f'Your deck "{_bg_filename}" could not be saved to storage '
+                             f'for "{proj.name}". Please try reuploading.'),
+                    notification_type='nas_upload_failed',
+                    project=proj,
+                )
+
+    _run_in_background(_bg_app, _upload_submission_deck)
 
     log_activity('submission_uploaded',
                  f'Client deck "{file.filename}" uploaded for "{project.name}" by {current_user.name}',
@@ -870,8 +890,14 @@ def download_submission(submission_id):
 
     # All files live on NAS — upload route never saves to local disk
     from app.nas import download_app_file, build_file_path
+    from flask import current_app
     nas_path   = build_file_path(project, 'Submissions', submission.original_filename)
-    file_bytes = download_app_file(nas_path)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Submission download failed (id={submission_id}): {e}')
+        return ('File could not be retrieved from storage. '
+                'Please try again or contact support.', 502)
     return send_file(
         io.BytesIO(file_bytes),
         as_attachment=True,
@@ -910,7 +936,15 @@ def preview_submission_file(file_id):
     
     project = Project.query.get(extra.project_id)
     nas_path = build_file_path(project, 'Submissions', extra.original_filename)
-    file_bytes = download_app_file(nas_path)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        from flask import current_app
+        current_app.logger.error(f'Submission file preview failed (file_id={file_id}): {e}')
+        return jsonify({
+            'success': False,
+            'error': 'File could not be retrieved from storage. Try downloading it instead.'
+        }), 502
 
     return send_file(
         io.BytesIO(file_bytes),
@@ -965,11 +999,31 @@ def add_submission_file(project_id, submission_id):
 
     # Upload to NAS in background (same Submissions/ folder as the main deck)
     from app.nas import upload_app_file, build_file_path, _run_in_background
-    _bg_folder   = build_file_path(project, 'Submissions', extra.original_filename).rsplit('/', 1)[0]
-    _bg_bytes    = file_bytes
-    _bg_filename = extra.original_filename
-    _bg_app      = current_app._get_current_object()
-    _run_in_background(_bg_app, lambda: upload_app_file(_bg_bytes, _bg_folder, _bg_filename))
+    _bg_folder      = build_file_path(project, 'Submissions', extra.original_filename).rsplit('/', 1)[0]
+    _bg_bytes       = file_bytes
+    _bg_filename    = extra.original_filename
+    _bg_app         = current_app._get_current_object()
+    _bg_uploader_id = current_user.id
+    _bg_project_id  = project.id
+
+    def _upload_extra_file():
+        try:
+            upload_app_file(_bg_bytes, _bg_folder, _bg_filename)
+        except RuntimeError:
+            from app.models import User as _U, Project as _P
+            from app.notifications import create_notification
+            uploader = _U.query.get(_bg_uploader_id)
+            proj     = _P.query.get(_bg_project_id)
+            if uploader and proj:
+                create_notification(
+                    recipient=uploader,
+                    message=(f'Your file "{_bg_filename}" could not be saved to storage '
+                             f'for "{proj.name}". Please try reuploading.'),
+                    notification_type='nas_upload_failed',
+                    project=proj,
+                )
+
+    _run_in_background(_bg_app, _upload_extra_file)
 
     log_activity('file_attached',
                  f'Extra file "{file.filename}" attached to submission for "{project.name}" by {current_user.name}',
@@ -997,8 +1051,14 @@ def download_submission_file(file_id):
     project = Project.query.get(extra.project_id)
 
     from app.nas import download_app_file, build_file_path
+    from flask import current_app
     nas_path   = build_file_path(project, 'Submissions', extra.original_filename)
-    file_bytes = download_app_file(nas_path)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Submission extra-file download failed (file_id={file_id}): {e}')
+        return ('File could not be retrieved from storage. '
+                'Please try again or contact support.', 502)
     return send_file(
         io.BytesIO(file_bytes),
         as_attachment=True,
@@ -1449,17 +1509,19 @@ def preview_submission(submission_id):
     project    = Project.query.get(submission.project_id)
 
     nas_path   = build_file_path(project, 'Submissions', submission.original_filename)
-    file_bytes = download_app_file(nas_path)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Submission preview NAS fetch failed (id={submission_id}): {e}')
+        return jsonify({
+            'success': False,
+            'error': 'File could not be retrieved from storage. Try downloading instead.'
+        }), 502
 
     if submission.file_type.lower() == 'pptx':
         try:
             file_bytes = convert_pptx_to_pdf(file_bytes)
         except (subprocess.TimeoutExpired, RuntimeError) as e:
-            # Conversion can legitimately fail — a corrupted deck, an
-            # unusual embed LibreOffice chokes on, whatever. We learned the
-            # hard way this can happen even for real files. Log it for
-            # debugging, but never let a bad deck 500 the page — the
-            # frontend falls back to "preview unavailable, download instead."
             current_app.logger.warning(
                 f'Preview conversion failed for submission {submission_id}: {e}'
             )
@@ -1474,4 +1536,3 @@ def preview_submission(submission_id):
         as_attachment=False,
         download_name=submission.original_filename.rsplit('.', 1)[0] + '.pdf'
     )
-

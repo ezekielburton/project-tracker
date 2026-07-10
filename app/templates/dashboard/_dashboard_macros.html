@@ -11,10 +11,60 @@
                  small chunk of markup (e.g. RAG pills), not plain text.
    expanded    — True if this card should start open (matches
                  initial_expanded_card from the ?view= redirect).
-   muted       — True renders the card visually de-emphasized with no
-                 chevron (used by the Clashing Projects card at zero clashes).
-   full        — True spans both grid columns (the Summary card only). #}
-{% macro dash_card(key, title, summary_html, expanded=False, muted=False, full=False) %}
+   muted       — True renders the card visually de-emphasized and
+                 unclickable (used by the Clashing Projects card at zero
+                 clashes).
+   full        — True spans both grid columns. Only ever used by the
+                 Summary card (mode left at its default, see below) — it's
+                 the one card the 12 Jul 2026 tile rework explicitly left
+                 alone (see the big comment on the tile/row-expand pattern
+                 in dashboard.html), so `full` has no meaning in tile/body
+                 mode and is ignored there.
+   mode        — added 12 Jul 2026 for the tile + shared row-expand-band
+                 rework (see dashboard.html). One of:
+                   None (default) — the ORIGINAL self-contained card: a
+                     clickable header that expands its own body in place.
+                     This is what the Summary card still uses, unchanged.
+                   'tile'  — renders ONLY the small clickable tile (title +
+                     summary_html), no body at all. Used for every other
+                     card, grouped 3-per-row in dashboard.html's
+                     .dash-tiles-row.
+                   'body'  — renders ONLY the body content, wrapped for the
+                     row's shared .dash-row-expand band below the tiles
+                     (max-height-collapsed unless `expanded`, same
+                     mechanic the old single-card body used, just no
+                     longer nested inside its own tile).
+                 A card partial gets `{% include %}`'d TWICE per row when
+                 in tile/body mode — once per mode, via dashboard.html
+                 setting the `dash_render_mode` context variable before
+                 each include — so whatever Jinja the partial does above
+                 its `{% call %}` (building summary_html, querying data for
+                 the body, etc.) simply runs twice. Harmless — no writes,
+                 just some redundant string-building. #}
+{% macro dash_card(key, title, summary_html, expanded=False, muted=False, full=False, mode=None) %}
+{% if mode == 'tile' %}
+<div class="dash-tile{% if expanded %} active{% endif %}{% if muted %} dash-tile--muted{% endif %}"
+    data-card="{{ key }}" {% if not muted %}data-action="toggle-card"{% endif %}>
+    <span class="dash-tile-title">{{ title }}</span>
+    <span class="dash-tile-summary">{{ summary_html | safe }}</span>
+</div>
+{% elif mode == 'body' %}
+{# .dash-card-body-visual (added 12 Jul 2026, second pass) is the "looks
+   like a card" wrapper — white bg/radius/shadow, only when .expanded — and
+   .dash-card-body-content (outer) is purely the "clips to 0 height when
+   collapsed" wrapper. They have to be two different elements: overflow:
+   hidden clips a box's OWN box-shadow when they're on the same element, so
+   a single combined element would render an expanded tile body with a
+   visibly cut-off shadow. See the big comment on .dash-card-body-content
+   in dashboard.css for the fuller version of this. #}
+<div class="dash-card-body-content{% if expanded %} expanded{% endif %}" data-card="{{ key }}">
+    <div class="dash-card-body-visual">
+        <div class="dash-card-body-inner">
+            {{ caller() }}
+        </div>
+    </div>
+</div>
+{% else %}
 <div class="dash-card{% if expanded %} expanded{% endif %}{% if muted %} dash-card--muted{% endif %}{% if full %} dash-card--full{% endif %}" data-card="{{ key }}">
     <button type="button" class="dash-card-header" data-action="toggle-card" {% if muted %}disabled{% endif %}>
         <span class="dash-card-title">{{ title }}</span>
@@ -27,6 +77,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endmacro %}
 
 

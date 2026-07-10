@@ -250,17 +250,22 @@
 }
 
 /* Height-transition expand, not display:none — animates smoothly.
-   9999px is arbitrary-large-enough rather than measuring actual content
-   height in JS; the transition duration is what makes this look smooth
-   either way since the visible portion always animates in that time. */
+   max-height, but JS-measured (see expandBody()/collapseBody()/
+   applyOpenState() in dashboard.js), not a fixed guess: transitioning
+   max-height from 0 to some large fixed number (9999px, the very first
+   version of this) animates at a CONSTANT RATE across that whole range, so
+   the fraction covering the content's actual height (a few hundred px) is
+   tiny — it reads as an almost-instant "pop" rather than a smooth grow.
+   A CSS-only grid-template-rows (0fr -> 1fr) alternative was tried next
+   (12 Jul 2026) to avoid the JS measurement, but didn't reliably collapse
+   to zero height across browsers — content stayed visible, unboxed,
+   outside its card. JS setting an exact pixel max-height sidesteps both
+   problems: the transition covers exactly the visible distance, and 0
+   really means 0. */
 .dash-card-body {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease;
-}
-
-.dash-card.expanded .dash-card-body {
-    max-height: 9999px;
+    transition: max-height 0.35s ease;
 }
 
 .dash-card-body-inner {
@@ -277,6 +282,127 @@
 
 .dash-card--muted .dash-card-header {
     cursor: default;
+}
+
+/* ── Tile grid + shared row-expand band (added 12 Jul 2026) ───────────────
+   Every card except Summary (which keeps the .dash-card/.dash-card-header/
+   .dash-card-body rules above, untouched) is now a small fixed-size tile,
+   3 per row — clicking one doesn't grow the tile itself, it opens a
+   full-width band below that row of 3 showing the body content. See the
+   big comment on dash_card()'s `mode` param in _dashboard_macros.html and
+   on the row-group loop in dashboard.html for the full mechanic; this is
+   just the visual layer, wired up by dashboard.js's click handler. */
+
+.dash-row-group {
+    margin-bottom: 1rem;
+}
+
+.dash-tiles-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 900px) {
+    .dash-tiles-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-tile {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1.5px solid transparent;
+    padding: 1rem 1.2rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 4.5rem;
+    justify-content: center;
+}
+
+/* Active — the one tile per row (at most) whose body is currently showing
+   in that row's .dash-row-expand band below. Same tangerine accent
+   .dash-card.expanded's chevron uses, so "this is the open one" reads the
+   same way it always has on this page. */
+.dash-tile.active {
+    border-color: var(--tangerine);
+}
+
+/* Muted — Clashing Projects tile at zero clashes. No data-action on the
+   element itself (set conditionally by the macro), reduced opacity, not
+   clickable — same convention .dash-card--muted used before this rework. */
+.dash-tile--muted {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.dash-tile-title {
+    font-family: var(--font-headline);
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    color: var(--black);
+}
+
+.dash-tile-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+    color: var(--grey-dark);
+    font-size: 0.9rem;
+}
+
+/* The shared band below a row of 3 tiles. Empty (all children collapsed
+   via .dash-card-body-content below) by default, so it takes no visible
+   space until a tile in that row is clicked — no separate "is anything
+   open in this row" class needed on the wrapper itself. */
+.dash-row-expand {
+    display: block;
+}
+
+/* Same JS-measured max-height mechanic as .dash-card-body above (see the
+   big comment there), self-toggling via its own .expanded class instead
+   of a parent .dash-card.expanded selector — there's no longer a single
+   wrapping card element tying a tile to its body, they're siblings in
+   different rows of the row-group now (see dashboard.html). This element
+   is the COLLAPSE wrapper only — max-height + overflow:hidden, no visual
+   styling of its own. The white/shadow/radius "card" look lives one level
+   deeper, on .dash-card-body-visual, because overflow:hidden clips a box's
+   OWN box-shadow when they're on the same element (the shadow extends
+   outside the border-box by definition, exactly what overflow:hidden
+   exists to cut off) — with only ONE wrapper, an expanded tile body would
+   render with a visibly clipped/missing shadow on top and bottom. Splitting
+   "clips overflow" and "looks like a card" across two nested elements
+   avoids that; .dash-card-body / .dash-card-body-inner didn't need this
+   split because Summary's shadow lives on .dash-card, a real ancestor two
+   levels further up, never sharing an element with the overflow:hidden. */
+.dash-card-body-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+}
+
+.dash-card-body-content.expanded .dash-card-body-visual {
+    margin-top: 1rem;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+/* .dash-card-body-inner's border-top (further down this file) exists to
+   separate a header from the body directly below it in the SAME box — the
+   old single-card layout. In this new split layout the tile is a whole
+   separate box in the row above, not sharing a box with this content at
+   all, so that divider line has nothing to divide here; swap it for even
+   padding on all sides instead. */
+.dash-card-body-content .dash-card-body-inner {
+    border-top: none;
+    padding: 1.4rem;
 }
 
 /* ── RAG badges ───────────────────────────────────────────────────────── */

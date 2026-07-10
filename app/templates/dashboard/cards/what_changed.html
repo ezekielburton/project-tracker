@@ -45,7 +45,7 @@
 {% endset %}
 
 {% call dash_card('what_changed', 'What Changed', what_changed_summary,
-    expanded=(initial_expanded_card == 'what_changed')) %}
+    expanded=(initial_expanded_card == 'what_changed'), mode=dash_render_mode) %}
 
     {% if what_changed %}
         {% for entry in what_changed %}

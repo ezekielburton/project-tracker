@@ -53,7 +53,7 @@
 {% endset %}
 
 {% call dash_card('next_actions', 'Next Actions', next_actions_summary,
-    expanded=(initial_expanded_card == 'next_actions')) %}
+    expanded=(initial_expanded_card == 'next_actions'), mode=dash_render_mode) %}
 
     <div class="dash-filter-chips">
         <button type="button" class="team-tag-btn active" data-action="next-actions-tab" data-filter="mine">My Actions</button>

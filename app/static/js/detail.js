@@ -548,6 +548,88 @@ document.addEventListener('click', function (e) {
     }
 });
 
+// ── Submission flag delegation ────────────────────────────────────────────────
+// These buttons share IDs across the C&KV and standard-brief blocks, so
+// getElementById always returns whichever appears first in the DOM — not
+// necessarily the one the user clicked. Delegation + DOM traversal avoids
+// that entirely and survives SPA navigation without re-wiring.
+document.addEventListener('click', function (e) {
+    // Open the flag form
+    var flagBtn = e.target.closest('[id="submissionFlagBtn"]');
+    if (flagBtn) {
+        // Form is the next sibling of flagBtn's parent flex row
+        var form = flagBtn.parentElement && flagBtn.parentElement.nextElementSibling;
+        if (form && form.id === 'submissionFlagForm') {
+            form.classList.remove('hidden');
+            flagBtn.classList.add('hidden');
+        }
+        return;
+    }
+
+    // Cancel — close the form and restore the trigger button
+    var flagCancel = e.target.closest('[id="submissionFlagCancel"]');
+    if (flagCancel) {
+        var form = flagCancel.closest('[id="submissionFlagForm"]');
+        if (form) {
+            form.classList.add('hidden');
+            var prevRow = form.previousElementSibling;
+            if (prevRow) {
+                var btn = prevRow.querySelector('[id="submissionFlagBtn"]');
+                if (btn) btn.classList.remove('hidden');
+            }
+            // Clear the rich editor that belongs to THIS form
+            var msgEl = form.querySelector('[data-rich-editor]');
+            if (msgEl) { msgEl.innerHTML = ''; msgEl.dispatchEvent(new Event('input')); }
+        }
+        return;
+    }
+
+    // Confirm — POST the flag
+    var flagConfirm = e.target.closest('[id="submissionFlagConfirm"]');
+    if (flagConfirm) {
+        var form = flagConfirm.closest('[id="submissionFlagForm"]');
+        var msgEl = form ? form.querySelector('[data-rich-editor]') : null;
+        var message = msgEl && (msgEl.textContent.trim() !== '' || msgEl.querySelector('img'))
+            ? msgEl.innerHTML : '';
+        if (!message) { showToast('Please describe the issue before flagging.', 'error'); return; }
+        var projectId = flagConfirm.dataset.projectId;
+        btnLoading(flagConfirm);
+        fetch('/projects/' + projectId + '/submission/flag', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: message })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) { showToast(data.error, 'error'); btnDone(flagConfirm); return; }
+                window.location.reload();
+            })
+            .catch(function () { showToast('Something went wrong.', 'error'); btnDone(flagConfirm); });
+        return;
+    }
+});
+
+// ── Reference file delete delegation ─────────────────────────────────────────
+document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.reference-file-delete-btn');
+    if (!btn) return;
+    var fileId = btn.dataset.fileId;
+    var row = btn.closest('.reference-file-item');
+    var filename = row ? (row.querySelector('.reference-file-name') || {}).textContent : 'this file';
+    showConfirm('Remove "' + filename + '"? This cannot be undone.', function () {
+        btnLoading(btn);
+        fetch('/projects/files/' + fileId + '/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) { showToast(data.error || 'Could not delete file.', 'error'); btnDone(btn); return; }
+                if (row) row.remove();
+                showToast('File removed.', 'success');
+            })
+            .catch(function () { showToast('Something went wrong.', 'error'); btnDone(btn); });
+    }, 'Remove File');
+});
+
 // ── _initDetailPage ───────────────────────────────────────────────────────────
 // All DOM wiring that targets elements in the current detail page lives here.
 // Called once on initial full-page load and again on every helix:navigated
@@ -567,32 +649,45 @@ function _initDetailPage() {
     });
 
     // ── Step 2: Deliverable picker (submission) ───────────────────────────────
+    // C&CM projects render TWO pickers (id="pickerList"): one for the C&KV
+    // deck (data-ckv="true") and one for the standard brief. Initialise each
+    // picker according to its type using querySelectorAll so both get built.
     (function () {
-        var pickerList = document.getElementById('pickerList');
-        if (!pickerList) return;
-        var selAll = document.getElementById('pickerSelectAll');
-        var deselAll = document.getElementById('pickerDeselectAll');
+        document.querySelectorAll('[id="pickerList"]').forEach(function (pickerList) {
+            var pickerDiv = pickerList.closest('.submission-picker');
+            var selAll   = pickerDiv ? pickerDiv.querySelector('[id="pickerSelectAll"]')   : null;
+            var deselAll = pickerDiv ? pickerDiv.querySelector('[id="pickerDeselectAll"]') : null;
 
-        if (window.PAGE.projectHasConcept || window.PAGE.projectHasKV) {
-            if (window.PAGE.projectHasConcept && window.PAGE.projectHasKV) {
-                pickerList.appendChild(makeCampaignRow('__concept__', 'Concept & KV'));
+            if (pickerList.dataset.ckv) {
+                // C&KV picker — add concept/KV option rows only
+                if (window.PAGE.projectHasConcept && window.PAGE.projectHasKV) {
+                    pickerList.appendChild(makeCampaignRow('__concept__', 'Concept & KV'));
+                } else {
+                    if (window.PAGE.projectHasConcept) pickerList.appendChild(makeCampaignRow('__concept__', 'Concept'));
+                    if (window.PAGE.projectHasKV)      pickerList.appendChild(makeCampaignRow('__kv__', 'Initial KV'));
+                }
+                if (selAll)   selAll.addEventListener('click',   function () { pickerList.querySelectorAll('input').forEach(function (cb) { cb.checked = true;  }); });
+                if (deselAll) deselAll.addEventListener('click', function () { pickerList.querySelectorAll('input').forEach(function (cb) { cb.checked = false; }); });
             } else {
-                if (window.PAGE.projectHasConcept) pickerList.appendChild(makeCampaignRow('__concept__', 'Concept'));
-                if (window.PAGE.projectHasKV) pickerList.appendChild(makeCampaignRow('__kv__', 'Initial KV'));
+                // Standard brief picker — populated from window.PAGE.projectDeliverables
+                buildPickerInto(pickerList, selAll, deselAll);
             }
-            if (selAll) selAll.addEventListener('click', function () { pickerList.querySelectorAll('input').forEach(function (cb) { cb.checked = true; }); });
-            if (deselAll) deselAll.addEventListener('click', function () { pickerList.querySelectorAll('input').forEach(function (cb) { cb.checked = false; }); });
-        } else {
-            buildPickerInto(pickerList, selAll, deselAll);
-        }
+        });
     })();
 
     // ── Step 2 → 3: Submit for Internal Review ────────────────────────────────
-    var submissionSubmitForReviewBtn = document.getElementById('submissionSubmitForReviewBtn');
-    if (submissionSubmitForReviewBtn) {
-        submissionSubmitForReviewBtn.addEventListener('click', function () {
-            var submissionId = parseInt(this.dataset.submissionId);
-            var pickerList = document.getElementById('pickerList');
+    // querySelectorAll: C&CM projects render submissionSubmitForReviewBtn twice.
+    // pickerList lookup uses DOM traversal (previousElementSibling) so each
+    // button reads its own adjacent picker, not always the first in the DOM.
+    document.querySelectorAll('[id="submissionSubmitForReviewBtn"]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var self = this;
+            var submissionId = parseInt(self.dataset.submissionId);
+            // The .submission-picker div immediately precedes the flex row that
+            // holds the submit button — so parentElement.previousElementSibling
+            // gives the correct picker for this specific section.
+            var pickerSection = self.parentElement && self.parentElement.previousElementSibling;
+            var pickerList = pickerSection && pickerSection.querySelector('[id="pickerList"]');
             var checked = [];
             var includesConcept = false;
             var includesKV = false;
@@ -607,7 +702,7 @@ function _initDetailPage() {
             if (checked.length === 0 && !includesConcept && !includesKV) {
                 showToast('Select at least one item to include.', 'error'); return;
             }
-            btnLoading(submissionSubmitForReviewBtn);
+            btnLoading(self);
 
             var posmCountry = null;
             var posmCustomerId = null;
@@ -631,51 +726,15 @@ function _initDetailPage() {
             })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
-                    if (!data.success) { showToast(data.error || 'Could not submit for review.', 'error'); btnDone(submissionSubmitForReviewBtn); return; }
+                    if (!data.success) { showToast(data.error || 'Could not submit for review.', 'error'); btnDone(self); return; }
                     showToast('Submitted for internal review. CS has been notified.', 'success');
                     window.location.reload();
                 })
-                .catch(function () { showToast('Something went wrong.', 'error'); btnDone(submissionSubmitForReviewBtn); });
+                .catch(function () { showToast('Something went wrong.', 'error'); btnDone(self); });
         });
-    }
+    });
 
-    // ── Step 3a: CS flags the deck ────────────────────────────────────────────
-    var submissionFlagBtn = document.getElementById('submissionFlagBtn');
-    var submissionFlagForm = document.getElementById('submissionFlagForm');
-    var submissionFlagCancel = document.getElementById('submissionFlagCancel');
-
-    if (submissionFlagBtn) {
-        submissionFlagBtn.addEventListener('click', function () {
-            submissionFlagForm.classList.remove('hidden');
-            submissionFlagBtn.classList.add('hidden');
-        });
-    }
-    if (submissionFlagCancel) {
-        submissionFlagCancel.addEventListener('click', function () {
-            submissionFlagForm.classList.add('hidden');
-            submissionFlagBtn.classList.remove('hidden');
-            clearRichContent('submissionFlagMessage');
-        });
-    }
-
-    var submissionFlagConfirm = document.getElementById('submissionFlagConfirm');
-    if (submissionFlagConfirm) {
-        submissionFlagConfirm.addEventListener('click', function () {
-            var message = getRichContent('submissionFlagMessage');
-            if (!message) { showToast('Please describe the issue before flagging.', 'error'); return; }
-            btnLoading(submissionFlagConfirm);
-            fetch('/projects/' + detailProjectId + '/submission/flag', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: message })
-            })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (!data.success) { showToast(data.error, 'error'); btnDone(submissionFlagConfirm); return; }
-                    window.location.reload();
-                })
-                .catch(function () { showToast('Something went wrong.', 'error'); btnDone(submissionFlagConfirm); });
-        });
-    }
+    // ── Step 3a: CS flags the deck — handled by module-scope delegation above ──
 
     // ── Step 3b: CS submits to client ─────────────────────────────────────────
     var submissionSubmitBtn = document.getElementById('submissionSubmitBtn');
