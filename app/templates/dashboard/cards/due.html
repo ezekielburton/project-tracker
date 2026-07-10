@@ -23,10 +23,27 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card, dash_due_row %}
 
+{# RAG mini-stats (reworked 12 Jul 2026, replacing the rag-badge pill
+   version) — dot + bold number + label, same colours as before (overdue/
+   today red, this-week yellow), just restyled to match the collapsed-card
+   format used across the dashboard now. dashboard.js's refreshDashboardFromSSE()
+   rebuilds this exact markup live — keep the two in sync. #}
 {% set due_summary %}
-<span class="rag-badge rag-red">{{ summary.overdue }} Overdue</span>
-<span class="rag-badge rag-red">{{ summary.due_today }} Today</span>
-<span class="rag-badge rag-yellow">{{ summary.due_week }} This Week</span>
+<span class="dash-mini-stat dash-mini-stat--red">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ summary.overdue }}</span>
+    <span class="dash-mini-stat-label">Overdue</span>
+</span>
+<span class="dash-mini-stat dash-mini-stat--red">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ summary.due_today }}</span>
+    <span class="dash-mini-stat-label">Today</span>
+</span>
+<span class="dash-mini-stat dash-mini-stat--yellow">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ summary.due_week }}</span>
+    <span class="dash-mini-stat-label">This Week</span>
+</span>
 {% endset %}
 
 {% call dash_card('due', 'Due Today / Week / Overdue', due_summary,

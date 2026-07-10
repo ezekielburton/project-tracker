@@ -40,6 +40,33 @@
     {% endif %}
     {% endif %}
 
+    {# ── Stat row (added 12 Jul 2026) ─────────────────────────────────
+       Three small, non-collapsible colour+number cards — Your Active
+       Projects / Pending Approval / Total Active Projects, in that exact
+       order per spec. Deliberately its own tiny component
+       (.dash-stat-card), not a reuse of .dash-card — there's no header/
+       chevron/expand mechanic here, just a coloured dot, a label, and a
+       big number, so borrowing the card-with-collapsible-body markup
+       would drag in a bunch of unused structure. Shown to every role,
+       above everything else on the page — see _compute_project_stats()
+       in dashboard.py for what each number means and how "yours" follows
+       the management/admin view-switcher while "Total" deliberately
+       doesn't. #}
+    <div class="dash-stats-row">
+        <div class="dash-stat-card dash-stat-card--owner">
+            <div class="dash-stat-label"><span class="dash-stat-dot"></span>Your Active Projects</div>
+            <div class="dash-stat-value" id="dash-stat-your-active">{{ project_stats.your_active }}</div>
+        </div>
+        <div class="dash-stat-card dash-stat-card--pending">
+            <div class="dash-stat-label"><span class="dash-stat-dot"></span>Pending Approval</div>
+            <div class="dash-stat-value" id="dash-stat-pending-approval">{{ project_stats.pending_approval }}</div>
+        </div>
+        <div class="dash-stat-card dash-stat-card--total">
+            <div class="dash-stat-label"><span class="dash-stat-dot"></span>Total Active Projects</div>
+            <div class="dash-stat-value" id="dash-stat-total-active">{{ project_stats.total_active }}</div>
+        </div>
+    </div>
+
     {# Cards zone. Summary always renders first, full-width, regardless of
        role — card_order (role-dependent, see dashboard.py CARD_ORDER) only
        controls the remaining cards in the two-column grid below it. #}

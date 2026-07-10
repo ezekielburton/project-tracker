@@ -12,6 +12,7 @@ from app.models import (Project, ProjectDesigner, Scope, User, Client,
                         Customer, DeliverableType, DeliverableTypeDiscipline,
                         ProjectRegion, ProjectCustomer, Deliverable,
                         DeliverableAssignment, DeliverableStatusLog,
+                        ProjectSubmissionDeliverable,
                         DesignType, DesignDirection, ProjectSubmission)
 from app.decorators import role_required
 from app.notifications import (
@@ -403,9 +404,10 @@ def update_project(project_id):
             # --- Stage 3: rebuild deliverables for surviving customers ---
             # Bulk SQL DELETE bypasses ORM cascade, so any table with a FK →
             # deliverables.id must be cleared manually first or Postgres will
-            # raise a ForeignKeyViolation.  Two tables reference deliverables:
-            #   • deliverable_assignments  (DeliverableAssignment)
-            #   • deliverable_status_logs  (DeliverableStatusLog)  ← added 2026-07-09
+            # raise a ForeignKeyViolation.  Three tables reference deliverables:
+            #   • deliverable_assignments          (DeliverableAssignment)
+            #   • deliverable_status_logs          (DeliverableStatusLog)  ← added 2026-07-09
+            #   • project_submission_deliverables  (ProjectSubmissionDeliverable) ← added 2026-07-10
             for pc_id in customer_map.values():
                 deliverable_ids = [
                     row.id for row in
@@ -418,6 +420,9 @@ def update_project(project_id):
                     ).delete(synchronize_session=False)
                     DeliverableStatusLog.query.filter(
                         DeliverableStatusLog.deliverable_id.in_(deliverable_ids)
+                    ).delete(synchronize_session=False)
+                    ProjectSubmissionDeliverable.query.filter(
+                        ProjectSubmissionDeliverable.deliverable_id.in_(deliverable_ids)
                     ).delete(synchronize_session=False)
                 Deliverable.query.filter_by(
                     project_customer_id=pc_id

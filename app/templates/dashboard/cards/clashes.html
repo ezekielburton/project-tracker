@@ -60,10 +60,34 @@
 {% set detected_count = clashes.by_project|length + (clashes.by_deliverable | selectattr('severity', 'equalto', 'clash') | list | length) %}
 {% set potential_count = clashes.by_deliverable | selectattr('severity', 'equalto', 'potential') | list | length %}
 
+{# RAG mini-stats (reworked 12 Jul 2026, replacing the severity-tag pill
+   version) — same detected=red/potential=yellow split as before, just
+   restyled to match the collapsed-card format used across the dashboard
+   now. Zero-clash state gets its own flat green "No Clashes" mini-stat
+   (dot + label, no number — there's nothing to count) instead of plain
+   text, so the muted card still reads as an intentional "all clear"
+   signal rather than looking broken/empty. #}
 {% set clashes_summary %}
-    {% if detected_count > 0 %}<span class="dash-clash-severity-tag dash-clash-severity-tag--detected">{{ detected_count }} Detected</span>{% endif %}
-    {% if potential_count > 0 %}<span class="dash-clash-severity-tag dash-clash-severity-tag--potential">{{ potential_count }} Potential</span>{% endif %}
-    {% if clash_count == 0 %}No clashes{% endif %}
+    {% if detected_count > 0 %}
+    <span class="dash-mini-stat dash-mini-stat--red">
+        <span class="dash-mini-stat-dot"></span>
+        <span class="dash-mini-stat-value">{{ detected_count }}</span>
+        <span class="dash-mini-stat-label">Detected</span>
+    </span>
+    {% endif %}
+    {% if potential_count > 0 %}
+    <span class="dash-mini-stat dash-mini-stat--yellow">
+        <span class="dash-mini-stat-dot"></span>
+        <span class="dash-mini-stat-value">{{ potential_count }}</span>
+        <span class="dash-mini-stat-label">Potential</span>
+    </span>
+    {% endif %}
+    {% if clash_count == 0 %}
+    <span class="dash-mini-stat dash-mini-stat--green">
+        <span class="dash-mini-stat-dot"></span>
+        <span class="dash-mini-stat-label">No Clashes</span>
+    </span>
+    {% endif %}
 {% endset %}
 
 {% call dash_card('clashes', 'Clashing Projects', clashes_summary,

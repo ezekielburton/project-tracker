@@ -158,6 +158,9 @@ def index():
         card_order=CARD_ORDER.get(layout_role, CARD_ORDER['management']),
         initial_expanded_card=VIEW_TO_CARD.get(initial_view),
         default_tab=DEFAULT_TAB.get(layout_role, 'projects'),
+        # Small colour+number stat row, pinned above the card grid — see
+        # _compute_project_stats()'s docstring for the scoping rules.
+        project_stats=_compute_project_stats(scope_user),
         summary=_compute_summary(scope_user),
         what_changed=_compute_what_changed(scope_user),
         # Due card's default filter is "Overdue + Due Today combined" per spec
@@ -316,6 +319,56 @@ def _compute_summary(user):
         'clashes_detected': clash_detected,
         'clashes_potential': clash_potential,
     }
+
+
+def _compute_project_stats(user):
+    """
+    The three small colour+number stat cards pinned above the card grid
+    (added 12 Jul 2026) — Your Active Projects / Pending Approval / Total
+    Active Projects, in that order. Unlike every other card on this page
+    these are pure display: no expand/collapse, no filter pills, just a
+    number — so there's no matching SSR-macro/JS-render-function pair to
+    keep in sync, just this one function feeding both the initial page
+    load and the SSE live-refresh's /api/project-stats fetch.
+
+    'your_active' and 'pending_approval' both respect `user` — in
+    practice this is always scope_user from _resolve_dashboard_scope() at
+    the call site, so these two numbers follow the management/admin
+    view-switcher exactly like every other card (see the big comment on
+    _resolve_dashboard_scope() further up).
+
+    'total_active' is deliberately UNSCOPED — every active project
+    company-wide, regardless of role or which view-switcher tab is
+    active. Same "counts as everything, on purpose" idea as the Decisions
+    Needed card's all_flags=True path on My View (_compute_decisions()) —
+    it's the one number on this row meant to answer "how many are there
+    really", not "how many are mine".
+
+    "Pending Approval" = project_status == 'submitted_to_client' — the
+    exact status string used everywhere else in the app for this state
+    (see projects_approval.py's "Project must be in Submitted to Client
+    state to approve" check), not a new label invented for this card.
+    """
+    your_active = _scoped_projects(user, active_only=True).count()
+    pending_approval = _scoped_projects(user, active_only=True).filter(
+        Project.project_status == 'submitted_to_client'
+    ).count()
+    total_active = Project.query.filter(
+        Project.project_status.notin_(['draft', 'approved'])
+    ).count()
+
+    return {
+        'your_active': your_active,
+        'pending_approval': pending_approval,
+        'total_active': total_active,
+    }
+
+
+@dashboard_bp.route('/api/project-stats')
+@login_required
+def api_project_stats():
+    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_project_stats(scope_user))
 
 
 @dashboard_bp.route('/api/summary')

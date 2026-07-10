@@ -3017,7 +3017,37 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     object-fit: cover;
     border-radius: 6px;
     flex-shrink: 0;
+    cursor: zoom-in;
     /* never let the image itself get squeezed by a long name */
+}
+
+/* ── Deliverable image hover overlay ── */
+#deliv-img-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;   /* backdrop is click-through */
+}
+#deliv-img-overlay.visible {
+    display: flex;
+}
+.deliv-img-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(26, 26, 26, 0.62);
+    pointer-events: none;
+}
+.deliv-img-large {
+    position: relative;     /* sits above the backdrop */
+    max-width: 80vw;
+    max-height: 80vh;
+    object-fit: contain;
+    border-radius: 12px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;   /* only the image is interactive */
 }
 
 .brief-assignment-chip {

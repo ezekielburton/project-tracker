@@ -8,7 +8,8 @@
    down to at-risk-only .dash-row lists (same component every card on this
    page uses) — see the big comment on the deep-dive zone in dashboard.html. */
 
-/* ── Management view-switcher (added 11 Jul 2026) ────────────────────────
+/* ── Management/admin view-switcher (added 11 Jul 2026, extended to admin
+   12 Jul 2026) ───────────────────────────────────────────────────────────
    My View / one tab per CS lead / All Projects — see the big comment on
    _resolve_dashboard_scope() in dashboard.py. Reuses .dash-tab-btn as-is
    (same look as the deep-dive zone's Projects/Deliverables tabs further
@@ -36,6 +37,85 @@
     font-style: italic;
     margin-bottom: 1.5rem;
 }
+
+/* ── Stat row (added 12 Jul 2026) ─────────────────────────────────────────
+   Three small colour+number cards pinned above everything else — Your
+   Active Projects / Pending Approval / Total Active Projects. Static
+   display only (no expand, no filter), so this is deliberately a much
+   simpler component than .dash-card below: a coloured dot, an uppercase
+   mono label, and one big number. Each --owner/--pending/--total modifier
+   just recolours the dot + number together — see dash_stat_card usage in
+   dashboard.html. */
+.dash-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .dash-stats-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-stat-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.1rem 1.4rem;
+}
+
+.dash-stat-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+    margin-bottom: 0.6rem;
+}
+
+.dash-stat-dot {
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.dash-stat-value {
+    font-family: var(--font-headline);
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* Your Active Projects — tangerine, same "this is yours" colour as
+   .dash-owner-tag elsewhere on this page. */
+.dash-stat-card--owner .dash-stat-dot { background: var(--tangerine); }
+.dash-stat-card--owner .dash-stat-value { color: var(--tangerine); }
+
+/* Pending Approval — --oak (warm amber/brown token). Deliberately NOT
+   --canary here even though canary is this app's usual "caution/waiting"
+   colour elsewhere (rag-yellow, the Potential Clash tag) — canary is a
+   bright, light yellow that reads poorly as bold 2.2rem text on a white
+   card. --oak carries the same "amber/pending" feeling at a size and
+   weight where it stays legible. */
+.dash-stat-card--pending .dash-stat-dot { background: var(--oak); }
+.dash-stat-card--pending .dash-stat-value { color: var(--oak); }
+
+/* Total Active Projects — the ashen family, same as .dash-action-tag's
+   neutral/informational tint elsewhere on this page (this number isn't
+   "yours" or urgent, just a steady company-wide count). The dot uses the
+   lighter --ashen token; the number uses #3E5E66, the same darker
+   readable shade .dash-action-tag already pairs with it for exactly this
+   contrast-at-size reason. */
+.dash-stat-card--total .dash-stat-dot { background: var(--ashen); }
+.dash-stat-card--total .dash-stat-value { color: #3E5E66; }
 
 /* ── Cards zone ───────────────────────────────────────────────────────── */
 
@@ -91,11 +171,70 @@
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.9rem;
     flex-wrap: wrap;
     color: var(--grey-dark);
     font-size: 0.9rem;
 }
+
+/* ── Collapsed-card mini stats (reworked 12 Jul 2026) ─────────────────────
+   Replaces the old rag-badge/action-tag/owner-tag "pill" summaries with a
+   compact dot + bold number + label, echoing the stat row's visual
+   language (.dash-stat-card above) but sized to sit inline in a
+   single-line card header rather than its own block. RAG-only per spec
+   ("use the RAG colour scheme here, brand colours are not required for
+   this essential data") — every one of these numbers is an urgency or
+   category signal (red = urgent/mine, yellow = caution/others, green =
+   all-clear/informational), so unlike the top stat row this never reaches
+   for tangerine/oak/ashen.
+
+   Dots use the real rag-red/rag-yellow/rag-green tokens (--rose/--canary/
+   --pine), same as .rag-badge — a small filled circle doesn't have the
+   text-on-white contrast problem a large bold number does. The NUMBER
+   text uses darker, readable variants for red/yellow for the same reason
+   .dash-stat-card--pending uses --oak instead of raw --canary above:
+   --rose and --canary both read as washed-out at bold headline size on a
+   white card. --pine is already dark enough to use directly for green. */
+.dash-mini-stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+
+.dash-mini-stat-dot {
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+.dash-mini-stat-value {
+    font-family: var(--font-headline);
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.dash-mini-stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+    white-space: nowrap;
+}
+
+.dash-mini-stat--red .dash-mini-stat-dot { background: var(--rose); }
+.dash-mini-stat--red .dash-mini-stat-value { color: #B5504F; }
+
+.dash-mini-stat--yellow .dash-mini-stat-dot { background: var(--canary); }
+.dash-mini-stat--yellow .dash-mini-stat-value { color: var(--oak); }
+
+.dash-mini-stat--green .dash-mini-stat-dot { background: var(--pine); }
+.dash-mini-stat--green .dash-mini-stat-value { color: var(--pine); }
 
 .dash-card-chevron {
     flex-shrink: 0;

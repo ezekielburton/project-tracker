@@ -30,13 +30,18 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
-{# Collapsed summary reworked 10 Jul 2026 — single ashen action-tag pill
-   instead of a grey sentence. Deliberately NOT a rag-badge (red/green) —
-   this card is purely informational, not urgent (see the big comment
-   above on why it just shows free-text activity, never a severity), so it
-   keeps the neutral action-tag colour regardless of count. #}
+{# Collapsed summary reworked 12 Jul 2026 (RAG mini-stat, replacing the 10
+   Jul ashen action-tag pill) — green, not red/yellow: this card is purely
+   informational, not urgent (see the big comment above on why it just
+   shows free-text activity, never a severity), so it reads as "calm/
+   nothing alarming" rather than a caution or urgency signal, regardless
+   of count. #}
 {% set what_changed_summary %}
-<span class="dash-action-tag">{{ what_changed|length }} Update{{ 's' if what_changed|length != 1 else '' }}</span>
+<span class="dash-mini-stat dash-mini-stat--green">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ what_changed|length }}</span>
+    <span class="dash-mini-stat-label">Update{{ 's' if what_changed|length != 1 else '' }}</span>
+</span>
 {% endset %}
 
 {% call dash_card('what_changed', 'What Changed', what_changed_summary,

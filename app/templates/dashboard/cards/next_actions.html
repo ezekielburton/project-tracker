@@ -32,14 +32,24 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
-{# Collapsed summary reworked 10 Jul 2026 — was one grey sentence, now two
-   pills reusing the same owner-tag ("on me") / action-tag ("informational,
-   not on me") colour language the expanded rows below already use. Kept
-   flat-coloured regardless of count (unlike the rag-badge cards) since
-   these two colours encode CATEGORY here — mine vs. others' — not urgency. #}
+{# Collapsed summary reworked 12 Jul 2026 (RAG mini-stats, replacing the 10
+   Jul owner-tag/action-tag pill version, per explicit instruction to use
+   the RAG colour scheme here instead of brand tones) — red for "mine"
+   (needs your attention), yellow for "waiting on others" (pending, not
+   yet a fire). Kept flat-coloured regardless of count, same as before —
+   these two colours encode CATEGORY here (mine vs. others'), not urgency,
+   so a high count on either side doesn't change which colour it gets. #}
 {% set next_actions_summary %}
-<span class="dash-owner-tag">{{ summary.my_actions }} Needed From Me</span>
-<span class="dash-action-tag">{{ summary.others_actions }} Waiting on Others</span>
+<span class="dash-mini-stat dash-mini-stat--red">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ summary.my_actions }}</span>
+    <span class="dash-mini-stat-label">Needed From Me</span>
+</span>
+<span class="dash-mini-stat dash-mini-stat--yellow">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ summary.others_actions }}</span>
+    <span class="dash-mini-stat-label">Waiting on Others</span>
+</span>
 {% endset %}
 
 {% call dash_card('next_actions', 'Next Actions', next_actions_summary,

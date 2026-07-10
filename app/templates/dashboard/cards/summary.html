@@ -32,17 +32,24 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card, dash_due_row %}
 
-{# Collapsed summary reworked 10 Jul 2026 — was a single grey sentence
-   ("N items due today, M actions needed from you"), now two colour-coded
-   pills matching the language used everywhere else on this dashboard: a
-   rag-badge for due_today (red when there's anything due, green as an
-   "all clear" signal at zero — same convention the Decisions Needed card
-   below uses), and a tangerine owner-tag for my_actions since that number
-   is specifically "on you", same colour dash-owner-tag uses for a person's
-   name elsewhere on this page. #}
+{# Collapsed summary reworked 12 Jul 2026 (RAG mini-stats, replacing the 10
+   Jul pill version) — dot + bold number + label instead of a coloured
+   pill. due_today is red when there's anything due, green as an "all
+   clear" signal at zero (same convention Decisions/Due below use).
+   my_actions stays flat red regardless of count — "on you" reads as the
+   same category signal Next Actions' "Needed From Me" mini-stat uses, not
+   an urgency count. #}
 {% set summary_pills %}
-<span class="rag-badge rag-{{ 'red' if summary.due_today > 0 else 'green' }}">{{ summary.due_today }} Due Today</span>
-<span class="dash-owner-tag">{{ summary.my_actions }} Needed From You</span>
+<span class="dash-mini-stat dash-mini-stat--{{ 'red' if summary.due_today > 0 else 'green' }}">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ summary.due_today }}</span>
+    <span class="dash-mini-stat-label">Due Today</span>
+</span>
+<span class="dash-mini-stat dash-mini-stat--red">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ summary.my_actions }}</span>
+    <span class="dash-mini-stat-label">Needed From You</span>
+</span>
 {% endset %}
 
 {% call dash_card('summary', 'My Today / My Week', summary_pills,

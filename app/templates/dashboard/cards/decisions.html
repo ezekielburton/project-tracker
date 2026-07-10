@@ -34,13 +34,18 @@
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
-{# Collapsed summary reworked 10 Jul 2026 — single rag-badge pill instead
-   of a grey sentence: red when anything's flagged, green as an "all
-   clear" signal at zero (same convention the Summary card above uses for
-   due_today). refreshDecisionsCard() in dashboard.js rebuilds this exact
-   markup after a new flag is submitted — keep the two in sync. #}
+{# Collapsed summary reworked 12 Jul 2026 (RAG mini-stat, replacing the 10
+   Jul pill version) — dot + bold number + label: red when anything's
+   flagged, green as an "all clear" signal at zero (same convention the
+   Summary card above uses for due_today). refreshDecisionsCard() in
+   dashboard.js rebuilds this exact markup after a new flag is submitted —
+   keep the two in sync. #}
 {% set decisions_summary %}
-<span class="rag-badge rag-{{ 'red' if decisions|length > 0 else 'green' }}">{{ decisions|length }} Flagged</span>
+<span class="dash-mini-stat dash-mini-stat--{{ 'red' if decisions|length > 0 else 'green' }}">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ decisions|length }}</span>
+    <span class="dash-mini-stat-label">Flagged</span>
+</span>
 {% endset %}
 
 {% call dash_card('decisions', 'Decisions Needed', decisions_summary,

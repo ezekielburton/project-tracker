@@ -137,6 +137,25 @@
         return div.innerHTML;
     }
 
+    // Builds one ".dash-mini-stat" span — dot + bold number + label — the
+    // RAG-only collapsed-card header format added 12 Jul 2026 (see the big
+    // comment on .dash-mini-stat in dashboard.css). color is 'red' |
+    // 'yellow' | 'green'; every live-refreshed card summary below builds
+    // its pills through this one helper so they can't drift from each
+    // other's markup shape. Pass value === null to omit the number entirely
+    // (used for the Clashing Projects card's zero-clash "No Clashes" state,
+    // which has nothing to count).
+    function miniStat(color, value, label) {
+        var valueHtml = value === null
+            ? ''
+            : '<span class="dash-mini-stat-value">' + value + '</span>';
+        return '<span class="dash-mini-stat dash-mini-stat--' + color + '">' +
+            '<span class="dash-mini-stat-dot"></span>' +
+            valueHtml +
+            '<span class="dash-mini-stat-label">' + escapeHtml(label) + '</span>' +
+            '</span>';
+    }
+
     // item.owner from the API is polymorphic — null | {id,name} | [{id,name}, ...] —
     // see the big comment on dash_due_row in _dashboard_macros.html for why.
     // Returns a plain display string, or '' if there's no owner to show.
@@ -268,10 +287,9 @@
                 var summaryEl = card ? card.querySelector('.dash-card-summary') : null;
                 if (summaryEl) {
                     // Matches decisions.html's decisions_summary block
-                    // (reworked 10 Jul 2026 — rag-badge pill, red/green by
-                    // count, instead of a plain sentence). Keep in sync.
-                    summaryEl.innerHTML = '<span class="rag-badge rag-' + (items.length > 0 ? 'red' : 'green') + '">' +
-                        items.length + ' Flagged</span>';
+                    // (reworked 12 Jul 2026 — RAG mini-stat, red/green by
+                    // count, instead of a rag-badge pill). Keep in sync.
+                    summaryEl.innerHTML = miniStat(items.length > 0 ? 'red' : 'green', items.length, 'Flagged');
                 }
 
                 var list = document.getElementById('dash-decisions-list');
@@ -506,35 +524,37 @@
                 var dueSummaryEl = document.querySelector('.dash-card[data-card="due"] .dash-card-summary');
                 if (dueSummaryEl) {
                     dueSummaryEl.innerHTML =
-                        '<span class="rag-badge rag-red">' + summary.overdue + ' Overdue</span>' +
-                        '<span class="rag-badge rag-red">' + summary.due_today + ' Today</span>' +
-                        '<span class="rag-badge rag-yellow">' + summary.due_week + ' This Week</span>';
+                        miniStat('red', summary.overdue, 'Overdue') +
+                        miniStat('red', summary.due_today, 'Today') +
+                        miniStat('yellow', summary.due_week, 'This Week');
                 }
 
                 // Matches next_actions.html's next_actions_summary block
-                // (reworked 10 Jul 2026 — owner-tag/action-tag pills
-                // instead of a plain sentence). Keep in sync.
+                // (reworked 12 Jul 2026 — RAG mini-stats, red=mine/
+                // yellow=others, instead of owner-tag/action-tag pills).
+                // Keep in sync.
                 var nextActionsSummaryEl = document.querySelector('.dash-card[data-card="next_actions"] .dash-card-summary');
                 if (nextActionsSummaryEl) {
                     nextActionsSummaryEl.innerHTML =
-                        '<span class="dash-owner-tag">' + summary.my_actions + ' Needed From Me</span>' +
-                        '<span class="dash-action-tag">' + summary.others_actions + ' Waiting on Others</span>';
+                        miniStat('red', summary.my_actions, 'Needed From Me') +
+                        miniStat('yellow', summary.others_actions, 'Waiting on Others');
                 }
 
                 // Matches what_changed.html's what_changed_summary block
-                // (reworked 10 Jul 2026 — single ashen action-tag pill
-                // instead of a plain sentence). Keep in sync.
+                // (reworked 12 Jul 2026 — single green mini-stat instead of
+                // an ashen action-tag pill; still flat-coloured regardless
+                // of count — informational, not urgent). Keep in sync.
                 var whatChangedSummaryEl = document.querySelector('.dash-card[data-card="what_changed"] .dash-card-summary');
                 if (whatChangedSummaryEl) {
                     whatChangedSummaryEl.innerHTML =
-                        '<span class="dash-action-tag">' + summary.what_changed + ' Update' + (summary.what_changed !== 1 ? 's' : '') + '</span>';
+                        miniStat('green', summary.what_changed, 'Update' + (summary.what_changed !== 1 ? 's' : ''));
                 }
 
-                // Matches clashes.html's clashes_summary block (reworked 10
-                // Jul 2026 — split into Detected/Potential severity pills
-                // instead of one flattened sentence; needs the
-                // clashes_detected/clashes_potential fields _compute_summary()
-                // now returns alongside the plain clashes total). Keep in sync.
+                // Matches clashes.html's clashes_summary block (reworked 12
+                // Jul 2026 — RAG mini-stats, detected=red/potential=yellow,
+                // instead of severity-tag pills; needs the clashes_detected/
+                // clashes_potential fields _compute_summary() returns
+                // alongside the plain clashes total). Keep in sync.
                 var clashesCardEl = document.querySelector('.dash-card[data-card="clashes"]');
                 if (clashesCardEl) {
                     var clashesSummaryEl = clashesCardEl.querySelector('.dash-card-summary');
@@ -542,16 +562,14 @@
                         if (summary.clashes > 0) {
                             var clashPills = '';
                             if (summary.clashes_detected > 0) {
-                                clashPills += '<span class="dash-clash-severity-tag dash-clash-severity-tag--detected">' +
-                                    summary.clashes_detected + ' Detected</span>';
+                                clashPills += miniStat('red', summary.clashes_detected, 'Detected');
                             }
                             if (summary.clashes_potential > 0) {
-                                clashPills += '<span class="dash-clash-severity-tag dash-clash-severity-tag--potential">' +
-                                    summary.clashes_potential + ' Potential</span>';
+                                clashPills += miniStat('yellow', summary.clashes_potential, 'Potential');
                             }
                             clashesSummaryEl.innerHTML = clashPills;
                         } else {
-                            clashesSummaryEl.textContent = 'No clashes';
+                            clashesSummaryEl.innerHTML = miniStat('green', null, 'No Clashes');
                         }
                     }
                     // NOTE: this toggles the muted VISUAL state live, but the
@@ -564,6 +582,27 @@
                     // something that self-corrects on the user's next visit.
                     clashesCardEl.classList.toggle('dash-card--muted', summary.clashes === 0);
                 }
+            })
+            .catch(function () {
+                // Same "leave it stale on a network blip" convention as
+                // every other fetch in this file.
+            });
+
+        // Stat row (added 12 Jul 2026) — three plain numbers, no card
+        // shell to update, so this is its own small fetch rather than
+        // being folded into the /api/summary handler above. Matches
+        // _compute_project_stats() in dashboard.py exactly.
+        fetch(withDashScope('/dashboard/api/project-stats'))
+            .then(function (r) { return r.json(); })
+            .then(function (stats) {
+                var yourActiveEl = document.getElementById('dash-stat-your-active');
+                if (yourActiveEl) yourActiveEl.textContent = stats.your_active;
+
+                var pendingApprovalEl = document.getElementById('dash-stat-pending-approval');
+                if (pendingApprovalEl) pendingApprovalEl.textContent = stats.pending_approval;
+
+                var totalActiveEl = document.getElementById('dash-stat-total-active');
+                if (totalActiveEl) totalActiveEl.textContent = stats.total_active;
             })
             .catch(function () {
                 // Same "leave it stale on a network blip" convention as
