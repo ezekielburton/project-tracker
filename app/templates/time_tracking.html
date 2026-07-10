@@ -1,0 +1,104 @@
+{#
+   app/templates/time_tracking.html
+   ───────────────────────────────────
+   Project + deliverable business-hours breakdown page (added 13 Jul 2026,
+   per Ezekiel — see app/routes/time_tracking.py and
+   app/time_tracking_logic.py for the backend). Reached by clicking the
+   "Average Time" stat tile on the main dashboard (management/admin only
+   for now).
+
+   `rows` (from time_tracking.index()) is a list of:
+     {id, name, overall, by_status: {status: hours, ...}, deliverables: [
+       {id, name, overall, by_status: {...}}, ...
+     ]}
+
+   Deliverables are shown via a native <details>/<summary> per project —
+   no JS needed for the expand/collapse itself (works even if time_tracking.js
+   fails to load), same "don't reach for a JS mechanic when plain HTML
+   already does the job" instinct as this app's other lightweight reporting
+   views. time_tracking.js only adds the optional "Expand All"/"Collapse
+   All" convenience buttons on top.
+#}
+{% extends "base.html" %}
+
+{% block title %}Time Tracking — Vitamin-E{% endblock %}
+
+{% block content %}
+
+<div class="page-container">
+
+    <div class="tt-header">
+        <h1 class="tt-title">Time Tracking</h1>
+        <p class="tt-subtitle">Business hours (Mon–Fri, 10AM–6PM Dubai time) per project and deliverable, broken down by status. Weekend hours only count when a status actually changed over that weekend.</p>
+        <div class="tt-header-actions">
+            <button type="button" class="tt-btn" data-action="expand-all">Expand All</button>
+            <button type="button" class="tt-btn" data-action="collapse-all">Collapse All</button>
+        </div>
+    </div>
+
+    {% if rows %}
+    <div class="tt-project-list">
+        {% for row in rows %}
+        <div class="tt-project">
+            <div class="tt-project-main">
+                <a class="tt-project-name" href="{{ url_for('project_detail.detail', project_id=row.id) }}?from=time-tracking">{{ row.name }}</a>
+                <span class="tt-overall">
+                    <span class="tt-overall-value">{{ row.overall }}</span>
+                    <span class="tt-overall-label">HRS OVERALL</span>
+                </span>
+            </div>
+
+            {% if row.by_status %}
+            <div class="tt-status-chips">
+                {% for status, hours in row.by_status.items() %}
+                <span class="tt-status-chip">
+                    <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
+                    <span class="tt-status-chip-value">{{ hours }}h</span>
+                </span>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="tt-empty">No status history yet.</p>
+            {% endif %}
+
+            {% if row.deliverables %}
+            <details class="tt-deliverables">
+                <summary>{{ row.deliverables | length }} deliverable{{ 's' if row.deliverables | length != 1 }}</summary>
+                <div class="tt-deliverable-list">
+                    {% for d in row.deliverables %}
+                    <div class="tt-deliverable">
+                        <div class="tt-deliverable-main">
+                            <span class="tt-deliverable-name">{{ d.name }}</span>
+                            <span class="tt-overall tt-overall--small">
+                                <span class="tt-overall-value">{{ d.overall }}</span>
+                                <span class="tt-overall-label">HRS OVERALL</span>
+                            </span>
+                        </div>
+                        {% if d.by_status %}
+                        <div class="tt-status-chips">
+                            {% for status, hours in d.by_status.items() %}
+                            <span class="tt-status-chip">
+                                <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
+                                <span class="tt-status-chip-value">{{ hours }}h</span>
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="tt-empty">No status history yet.</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="tt-empty">No projects to show.</p>
+    {% endif %}
+
+</div>
+
+<script src="{{ url_for('static', filename='js/time_tracking.js') }}"></script>
+{% endblock %}

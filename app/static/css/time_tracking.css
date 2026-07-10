@@ -1,0 +1,219 @@
+/* app/static/css/time_tracking.css
+   ───────────────────────────────────
+   Project + deliverable business-hours breakdown page (added 13 Jul
+   2026). Own dedicated CSS file per this project's "every new feature
+   gets its own route/JS/CSS" convention — see CLAUDE.md.
+
+   Deliberately doesn't reuse dashboard.css's .dash-row/.dash-tile
+   components: this page's rows carry a variable-length list of per-status
+   chips rather than a fixed set of mini-stats, so it gets its own
+   simpler, purpose-built card/chip shapes instead of stretching the
+   dashboard's tile system to fit a shape it wasn't designed for. */
+
+.tt-header {
+    margin-bottom: 1.5rem;
+}
+
+.tt-title {
+    font-family: var(--font-body);
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--black);
+    margin: 0 0 0.4rem;
+}
+
+.tt-subtitle {
+    color: var(--grey-dark);
+    font-size: 0.9rem;
+    max-width: 60ch;
+    margin: 0 0 1rem;
+}
+
+.tt-header-actions {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.tt-btn {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    padding: 0.5rem 0.9rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--white);
+    color: var(--black);
+    cursor: pointer;
+}
+
+.tt-btn:hover {
+    background: var(--surface-hover);
+}
+
+.tt-project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tt-project {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.1rem 1.4rem;
+}
+
+.tt-project-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.tt-project-name {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--black);
+    text-decoration: none;
+}
+
+.tt-project-name:hover {
+    text-decoration: underline;
+}
+
+/* Overall hours — same "big number + small label" language as
+   dashboard.css's .dash-mini-stat, but its own class since this page
+   doesn't import that component. */
+.tt-overall {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+}
+
+.tt-overall-value {
+    font-family: var(--font-headline);
+    font-weight: 700;
+    font-size: 1.8rem;
+    color: var(--tangerine);
+    line-height: 1;
+}
+
+.tt-overall--small .tt-overall-value {
+    font-size: 1.3rem;
+}
+
+.tt-overall-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+}
+
+.tt-status-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.tt-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: var(--radius-sm);
+    background: var(--sandstone);
+    border: 1px solid var(--border-subtle);
+}
+
+.tt-status-chip-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+}
+
+.tt-status-chip-value {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: var(--black);
+}
+
+.tt-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0.75rem 0 0;
+}
+
+/* Deliverables — native <details>/<summary>, styled to look like a
+   subtle expandable link rather than the browser default triangle. */
+.tt-deliverables {
+    margin-top: 0.9rem;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 0.75rem;
+}
+
+.tt-deliverables summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--tangerine);
+    list-style: none;
+}
+
+.tt-deliverables summary::-webkit-details-marker {
+    display: none;
+}
+
+.tt-deliverables summary::before {
+    content: '▸ ';
+}
+
+.tt-deliverables[open] summary::before {
+    content: '▾ ';
+}
+
+.tt-deliverable-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding-left: 1rem;
+    border-left: 2px solid var(--border-subtle);
+}
+
+.tt-deliverable {
+    padding: 0.6rem 0.8rem;
+    background: var(--sandstone);
+    border-radius: var(--radius-sm);
+}
+
+.tt-deliverable-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.tt-deliverable-name {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--black);
+}

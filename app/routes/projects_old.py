@@ -838,6 +838,16 @@ def detail(project_id):
 @login_required
 @role_required('admin')
 def update_status(project_id):
+    # DEAD CODE — this whole `projects` blueprint is never registered in
+    # app/__init__.py, so this route (and everything else in this file)
+    # is unreachable in production. The hours_accumulated/timer_started_at
+    # logic below was moved and re-wired 13 Jul 2026 into the CURRENT
+    # status-change funnel, record_project_status() in
+    # app/status_tracking.py — see that function's docstring. That's also
+    # where work_hours_between() actually lives now (app/utils.py); the
+    # `from app.utils import work_hours_between` a few lines down never
+    # worked, since that function was never defined anywhere while this
+    # route was the only caller.
     project = Project.query.get_or_404(project_id)
     new_status = request.form.get('status')
 
@@ -976,8 +986,6 @@ def remove_customer(project_id, pc_id):
     project = Project.query.get_or_404(project_id)
     pc = ProjectCustomer.query.get_or_404(pc_id)
 
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
     
     # Guard: refuse if submissions exist - we use cancel instead
     has_submissions = ProjectSubmission.query.filter_by(posm_customer_id=pc.id).first()
@@ -1027,8 +1035,6 @@ def cancel_customer(project_id, pc_id):
     project = Project.query.get_or_404(project_id)
     pc = ProjectCustomer.query.get_or_404(pc_id)
 
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
 
     customer_name = pc.customer.name
     pc.cancelled = True
@@ -2275,9 +2281,6 @@ def upload_submission(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
@@ -2451,9 +2454,6 @@ def submit_for_internal_review(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json() or {}
     submission_id = data.get('submission_id')
@@ -2570,15 +2570,15 @@ def flag_submission(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json() or {}
     message = (data.get('message') or '').strip()
     posm_channel_id = data.get('posm_channel_id')
     if not message:
         return jsonify({'success': False, 'error': 'Please provide a reason for flagging'}), 400
+
+    from app.utils import strip_html
+    plain_message = strip_html(message)
 
     # Resolve channel (POSM parallel flow)
     channel = None
@@ -2633,14 +2633,14 @@ def flag_submission(project_id):
     # Notify the designer who uploaded the deck
     create_notification(
         recipient=submission.uploaded_by,
-        message=f'Your client deck for "{project.name}" was flagged by CS: {message}',
+        message=f'Your client deck for "{project.name}" was flagged by CS: {plain_message}',
         notification_type='submission_flagged',
         project=project,
         triggered_by=current_user
     )
 
     log_activity('submission_flagged',
-                 f'Client deck for "{project.name}" flagged by {current_user.name}: {message}',
+                 f'Client deck for "{project.name}" flagged by {current_user.name}: {plain_message}',
                  user=current_user, entity_type='project',
                  entity_name=project.name, entity_id=project.id)
 
@@ -2663,9 +2663,6 @@ def submit_to_client(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json(silent=True) or {}
     posm_channel_id = data.get('posm_channel_id')
@@ -2826,9 +2823,6 @@ def send_revision(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json() or {}
     message = (data.get('message') or '').strip()
@@ -2841,6 +2835,9 @@ def send_revision(project_id):
 
     if not message:
         return jsonify({'success': False, 'error': 'Please describe what needs to be revised'}), 400
+
+    from app.utils import strip_html
+    plain_message = strip_html(message)
 
     # Resolve channel (POSM parallel flow)
     channel = None
@@ -2906,7 +2903,7 @@ def send_revision(project_id):
                 )
 
         log_activity('revision_requested',
-                     f'C&KV Revision #{project.ckv_revision_count} sent for "{project.name}" by {current_user.name}: {message[:100]}',
+                     f'C&KV Revision #{project.ckv_revision_count} sent for "{project.name}" by {current_user.name}: {plain_message[:100]}',
                      user=current_user, entity_type='project',
                      entity_name=project.name, entity_id=project.id)
         return jsonify({'success': True})
@@ -3042,7 +3039,7 @@ def send_revision(project_id):
         )
 
     log_activity('revision_requested',
-                 f'Revision {rev_label} sent for "{project.name}" by {current_user.name}: {message[:100]}',
+                 f'Revision {rev_label} sent for "{project.name}" by {current_user.name}: {plain_message[:100]}',
                  user=current_user, entity_type='project',
                  entity_name=project.name, entity_id=project.id)
 
@@ -3062,9 +3059,6 @@ def start_revision(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json(silent=True) or {}
     posm_channel_id = data.get('posm_channel_id')

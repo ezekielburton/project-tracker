@@ -315,9 +315,6 @@ def upload_submission(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
@@ -521,9 +518,6 @@ def submit_for_internal_review(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json() or {}
     submission_id = data.get('submission_id')
@@ -640,15 +634,15 @@ def flag_submission(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json() or {}
     message = (data.get('message') or '').strip()
     posm_channel_id = data.get('posm_channel_id')
     if not message:
         return jsonify({'success': False, 'error': 'Please provide a reason for flagging'}), 400
+
+    from app.utils import strip_html
+    plain_message = strip_html(message)
 
     # Resolve channel (POSM parallel flow)
     channel = None
@@ -703,14 +697,14 @@ def flag_submission(project_id):
     # Notify the designer who uploaded the deck
     create_notification(
         recipient=submission.uploaded_by,
-        message=f'Your client deck for "{project.name}" was flagged by CS: {message}',
+        message=f'Your client deck for "{project.name}" was flagged by CS: {plain_message}',
         notification_type='submission_flagged',
         project=project,
         triggered_by=current_user
     )
 
     log_activity('submission_flagged',
-                 f'Client deck for "{project.name}" flagged by {current_user.name}: {message}',
+                 f'Client deck for "{project.name}" flagged by {current_user.name}: {plain_message}',
                  user=current_user, entity_type='project',
                  entity_name=project.name, entity_id=project.id)
 
@@ -733,9 +727,6 @@ def submit_to_client(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json(silent=True) or {}
     posm_channel_id = data.get('posm_channel_id')
@@ -966,8 +957,6 @@ def add_submission_file(project_id, submission_id):
 
     project = Project.query.get_or_404(project_id)
 
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     submission = ProjectSubmission.query.filter_by(
         id=submission_id, project_id=project_id, is_active=True
@@ -1129,8 +1118,6 @@ def delete_submission_file(file_id):
     if current_user.role != 'admin' and extra.uploaded_by_id != current_user.id:
         return jsonify({'success': False, 'error': 'Not authorised to delete this file'}), 403
 
-    if project and project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
 
     # Remove from NAS in background
     from app.nas import delete_app_file, build_file_path, _run_in_background
@@ -1160,9 +1147,6 @@ def send_revision(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json() or {}
     message = (data.get('message') or '').strip()
@@ -1175,6 +1159,9 @@ def send_revision(project_id):
 
     if not message:
         return jsonify({'success': False, 'error': 'Please describe what needs to be revised'}), 400
+
+    from app.utils import strip_html
+    plain_message = strip_html(message)
 
     # Resolve channel (POSM parallel flow)
     channel = None
@@ -1240,7 +1227,7 @@ def send_revision(project_id):
                 )
 
         log_activity('revision_requested',
-                     f'C&KV Revision #{project.ckv_revision_count} sent for "{project.name}" by {current_user.name}: {message[:100]}',
+                     f'C&KV Revision #{project.ckv_revision_count} sent for "{project.name}" by {current_user.name}: {plain_message[:100]}',
                      user=current_user, entity_type='project',
                      entity_name=project.name, entity_id=project.id)
         return jsonify({'success': True})
@@ -1376,7 +1363,7 @@ def send_revision(project_id):
         )
 
     log_activity('revision_requested',
-                 f'Revision {rev_label} sent for "{project.name}" by {current_user.name}: {message[:100]}',
+                 f'Revision {rev_label} sent for "{project.name}" by {current_user.name}: {plain_message[:100]}',
                  user=current_user, entity_type='project',
                  entity_name=project.name, entity_id=project.id)
 
@@ -1396,9 +1383,6 @@ def start_revision(project_id):
 
     project = Project.query.get_or_404(project_id)
 
-    # ── Lock guard: approved projects are read-only ──────────────────────────
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'This project has been approved and is locked.'}), 403
 
     data = request.get_json(silent=True) or {}
     posm_channel_id = data.get('posm_channel_id')

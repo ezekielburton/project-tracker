@@ -1,3 +1,17 @@
+import re as _re
+from html import unescape as _unescape
+
+def strip_html(html_text):
+    """Strip HTML tags and decode entities for use in plain-text contexts
+    (notifications, activity logs). Rich-text fields may contain <img> tags
+    and other markup that must not leak into notification strings."""
+    if not html_text:
+        return ''
+    text = _re.sub(r'<[^>]+>', '', html_text)
+    text = _unescape(text)
+    return ' '.join(text.split())
+
+
 def get_actor():
     """Return the effective acting user.
 
@@ -13,6 +27,23 @@ def get_actor():
     if emulating_id and current_user.role == 'admin':
         return User.query.get(emulating_id)
     return current_user
+
+def work_hours_between(start, end):
+    """Elapsed hours between two datetimes, as a plain wall-clock duration
+    (added 13 Jul 2026, re-wiring the project time-tracking feature — see
+    record_project_status() in app/status_tracking.py, the only caller).
+
+    This is a straightforward (end - start) in hours, NOT a "business
+    hours" calculation that excludes nights/weekends/holidays — there was
+    no prior working implementation to match (the old, never-registered
+    app/routes/projects_old.py referenced a function of this name but
+    never defined it), and nothing in the codebase specifies working-hours
+    semantics, so the simplest honest interpretation was used. If Ezekiel
+    wants project timers to only count business hours, this is the one
+    place that needs to change.
+    """
+    return (end - start).total_seconds() / 3600.0
+
 
 def log_activity(action, description, user=None, entity_type=None, entity_name=None, entity_id=None):
     from app import db

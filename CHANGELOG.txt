@@ -3,14 +3,14 @@ VITAMIN HELIX — CHANGELOG
 ===============================================================================
 
 ================================================================================
-v2.2.1 - Instant Updates Patch & Small Adjustments
+v2.3 - Dashboard Launch & Instant Updates!
 ================================================================================
 New Features:
 
 - Instant updates. The app now auto refreshes when there are updates. 
-True live updating is in the works, but will take a while on the backend. This is a temporary solution.
+  True live updating is in the works, but will take a while on the backend. This is a temporary solution.
 - Client directory has been added. Links to the clients. Contacts now optional additional to a project. 
-The directory stores each clients address - typical install locations. Contacts for each client include their name, number, email and location.
+  The directory stores each clients address - typical install locations. Contacts for each client include their name, number, email and location.
 
 
 Adjustments:
@@ -28,7 +28,10 @@ Bug Fixes:
 - Fixed draft deletion not working.
 - FIxed concept and kv assignment not instantly updating.
 - Fixed lots of buttons across the site not working without a page refresh.
-- Fixed some files still uploading when the upload gets corrupted. Now you will be notified and asked to reupload.
+- Fixed some files still uploading when the upload gets corrupted. Now it will auto retry 3 times before asking you to try again.
+- Fixed lots of buttons across the website not being clickable sometimes.
+
+
 
 ================================================================================
 v2.2 - Large feature update

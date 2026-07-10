@@ -37,6 +37,28 @@ def _record_status_change(entity, new_status, actor, log_cls, fk_field):
 
 
 def record_project_status(project, new_status, actor):
+    """
+    Time-tracking note (13 Jul 2026): this function's ProjectStatusLog
+    rows (started_at/ended_at per status) are the ONLY thing the
+    project/deliverable hours feature reads — see
+    app/time_tracking_logic.py. There is no separate hours-accumulator
+    write here; hours are recomputed from this log history on demand, so
+    there's exactly one source of truth for "how long was this project in
+    status X" rather than a running counter that could drift from it.
+
+    (Historical note: earlier the same day, a live hours_accumulated/
+    timer_started_at accumulator WAS spliced in right here, re-wiring
+    logic that used to live dead/unreachable in
+    app/routes/projects_old.py's update_status route. It used plain
+    wall-clock hours and a narrow 2-status "active" set. Per Ezekiel's
+    fuller spec later the same day — business hours only, weekend
+    discard rule, per-status breakdown for a new drill-down page — that
+    approach was superseded by the StatusLog-derived computation in
+    time_tracking_logic.py before it ever went live, so it was removed
+    again rather than left running alongside the new logic. The
+    Project.hours_accumulated/timer_started_at columns are no longer
+    written to by anything; left in place on the model, unused.)
+    """
     from app.models import ProjectStatusLog
     _record_status_change(project, new_status, actor, ProjectStatusLog, 'project_id')
     project.project_status = new_status

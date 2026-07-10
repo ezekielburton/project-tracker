@@ -38,84 +38,18 @@
     margin-bottom: 1.5rem;
 }
 
-/* ── Stat row (added 12 Jul 2026) ─────────────────────────────────────────
-   Three small colour+number cards pinned above everything else — Your
-   Active Projects / Pending Approval / Total Active Projects. Static
-   display only (no expand, no filter), so this is deliberately a much
-   simpler component than .dash-card below: a coloured dot, an uppercase
-   mono label, and one big number. Each --owner/--pending/--total modifier
-   just recolours the dot + number together — see dash_stat_card usage in
-   dashboard.html. */
-.dash-stats-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-@media (max-width: 900px) {
-    .dash-stats-row {
-        grid-template-columns: 1fr;
-    }
-}
-
-.dash-stat-card {
-    background: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 1.1rem 1.4rem;
-}
-
-.dash-stat-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--grey-dark);
-    margin-bottom: 0.6rem;
-}
-
-.dash-stat-dot {
-    display: inline-block;
-    width: 0.6rem;
-    height: 0.6rem;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.dash-stat-value {
-    font-family: var(--font-headline);
-    font-size: 2.2rem;
-    font-weight: 700;
-    line-height: 1;
-}
-
-/* Your Active Projects — tangerine, same "this is yours" colour as
-   .dash-owner-tag elsewhere on this page. */
-.dash-stat-card--owner .dash-stat-dot { background: var(--tangerine); }
-.dash-stat-card--owner .dash-stat-value { color: var(--tangerine); }
-
-/* Pending Approval — --oak (warm amber/brown token). Deliberately NOT
-   --canary here even though canary is this app's usual "caution/waiting"
-   colour elsewhere (rag-yellow, the Potential Clash tag) — canary is a
-   bright, light yellow that reads poorly as bold 2.2rem text on a white
-   card. --oak carries the same "amber/pending" feeling at a size and
-   weight where it stays legible. */
-.dash-stat-card--pending .dash-stat-dot { background: var(--oak); }
-.dash-stat-card--pending .dash-stat-value { color: var(--oak); }
-
-/* Total Active Projects — the ashen family, same as .dash-action-tag's
-   neutral/informational tint elsewhere on this page (this number isn't
-   "yours" or urgent, just a steady company-wide count). The dot uses the
-   lighter --ashen token; the number uses #3E5E66, the same darker
-   readable shade .dash-action-tag already pairs with it for exactly this
-   contrast-at-size reason. */
-.dash-stat-card--total .dash-stat-dot { background: var(--ashen); }
-.dash-stat-card--total .dash-stat-value { color: #3E5E66; }
+/* ── Stat tiles (added 12 Jul 2026, removed as a separate component in
+   the twelfth follow-up the same day) ────────────────────────────────────
+   Your Active Projects / Pending Approval / Total Active Projects used to
+   be their own small component (.dash-stats-row/.dash-stat-card) pinned
+   above the tile grid — per Ezekiel ("make them in the same style as the
+   others and same size and make them the first 3 cards"), they're now
+   ordinary .dash-tile entries (see stat_active.html/stat_pending.html/
+   stat_total.html), just always first in CARD_ORDER. Check git history
+   around 12 Jul 2026 if the old standalone markup/CSS ever needs
+   resurrecting. Their colours (green/ashen-blue/tangerine) carried over
+   unchanged into the new .dash-mini-stat--green/--blue/--orange variants
+   used by those tile partials. */
 
 /* ── Cards zone ───────────────────────────────────────────────────────── */
 
@@ -161,20 +95,43 @@
     font-family: var(--font-headline);
     text-transform: uppercase;
     font-weight: 700;
-    font-size: 1rem;
+    font-size: 1.6rem; /* 13 Jul 2026: bumped up per Ezekiel ("My Today / My Week bigger too") — this class is only ever used by the Summary card's header (see dash-card-summary comment above), so it's safe to size independently of .dash-tile-title */
     letter-spacing: 0.02em;
     color: var(--black);
     flex-shrink: 0;
 }
 
+/* Summary card's collapsed-header mini-stats ("Due Today" / "Needed From
+   You") — the ONLY consumer of .dash-card-header/.dash-card-summary (every
+   other card uses the tile system's .dash-tile-summary instead), so it's
+   safe to size these up here without touching the shared
+   .dash-mini-stat-value/-label rules used by tiles. Bumped up (13 Jul
+   2026, per Ezekiel: "make it much larger") and pushed to the right edge
+   of the header via justify-content: flex-end — .dash-card-title keeps
+   flex-shrink: 0 so it stays put on the left, and this flex:1 span just
+   claims the rest of the row. */
 .dash-card-summary {
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 0.9rem;
+    justify-content: flex-end;
+    gap: 1.6rem;
     flex-wrap: wrap;
     color: var(--grey-dark);
     font-size: 0.9rem;
+}
+
+.dash-card-summary .dash-mini-stat-dot {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+
+.dash-card-summary .dash-mini-stat-value {
+    font-size: 2.2rem;
+}
+
+.dash-card-summary .dash-mini-stat-label {
+    font-size: 1rem;
 }
 
 /* ── Collapsed-card mini stats (reworked 12 Jul 2026) ─────────────────────
@@ -188,13 +145,18 @@
    all-clear/informational), so unlike the top stat row this never reaches
    for tangerine/oak/ashen.
 
-   Dots use the real rag-red/rag-yellow/rag-green tokens (--rose/--canary/
-   --pine), same as .rag-badge — a small filled circle doesn't have the
-   text-on-white contrast problem a large bold number does. The NUMBER
-   text uses darker, readable variants for red/yellow for the same reason
-   .dash-stat-card--pending uses --oak instead of raw --canary above:
-   --rose and --canary both read as washed-out at bold headline size on a
-   white card. --pine is already dark enough to use directly for green. */
+   Colours changed 12 Jul 2026 (second follow-up, same day) from the brand
+   RAG tokens (--rose/--canary/--pine) to PURE red/green/yellow, per
+   explicit management request: "red green yellow, not our colors, but
+   pure." Red and green keep dot + text at the same hue family (text
+   slightly deepened from the dot purely for on-white legibility). Yellow
+   was the same originally, but per Ezekiel's follow-up review (screenshot
+   showing the dot/number mismatch) the yellow NUMBER now matches the dot
+   exactly — both #FFEB00 — even though that's a lighter, lower-contrast
+   text colour than red/green's deepened variants. This is a deliberate
+   trade against the general "deepen for legibility" rule above, made
+   after seeing it rendered; if it reads as too washed out at some sizes,
+   that's the known trade-off, not a bug. */
 .dash-mini-stat {
     display: inline-flex;
     align-items: baseline;
@@ -227,14 +189,46 @@
     white-space: nowrap;
 }
 
-.dash-mini-stat--red .dash-mini-stat-dot { background: var(--rose); }
-.dash-mini-stat--red .dash-mini-stat-value { color: #B5504F; }
+.dash-mini-stat--red .dash-mini-stat-dot { background: #FF0000; }
+.dash-mini-stat--red .dash-mini-stat-value { color: #E60000; }
 
-.dash-mini-stat--yellow .dash-mini-stat-dot { background: var(--canary); }
-.dash-mini-stat--yellow .dash-mini-stat-value { color: var(--oak); }
+.dash-mini-stat--yellow .dash-mini-stat-dot { background: #FFEB00; }
+.dash-mini-stat--yellow .dash-mini-stat-value { color: #FFEB00; }
 
-.dash-mini-stat--green .dash-mini-stat-dot { background: var(--pine); }
-.dash-mini-stat--green .dash-mini-stat-value { color: var(--pine); }
+.dash-mini-stat--green .dash-mini-stat-dot { background: #00C400; }
+.dash-mini-stat--green .dash-mini-stat-value { color: #009900; }
+
+/* Orange (added 12 Jul 2026, tenth follow-up) — the first mini-stat
+   colour that isn't part of the red/yellow/green RAG trio. Added for
+   Next Actions' "Waiting on Others" stat, which per Ezekiel should be
+   green at zero ("all clear, nobody's waiting on anyone") and orange
+   once it's greater than zero — brand --tangerine, used directly (no
+   deepened variant needed). Not a RAG colour (this isn't red/yellow/green
+   urgency), so it lives as its own explicit modifier rather than being
+   forced into the existing three. Reused as-is by stat_total.html's
+   "Total Active Projects" tile (twelfth follow-up). */
+.dash-mini-stat--orange .dash-mini-stat-dot { background: var(--tangerine); }
+.dash-mini-stat--orange .dash-mini-stat-value { color: var(--tangerine); }
+
+/* Blue/ashen (added 12 Jul 2026, twelfth follow-up) — for
+   stat_pending.html's "Pending Approval" tile only. Not a RAG colour
+   either (a neutral "waiting" count, not urgency), same reasoning orange
+   above uses. Dot uses --ashen directly; text uses the deepened #3E5E66
+   (same shade .dash-action-tag uses) since raw --ashen is too light for
+   bold text at the :only-child big-number size. */
+.dash-mini-stat--blue .dash-mini-stat-dot { background: var(--ashen); }
+.dash-mini-stat--blue .dash-mini-stat-value { color: #3E5E66; }
+
+/* Oak (added 13 Jul 2026) — for stat_avg_time.html's "Average Time" tile
+   only. Not a RAG colour (a neutral duration metric, not urgency), same
+   reasoning orange/blue above use. The one brand token not already
+   claimed by the other three stat tiles (green/ashen-blue/tangerine), so
+   Average Time reads as its own distinct thing on the row rather than
+   reusing a colour that already means something else. --oak (#A07C5A) is
+   dark/muted enough to use directly for both dot and bold text without
+   needing a deepened variant, unlike --ashen above. */
+.dash-mini-stat--oak .dash-mini-stat-dot { background: var(--oak); }
+.dash-mini-stat--oak .dash-mini-stat-value { color: var(--oak); }
 
 .dash-card-chevron {
     flex-shrink: 0;
@@ -274,6 +268,22 @@
     padding-top: 1.2rem;
 }
 
+/* Static/always-open card (added 12 Jul 2026, fourth follow-up) — used
+   ONLY by Summary ("My Day / My Week"), mode=None's markup as of this
+   change (see _dashboard_macros.html). No collapse mechanic at all: the
+   body always renders at its natural height instead of the JS-measured
+   max-height every other card's body uses, and the header isn't
+   clickable — no chevron, no cursor change, no toggle-card data-action. */
+.dash-card-body--static {
+    max-height: none;
+    overflow: visible;
+    transition: none;
+}
+
+.dash-card-header--static {
+    cursor: default;
+}
+
 /* Muted state — Clashing Projects card at zero clashes. No chevron
    (rendered conditionally by the macro), reduced opacity, not clickable. */
 .dash-card--muted {
@@ -284,49 +294,83 @@
     cursor: default;
 }
 
-/* ── Tile grid + shared row-expand band (added 12 Jul 2026) ───────────────
+/* ── Tile grid + shared expand area (added 12 Jul 2026, reworked twice
+   more the same day — see the dated comments below for each pass) ───────
    Every card except Summary (which keeps the .dash-card/.dash-card-header/
-   .dash-card-body rules above, untouched) is now a small fixed-size tile,
-   3 per row — clicking one doesn't grow the tile itself, it opens a
-   full-width band below that row of 3 showing the body content. See the
-   big comment on dash_card()'s `mode` param in _dashboard_macros.html and
-   on the row-group loop in dashboard.html for the full mechanic; this is
-   just the visual layer, wired up by dashboard.js's click handler. */
+   .dash-card-body rules above, untouched) is a small fixed-size tile —
+   clicking one doesn't grow the tile itself, it opens ONE shared area
+   below the whole grid showing the body content (originally one band per
+   row of 3; collapsed to a single page-wide area in the third follow-up,
+   see below). See the big comment on dash_card()'s `mode` param in
+   _dashboard_macros.html and on the tile-grid loop in dashboard.html for
+   the full mechanic; this is just the visual layer, wired up by
+   dashboard.js's click handler. */
 
-.dash-row-group {
+/* 5 tiles per row (changed 12 Jul 2026, third follow-up — was 3), with a
+   single shared expand area (.dash-shared-expand, further down) below the
+   WHOLE grid instead of one band per row of 3. That's what let this
+   collapse from a row-batching layout to one flat grid: there's no longer
+   a per-row band that needs to sit directly under its own row, so nothing
+   here needs to know about "rows" at all anymore — just narrower tiles,
+   more of them across. */
+.dash-tiles-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1rem;
     margin-bottom: 1rem;
 }
 
-.dash-tiles-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
+@media (max-width: 1200px) {
+    .dash-tiles-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
 }
 
-@media (max-width: 900px) {
-    .dash-tiles-row {
+@media (max-width: 700px) {
+    .dash-tiles-grid {
         grid-template-columns: 1fr;
     }
 }
 
+/* Column layout, title pinned to the TOP (changed 12 Jul 2026, fourth
+   follow-up — was vertically centered via justify-content: center in the
+   third follow-up). justify-content: flex-start anchors the title against
+   the tile's top edge regardless of how much room the stat below it needs,
+   instead of the whole title+stat block floating centered in the tile.
+
+   FIXED height, not min-height (changed 12 Jul 2026, fifth follow-up, per
+   Ezekiel — "reduce the vertical size to be the size of all to match the
+   size needed for the biggest div"). Before this, CSS Grid's default
+   row-stretch behaviour meant a tile's actual height depended on whichever
+   OTHER tile happened to share its row — Next Actions/Clashes (2 stacked
+   mini-stats) made their whole row taller, so a single-stat tile like
+   Decisions in a DIFFERENT row could end up visibly shorter than one in
+   Next Actions' row. One fixed height sized for the tallest realistic
+   content (Next Actions, per Ezekiel) makes every tile the same size
+   everywhere, not just within its own row. 12rem is a judgment-call
+   estimate (padding + up to a 2-line title + divider + gap + two stacked
+   mini-stats) — nudge it up if a longer title/label combination ever
+   clips. gap increased from 0.55rem to 0.9rem in the same pass — see
+   .dash-tile-title's border-bottom below for why less gap was needed
+   there before. */
 .dash-tile {
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     border: 1.5px solid transparent;
-    padding: 1rem 1.2rem;
+    padding: 1.1rem 1.2rem;
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    min-height: 4.5rem;
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 0.9rem;
+    height: 12rem;
 }
 
-/* Active — the one tile per row (at most) whose body is currently showing
-   in that row's .dash-row-expand band below. Same tangerine accent
-   .dash-card.expanded's chevron uses, so "this is the open one" reads the
-   same way it always has on this page. */
+/* Active — the one tile (at most, page-wide) whose body is currently
+   showing in the single shared expand area below the grid. Same tangerine
+   accent .dash-card.expanded's chevron uses, so "this is the open one"
+   reads the same way it always has on this page. */
 .dash-tile.active {
     border-color: var(--tangerine);
 }
@@ -339,37 +383,164 @@
     cursor: default;
 }
 
-.dash-tile-title {
-    font-family: var(--font-headline);
-    text-transform: uppercase;
-    font-weight: 700;
-    font-size: 0.85rem;
-    letter-spacing: 0.02em;
-    color: var(--black);
+/* Static — the three stat tiles (stat_active/stat_pending/stat_total,
+   added 12 Jul 2026 twelfth follow-up). Unlike .dash-tile--muted this is
+   full opacity/full colour, NOT dimmed — these numbers should read just
+   as clearly as any other tile's. The only thing "static" means here is
+   cursor: default, since these tiles never carry data-action="toggle-card"
+   (no expandable body — see the stat_*.html partials) and .dash-tile's
+   base cursor: pointer would otherwise misleadingly suggest they're
+   clickable. */
+.dash-tile--static {
+    cursor: default;
 }
 
+/* stat_avg_time.html only (13 Jul 2026) — the one stat tile that's an
+   actual link (to /time-tracking, admin/management only) rather than
+   purely static. text-decoration/color resets undo the browser's default
+   <a> styling so it looks identical to the other three non-linkable
+   tiles at rest; cursor: pointer + a subtle hover lift are the only
+   visual cues that this one is clickable. */
+.dash-tile--link {
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.dash-tile--link:hover {
+    box-shadow: var(--shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.1));
+    transform: translateY(-1px);
+}
+
+/* Switched to Public Sans Bold (--font-body) and sized up again, centered
+   (changed 12 Jul 2026, fourth follow-up — was Barlow Condensed/
+   --font-headline at 1.05rem, left-aligned by default as the top line of
+   a column). Pinned to the top of the tile via .dash-tile's
+   justify-content: flex-start above.
+
+   Divider added 12 Jul 2026 (fifth follow-up, per Ezekiel — "add a
+   horizontal dividing line under the heading... across all cards"):
+   padding-bottom is the small gap between the heading text and the line
+   ("a few px underneath"), border-bottom is the line itself. As a flex
+   item in a column .dash-tile, this span already stretches to the tile's
+   full width (flex items are blockified regardless of their original
+   display value), so the border-bottom spans edge-to-edge with no extra
+   width/display rule needed. */
+.dash-tile-title {
+    font-family: var(--font-body);
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 0.9rem; /* 13 Jul 2026: reduced ~30% from 1.3rem per Ezekiel */
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    text-align: center;
+    color: var(--black);
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Centered (changed 12 Jul 2026, fourth follow-up — was right-aligned via
+   justify-content: flex-end) and stacked VERTICALLY when a tile has more
+   than one mini-stat (Next Actions, Clashes) instead of wrapping them
+   side by side — flex-direction: column + align-items: center does both
+   at once: a single stat centers under the title, multiple stats stack
+   as their own centered column. These ONLY apply inside a tile's summary,
+   not the Summary ("My Day/My Week") card's own header, which was never
+   part of the tile rework.
+
+   flex: 1 1 auto + justify-content: center (added 12 Jul 2026, sixth
+   follow-up, per Ezekiel — "move the text down so it's centered") — the
+   title above this has a fixed natural height, but .dash-tile itself is a
+   FIXED height (12rem, see .dash-tile above) sized for the tallest tile's
+   content. Without this, a short tile like Decisions (one stat) left its
+   stat sitting right under the title's divider with a block of empty
+   space below it, since .dash-tile's justify-content: flex-start only
+   pins the START of the column, it doesn't center leftover space. Giving
+   .dash-tile-summary flex: 1 makes it claim ALL the space the tile isn't
+   using for its title, and justify-content: center then centers whatever
+   stat(s) it holds within THAT space — so the stat sits centered in the
+   room actually left over below the header, not centered in the whole
+   tile (which would push it too close to/under the divider). */
 .dash-tile-summary {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 0.9rem;
-    flex-wrap: wrap;
+    justify-content: center;
+    flex: 1 1 auto;
+    gap: 0.35rem;
     color: var(--grey-dark);
     font-size: 0.9rem;
 }
 
-/* The shared band below a row of 3 tiles. Empty (all children collapsed
-   via .dash-card-body-content below) by default, so it takes no visible
-   space until a tile in that row is clicked — no separate "is anything
-   open in this row" class needed on the wrapper itself. */
-.dash-row-expand {
+/* align-items: center (sixth follow-up, was the default "baseline") —
+   baseline aligned the dot/label to the NUMBER's baseline, which sits
+   near the bottom of its glyph, so the label read as sitting low/
+   off-center against a big number instead of level with its middle.
+   center aligns all three (dot/number/label) against the vertical middle
+   of the tallest one. This is the row layout, still used by tiles with
+   MULTIPLE stats (Next Actions, Clashes) — see the :only-child override
+   further down for the single-stat "big number, stacked" treatment. */
+.dash-tile-summary .dash-mini-stat {
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.dash-tile-summary .dash-mini-stat-dot {
+    width: 0.85rem;
+    height: 0.85rem;
+}
+
+.dash-tile-summary .dash-mini-stat-value {
+    font-size: 2.75rem;
+}
+
+.dash-tile-summary .dash-mini-stat-label {
+    font-size: 0.78rem;
+}
+
+/* Single-stat tiles ONLY (added 12 Jul 2026, seventh follow-up, per
+   Ezekiel — "for these cards specifically" — Decisions, At Risk, Overdue,
+   What Changed, and Clashes' own zero-state "No Clashes" pill): number
+   bigger and centered, label underneath it, instead of the dot/number/
+   label row every other tile still uses (see above). :only-child targets
+   exactly this case with no template changes needed — a tile with ONE
+   .dash-mini-stat gets the big stacked treatment automatically, a tile
+   with TWO OR MORE (Next Actions, Clashes' non-zero state) keeps the
+   compact row layout. Deliberate, not just convenient: two stats at this
+   size stacked inside the fixed 12rem tile (see .dash-tile) would
+   overflow, so only single-stat tiles — which have the room to spare —
+   get the bigger treatment. DOM order (dot, then value, then label) is
+   unchanged; switching just this element from row to column naturally
+   puts the dot on top, the big number in the middle, and the label
+   caption underneath, with no markup reordering needed. */
+.dash-tile-summary .dash-mini-stat:only-child {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.dash-tile-summary .dash-mini-stat:only-child .dash-mini-stat-value {
+    font-size: 3.4rem;
+}
+
+/* ONE shared area below the entire tile grid (changed 12 Jul 2026, third
+   follow-up — was one band per row of 3, so up to 3 could be open
+   simultaneously). Empty (all children collapsed via .dash-card-body-
+   content below) by default, so it takes no visible space until ANY tile
+   anywhere in the grid is clicked — no separate "is anything open" class
+   needed on the wrapper itself, same as the old per-row version. */
+.dash-shared-expand {
     display: block;
 }
 
 /* Same JS-measured max-height mechanic as .dash-card-body above (see the
    big comment there), self-toggling via its own .expanded class instead
    of a parent .dash-card.expanded selector — there's no longer a single
-   wrapping card element tying a tile to its body, they're siblings in
-   different rows of the row-group now (see dashboard.html). This element
+   wrapping card element tying a tile to its body, they're siblings of
+   every other card's body inside the one shared expand area now (see
+   dashboard.html). This element
    is the COLLAPSE wrapper only — max-height + overflow:hidden, no visual
    styling of its own. The white/shadow/radius "card" look lives one level
    deeper, on .dash-card-body-visual, because overflow:hidden clips a box's
@@ -443,12 +614,47 @@
 .dash-two-col {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+    gap: 0; /* 13 Jul 2026: was 1.5rem — the gutter is now built entirely
+               from .dash-summary-col--left/--right's padding below, so the
+               dividing border-right sits exactly centered between the two
+               columns instead of hugging one side of a separate grid gap. */
 }
 
 @media (max-width: 900px) {
     .dash-two-col {
         grid-template-columns: 1fr;
+    }
+}
+
+/* Full-height visible split between Today/This Week (13 Jul 2026, per
+   Ezekiel: "Today should be on the left in its own div completely and My
+   Week should be the same, so there should be a visible split all the way
+   down"). A grid item's default align-items is `stretch`, so
+   .dash-summary-col--left already stretches to match whichever column is
+   taller before this rule — the border-right just draws along that full
+   stretched height, no extra height/min-height math needed. Padding
+   replaces half of .dash-two-col's gap on each side of the line so the
+   line sits centered in the gutter instead of hugging one column. */
+.dash-summary-col--left {
+    padding-right: 1.5rem;
+    border-right: 1px solid var(--border-subtle);
+}
+
+.dash-summary-col--right {
+    padding-left: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .dash-summary-col--left {
+        padding-right: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .dash-summary-col--right {
+        padding-left: 0;
     }
 }
 
@@ -481,6 +687,38 @@
 }
 
 a.dash-row:hover {
+    background: var(--surface-hover);
+}
+
+/* Summary card's Today/This Week columns (13 Jul 2026, per Ezekiel: "make
+   the header text bigger for both" + "each item... their own divs so it's
+   easy to see they are individual rows"). Scoped to .dash-two-col, which
+   is ONLY used by summary.html, rather than touching the base
+   .dash-col-heading/.dash-row rules above — those are shared by
+   Due/Next Actions/What Changed/Decisions/At Risk/Clashes via the same
+   dash_due_row() macro (see _dashboard_macros.html's big comment on why
+   that macro is the one place row markup lives), so this override keeps
+   every other card's flat/bordered-list look untouched and only boxes up
+   rows inside Summary's two columns. */
+.dash-two-col .dash-col-heading {
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+}
+
+.dash-two-col .dash-row {
+    background: var(--sandstone);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.6rem;
+}
+
+.dash-two-col .dash-row:last-child {
+    border-bottom: 1px solid var(--border-subtle); /* undo the shared .dash-row:last-child { border-bottom: none } — every row here is its own box, so the last one still needs its own full border */
+    margin-bottom: 0;
+}
+
+.dash-two-col a.dash-row:hover {
     background: var(--surface-hover);
 }
 
@@ -551,6 +789,220 @@ a.dash-row:hover {
     color: var(--tangerine);
 }
 
+/* Decisions Needed — Resolve button (13 Jul 2026, admin/management only).
+   The button is a sibling of .dash-row, not nested inside it (buttons
+   can't legally nest inside an <a> — same rule dash_person_chip follows
+   in _dashboard_macros.html), so .dash-decision-row is the new outer flex
+   row that holds both. The border-bottom that used to live directly on
+   .dash-row (shared base rule above) is re-declared here on the wrapper
+   instead, and switched off on the anchor for decisions rows specifically,
+   so there's exactly one border between rows, not a doubled one. */
+.dash-decision-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dash-decision-row:last-child {
+    border-bottom: none;
+}
+
+.dash-decision-row .dash-row {
+    flex: 1;
+    min-width: 0;
+    border-bottom: none;
+}
+
+/* Same green language as .btn-flag-resolve (main.css, project detail
+   page's per-flag "Mark Resolved" button) — reused rather than reinvented
+   so "resolve" reads as the same action/colour everywhere in the app, just
+   sized down to fit inline in a compact dashboard row instead of a full
+   detail-page flag card. */
+.dash-resolve-btn {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid #6ee7b7;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: #065f46;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.dash-resolve-btn:hover {
+    background: #d1fae5;
+}
+
+.dash-resolve-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* ── Due row redesign (13 Jul 2026) ───────────────────────────────────────
+   dash_due_row()'s new CS lead / designer chips + right-hand "Next Action"
+   block — see the big comment on that macro in _dashboard_macros.html.
+   Only affects Due/Summary (the two consumers of dash_due_row()); Next
+   Actions and the deep-dive row macro keep their original
+   .dash-row-tags/.dash-action-tag/.dash-owner-tag layout untouched above. */
+
+/* Row of avatar chips + missing-team tags under the title, replacing the
+   old guidance/owner .dash-row-tags line for this macro specifically. */
+.dash-row-people {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.4rem;
+}
+
+.dash-person-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.6rem 0.15rem 0.15rem;
+    border-radius: 999px;
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+}
+
+.dash-person-avatar {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ashen);
+}
+
+.dash-person-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.dash-person-avatar-initials {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.7rem;
+    color: var(--white);
+}
+
+.dash-person-name {
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--black);
+    white-space: nowrap;
+}
+
+/* Designer-missing tags specifically (13 Jul 2026, per Ezekiel: "make the
+   designer missing tags red") — red (same family the RAG mini-stats use),
+   layered ON TOP of .dash-risk-tag's base shape via a second class rather
+   than replacing it, so padding/radius/font stay identical to the At Risk
+   card's tags and only the colour differs. CS Missing (dash_person_chip's
+   default missing_class) keeps the original rose .dash-risk-tag colour —
+   only the per-team "<Team> Designer Missing" tags in a Due row use this
+   modifier.
+
+   Compound selector (.dash-risk-tag.dash-risk-tag--red), not a bare
+   .dash-risk-tag--red — the base .dash-risk-tag rule (background:
+   var(--rose)) lives FURTHER DOWN this file (At Risk card section), and
+   at equal specificity CSS resolves ties by source order, so a single-class
+   .dash-risk-tag--red here was silently losing to that later rule and
+   rendering rose instead of red. The compound selector's higher
+   specificity (0,2,0 vs 0,1,0) wins regardless of where either rule sits
+   in the file — real bug, caught from Ezekiel's screenshot, not the usual
+   bash/tool desync false alarm.
+
+   Colour dialed from pure #FF0000 down to #E60000 (13 Jul 2026, same-day
+   follow-up, per Ezekiel: "adjust the red ... to be less bright slightly")
+   — the same deepened red the RAG mini-stat's red TEXT already uses over
+   its pure-red dot, reused here for a solid-fill tag background instead of
+   inventing a third red. */
+.dash-risk-tag.dash-risk-tag--red {
+    background: #E60000;
+}
+
+/* Plain deadline text (13 Jul 2026, same-day follow-up, per Ezekiel:
+   "remove the green wrapper, add a vertical divider between it and rest of
+   the information") — replaces the old .rag-badge rag-{red/yellow/green}
+   coloured pill dash_due_row used to render here. .rag-badge/.rag-red/
+   .rag-yellow/.rag-green themselves are UNTOUCHED — still used as-is by
+   Next Actions, Decisions, Clashes, At Risk, and the deep-dive row macros,
+   this row type just stopped using them.
+
+   align-self: stretch overrides .dash-row's own align-items: center for
+   just this child, so the border-right divider spans the FULL row height
+   regardless of how tall .dash-row-main/.dash-row-next-action end up —
+   same technique .dash-summary-col--left uses for the Today/This Week
+   split further up this file. */
+.dash-row-date {
+    flex-shrink: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--grey-dark);
+    white-space: nowrap;
+    padding-right: 1rem;
+    border-right: 1px solid var(--border-subtle);
+}
+
+/* Right-hand "Next Action" block — was a small inline .dash-action-tag
+   pill; now the row's main call-to-action, sized up and pulled to the far
+   right per Ezekiel ("Put the action needed to do on the right and make it
+   bigger"). flex-shrink: 0 so a long project title/chip row never
+   compresses it; text-align: right keeps both lines flush against the
+   row's right edge regardless of how long the label/guidance text is. */
+.dash-row-next-action {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    gap: 0.3rem;
+    padding-left: 1rem;
+    max-width: 40%;
+}
+
+.dash-row-next-action-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+}
+
+/* Wrapped in a solid pine-green pill (13 Jul 2026, same-day follow-up, per
+   Ezekiel: "the next action wrap it in a tag, make it pine green") — was
+   plain bold text with no background. Same solid-fill tag recipe
+   .dash-risk-tag/.rag-green already use elsewhere on this page (padding/
+   radius/white text), so this reads as "the same kind of thing" as those
+   pills despite being a one-off class rather than reusing .rag-badge
+   (which is sized/laid out for a short deadline string, not a full
+   guidance sentence). */
+.dash-row-next-action-tag {
+    display: inline-block;
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.25;
+    background: var(--pine);
+    padding: 0.35rem 0.9rem;
+    border-radius: var(--radius-sm);
+}
+
 /* Clashing Projects card — "Clash Detected" vs "Potential Clash" (see
    _clash_severity() in dashboard_logic.py). Reuses the same rag-red/
    rag-yellow colours the rest of the dashboard already uses for urgency,
@@ -579,6 +1031,30 @@ a.dash-row:hover {
 .dash-clash-severity-tag--potential {
     background: var(--canary);
     color: var(--black);
+}
+
+/* At Risk card (added 12 Jul 2026) — every tag (CS Missing, <Team>
+   Designer Missing, All Designers Missing, Overdue) renders the same way,
+   deliberately not colour-coded per team or per reason: these are all
+   "something's wrong here" signals of equal weight, not a severity
+   spectrum like Clashes' detected/potential split, so one consistent
+   urgent-red tag for all of them is clearer than inventing a colour code
+   nobody asked for. Same rose/white recipe as
+   .dash-clash-severity-tag--detected for exactly that "this page's red
+   always means the same thing" consistency. */
+.dash-risk-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.6rem;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    background: var(--rose);
+    color: var(--white);
 }
 
 .dash-empty-state {

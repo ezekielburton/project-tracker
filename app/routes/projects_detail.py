@@ -535,8 +535,6 @@ def remove_customer(project_id, pc_id):
     project = Project.query.get_or_404(project_id)
     pc = ProjectCustomer.query.get_or_404(pc_id)
 
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
 
     # Guard: refuse if submissions exist - we use cancel instead
     has_submissions = ProjectSubmission.query.filter_by(posm_customer_id=pc.id).first()
@@ -591,8 +589,6 @@ def cancel_customer(project_id, pc_id):
     project = Project.query.get_or_404(project_id)
     pc = ProjectCustomer.query.get_or_404(pc_id)
 
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
 
     customer_name = pc.customer.name
     pc.cancelled = True
@@ -948,9 +944,6 @@ def resolve_flag(project_id, flag_id):
 def flag_management(project_id):
     project = Project.query.get_or_404(project_id)
 
-    # Approval lock guard — see CLAUDE.md: approved projects are frozen, no further state changes.
-    if project.project_status == 'approved':
-        return jsonify({'success': False, 'error': 'Project is approved and locked'}), 403
 
     data = request.get_json(silent=True) or {}
     decision_note = (data.get('decision_note') or '').strip()
@@ -982,6 +975,45 @@ def flag_management(project_id):
     log_activity(
         'decision_flagged',
         f'{actor.name} flagged "{project.name}" for a Management decision: "{decision_note}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
+    )
+
+    return jsonify({'success': True})
+
+
+@detail_bp.route('/projects/<int:project_id>/resolve-decision', methods=['POST'])
+@login_required
+@role_required('admin', 'management')  # Decisions Needed is a management-oversight queue — only they clear it
+def resolve_decision(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    if not project.decision_needed:
+        return jsonify({'success': False, 'error': 'No decision is currently pending on this project'}), 400
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    raised_by = project.decision_raised_by  # captured before clearing, for the notification below
+
+    project.decision_needed = False
+    project.decision_raised_by_id = None
+    project.decision_raised_at = None
+    project.decision_note = None
+    db.session.commit()
+
+    if raised_by:
+        create_notification(
+            recipient=raised_by,
+            message=f'{actor.name} resolved the Management decision you flagged on "{project.name}".',
+            notification_type='decision_resolved',
+            project=project,
+            triggered_by=actor,
+            pref_key='email_decision_flag'
+        )
+
+    log_activity(
+        'decision_resolved',
+        f'{actor.name} resolved the Management decision on "{project.name}"',
         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
     )
 

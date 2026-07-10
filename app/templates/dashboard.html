@@ -40,85 +40,58 @@
     {% endif %}
     {% endif %}
 
-    {# ── Stat row (added 12 Jul 2026) ─────────────────────────────────
-       Three small, non-collapsible colour+number cards — Your Active
-       Projects / Pending Approval / Total Active Projects, in that exact
-       order per spec. Deliberately its own tiny component
-       (.dash-stat-card), not a reuse of .dash-card — there's no header/
-       chevron/expand mechanic here, just a coloured dot, a label, and a
-       big number, so borrowing the card-with-collapsible-body markup
-       would drag in a bunch of unused structure. Shown to every role,
-       above everything else on the page — see _compute_project_stats()
-       in dashboard.py for what each number means and how "yours" follows
-       the management/admin view-switcher while "Total" deliberately
-       doesn't. #}
-    <div class="dash-stats-row">
-        <div class="dash-stat-card dash-stat-card--owner">
-            <div class="dash-stat-label"><span class="dash-stat-dot"></span>Your Active Projects</div>
-            <div class="dash-stat-value" id="dash-stat-your-active">{{ project_stats.your_active }}</div>
-        </div>
-        <div class="dash-stat-card dash-stat-card--pending">
-            <div class="dash-stat-label"><span class="dash-stat-dot"></span>Pending Approval</div>
-            <div class="dash-stat-value" id="dash-stat-pending-approval">{{ project_stats.pending_approval }}</div>
-        </div>
-        <div class="dash-stat-card dash-stat-card--total">
-            <div class="dash-stat-label"><span class="dash-stat-dot"></span>Total Active Projects</div>
-            <div class="dash-stat-value" id="dash-stat-total-active">{{ project_stats.total_active }}</div>
-        </div>
-    </div>
-
     {# Cards zone. Summary always renders first, full-width, and keeps its
        original self-contained expand-in-place behaviour unchanged — it's
        the one card the 12 Jul 2026 tile rework below deliberately left
        alone (see the big comment on `mode` in _dashboard_macros.html's
-       dash_card()). #}
+       dash_card()). Moved ABOVE the stat row (12 Jul 2026, third
+       follow-up, per Ezekiel) — was below it originally; "My Day / My
+       Week" is the one thing on this page meant to be read first. #}
     <div class="dash-cards-grid">
         {% include 'dashboard/cards/summary.html' %}
     </div>
 
-    {# ── Tile grid + shared row-expand band (added 12 Jul 2026) ──────────
+    {# ── Tile grid + single shared expand area (12 Jul 2026, third
+       follow-up — replaces the per-row-of-3 band design from earlier the
+       same day) ───────────────────────────────────────────────────────
        Every OTHER card (card_order, role-dependent — see CARD_ORDER in
-       dashboard.py) is now a small fixed-size tile, 3 per row. Clicking a
-       tile doesn't grow the tile itself — it opens a full-width band BELOW
-       that row of 3 (.dash-row-expand) showing that card's body content.
-       Clicking a different tile in the SAME row swaps what's showing in
-       that row's band (single-open-per-row, like an accordion); a tile in
-       a DIFFERENT row opens its own row's band independently, so more than
-       one row can be expanded at once.
+       dashboard.py) is a small fixed-size tile, 5 per row (.dash-tiles-grid).
+       Clicking a tile doesn't grow the tile itself and doesn't open a band
+       tied to its own row anymore — it opens ONE shared area below the
+       ENTIRE grid (.dash-shared-expand) showing that card's body content.
+       Only ever one card open at a time, page-wide (was "one per row,
+       up to 3 simultaneously" before) — clicking any tile closes whatever
+       was previously open, even if it was a tile in a different row.
+       See the toggle-card click handler in dashboard.js.
 
-       card_order|batch(3) (Jinja builtin) chunks the role's card list into
-       groups of 3 — pads the last group with `none` if it doesn't divide
-       evenly, hence the `if card_key` guard below. Every role currently
-       has exactly 6 cards (see CARD_ORDER), so in practice this is always
-       two clean rows, but the guard keeps this from breaking if that ever
-       changes.
+       Each card partial still gets `{% include %}`'d TWICE — once with
+       dash_render_mode='tile' (into .dash-tiles-grid), once with
+       dash_render_mode='body' (into .dash-shared-expand, collapsed unless
+       that card is the one currently open). See dash_card()'s `mode`
+       param in _dashboard_macros.html for how a single macro produces
+       both. No more batch(3)/row-group wrapper needed — every tile is a
+       sibling in one flat grid now, and there's only one body container
+       for the whole page instead of one per row.
 
-       Each card partial gets `{% include %}`'d TWICE per row — once with
-       dash_render_mode='tile' (renders just the small clickable box into
-       .dash-tiles-row), once with dash_render_mode='body' (renders the
-       actual body content into .dash-row-expand, collapsed unless that
-       card is the one currently open). See dash_card()'s `mode` param in
-       _dashboard_macros.html for how a single macro produces both. #}
-    {% for row in card_order | batch(3) %}
-    <div class="dash-row-group">
-        <div class="dash-tiles-row">
-            {% for card_key in row %}
-                {% if card_key %}
-                {% set dash_render_mode = 'tile' %}
-                {% include 'dashboard/cards/' + card_key + '.html' %}
-                {% endif %}
-            {% endfor %}
-        </div>
-        <div class="dash-row-expand">
-            {% for card_key in row %}
-                {% if card_key %}
-                {% set dash_render_mode = 'body' %}
-                {% include 'dashboard/cards/' + card_key + '.html' %}
-                {% endif %}
-            {% endfor %}
-        </div>
+       EXCEPTION: the three stat tiles (stat_active/stat_pending/
+       stat_total, added 12 Jul 2026 twelfth follow-up, always first in
+       CARD_ORDER) don't use dash_card() at all — they're pure numbers
+       with no expandable content, so they only render something on the
+       'tile' pass and render nothing on the 'body' pass. They still get
+       `{% include %}`'d twice like every other card_key, the second
+       include just produces empty output for these three. #}
+    <div class="dash-tiles-grid">
+        {% for card_key in card_order %}
+        {% set dash_render_mode = 'tile' %}
+        {% include 'dashboard/cards/' + card_key + '.html' %}
+        {% endfor %}
     </div>
-    {% endfor %}
+    <div class="dash-shared-expand" id="dash-shared-expand">
+        {% for card_key in card_order %}
+        {% set dash_render_mode = 'body' %}
+        {% include 'dashboard/cards/' + card_key + '.html' %}
+        {% endfor %}
+    </div>
 
     <hr class="dash-divider">
 
@@ -283,6 +256,14 @@
     // "Identifier has already been declared" on the second visit. var
     // redeclaration is a silent no-op, which is what we want here.
     var HELIX_DASH_SCOPE = {{ scope_mode | tojson }};
+
+    // Same var/SPA-renav reasoning as above. Tied to the REAL user's role
+    // (effective_role), not whichever scope tab is being previewed — used
+    // by dashboard.js's isManagementOrAdmin() to decide whether a
+    // JS-rebuilt Decisions row (renderDecisionRow(), after resolving a
+    // decision) should include the Resolve button, mirroring decisions.html's
+    // server-side `{% if effective_role in ('admin', 'management') %}` check.
+    var HELIX_EFFECTIVE_ROLE = {{ effective_role | tojson }};
 </script>
 
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>

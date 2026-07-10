@@ -49,6 +49,7 @@ def create_app():
     from app.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
     from app.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
     from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
+    from app.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -69,7 +70,8 @@ def create_app():
     app.register_blueprint(sse_bp)
     app.register_blueprint(client_directory_bp)
     app.register_blueprint(dashboard_bp)
-   
+    app.register_blueprint(time_tracking_bp)
+
     @app.context_processor
     @app.context_processor
     def inject_notifications():

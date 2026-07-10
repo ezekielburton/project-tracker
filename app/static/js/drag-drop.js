@@ -36,4 +36,4 @@ function enableDragAndDrop() {
 }
 
 document.addEventListener('DOMContentLoaded', enableDragAndDrop);
-document.addEventListener('helix:navigatied', enableDragAndDrop);
+document.addEventListener('helix:navigated', enableDragAndDrop);

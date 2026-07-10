@@ -16,7 +16,6 @@
         <h1 class="dashboard-greeting">{{ project.name }}</h1>
         <div style="display: flex; gap: 0.75rem; align-items: center;">
             {% if effective_user.role == 'admin' or project.cs_lead_id == effective_user.id or is_secondary_cs %}
-            {% if project.project_status != 'approved' %}
             <form method="POST" action="{{ url_for('project_detail.toggle_hold', project_id=project.id) }}" id="hold-project-form">
                 {% if project.project_status == 'on_hold' %}
                 {# Resume has no confirm — it's a safe, reversible action #}
@@ -26,12 +25,9 @@
                 {% endif %}
             </form>
             {% endif %}
-            {% endif %}
             {% if effective_user.role == 'admin' or project.cs_lead_id == effective_user.id or is_secondary_cs %}
-            {% if project.project_status != 'approved' %}
             <a href="{{ url_for('brief.edit_project', project_id=project.id) }}" class="btn-secondary">Edit
                 Project</a>
-            {% endif %}
             <form method="POST" action="{{ url_for('brief.delete_project', project_id=project.id) }}" id="delete-project-form">
                 <button type="button" class="btn-danger" id="delete-project-btn">
                     Delete Project
@@ -114,7 +110,6 @@
 
                 {% if effective_user.role == 'admin' or project.cs_lead_id == effective_user.id %}
                 {% if available_cs_users %}
-                {% if project.project_status != 'approved' %}
                 <div class="detail-field">
                     <span class="detail-label">Add Secondary CS</span>
                     <form method="POST" action="{{ url_for('project_detail.add_secondary_cs', project_id=project.id) }}"
@@ -130,7 +125,6 @@
                         </div>
                     </form>
                 </div>
-                {% endif %}
                 {% endif %}
                 {% endif %}
 
@@ -593,7 +587,7 @@
                     {% endif %}
                     {% if pc.cancelled %}
                     <span class="customer-cancelled-badge">✗ Cancelled</span>
-                    {% elif effective_user.role in ['admin', 'cs'] and project.project_status != 'approved' %}
+                    {% elif effective_user.role in ['admin', 'cs'] %}
                     {% if pc.id in pc_ids_with_submissions %}
                     <button class="btn-customer-action btn-customer-cancel"
                         data-action="cancel-customer"
@@ -967,7 +961,7 @@
                 {% if effective_user.role in ['admin', 'cs'] and project.project_status != 'approved' %}
                 <button type="button" id="approveDirectBtn" class="btn-approve-direct" data-project-id="{{ project.id }}">✓ Approve Project</button>
                 {% endif %}
-                {% if effective_user.role == 'admin' and project.project_status == 'approved' %}
+                {% if effective_user.role in ['admin', 'cs'] and project.project_status == 'approved' %}
                 <button type="button" id="unapproveBtn" class="btn-danger btn-sm" data-project-id="{{ project.id }}">↩ Unapprove</button>
                 {% endif %}
             </div>
@@ -1019,7 +1013,7 @@
             {% if project.concept_status == 'approved' %}
             {# Approved #}
             <div class="submission-status submission-status--approved" style="margin-top:0.5rem;">✓ Concept &amp; KV Approved</div>
-            {% if effective_user.role == 'admin' %}
+            {% if effective_user.role in ['admin', 'cs'] %}
             <button type="button" class="btn-danger btn-sm" data-action="unapprove-ckv" data-project-id="{{ project.id }}" style="margin-top:0.5rem;">↩ Unapprove C&amp;KV</button>
             {% endif %}
             {% elif project.concept_status == 'submitted_to_client' %}
@@ -1224,7 +1218,7 @@
                is what actually locks it. #}
             {% if ch.status == 'approved' %}
             <div class="submission-status submission-status--approved" style="margin-top:0.5rem;">✓ This channel has been fully approved and is locked.</div>
-            {% if effective_user.role == 'admin' %}
+            {% if effective_user.role in ['admin', 'cs'] %}
             <button type="button" class="btn-danger btn-sm" data-action="unapprove-channel"
                 data-channel-id="{{ ch.id }}" data-project-id="{{ project.id }}"
                 data-label="{{ cd.label }}" style="margin-top:0.5rem;">↩ Unapprove</button>

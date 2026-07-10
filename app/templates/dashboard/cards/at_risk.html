@@ -1,0 +1,53 @@
+{#
+   app/templates/dashboard/cards/at_risk.html
+   ───────────────────────────────────────────
+   At Risk card — added 12 Jul 2026, per management review.
+
+   NOT the deep-dive zone's "at-risk" filter (BriefFlag/decision/RAG-red —
+   see _is_at_risk() in dashboard.py) — this is a staffing-gap + overdue
+   check, one row per project. See _compute_at_risk_projects()'s docstring
+   in dashboard.py for the full tag logic (CS Missing / <Team> Designer
+   Missing / All Designers Missing / Overdue, context-aware against
+   design_teams_requested so a team that was never requested never gets
+   flagged as missing).
+
+   Collapsed: single mini-stat — count of at-risk projects, red if >0,
+   green ("all clear") at zero, same convention Decisions/What Changed use.
+
+   Expanded: fully server-rendered list, no filter tabs — same "small
+   enough it doesn't need pagination or client-side filtering" reasoning
+   Clashing Projects uses. Each row shows the project's nearest deadline
+   (RAG badge), name, and every tag that applies, wrapped.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+
+{% set at_risk_summary %}
+<span class="dash-mini-stat dash-mini-stat--{{ 'red' if at_risk_projects|length > 0 else 'green' }}">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ at_risk_projects|length }}</span>
+    <span class="dash-mini-stat-label">At Risk</span>
+</span>
+{% endset %}
+
+{% call dash_card('at_risk', 'At Risk', at_risk_summary,
+    expanded=(initial_expanded_card == 'at_risk'), mode=dash_render_mode) %}
+
+    {% if at_risk_projects %}
+        {% for item in at_risk_projects %}
+        <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+            <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+            <span class="dash-row-main">
+                <span class="dash-row-title">{{ item.name }}</span>
+                <span class="dash-row-tags">
+                    {% for tag in item.tags %}
+                    <span class="dash-risk-tag">{{ tag }}</span>
+                    {% endfor %}
+                </span>
+            </span>
+        </a>
+        {% endfor %}
+    {% else %}
+        <p class="dash-empty-state">No projects currently at risk.</p>
+    {% endif %}
+
+{% endcall %}

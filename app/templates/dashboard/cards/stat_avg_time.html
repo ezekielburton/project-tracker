@@ -1,0 +1,57 @@
+{#
+   app/templates/dashboard/cards/stat_avg_time.html
+   ───────────────────────────────────────────────────
+   "Average Time" stat tile — 4th of the stat-tile family, added 13 Jul
+   2026 per Ezekiel: "add a card that has the project tracking number from
+   the model we added earlier ... let it be 'Average Time' so it will
+   display the average time of the numbers tracked." See stat_active.html's
+   docstring for the shared history/reasoning (no dash_card() tile/body
+   split, static non-clickable tile — MOSTLY still true, see below) and
+   _compute_project_stats()'s big comment on `average_time` in dashboard.py
+   for what's actually being averaged (business hours, derived on demand
+   from ProjectStatusLog history via app/time_tracking_logic.py — not a
+   raw stored field).
+
+   Colour is oak (--mini-stat--oak, new 13 Jul 2026) — the one brand token
+   not already claimed by the other three stat tiles (green/ashen-blue/
+   tangerine), so this reads as its own distinct thing rather than
+   reusing a colour that already means something else on this row.
+
+   Label is "HRS" (not blank like the other three) since a bare number
+   here would be ambiguous — those three are self-evidently project
+   counts, this one needs the unit spelled out.
+
+   Clickable link to /time-tracking, admin/management only (added same
+   day, per Ezekiel: "this card will open a different dashboard page...
+   Management and admin can open the time tracking dashboard for now") —
+   the one exception to every other stat tile being non-interactive. CS/
+   Designer/Team Lead still see the tile and its number, just can't click
+   through yet; `.dash-tile--link` (dashboard.css) restores the pointer
+   cursor `.dash-tile--static` otherwise removes. Renders as an <a> for
+   linkable roles, a plain <div> otherwise — same tile markup either way,
+   just the wrapping tag differs, so this stays a static display-only
+   .dash-tile for the roles that can't open the page (no
+   data-action="toggle-card" is ever added here, so the click handler in
+   dashboard.js never touches this tile regardless of role).
+#}
+{% if dash_render_mode == 'tile' %}
+{% set is_linkable = current_user.role in ('admin', 'management') %}
+{% if is_linkable %}
+<a class="dash-tile dash-tile--static dash-tile--link" data-card="stat_avg_time" href="{{ url_for('time_tracking.index') }}">
+{% else %}
+<div class="dash-tile dash-tile--static" data-card="stat_avg_time">
+{% endif %}
+    <span class="dash-tile-title">Average Time</span>
+    <span class="dash-tile-summary">
+        <span class="dash-mini-stat dash-mini-stat--oak">
+            <span class="dash-mini-stat-dot"></span>
+            <span class="dash-mini-stat-value">{{ project_stats.average_time }}</span>
+            <span class="dash-mini-stat-label">HRS</span>
+        </span>
+    </span>
+{% if is_linkable %}
+</a>
+{% else %}
+</div>
+{% endif %}
+{% endif %}

@@ -369,7 +369,7 @@ def approve_direct(project_id):
 
 @approval_bp.route('/projects/<int:project_id>/unapprove', methods=['POST'])
 @login_required
-@role_required('admin')
+@role_required('admin', 'cs')
 def unapprove_project(project_id):
     """Admin reverses a project approval — moves project back to submitted_to_client.
 
@@ -437,7 +437,7 @@ def unapprove_project(project_id):
 
 @approval_bp.route('/projects/<int:project_id>/unapprove-ckv', methods=['POST'])
 @login_required
-@role_required('admin')
+@role_required('admin', 'cs')
 def unapprove_ckv(project_id):
     """Admin reverses a C&KV approval, returning it (and the project if fully approved)
     to submitted_to_client."""
@@ -483,7 +483,7 @@ def unapprove_ckv(project_id):
 
 @approval_bp.route('/projects/<int:project_id>/unapprove-channel/<int:channel_id>', methods=['POST'])
 @login_required
-@role_required('admin')
+@role_required('admin', 'cs')
 def unapprove_channel(project_id, channel_id):
     """Admin reverses a single POSM channel approval. Resets the channel and all its
     deliverables back to submitted_to_client. Also unlocks the project if it was fully approved."""

@@ -19,19 +19,38 @@ dashboard_bp = Blueprint('projects', __name__, url_prefix='/dashboard')
 VIEW_TO_CARD = {
     'decisions': 'decisions',
     'due': 'due',
+    # 'my-week' -> 'summary' is now a no-op: Summary ("My Day / My Week")
+    # is always open regardless of initial_expanded_card as of 12 Jul 2026's
+    # fourth follow-up (see summary.html / dash_card()'s mode=None branch
+    # in _dashboard_macros.html) — left here since auth.py's login redirect
+    # may still send ?view=my-week and there's no harm in the key resolving
+    # to something, it just no longer does anything on the receiving end.
     'my-week': 'summary',
+    'at-risk': 'at_risk',
 }
 
 # Card order below the always-full-width Summary card, per role. Only the
 # FIRST entry per role is actually specified in the brief ("X card appears
 # first") — the rest of the order is a judgment call, easy to change later
 # since it's just a list.
+#
+# 'stat_active' / 'stat_pending' / 'stat_total' (added 12 Jul 2026,
+# twelfth follow-up, per Ezekiel: "make them in the same style as the
+# others and same size and make them the first 3 cards") are prepended to
+# EVERY role's list — these used to be the separate, non-tile
+# .dash-stats-row above the grid (see dashboard.html's git history around
+# 12 Jul 2026 if that markup needs resurrecting); they're now ordinary
+# tiles like everything else, just always first regardless of role. See
+# stat_active.html / stat_pending.html / stat_total.html for why they
+# don't use dash_card()'s tile/body split the way every other card does.
+_STAT_TILES = ['stat_active', 'stat_pending', 'stat_total', 'stat_avg_time']
+
 CARD_ORDER = {
-    'management': ['decisions', 'what_changed', 'due', 'next_actions', 'clashes', 'brief_quality'],
-    'admin':      ['decisions', 'what_changed', 'due', 'next_actions', 'clashes', 'brief_quality'],
-    'cs':         ['due', 'decisions', 'what_changed', 'next_actions', 'clashes', 'brief_quality'],
-    'designer':   ['clashes', 'due', 'decisions', 'what_changed', 'next_actions', 'brief_quality'],
-    'team_lead':  ['clashes', 'due', 'decisions', 'what_changed', 'next_actions', 'brief_quality'],
+    'management': _STAT_TILES + ['decisions', 'at_risk', 'what_changed', 'due', 'next_actions', 'clashes', 'brief_quality'],
+    'admin':      _STAT_TILES + ['decisions', 'at_risk', 'what_changed', 'due', 'next_actions', 'clashes', 'brief_quality'],
+    'cs':         _STAT_TILES + ['due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'clashes', 'brief_quality'],
+    'designer':   _STAT_TILES + ['clashes', 'due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'brief_quality'],
+    'team_lead':  _STAT_TILES + ['clashes', 'due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'brief_quality'],
 }
 
 # Deep-dive zone default tab per role (Management/CS/Admin → Projects,
@@ -158,13 +177,19 @@ def index():
         card_order=CARD_ORDER.get(layout_role, CARD_ORDER['management']),
         initial_expanded_card=VIEW_TO_CARD.get(initial_view),
         default_tab=DEFAULT_TAB.get(layout_role, 'projects'),
-        # Small colour+number stat row, pinned above the card grid — see
+        # Feeds the three stat tiles (stat_active/stat_pending/stat_total
+        # — first 3 in CARD_ORDER as of 12 Jul 2026's twelfth follow-up,
+        # was a separate non-tile stat row before that) — see
         # _compute_project_stats()'s docstring for the scoping rules.
         project_stats=_compute_project_stats(scope_user),
         summary=_compute_summary(scope_user),
         what_changed=_compute_what_changed(scope_user),
-        # Due card's default filter is "Overdue + Due Today combined" per spec
-        due_default=_compute_due(scope_user, 'overdue_today'),
+        # Due card narrowed 12 Jul 2026 (fourth follow-up) to show ONLY
+        # overdue-this-week, no toggles — was "Overdue + Due Today
+        # combined" (filter_type='overdue_today') before that. 'overdue'
+        # is already scoped to the 1-7-day window (see _compute_due()'s
+        # docstring), so this is a straight filter swap, no new logic.
+        due_default=_compute_due(scope_user, 'overdue'),
         # Summary card's two columns (UI Chunk 2) — separate from due_default
         # above: the Summary card wants a strict "Today" list and a "This
         # Week" list side by side, not the Due card's overdue+today merge.
@@ -182,6 +207,11 @@ def index():
         # card's due_default/fetchAndRenderDue().
         next_actions_default=_compute_next_actions(scope_user, 'mine'),
         clashes=_compute_clashes_response(scope_user),
+        # At Risk card (added 12 Jul 2026) — staffing gaps (missing CS/
+        # designer) + overdue-this-week, one row per project with whichever
+        # tags apply. Fully server-rendered, no filter tabs — see
+        # _compute_at_risk_projects()'s docstring for the full tag logic.
+        at_risk_projects=_compute_at_risk_projects(scope_user),
         # Only CS/Designer/Team Lead ever see the "Flag a Project" button
         # (Management has no reason to flag something to itself), so skip
         # the extra query entirely for roles that can't open the modal.
@@ -250,11 +280,153 @@ def _serialize_owner(owner):
     return _serialize_user(owner)
 
 
+def _serialize_person(u):
+    """
+    Like _serialize_user(), but carries avatar_filename too (added 13 Jul
+    2026 for the Due row redesign's CS lead / designer avatar chips — see
+    dash_person_chip() in _dashboard_macros.html). Kept separate from
+    _serialize_user() rather than just adding the field there, since that
+    one backs the older owner-tag (guidance) pills elsewhere on this page
+    and there's no reason to widen its payload for consumers that don't
+    need an avatar.
+    """
+    if not u:
+        return None
+    return {'id': u.id, 'name': u.name, 'avatar_filename': u.avatar_filename}
+
+
+def _due_row_people(project, teams):
+    """
+    Per-team designer lookup for a Due row (added 13 Jul 2026, per Ezekiel:
+    "add designer assigned to that deliverable ... any unassigned, use the
+    same logic we used for at risk section of the labelling").
+
+    `teams` is the list of team names relevant to THIS row — d.teams for a
+    deliverable row (designer assigned to that specific deliverable), or
+    project.design_teams_requested for a customer/project-level row (no
+    single deliverable to scope to, so it falls back to the same
+    project-wide staffing view _compute_at_risk_projects() already uses).
+
+    Returns one entry per team: {'team': t, 'users': [serialized designer,
+    ...]} — 'users' is empty when nobody's assigned to that team yet, which
+    the template/JS render as the same "<Team> Designer Missing" tag
+    _TEAM_MISSING_LABELS already defines for the At Risk card, so an
+    unstaffed team reads identically in both places rather than inventing a
+    second wording for the same fact.
+    """
+    by_team = {}
+    for pd in project.assigned_designers:
+        by_team.setdefault(pd.team, []).append(pd.designer)
+
+    results = []
+    for t in teams:
+        users = [_serialize_person(u) for u in by_team.get(t, [])]
+        # Missing-label text computed here, not in the template, so it's
+        # the exact same wording _TEAM_MISSING_LABELS already defines for
+        # the At Risk card — one source of truth for "how do we phrase an
+        # unstaffed team" instead of a second copy of the map in Jinja.
+        results.append({
+            'team': t,
+            'users': users,
+            'missing_label': None if users else _TEAM_MISSING_LABELS.get(t, f'{t} Missing'),
+        })
+    return results
+
+
 # ── Compute functions ────────────────────────────────────────────────────
 # Each one returns a plain dict/list — no Flask Response involved — so the
 # SAME function backs both the initial server-rendered page (index() above)
 # and the JSON endpoint below it. One source of truth for what each card
 # shows, instead of the page and the API silently drifting apart.
+
+# Team name -> exact tag wording, per spec (note "Technical Missing" has no
+# "Designer" in it — that's deliberate, matching exactly how it was
+# requested, not an inconsistency to "fix"). Any future team name not in
+# this map falls back to "<Team> Missing" via .get()'s default in
+# _compute_at_risk_projects() below.
+_TEAM_MISSING_LABELS = {
+    '3D': '3D Designer Missing',
+    '2D': '2D Designer Missing',
+    'Technical': 'Technical Missing',
+}
+
+
+def _compute_at_risk_projects(user):
+    """
+    "At Risk" card (added 12 Jul 2026, per management review). NOT the same
+    thing as _is_at_risk() further down (that's the deep-dive zone's
+    BriefFlag/decision/RAG-red filter, a completely different rule for a
+    completely different section of the page) — this is a staffing-gap +
+    overdue check, one row per project, each row carrying whichever tags
+    apply:
+
+      - 'CS Missing' — project.cs_lead_id is unset. cs_lead_id is NOT NULL
+        in the schema today ("there is always a CS on a project now" —
+        Ezekiel), so this can't actually fire yet, but the column is
+        planned to become nullable later for a specific reason, and this
+        check is written to already be correct the moment that happens
+        rather than needing to be revisited then.
+      - '<Team> Designer Missing' — one of the project's REQUESTED teams
+        (design_teams_requested) has no ProjectDesigner (the project-level
+        "Lead Designer" per team — the same "Assigned Lead Designers" table
+        on the detail page, NOT per-deliverable assignment) for that team.
+        Context-aware by construction: only requested teams are ever
+        checked, so a project that never requested Technical is never
+        tagged "Technical Missing" — and since nothing here is cached or
+        stored, if Technical gets added to the brief later this recomputes
+        fresh on the very next page load with no extra wiring needed.
+      - 'All Designers Missing' — replaces the individual per-team tags
+        above when EVERY requested team is missing its designer, instead of
+        stacking three redundant "X Missing" tags on one row.
+      - 'Overdue' — nearest_deadline(project) is 1-7 days in the past.
+        Deliberately bounded to "this week", not indefinitely overdue — see
+        the big comment on this card in CLAUDE.md for the reasoning.
+
+    A project can carry more than one tag at once (e.g. missing a designer
+    AND overdue this week) — that's still one row with multiple tags, never
+    duplicate rows for the same project.
+    """
+    today = date.today()
+    results = []
+
+    for p in _scoped_projects(user, active_only=True).all():
+        tags = []
+
+        if not p.cs_lead_id:
+            tags.append('CS Missing')
+
+        requested_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
+        if requested_teams:
+            assigned_teams = {d.team for d in p.assigned_designers}
+            missing_teams = [t for t in requested_teams if t not in assigned_teams]
+            if missing_teams and len(missing_teams) == len(requested_teams):
+                tags.append('All Designers Missing')
+            else:
+                for t in missing_teams:
+                    tags.append(_TEAM_MISSING_LABELS.get(t, f'{t} Missing'))
+
+        deadline = nearest_deadline(p)
+        if deadline:
+            days_overdue = (today - deadline).days
+            if 1 <= days_overdue <= 7:
+                tags.append('Overdue')
+
+        if not tags:
+            continue
+
+        results.append({
+            'project_id': p.id,
+            'name': p.name,
+            'tags': tags,
+            'deadline': deadline.isoformat() if deadline else None,
+            'rag': get_project_rag(p),
+        })
+
+    # Nearest deadline first, same convention as the deep-dive zone's
+    # project list — projects with no deadline at all sort last.
+    results.sort(key=lambda r: r['deadline'] or '9999-12-31')
+    return results
+
 
 def _compute_summary(user):
     active_projects = _scoped_projects(user, active_only=True).all()
@@ -267,7 +439,16 @@ def _compute_summary(user):
         deadline = nearest_deadline(p)
         if deadline:
             if deadline < today:
-                overdue += 1
+                # Overdue is scoped to "this week" (1-7 days overdue), same
+                # window as _compute_due()'s 'overdue'/'overdue_today'
+                # filters and the At Risk card's own overdue check (see
+                # _compute_at_risk_projects()) — changed 12 Jul 2026 per
+                # management review. This count feeds the Due card's
+                # collapsed mini-stat (due.html reads summary.overdue), so
+                # it has to agree with what the expanded "Overdue" pill
+                # actually lists, or the two would silently disagree.
+                if (today - deadline).days <= 7:
+                    overdue += 1
             elif deadline == today:
                 due_today += 1
             elif deadline <= week_end:
@@ -318,17 +499,32 @@ def _compute_summary(user):
         'clashes': clash_count,
         'clashes_detected': clash_detected,
         'clashes_potential': clash_potential,
+        # At Risk card's collapsed mini-stat (added 12 Jul 2026) — like
+        # Clashes, the At Risk card's row list is fully server-rendered
+        # with no client-side fetch-on-toggle (see at_risk.html), so only
+        # the COUNT needs to travel through /api/summary for SSE
+        # live-refresh; the list itself just goes stale until next reload,
+        # same acceptable-staleness convention Clashes uses.
+        'at_risk_count': len(_compute_at_risk_projects(user)),
     }
 
 
 def _compute_project_stats(user):
     """
-    The three small colour+number stat cards pinned above the card grid
-    (added 12 Jul 2026) — Your Active Projects / Pending Approval / Total
-    Active Projects, in that order. Unlike every other card on this page
-    these are pure display: no expand/collapse, no filter pills, just a
-    number — so there's no matching SSR-macro/JS-render-function pair to
-    keep in sync, just this one function feeding both the initial page
+    The stat tiles — Your Active Projects / Pending Approval / Total
+    Active Projects / Average Time, in that order, always first in
+    CARD_ORDER (see _STAT_TILES above). The first three were added 12 Jul
+    2026 as a separate non-tile stat row above the grid; folded into the
+    normal tile grid as its own first-3 entries in the twelfth follow-up
+    the same day, per Ezekiel ("same style as the others and same size").
+    Average Time was added 13 Jul 2026 as a 4th entry in this same family
+    (see the big comment further down, near `average_time`). Unlike every
+    other tile these are pure display: no expand/collapse, no body, no
+    filter pills, just a number — so unlike the rest of card_order,
+    stat_active.html/stat_pending.html/stat_total.html/stat_avg_time.html
+    don't use dash_card()'s mode='tile'/'body' split at all, they just
+    render a static .dash-tile directly on the 'tile' pass and nothing on
+    the 'body' pass. This one function still feeds both the initial page
     load and the SSE live-refresh's /api/project-stats fetch.
 
     'your_active' and 'pending_approval' both respect `user` — in
@@ -357,10 +553,39 @@ def _compute_project_stats(user):
         Project.project_status.notin_(['draft', 'approved'])
     ).count()
 
+    # "Average Time" tile (added 13 Jul 2026, per Ezekiel: "add a card that
+    # has the project tracking number from the model we added earlier ...
+    # display the average time of the numbers tracked") — averages each
+    # scoped project's business-hours "overall" total, computed on demand
+    # from its ProjectStatusLog history via time_tracking_logic.py (see
+    # that module's docstring for the full business-hours/weekend-discard
+    # rules and app/status_tracking.py's record_project_status() for why
+    # there's no separate accumulator field feeding this anymore — same
+    # StatusLog-derived computation also backs the full project+deliverable
+    # breakdown page at /time-tracking).
+    #
+    # Same scope as your_active/pending_approval (respects the
+    # management/admin view-switcher via `user` = scope_user at the call
+    # site), NOT total_active's company-wide/unscoped query — "average time
+    # on MY projects" reads as the more useful default for this tile.
+    #
+    # Only averaged over projects with overall > 0 — a project that's
+    # never left an excluded status (in_queue, etc.) yet has 0 by
+    # construction, not "zero time worked", so including it would silently
+    # drag the average toward zero rather than reflect real turnaround
+    # time. Same judgment call as before, now applied to the derived value.
+    from app.time_tracking_logic import compute_project_hours
+    tracked_hours = [
+        h for p in _scoped_projects(user, active_only=True).all()
+        if (h := compute_project_hours(p)['overall']) > 0
+    ]
+    average_time = round(sum(tracked_hours) / len(tracked_hours), 1) if tracked_hours else 0.0
+
     return {
         'your_active': your_active,
         'pending_approval': pending_approval,
         'total_active': total_active,
+        'average_time': average_time,
     }
 
 
@@ -431,6 +656,13 @@ def _compute_due(user, filter_type):
     filter_type: 'today' | 'week' | 'overdue' | 'overdue_today' (the Due
     card's default view — overdue and due-today combined into one list).
 
+    'overdue' is scoped to THIS WEEK only (1-7 days overdue), not
+    indefinitely overdue — changed 12 Jul 2026 per management review, same
+    window the At Risk card's own overdue check uses (see
+    _compute_at_risk_projects()) and same window _compute_summary() now
+    applies when counting summary['overdue'] for this card's collapsed
+    mini-stat, so the two never disagree.
+
     Granularity varies by project type since that's where the real deadline
     data lives: Standard projects surface individual Deliverables (a project
     can have several, each due on a different day); C&CM projects surface
@@ -440,18 +672,19 @@ def _compute_due(user, filter_type):
     """
     today = date.today()
     week_end = today + timedelta(days=7)
+    overdue_start = today - timedelta(days=7)
 
     def matches(d):
         if d is None:
             return False
         if filter_type == 'overdue':
-            return d < today
+            return overdue_start <= d < today
         if filter_type == 'today':
             return d == today
         if filter_type == 'week':
             return today <= d <= week_end
         if filter_type == 'overdue_today':
-            return d <= today
+            return overdue_start <= d <= today
         return False
 
     results = []
@@ -459,7 +692,17 @@ def _compute_due(user, filter_type):
         owner = get_next_action_owner(p)
         rag = get_project_rag(p)
         owner_json = _serialize_owner(owner['user'])
-        common = {'rag': rag, 'owner': owner_json, 'owner_role': owner['role'], 'guidance': owner['guidance']}
+        # cs_lead + project-level requested teams (13 Jul 2026, Due row
+        # redesign — see _due_row_people()'s docstring). project_teams is
+        # the fallback team list for row types with no single deliverable
+        # to scope to (customer/project-level rows) — same
+        # design_teams_requested field _compute_at_risk_projects() checks.
+        cs_lead_json = _serialize_person(p.cs_lead)
+        project_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
+        common = {
+            'rag': rag, 'owner': owner_json, 'owner_role': owner['role'], 'guidance': owner['guidance'],
+            'cs_lead': cs_lead_json,
+        }
 
         if p.brief_type == 'ccm':
             for pc in p.project_customers:
@@ -473,12 +716,18 @@ def _compute_due(user, filter_type):
                         'project_name': p.name,
                         'customer_name': pc.customer.name if pc.customer else None,
                         'deadline': pc.design_deadline.isoformat(),
+                        'designers': _due_row_people(p, project_teams),
                     })
         else:
             matched_any_deliverable = False
             for d in p.project_deliverables:
                 if matches(d.design_deadline):
                     matched_any_deliverable = True
+                    # Deliverable-scoped teams, NOT project_teams — "designer
+                    # assigned to THAT deliverable", per Ezekiel, same
+                    # d.teams field standard_designers_by_deliverable
+                    # already uses on the project detail page.
+                    d_teams = [t.strip() for t in (d.teams or '').split(',') if t.strip()]
                     results.append({
                         **common,
                         'type': 'deliverable',
@@ -487,6 +736,7 @@ def _compute_due(user, filter_type):
                         'deliverable_id': d.id,
                         'deliverable_name': d.name,
                         'deadline': d.design_deadline.isoformat(),
+                        'designers': _due_row_people(p, d_teams),
                     })
             if not matched_any_deliverable and matches(p.execution_date):
                 results.append({
@@ -495,6 +745,7 @@ def _compute_due(user, filter_type):
                     'project_id': p.id,
                     'project_name': p.name,
                     'deadline': p.execution_date.isoformat(),
+                    'designers': _due_row_people(p, project_teams),
                 })
 
     results.sort(key=lambda r: r['deadline'])
@@ -504,8 +755,13 @@ def _compute_due(user, filter_type):
 @dashboard_bp.route('/api/due')
 @login_required
 def api_due():
+    # Default changed 12 Jul 2026 (fourth follow-up) from 'overdue_today'
+    # to 'overdue', matching the Due card's new overdue-only scope — the
+    # 'today'/'week' filter values are still fully supported and still
+    # used by the Summary card's due_today_items/due_week_items (see
+    # index() above), just no longer reachable from the Due card itself.
     _, scope_user, _ = _resolve_dashboard_scope(get_actor())
-    filter_type = request.args.get('filter', 'overdue_today')
+    filter_type = request.args.get('filter', 'overdue')
     return jsonify(_compute_due(scope_user, filter_type))
 
 

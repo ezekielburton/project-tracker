@@ -52,13 +52,18 @@
 </span>
 {% endset %}
 
-{% call dash_card('summary', 'My Today / My Week', summary_pills,
-    expanded=(initial_expanded_card == 'summary'), full=True) %}
+{# ALWAYS OPEN, not collapsible (changed 12 Jul 2026, fourth follow-up,
+   per Ezekiel) — mode is left at its default (None), which as of this
+   change means "static card, no toggle" rather than "self-contained
+   expand-in-place". `expanded`/`muted` aren't passed since dash_card()
+   ignores both for mode=None now; see the big comment in
+   _dashboard_macros.html. #}
+{% call dash_card('summary', 'My Today / My Week', summary_pills, full=True) %}
 
     <div class="dash-two-col">
 
         {# ── LEFT COLUMN: Today ─────────────────────────────────────── #}
-        <div>
+        <div class="dash-summary-col dash-summary-col--left">
             <div class="dash-col-heading">Today</div>
 
             {% if due_today_items %}
@@ -75,7 +80,7 @@
         {# ── RIGHT COLUMN: This Week ───────────────────────────────────
            Same rendering (dash_due_row), different source list
            (due_week_items instead of due_today_items). #}
-        <div>
+        <div class="dash-summary-col dash-summary-col--right">
             <div class="dash-col-heading">This Week</div>
 
             {% if due_week_items %}

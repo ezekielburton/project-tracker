@@ -31,6 +31,23 @@
    card open/closed. One click, one unambiguous action, one tap away
    (expand the card, then click the button) — not worth the fragility for
    what's a very small UX convenience.
+
+   "Resolve" button (added 13 Jul 2026, admin/management only — the
+   reverse counterpart to "Flag a Project" above, since Management/Admin
+   are the ones the flag is FOR, they're the ones who clear it). Each row
+   is now a `.dash-decision-row` wrapper containing the original
+   `<a class="dash-row">` PLUS a sibling `<button>` — the button is
+   deliberately NOT nested inside the anchor (same "don't nest interactive
+   content inside interactive content" rule dash_person_chip follows in
+   _dashboard_macros.html), so the row's border/hover styling moved from
+   `.dash-row` onto the new `.dash-decision-row` wrapper (see
+   dashboard.css) to avoid a doubled border between the anchor and the
+   button sitting next to it. POSTs to
+   `/projects/<id>/resolve-decision` (projects_detail.py) and, on
+   success, calls refreshDecisionsCard() directly (dashboard.js) rather
+   than waiting on the SSE round-trip, for a snappier remove-from-list
+   feel — the SSE push still arrives afterward and is a harmless no-op
+   re-fetch of the same now-shorter list.
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
@@ -68,21 +85,26 @@
     <div id="dash-decisions-list">
         {% if decisions %}
             {% for d in decisions %}
-            <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
-                <span class="dash-row-main">
-                    <span class="dash-row-title">{{ d.project_name }}</span>
-                    <span class="dash-row-sub">{{ d.note }}</span>
-                    <span class="dash-row-tags">
-                        {% if d.raised_by %}<span class="dash-owner-tag">{{ d.raised_by.name }}</span>{% endif %}
-                        {% if d.days_waiting is not none %}
-                        <span class="dash-action-tag">{{ d.days_waiting }} day{{ 's' if d.days_waiting != 1 else '' }} waiting</span>
-                        {% endif %}
+            <div class="dash-decision-row">
+                <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
+                    <span class="dash-row-main">
+                        <span class="dash-row-title">{{ d.project_name }}</span>
+                        <span class="dash-row-sub">{{ d.note }}</span>
+                        <span class="dash-row-tags">
+                            {% if d.raised_by %}<span class="dash-owner-tag">{{ d.raised_by.name }}</span>{% endif %}
+                            {% if d.days_waiting is not none %}
+                            <span class="dash-action-tag">{{ d.days_waiting }} day{{ 's' if d.days_waiting != 1 else '' }} waiting</span>
+                            {% endif %}
+                        </span>
                     </span>
-                </span>
-                <span style="text-align: right; flex-shrink: 0; font-size: 0.8rem; color: var(--grey-dark);">
-                    {{ d.raised_at | dubai_time }}
-                </span>
-            </a>
+                    <span style="text-align: right; flex-shrink: 0; font-size: 0.8rem; color: var(--grey-dark);">
+                        {{ d.raised_at | dubai_time }}
+                    </span>
+                </a>
+                {% if effective_role in ('admin', 'management') %}
+                <button type="button" class="dash-resolve-btn" data-action="resolve-decision" data-project-id="{{ d.project_id }}">✓ Resolve</button>
+                {% endif %}
+            </div>
             {% endfor %}
         {% else %}
             <p class="dash-empty-state">No decisions currently needed.</p>

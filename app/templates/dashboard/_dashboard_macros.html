@@ -10,32 +10,43 @@
                  as a string and rendered with |safe since it's usually a
                  small chunk of markup (e.g. RAG pills), not plain text.
    expanded    — True if this card should start open (matches
-                 initial_expanded_card from the ?view= redirect).
+                 initial_expanded_card from the ?view= redirect). IGNORED
+                 by mode=None as of 12 Jul 2026's fourth follow-up — see
+                 below, that branch is now always open regardless of this.
    muted       — True renders the card visually de-emphasized and
                  unclickable (used by the Clashing Projects card at zero
-                 clashes).
+                 clashes). Also ignored by mode=None, same reason.
    full        — True spans both grid columns. Only ever used by the
                  Summary card (mode left at its default, see below) — it's
                  the one card the 12 Jul 2026 tile rework explicitly left
                  alone (see the big comment on the tile/row-expand pattern
                  in dashboard.html), so `full` has no meaning in tile/body
                  mode and is ignored there.
-   mode        — added 12 Jul 2026 for the tile + shared row-expand-band
-                 rework (see dashboard.html). One of:
-                   None (default) — the ORIGINAL self-contained card: a
-                     clickable header that expands its own body in place.
-                     This is what the Summary card still uses, unchanged.
+   mode        — added 12 Jul 2026 for the tile + shared-expand-area
+                 rework (see dashboard.html; reworked again same day,
+                 third follow-up, from per-row bands to ONE shared area).
+                 One of:
+                   None (default) — used ONLY by the Summary card. Was
+                     originally the same self-contained expand-in-place
+                     mechanic every card used before the tile rework;
+                     changed 12 Jul 2026 (fourth follow-up, per Ezekiel)
+                     to a fully static, ALWAYS-OPEN card with no toggle at
+                     all — see the branch itself further down for the
+                     markup/CSS specifics.
                    'tile'  — renders ONLY the small clickable tile (title +
                      summary_html), no body at all. Used for every other
-                     card, grouped 3-per-row in dashboard.html's
-                     .dash-tiles-row.
-                   'body'  — renders ONLY the body content, wrapped for the
-                     row's shared .dash-row-expand band below the tiles
+                     card, laid out 5-per-row in dashboard.html's
+                     .dash-tiles-grid.
+                   'body'  — renders ONLY the body content, wrapped for
+                     dashboard.html's single .dash-shared-expand area
                      (max-height-collapsed unless `expanded`, same
                      mechanic the old single-card body used, just no
-                     longer nested inside its own tile).
-                 A card partial gets `{% include %}`'d TWICE per row when
-                 in tile/body mode — once per mode, via dashboard.html
+                     longer nested inside its own tile, and no longer one
+                     of several per-row bands — there's exactly one of
+                     these areas on the whole page now, shared by every
+                     card).
+                 A card partial gets `{% include %}`'d TWICE when in
+                 tile/body mode — once per mode, via dashboard.html
                  setting the `dash_render_mode` context variable before
                  each include — so whatever Jinja the partial does above
                  its `{% call %}` (building summary_html, querying data for
@@ -65,13 +76,21 @@
     </div>
 </div>
 {% else %}
-<div class="dash-card{% if expanded %} expanded{% endif %}{% if muted %} dash-card--muted{% endif %}{% if full %} dash-card--full{% endif %}" data-card="{{ key }}">
-    <button type="button" class="dash-card-header" data-action="toggle-card" {% if muted %}disabled{% endif %}>
+{# mode=None — used ONLY by Summary ("My Day / My Week"), see the docstring
+   above. Changed 12 Jul 2026 (fourth follow-up, per Ezekiel: "my day/
+   week should always be open, not collapsible") from a clickable
+   header that expanded its own body in place to a fully static card:
+   no button, no chevron, no data-action, `expanded`/`muted` params are
+   ignored here (this branch always renders open). The body has no
+   collapse mechanic at all — see .dash-card-body--static in
+   dashboard.css, which sets max-height: none/overflow: visible instead
+   of the JS-measured max-height every other card's body uses. #}
+<div class="dash-card dash-card--static{% if full %} dash-card--full{% endif %}" data-card="{{ key }}">
+    <div class="dash-card-header dash-card-header--static">
         <span class="dash-card-title">{{ title }}</span>
         <span class="dash-card-summary">{{ summary_html | safe }}</span>
-        {% if not muted %}<span class="dash-card-chevron">&rsaquo;</span>{% endif %}
-    </button>
-    <div class="dash-card-body">
+    </div>
+    <div class="dash-card-body dash-card-body--static">
         <div class="dash-card-body-inner">
             {{ caller() }}
         </div>
@@ -82,81 +101,107 @@
 
 
 {#
-   dash_due_row(item)
-   ───────────────────
-   Renders ONE clickable row for a single "due item" dict, as returned by
-   dashboard.py's _compute_due(user, filter_type) — the same function backs
-   the /dashboard/api/due JSON endpoint, the Due card's default view, AND
-   both columns of the Summary card. This macro is the one place that turns
-   one of those dicts into HTML, so all three call sites render a due item
-   identically. If you ever need to change how a due row LOOKS, this is the
-   only file to touch — don't copy/paste this markup into a card partial.
+   dash_person_chip(person, missing_label)
+   ─────────────────────────────────────────
+   Small avatar+name chip used underneath a Due row's title (added 13 Jul
+   2026 — see dash_due_row()'s redesign below). `person` is a
+   _serialize_person() dict ({id, name, avatar_filename}) or None/empty.
 
-   Expected shape of `item` (see _compute_due in app/routes/dashboard.py):
-     item.type            — 'deliverable' | 'customer' | 'project'
-     item.project_id       — int, used to build the link to project detail
-     item.project_name     — str
-     item.deliverable_name — str, only present when type == 'deliverable'
-     item.customer_name    — str or None, only present when type == 'customer'
-     item.deadline         — ISO date string 'YYYY-MM-DD' (already
-                              .isoformat()'d in Python before it got here)
-     item.rag               — 'red' | 'yellow' | 'green', from get_project_rag()
-     item.guidance          — free text from get_next_action_owner(), e.g.
-                              "Submit work" or "Review flag and adjust work"
-     item.owner              — the OTHER half of get_next_action_owner()'s
-                              result, run through _serialize_owner() so it's
-                              JSON-safe. Polymorphic on purpose (matches
-                              get_next_action_owner's own docstring):
-                                - None            — nobody assigned yet
-                                - {'id':.., 'name':..}      — one specific person
-                                - [{'id':..,'name':..}, ...] — every designer
-                                  assigned to a specific deliverable a flag
-                                  was raised against (one per team, e.g. 3D + Technical)
+   Deliberately a <span>, not a link to the person's profile — dash_due_row
+   wraps the WHOLE row in an <a>, and nesting an <a> inside an <a> is
+   invalid HTML (this is why the old .dash-owner-tag pill was a span too).
 
-   NOTE on the link: project_detail.detail's route is /projects/<id> — we
-   append ?from=dashboard by hand (string concat) rather than via url_for's
-   kwargs, because `from` is a reserved word in Python/Jinja and can't be
-   passed as a normal keyword argument. This is the exact same ?from=
-   back-navigation pattern used everywhere else in the app (see
-   cs.html/designer.html/team_lead.html) — clicking this row and then
-   clicking "Back" on the project detail page returns here, not to /projects.
+   When `person` is falsy, renders `missing_label` (if given) as a
+   .dash-risk-tag — the exact same red "something's wrong" tag component
+   the At Risk card uses, and (for designers) the exact same wording
+   _TEAM_MISSING_LABELS defines, computed server-side in
+   _due_row_people() — so "nobody assigned" reads identically here and on
+   the At Risk card rather than inventing a second phrasing.
+#}
+{% macro dash_person_chip(person, missing_label=None, missing_class='dash-risk-tag') %}
+{% if person %}
+<span class="dash-person-chip">
+    <span class="dash-person-avatar">
+        {% if person.avatar_filename %}
+        <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="">
+        {% else %}
+        <span class="dash-person-avatar-initials">{{ person.name[0].upper() }}</span>
+        {% endif %}
+    </span>
+    <span class="dash-person-name">{{ person.name }}</span>
+</span>
+{% elif missing_label %}
+{# missing_class defaults to the At Risk card's rose .dash-risk-tag (used
+   for CS Missing here). Designer-missing tags pass the --red modifier
+   instead (13 Jul 2026, per Ezekiel: "make the designer missing tags
+   red") — pure red (#FF0000), not the softer rose, since that's what was
+   specifically called out. See .dash-risk-tag--red in dashboard.css. #}
+<span class="{{ missing_class }}">{{ missing_label }}</span>
+{% endif %}
+{% endmacro %}
 
-   IMPORTANT for later chunks: dashboard.js's renderDueRow() (used by the
-   Due card's filter pills to re-render this same list via JSON, without a
-   page reload) is a hand-written JS mirror of this exact macro. If you
-   change what this macro outputs, you MUST make the same change in
-   renderDueRow() in dashboard.js, or the JS-filtered view will silently
-   look different from the server-rendered one. There's no way around this
-   duplication with Jinja macros — they only run server-side.
 
-   Row layout (reworked 10 Jul 2026 for readability — plain "guidance ·
-   owner" grey text was hard to scan): title line is project name (bold)
-   plus, when present, the specific deliverable/customer in a lighter
-   weight/colour (.dash-row-title-detail) so it reads as "project, THEN
-   which piece" rather than one flat run of text. Below that, guidance and
-   owner render as two separate colour-coded pills (.dash-action-tag /
-   .dash-owner-tag, see dashboard.css) instead of one sentence — "what
-   needs doing" and "who's doing it" are now visually distinct at a glance.
+{#
+   dash_due_row(item) — REDESIGNED 13 Jul 2026, per Ezekiel:
+   "Put the action needed to do on the right and make it bigger. Above it
+   put the text 'Next Action'. Underneath the project name and deliverable
+   name, replace the name with the profile image + name of the CS lead.
+   Then add designer assigned to that deliverable in the same style."
+
+   Row now has three zones instead of two:
+     1. .dash-row-date — plain deadline text, no more coloured rag-badge
+        pill (removed same-day follow-up, per Ezekiel: "remove the green
+        wrapper" — the RAG colour info is still available via item.rag if
+        a future pass wants it back, just not rendered as a filled box
+        here anymore). A vertical divider (border-right) separates it from
+        the rest of the row, spanning the row's full height the same
+        border-right/align-self: stretch technique .dash-summary-col--left
+        uses for the Today/This Week split.
+     2. .dash-row-main — title, THEN a row of person chips underneath
+        (CS lead first, then one chip per assigned designer / missing-team
+        tag — see item.designers, built by _due_row_people() in
+        dashboard.py). Replaces the old guidance+owner .dash-row-tags pills.
+     3. .dash-row-next-action — "Next Action" label (small, mono, same
+        visual language as .dash-col-heading) over item.guidance itself,
+        wrapped in a pine-green .dash-row-next-action-tag pill (same-day
+        follow-up, per Ezekiel: "wrap it in a tag, make it pine green") —
+        was plain bold text. Right-aligned, flex-shrink: 0 so a long
+        project title never pushes it off the row.
+
+   item.owner/item.owner_role are still present on the dict (dashboard.py
+   still computes them — Next Actions' own row markup uses the equivalent
+   fields independently) but are NO LONGER rendered here; CS lead +
+   designer chips replace what the owner tag used to communicate.
+
+   IMPORTANT: dashboard.js's renderDueRow() is a hand-written JS mirror of
+   this exact macro (same "SSR and JS mirror must stay in sync" rule noted
+   throughout this file) — if you change this macro's output, update
+   renderDueRow() and its buildPersonChip()/DASH_TEAM_MISSING_LABELS
+   companions to match.
 #}
 {% macro dash_due_row(item) %}
 <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
-    <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline }}</span>
+    <span class="dash-row-date">{{ item.deadline }}</span>
     <span class="dash-row-main">
         <span class="dash-row-title">
             {{ item.project_name }}
             {%- if item.type == 'deliverable' %} <span class="dash-row-title-detail">&mdash; {{ item.deliverable_name }}</span>{% endif -%}
             {%- if item.type == 'customer' and item.customer_name %} <span class="dash-row-title-detail">&mdash; {{ item.customer_name }}</span>{% endif -%}
         </span>
-        <span class="dash-row-tags">
-            <span class="dash-action-tag">{{ item.guidance }}</span>
-            {%- if item.owner %}
-                {%- if item.owner is mapping %}
-                <span class="dash-owner-tag">{{ item.owner.name }}</span>
+        <span class="dash-row-people">
+            {{ dash_person_chip(item.cs_lead, 'CS Missing') }}
+            {%- for team_entry in item.designers %}
+                {%- if team_entry.users %}
+                    {%- for u in team_entry.users %}{{ dash_person_chip(u) }}{% endfor -%}
                 {%- else %}
-                <span class="dash-owner-tag">{{ item.owner | map(attribute='name') | join(', ') }}</span>
+                    {{ dash_person_chip(None, team_entry.missing_label, 'dash-risk-tag dash-risk-tag--red') }}
                 {%- endif -%}
-            {%- endif -%}
+            {%- endfor %}
         </span>
+    </span>
+    <span class="dash-row-next-action">
+        <span class="dash-row-next-action-label">Next Action</span>
+        <span class="dash-row-next-action-tag">{{ item.guidance }}</span>
     </span>
 </a>
 {% endmacro %}

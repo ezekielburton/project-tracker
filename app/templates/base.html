@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/file-templates.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}">
 </head>
 
 {# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}
@@ -70,14 +71,10 @@
                 <span class="sidebar-section-label">Internal Tools</span>
                 <div class="sidebar-grid">
 
-                            {# Dashboard — TEMPORARILY greyed out (9 Jul 2026): new dashboard is
-                               feature-complete but Ezekiel wants it held back until after showing
-                               it to management. Same disabled-item pattern as Color Directory /
-                               Production Directory / etc. below (span, sidebar-item--unlinked, no
-                               href) rather than deleting anything. To re-enable: swap this <span>
-                               back for the <a href="{{ url_for('projects.index') }}"
-                               class="sidebar-item sidebar-item--nav" data-link="dashboard"> version —
-                               same title/SVG/label, just a real internal nav link again. #}
+                            {# Dashboard — temporarily unlinked for testing. Re-enable Monday:
+                               swap <span>/sidebar-item--unlinked back to
+                               <a href="{{ url_for('projects.index') }}"
+                               class="sidebar-item sidebar-item--nav" data-link="dashboard"> #}
                             <span class="sidebar-item sidebar-item--unlinked" data-link="dashboard" title="Dashboard">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"

@@ -45,6 +45,17 @@
         localStorage.setItem(STORAGE_PREFIX + key, open ? '1' : '0');
     }
 
+    // Client-side mirror of decisions.html's `effective_role in ('admin',
+    // 'management')` gate — see renderDecisionRow() below, which needs to
+    // decide whether to include the Resolve button when it rebuilds a row
+    // after a live refresh (SSR only runs once, on page load). Reads
+    // HELIX_EFFECTIVE_ROLE, a page-level var set by dashboard.html
+    // alongside HELIX_DASH_SCOPE.
+    function isManagementOrAdmin() {
+        return typeof HELIX_EFFECTIVE_ROLE !== 'undefined' &&
+            (HELIX_EFFECTIVE_ROLE === 'admin' || HELIX_EFFECTIVE_ROLE === 'management');
+    }
+
     // ── Smooth expand/collapse via JS-measured max-height ────────────────
     // Added 12 Jul 2026 (second pass, replacing a CSS-only grid-template-
     // rows attempt from earlier the same day) — see the big comment on
@@ -121,10 +132,20 @@
     // On any other load (no ?view=), localStorage — not the server default
     // — decides each card's state, so the user's own open/closed layout
     // from last time sticks across visits.
+    //
+    // :not(.dash-card--static) excludes Summary ("My Day / My Week") —
+    // changed 12 Jul 2026 (fourth follow-up) to always be open with no
+    // toggle at all (see .dash-card-body--static in dashboard.css and the
+    // mode=None branch in _dashboard_macros.html). Without this exclusion,
+    // a STALE '0' left in localStorage from before that change would call
+    // applyOpenState(card, false) below and incorrectly collapse it again.
+    // In practice this loop currently matches nothing (Summary was the
+    // only card ever using this selector), kept for whatever mode=None
+    // card, if any, comes along later that ISN'T meant to be static.
     function initCards() {
         var hasViewParam = new URLSearchParams(window.location.search).has('view');
 
-        document.querySelectorAll('.dash-card[data-card]').forEach(function (card) {
+        document.querySelectorAll('.dash-card[data-card]:not(.dash-card--static)').forEach(function (card) {
             if (card.classList.contains('dash-card--muted')) return; // not togglable
 
             var key = card.dataset.card;
@@ -251,14 +272,39 @@
         return owner.name;
     }
 
+    // Mirrors dash_person_chip() in _dashboard_macros.html — avatar+name
+    // chip, or a .dash-risk-tag when `person` is falsy and a label was
+    // given. missingClass defaults to the plain rose .dash-risk-tag (CS
+    // Missing); renderDueRow() below passes the --red modifier for
+    // designer-missing tags specifically (13 Jul 2026, per Ezekiel: "make
+    // the designer missing tags red" — see .dash-risk-tag--red in
+    // dashboard.css). NOTE: avatar src is hardcoded to /static/avatars/,
+    // same "JS has no url_for" reasoning as the /projects/ link below.
+    function personChip(person, missingLabel, missingClass) {
+        if (person) {
+            var avatarInner = person.avatar_filename
+                ? '<img src="/static/avatars/' + encodeURIComponent(person.avatar_filename) + '" alt="">'
+                : '<span class="dash-person-avatar-initials">' + escapeHtml(person.name.charAt(0).toUpperCase()) + '</span>';
+            return '<span class="dash-person-chip">' +
+                '<span class="dash-person-avatar">' + avatarInner + '</span>' +
+                '<span class="dash-person-name">' + escapeHtml(person.name) + '</span>' +
+                '</span>';
+        }
+        if (missingLabel) {
+            return '<span class="' + (missingClass || 'dash-risk-tag') + '">' + escapeHtml(missingLabel) + '</span>';
+        }
+        return '';
+    }
+
     // Builds the exact same markup dash_due_row() produces server-side —
     // see the comment above this section for why these two must be kept in
-    // sync. Reworked 10 Jul 2026 alongside the macro: title's deliverable/
-    // customer detail gets its own lighter-weight span
-    // (.dash-row-title-detail), and guidance/owner render as two separate
-    // colour-coded pills (.dash-action-tag / .dash-owner-tag) instead of
-    // one grey "guidance · owner" sentence — see dashboard.css for the
-    // actual colours and dash_due_row's comment for why.
+    // sync. REDESIGNED 13 Jul 2026 alongside the macro: guidance/owner
+    // pills are gone, replaced by a person-chip row (CS lead + per-team
+    // designers or missing-team tags, from item.cs_lead/item.designers —
+    // see _due_row_people() in dashboard.py) under the title, and a
+    // right-hand "Next Action" block (item.guidance, sized up) instead of
+    // the old inline .dash-action-tag pill. item.owner is still present on
+    // the payload but no longer rendered here.
     function renderDueRow(item) {
         var title = escapeHtml(item.project_name);
         if (item.type === 'deliverable') {
@@ -268,20 +314,35 @@
             title += ' <span class="dash-row-title-detail">— ' + escapeHtml(item.customer_name) + '</span>';
         }
 
-        var tags = '<span class="dash-action-tag">' + escapeHtml(item.guidance) + '</span>';
-        var owners = ownerNames(item.owner);
-        if (owners) tags += '<span class="dash-owner-tag">' + escapeHtml(owners) + '</span>';
+        var people = personChip(item.cs_lead, 'CS Missing');
+        (item.designers || []).forEach(function (teamEntry) {
+            if (teamEntry.users && teamEntry.users.length) {
+                teamEntry.users.forEach(function (u) { people += personChip(u); });
+            } else {
+                people += personChip(null, teamEntry.missing_label, 'dash-risk-tag dash-risk-tag--red');
+            }
+        });
 
         // NOTE: this URL is hardcoded to match project_detail.detail's
         // route (/projects/<id>) rather than built with Flask's url_for —
         // JS has no access to url_for, it only exists at Jinja render
         // time. If that route's URL pattern ever changes, this must be
         // updated to match by hand.
+        //
+        // .dash-row-date (was a coloured .rag-badge rag-<colour> pill) and
+        // .dash-row-next-action-tag (was plain .dash-row-next-action-text)
+        // both changed 13 Jul 2026, same-day follow-up — see the matching
+        // comment on dash_due_row() in _dashboard_macros.html and the CSS
+        // comments on .dash-row-date/.dash-row-next-action-tag.
         return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
-            '<span class="rag-badge rag-' + item.rag + '">' + escapeHtml(item.deadline) + '</span>' +
+            '<span class="dash-row-date">' + escapeHtml(item.deadline) + '</span>' +
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + title + '</span>' +
-            '<span class="dash-row-tags">' + tags + '</span>' +
+            '<span class="dash-row-people">' + people + '</span>' +
+            '</span>' +
+            '<span class="dash-row-next-action">' +
+            '<span class="dash-row-next-action-label">Next Action</span>' +
+            '<span class="dash-row-next-action-tag">' + escapeHtml(item.guidance) + '</span>' +
             '</span>' +
             '</a>';
     }
@@ -294,7 +355,10 @@
             .then(function (r) { return r.json(); })
             .then(function (items) {
                 if (!items.length) {
-                    container.innerHTML = '<p class="dash-empty-state">Nothing matches this filter.</p>';
+                    // Only ever called with 'overdue' now (see the SSE
+                    // refresh call site below) — fixed copy instead of the
+                    // old generic "Nothing matches this filter." text.
+                    container.innerHTML = '<p class="dash-empty-state">Nothing overdue this week.</p>';
                     return;
                 }
                 container.innerHTML = items.map(renderDueRow).join('');
@@ -338,6 +402,11 @@
     // 2026 alongside decisions.html: raised-by and days-waiting are now
     // tags (.dash-owner-tag / .dash-action-tag) instead of stacked plain
     // text; the raised-at timestamp stays plain on the right as a stamp.
+    // Resolve button (added 13 Jul 2026, admin/management only — mirrors
+    // decisions.html's .dash-decision-row wrapper and its `effective_role
+    // in ('admin', 'management')` gate). See isManagementOrAdmin() near
+    // withDashScope() above, which reads HELIX_EFFECTIVE_ROLE — a
+    // page-level var dashboard.html sets for exactly this purpose.
     function renderDecisionRow(item) {
         var tags = '';
         if (item.raised_by) tags += '<span class="dash-owner-tag">' + escapeHtml(item.raised_by.name) + '</span>';
@@ -347,7 +416,7 @@
 
         // Same hardcoded-URL caveat as renderDueRow() above — no url_for()
         // available client-side.
-        return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+        var row = '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
             '<span class="dash-row-sub">' + escapeHtml(item.note) + '</span>' +
@@ -356,6 +425,37 @@
             '<span style="text-align:right; flex-shrink:0; font-size:0.8rem; color:var(--grey-dark);">' +
             escapeHtml(formatDubaiTime(item.raised_at)) + '</span>' +
             '</a>';
+
+        var resolveBtn = isManagementOrAdmin()
+            ? '<button type="button" class="dash-resolve-btn" data-action="resolve-decision" data-project-id="' + item.project_id + '">✓ Resolve</button>'
+            : '';
+
+        return '<div class="dash-decision-row">' + row + resolveBtn + '</div>';
+    }
+
+    // Resolves a flagged decision: confirm, POST, then re-fetch the queue
+    // via refreshDecisionsCard() (same pattern submitFlagManagement() uses
+    // after raising a flag — see above) rather than manually removing just
+    // this one row from the DOM, so the collapsed mini-stat count and the
+    // expanded list can never drift out of sync with each other.
+    function resolveDecision(projectId, btn) {
+        if (!confirm('Mark this decision as resolved?')) return;
+        if (btn) btn.disabled = true;
+        fetch('/projects/' + projectId + '/resolve-decision', { method: 'POST' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    showToast('Decision resolved', 'success');
+                    refreshDecisionsCard();
+                } else {
+                    showToast(data.error || 'Could not resolve this decision', 'error');
+                    if (btn) btn.disabled = false;
+                }
+            })
+            .catch(function () {
+                showToast('Something went wrong', 'error');
+                if (btn) btn.disabled = false;
+            });
     }
 
     // Re-fetches the whole queue after a successful flag submission and
@@ -608,25 +708,39 @@
                 // guarantees this always matches due.html's exact original
                 // markup (see the due_summary Jinja block there). Selector
                 // targets .dash-tile (not .dash-card) — every card except
-                // Summary moved to the tile/row-expand layout 12 Jul 2026,
-                // see the big comment on .dash-row-group in dashboard.css.
+                // Summary moved to the tile/shared-expand layout 12 Jul
+                // 2026, see the big comment on .dash-tiles-grid in dashboard.css.
+                //
+                // FIXED 12 Jul 2026 (fifth follow-up): this used to rebuild
+                // THREE mini-stats (Overdue/Today/This Week) — a bug left
+                // over from the fourth follow-up, which narrowed due.html
+                // itself down to ONE stat but never updated this JS mirror
+                // to match. Net effect: the page loaded correctly with one
+                // stat, then the very next SSE refresh silently overwrote
+                // it with the old three-stat markup — exactly the "SSR and
+                // JS mirror must stay in sync" trap this file's other
+                // render functions call out explicitly. Single stat now,
+                // label matches due.html's ("This Week", not "Overdue" —
+                // the card's own title already says Overdue). Colour is
+                // count-based since the eleventh follow-up (green at
+                // zero, red at 1+) — keep in sync with due.html.
                 var dueSummaryEl = document.querySelector('.dash-tile[data-card="due"] .dash-tile-summary');
                 if (dueSummaryEl) {
-                    dueSummaryEl.innerHTML =
-                        miniStat('red', summary.overdue, 'Overdue') +
-                        miniStat('red', summary.due_today, 'Today') +
-                        miniStat('yellow', summary.due_week, 'This Week');
+                    dueSummaryEl.innerHTML = miniStat(summary.overdue === 0 ? 'green' : 'red', summary.overdue, 'This Week');
                 }
 
                 // Matches next_actions.html's next_actions_summary block
-                // (reworked 12 Jul 2026 — RAG mini-stats, red=mine/
-                // yellow=others, instead of owner-tag/action-tag pills).
-                // Keep in sync.
+                // (reworked 12 Jul 2026 — RAG mini-stats, red=mine,
+                // instead of owner-tag/action-tag pills). "Waiting on
+                // Others" changed the same day (tenth follow-up) from
+                // flat yellow to green-at-zero/orange-otherwise — keep
+                // this in sync with next_actions_summary in
+                // next_actions.html.
                 var nextActionsSummaryEl = document.querySelector('.dash-tile[data-card="next_actions"] .dash-tile-summary');
                 if (nextActionsSummaryEl) {
                     nextActionsSummaryEl.innerHTML =
                         miniStat('red', summary.my_actions, 'Needed From Me') +
-                        miniStat('yellow', summary.others_actions, 'Waiting on Others');
+                        miniStat(summary.others_actions === 0 ? 'green' : 'orange', summary.others_actions, 'Waiting on Others');
                 }
 
                 // Matches what_changed.html's what_changed_summary block
@@ -672,27 +786,54 @@
                     // something that self-corrects on the user's next visit.
                     clashesTileEl.classList.toggle('dash-tile--muted', summary.clashes === 0);
                 }
+
+                // Matches at_risk.html's at_risk_summary block (added 12
+                // Jul 2026) — single mini-stat, red if >0 else green. The
+                // row list itself isn't re-fetched here, same as Clashes
+                // above — see at_risk.html's docstring for why that's
+                // acceptable staleness for this card.
+                var atRiskSummaryEl = document.querySelector('.dash-tile[data-card="at_risk"] .dash-tile-summary');
+                if (atRiskSummaryEl) {
+                    atRiskSummaryEl.innerHTML = miniStat(
+                        summary.at_risk_count > 0 ? 'red' : 'green',
+                        summary.at_risk_count,
+                        'At Risk'
+                    );
+                }
             })
             .catch(function () {
                 // Same "leave it stale on a network blip" convention as
                 // every other fetch in this file.
             });
 
-        // Stat row (added 12 Jul 2026) — three plain numbers, no card
-        // shell to update, so this is its own small fetch rather than
-        // being folded into the /api/summary handler above. Matches
-        // _compute_project_stats() in dashboard.py exactly.
+        // Stat tiles (added 12 Jul 2026, own small fetch rather than being
+        // folded into the /api/summary handler above — matches
+        // _compute_project_stats() in dashboard.py exactly). Rebuilt via
+        // miniStat() same as every other tile's mini-stat as of the
+        // twelfth follow-up, when these stopped being a separate
+        // getElementById-targeted component and became ordinary
+        // .dash-tile entries (see stat_active.html/stat_pending.html/
+        // stat_total.html/stat_avg_time.html) — label is '' for the first
+        // three since the tile's own heading already says what the number
+        // means, same as the Jinja templates render an empty label span
+        // rather than omitting it, so the two markups stay byte-for-byte
+        // matched. stat_avg_time (added 13 Jul 2026) is the one exception —
+        // its label is 'HRS', matching stat_avg_time.html exactly, since a
+        // bare number there would be ambiguous.
         fetch(withDashScope('/dashboard/api/project-stats'))
             .then(function (r) { return r.json(); })
             .then(function (stats) {
-                var yourActiveEl = document.getElementById('dash-stat-your-active');
-                if (yourActiveEl) yourActiveEl.textContent = stats.your_active;
+                var statActiveEl = document.querySelector('.dash-tile[data-card="stat_active"] .dash-tile-summary');
+                if (statActiveEl) statActiveEl.innerHTML = miniStat('green', stats.your_active, '');
 
-                var pendingApprovalEl = document.getElementById('dash-stat-pending-approval');
-                if (pendingApprovalEl) pendingApprovalEl.textContent = stats.pending_approval;
+                var statPendingEl = document.querySelector('.dash-tile[data-card="stat_pending"] .dash-tile-summary');
+                if (statPendingEl) statPendingEl.innerHTML = miniStat('blue', stats.pending_approval, '');
 
-                var totalActiveEl = document.getElementById('dash-stat-total-active');
-                if (totalActiveEl) totalActiveEl.textContent = stats.total_active;
+                var statTotalEl = document.querySelector('.dash-tile[data-card="stat_total"] .dash-tile-summary');
+                if (statTotalEl) statTotalEl.innerHTML = miniStat('orange', stats.total_active, '');
+
+                var statAvgTimeEl = document.querySelector('.dash-tile[data-card="stat_avg_time"] .dash-tile-summary');
+                if (statAvgTimeEl) statAvgTimeEl.innerHTML = miniStat('oak', stats.average_time, 'HRS');
             })
             .catch(function () {
                 // Same "leave it stale on a network blip" convention as
@@ -700,24 +841,18 @@
             });
 
         // Due card's LIST: only worth refetching if actually expanded.
-        // Reads whichever filter pill is currently active rather than
-        // tracking separate state — due-filter's click handler (below) is
-        // the only thing that ever changes which pill is active, so the
-        // DOM is always the source of truth. Exactly one pill is ever
-        // active (see due.html's "All Today" pill, added 12 Jul 2026 —
-        // there used to be two pills active simultaneously to represent
-        // the combined default, which read as a conflict; that's now one
-        // explicit pill instead, still strictly single-select).
+        // No filter pills to read anymore (removed 12 Jul 2026, fourth
+        // follow-up — the card only ever shows one thing now: overdue
+        // this week), so this always refetches with 'overdue', full stop.
         //
         // Selector targets .dash-card-body-content, not .dash-tile — since
-        // 12 Jul 2026 the tile and its body are separate elements in
-        // different rows of the row-group (see dashboard.css), and
-        // .expanded plus the filter buttons both live on/in the body now,
-        // not the tile.
+        // 12 Jul 2026 the tile and its body are separate elements (the
+        // body lives in the single .dash-shared-expand area, not next to
+        // its tile — see dashboard.css), and .expanded lives on/in the
+        // body now, not the tile.
         var dueBodyEl = document.querySelector('.dash-card-body-content[data-card="due"]');
         if (dueBodyEl && dueBodyEl.classList.contains('expanded')) {
-            var activeDueBtn = dueBodyEl.querySelector('[data-action="due-filter"].active');
-            if (activeDueBtn) fetchAndRenderDue(activeDueBtn.dataset.filter);
+            fetchAndRenderDue('overdue');
         }
 
         // Decisions: refreshDecisionsCard() already updates both the
@@ -782,78 +917,81 @@
                 submitFlagManagement();
                 return;
             }
+            var resolveBtn = e.target.closest('[data-action="resolve-decision"]');
+            if (resolveBtn) {
+                // Same defensive-ordering reasoning as the flag-management
+                // triggers above: this button lives inside a .dash-row
+                // sibling, not the row itself, so there's no bubbling
+                // conflict today — but it's still checked ahead of
+                // toggle-card in case that ever changes.
+                resolveDecision(resolveBtn.getAttribute('data-project-id'), resolveBtn);
+                return;
+            }
 
             var toggleHeader = e.target.closest('[data-action="toggle-card"]');
             if (toggleHeader) {
-                // Tile (every card except Summary, since 12 Jul 2026 — see
-                // the big comment on .dash-row-group in dashboard.css) —
-                // single-open-per-row: opening one tile in a row closes
-                // whichever OTHER tile in that same row was open, since
-                // they all share one .dash-row-expand band below the row.
-                // No localStorage here (unlike the old .dash-card path
+                // Tile (every card except Summary, since 12 Jul 2026) —
+                // single-open PAGE-WIDE as of the third follow-up the same
+                // day (was single-open-per-row, when each row of 3 had its
+                // own .dash-row-expand band — see git history around 12
+                // Jul 2026 if that's ever needed again). Now there's just
+                // one .dash-shared-expand area for the whole tile grid
+                // (.dash-tiles-grid, 5 per row — see dashboard.css), so
+                // opening any tile closes whichever OTHER tile was active
+                // ANYWHERE on the page, not just within the same row. No
+                // localStorage here (unlike the old .dash-card path
                 // below) — tiles always start fresh/minimized on load,
                 // matching the wireframe's default state, except whichever
                 // one a ?view= deep link server-rendered as already open.
                 var tile = toggleHeader.closest('.dash-tile');
                 if (tile) {
                     if (tile.classList.contains('dash-tile--muted')) return;
-                    var rowGroup = tile.closest('.dash-row-group');
                     var wasActive = tile.classList.contains('active');
 
-                    if (rowGroup) {
-                        rowGroup.querySelectorAll('.dash-tile.active').forEach(function (t) {
-                            t.classList.remove('active');
-                        });
-                        rowGroup.querySelectorAll('.dash-card-body-content.expanded').forEach(function (b) {
-                            collapseBody(b);
-                        });
-                    }
+                    document.querySelectorAll('.dash-tile.active').forEach(function (t) {
+                        t.classList.remove('active');
+                    });
+                    document.querySelectorAll('.dash-card-body-content.expanded').forEach(function (b) {
+                        collapseBody(b);
+                    });
 
                     if (!wasActive) {
                         tile.classList.add('active');
-                        var body = rowGroup && rowGroup.querySelector(
+                        var body = document.querySelector(
                             '.dash-card-body-content[data-card="' + tile.dataset.card + '"]');
                         expandBody(body);
                     }
                     return;
                 }
 
-                // Summary card only, from here on — original self-contained
-                // expand-in-place behaviour, unchanged.
-                var card = toggleHeader.closest('.dash-card');
-                if (card && !card.classList.contains('dash-card--muted')) {
-                    var nowOpen = !card.classList.contains('expanded');
-                    applyOpenState(card, nowOpen);
-                    setStoredOpen(card.dataset.card, nowOpen);
-                }
+                // No Summary branch here anymore — its header stopped
+                // carrying data-action="toggle-card" entirely as of 12
+                // Jul 2026's fourth follow-up (always open, no toggle —
+                // see .dash-card--static in dashboard.css), so this
+                // `if (toggleHeader)` block is now only ever reachable via
+                // a tile click above. applyOpenState()/setStoredOpen()
+                // are still defined further up for whatever future
+                // mode=None card, if any, might need real toggle behaviour.
                 return;
             }
 
             var tabBtn = e.target.closest('[data-action="switch-tab"]');
             if (tabBtn) { switchTab(tabBtn.dataset.tab); return; }
 
-            var dueFilterBtn = e.target.closest('[data-action="due-filter"]');
-            if (dueFilterBtn) {
-                // Radio-style: exactly one pill active at a time, including
-                // the default state — "All Today" (data-filter=
-                // "overdue_today") is the pill that starts active,
-                // server-rendered in due.html, standing in for what used to
-                // be two simultaneously-active pills (Overdue + Due Today)
-                // representing the same combined default. That looked like
-                // a conflicting/broken selection at a glance, so as of 12
-                // Jul 2026 there's always exactly one active pill, full stop.
-                document.querySelectorAll('[data-action="due-filter"]').forEach(function (btn) {
-                    btn.classList.toggle('active', btn === dueFilterBtn);
-                });
-                fetchAndRenderDue(dueFilterBtn.dataset.filter);
-                return;
-            }
+            // NOTE: the Due card's filter pills (All Today/Overdue/Due
+            // Today/Due This Week, data-action="due-filter") were removed
+            // 12 Jul 2026 (fourth follow-up) when that card was narrowed
+            // to show ONLY overdue-this-week with no toggles at all — see
+            // due.html. If you're looking for that click-handler branch or
+            // the "always exactly one active pill" pattern it used, check
+            // git history around that date; fetchAndRenderDue() itself is
+            // still here (used by the SSE refresh below) but is now always
+            // called with 'overdue'.
 
             var nextActionsBtn = e.target.closest('[data-action="next-actions-tab"]');
             if (nextActionsBtn) {
                 // Strict two-way toggle — always exactly one active, same
-                // single-select convention the Due card's pills use too
-                // (see the comment on due-filter above).
+                // single-select convention the Clashes tab pills use too.
                 document.querySelectorAll('[data-action="next-actions-tab"]').forEach(function (btn) {
                     btn.classList.toggle('active', btn === nextActionsBtn);
                 });

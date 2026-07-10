@@ -322,5 +322,9 @@
 
     // Re-init after any section-level DOM refresh (e.g. refreshSection() calls)
     document.addEventListener('helix:section-refreshed', window.initRichEditors);
+    // Re-init on SPA navigation — sidebar.js swaps innerHTML without a full reload,
+    // so DOMContentLoaded never fires again. helix:navigated is the correct hook for
+    // base.html scripts that need to re-initialize after each nav swap.
+    document.addEventListener('helix:navigated', window.initRichEditors);
 
 })();
