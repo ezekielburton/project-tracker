@@ -33,9 +33,22 @@
    .dash-tile for the roles that can't open the page (no
    data-action="toggle-card" is ever added here, so the click handler in
    dashboard.js never touches this tile regardless of role).
+
+   Fixed to be emulation-aware (13 Jul 2026, same-day follow-up, per
+   Ezekiel: "it's not emulation aware") — was gated on
+   `current_user.role`, which is always the REAL logged-in user
+   (Flask-Login's current_user is never swapped during emulation, only
+   get_actor()'s return value is — see the Emulation-aware actor pattern
+   in CLAUDE.md). That meant an admin emulating a CS/Designer/Team Lead
+   still saw this tile as a clickable link, even though a real user in
+   that role never would — the dashboard's emulation preview is supposed
+   to show exactly what that role sees. Switched to `effective_role`,
+   the context var `index()` already passes as `user.role` from
+   `get_actor()` (dashboard.py) — the same var `decisions.html`'s Resolve
+   button already gates on for the identical reason.
 #}
 {% if dash_render_mode == 'tile' %}
-{% set is_linkable = current_user.role in ('admin', 'management') %}
+{% set is_linkable = effective_role in ('admin', 'management') %}
 {% if is_linkable %}
 <a class="dash-tile dash-tile--static dash-tile--link" data-card="stat_avg_time" href="{{ url_for('time_tracking.index') }}">
 {% else %}

@@ -17,9 +17,9 @@
 # file is just the route: fetch scoped projects + deliverables, run each
 # through that module, hand the result to the template.
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, abort
 from flask_login import login_required
-from app.decorators import role_required
+from app.utils import get_actor
 from app.models import Project
 from app.time_tracking_logic import compute_project_hours, compute_deliverable_hours
 
@@ -28,7 +28,6 @@ time_tracking_bp = Blueprint('time_tracking', __name__)
 
 @time_tracking_bp.route('/time-tracking')
 @login_required
-@role_required('admin', 'management')
 def index():
     """
     One row per non-draft project, each carrying its own overall/by-status
@@ -43,7 +42,25 @@ def index():
     deliverable", and standard-brief Deliverable rows are what that maps
     to. Worth a follow-up if C&CM customer-level breakdowns turn out to be
     wanted too.
+
+    Access check made emulation-aware (13 Jul 2026, same-day follow-up,
+    per Ezekiel: "it's not emulation aware") — was the shared
+    @role_required('admin', 'management') decorator, which checks
+    current_user directly (deliberately, for admin-only WRITE routes —
+    see get_actor()'s docstring in app/utils.py). But this is a read-only
+    reporting VIEW, not a write action, and the stat_avg_time.html tile
+    that links here was fixed the same way in the same pass: an admin
+    emulating a CS/Designer/Team Lead should see this page exactly as
+    unreachable as that role would, matching what the now-static
+    (non-link) tile already shows them. Replaced with a manual get_actor()
+    check so the shared role_required decorator (used by plenty of
+    genuine admin-only write routes elsewhere) didn't need to change
+    behaviour for everyone else.
     """
+    actor = get_actor()
+    if actor.role not in ('admin', 'management'):
+        abort(403)
+
     projects = Project.query.filter(Project.project_status != 'draft').order_by(Project.name).all()
 
     rows = []
