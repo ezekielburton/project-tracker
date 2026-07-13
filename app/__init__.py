@@ -24,7 +24,7 @@ def create_app():
 
     import subprocess
     app.config['STATIC_VERSION'] = subprocess.check_output(
-    ['git', 'rev-parse', '--short', 'HEAD']
+    ['/usr/bin/git', 'rev-parse', '--short', 'HEAD']
     ).decode().strip()
 
     login_manager.login_view = 'auth.login'

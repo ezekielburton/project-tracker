@@ -45,6 +45,8 @@ New Features:
 - Added drag and dropping when attaching files.
 - Added C&CM File Template Directory for Graphics.
 - Added download all for reference files and submisson file history.
+- TIme tracking has been added to all projects. It works on a 9:30am - 6:30 pm system and tracks the hours of every stage. Weekends only count if a status is changed.
+- Browser now automatically pulls latest project version without needing to refresh.
 
 Adjustments:
 
