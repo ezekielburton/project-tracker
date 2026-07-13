@@ -444,14 +444,25 @@ def update_project(project_id):
 
         db.session.commit()
 
-        # Sync NAS folder tree in background — creates any folders added by this edit.
-        # Idempotent: force_parent=true means existing folders are silently skipped.
-        _pid = project.id
+        # Sync NAS folder tree in background — renames the top-level project
+        # folder if the name changed, then creates any folders added by this edit.
+        # Rename runs first so create_project_folders sees the folder already at
+        # its new name and can safely add subfolders inside it.
+        _pid      = project.id
+        _old_name = old_snapshot['name']
+        _new_name = project.name
         from flask import current_app as _app
-        from app.nas import _run_in_background, create_project_folders
+        from app.nas import _run_in_background, create_project_folders, rename_project_folder
         from app.models import Project as _Project
         _app_obj = _app._get_current_object()
-        _run_in_background(_app_obj, lambda: create_project_folders(_Project.query.get(_pid)))
+
+        def _nas_sync():
+            proj = _Project.query.get(_pid)
+            if _old_name != _new_name:
+                rename_project_folder(proj, _old_name)
+            create_project_folders(proj)
+
+        _run_in_background(_app_obj, _nas_sync)
 
         # -- POSM resume notification ---
         # Fires exactly once: when this project was paused (awaiting_posm_details)

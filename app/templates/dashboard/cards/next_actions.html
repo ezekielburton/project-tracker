@@ -22,15 +22,30 @@
 
    ONE ROW PER PROJECT here (not per-deliverable/customer like the Due
    card) — get_next_action_owner() gives one verdict per whole project, so
-   that's what each row represents. Each row shows: RAG badge + deadline
-   (or "No deadline" — unlike the Due card, a project can legitimately have
-   no deadline yet and still need someone's next action, e.g. a fresh brief
-   sitting 'in_queue'), project name, the guidance text explaining WHAT
-   needs doing, and — only on the Others' Actions tab — WHO it's waiting
-   on. Showing "Assigned to: you" on your own My Actions tab would just be
-   noise, so the owner name is only rendered when filter == 'others'.
+   that's what each row represents.
+
+   Row layout matched to Overdue (13 Jul 2026, per Ezekiel: "make the
+   layout of the rows match Overdue layout") — this card's rows now render
+   via dash_due_row(item), the exact same macro Overdue uses, instead of
+   bespoke markup. item.type is always 'project' here (see
+   _compute_next_actions() in dashboard.py) — there's no deliverable/
+   customer to invert the title against, so the row is just the plain
+   project name, same as a plain project-level Due row. The old separate
+   RAG badge, .dash-action-tag guidance pill, Others'-tab-only owner tag,
+   and flat missing_designer_tags chips are ALL gone, replaced by what
+   dash_due_row() already gives every other card: a plain date (+ divider),
+   CS lead/designer person chips (item.cs_lead/item.designers, from
+   _due_row_people() — the per-team red fallback chips now cover the
+   staffing-gap info the old missing_designer_tags list used to duplicate,
+   same "one missing-designer indicator per row" fix the At Risk card got
+   earlier the same day), and a right-hand pine "Next Action" tag
+   (item.guidance). item.owner/item.owner_role are still on the payload
+   (dashboard.py still needs them for the mine/others split) but are no
+   longer rendered — CS lead/designer chips communicate "who's relevant"
+   instead, matching how Overdue/At Risk/Clashing Projects all stopped
+   showing a plain owner tag the same day.
 #}
-{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+{% from 'dashboard/_dashboard_macros.html' import dash_card, dash_due_row %}
 
 {# Collapsed summary reworked 12 Jul 2026 (RAG mini-stats, replacing the 10
    Jul owner-tag/action-tag pill version, per explicit instruction to use
@@ -72,20 +87,7 @@
     <div id="dash-next-actions-list">
         {% if next_actions_default %}
             {% for item in next_actions_default %}
-            <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
-                <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline if item.deadline else 'No deadline' }}</span>
-                <span class="dash-row-main">
-                    <span class="dash-row-title">{{ item.project_name }}</span>
-                    {# No owner tag here — this is always the 'mine' list (see
-                       next_actions_default above), so the owner is always
-                       "you"; showing an owner tag on your own list would just
-                       repeat that. renderNextActionRow() in dashboard.js adds
-                       one when the Others' Actions tab is active instead. #}
-                    <span class="dash-row-tags">
-                        <span class="dash-action-tag">{{ item.guidance }}</span>
-                    </span>
-                </span>
-            </a>
+                {{ dash_due_row(item) }}
             {% endfor %}
         {% else %}
             <p class="dash-empty-state">Nothing needs your action right now.</p>

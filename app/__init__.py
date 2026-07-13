@@ -22,6 +22,11 @@ def create_app():
     from app.sse_relay import init_sse_relay
     init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
 
+    import subprocess
+    app.config['STATIC_VERSION'] = subprocess.check_output(
+    ['git', 'rev-parse', '--short', 'HEAD']
+    ).decode().strip()
+
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'
 
@@ -50,6 +55,7 @@ def create_app():
     from app.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
     from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
     from app.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
+    from app.routes.projects_transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -71,6 +77,7 @@ def create_app():
     app.register_blueprint(client_directory_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(time_tracking_bp)
+    app.register_blueprint(transfer_bp)
 
     @app.context_processor
     @app.context_processor

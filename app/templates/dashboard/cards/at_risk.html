@@ -16,10 +16,48 @@
 
    Expanded: fully server-rendered list, no filter tabs — same "small
    enough it doesn't need pagination or client-side filtering" reasoning
-   Clashing Projects uses. Each row shows the project's nearest deadline
-   (RAG badge), name, and every tag that applies, wrapped.
+   Clashing Projects uses. Each row shows the project's nearest deadline,
+   name, and every tag that applies, wrapped.
+
+   Row layout matched to Overdue (13 Jul 2026, same-day follow-up, per
+   Ezekiel: "look at img 1 that is the overdue expanded area... it should
+   follow the same visual pattern, so date in plain black text, vertical
+   divider, then the name, overdue tag then 2D designer missing"). The
+   date changed from a coloured `.rag-badge` pill to plain `.dash-row-date`
+   text with a vertical divider — same class dash_due_row() uses, reused
+   as-is since it's already a generic dashboard.css component, not scoped
+   to that macro.
+
+   Tag variant (reworked same day from an earlier {'label':,'red':}
+   boolean shape to {'label':,'variant':}) — see
+   _compute_at_risk_projects()'s docstring in dashboard.py for the full
+   rule. `variant` is 'overdue' (red + pulsing, per "make overdue red and
+   make it pulse or flash" — see .dash-risk-tag--overdue in dashboard.css),
+   'designer_missing' (solid red, same .dash-risk-tag--red dash_due_row()
+   uses), or 'plain' (CS Missing — the card's original rose
+   .dash-risk-tag). Tag ORDER also changed: Overdue now comes first, CS
+   Missing second — matches "overdue tag then 2D designer missing".
+
+   Designer-missing labels are NO LONGER in this top tags row at all
+   (same-day follow-up, per Ezekiel: "at risk is duplicating the tags -
+   only one missing tag is needed") — see the person-chips paragraph
+   below for where that information moved to exclusively.
+
+   Person chips (added 13 Jul 2026, per Ezekiel: "add the tags you have
+   already made (with their profile pic included) for the relevant
+   designers and CS leads. Add it to at risk, clashing projects.") — each
+   row shows dash_row_people(item.cs_lead, item.designers), the exact
+   same avatar+name chip row dash_due_row() shows on Overdue/Summary
+   (extracted into its own macro the same day specifically so this card
+   and Clashing Projects could reuse it). item.designers is project-level
+   (design_teams_requested), same fallback _due_row_people()'s project/
+   customer rows already use — there's no single deliverable to scope to
+   on a project-level card like this one. This chip row is now the ONLY
+   place a missing design team shows on this card (as a red
+   dash_person_chip missing-label tag) — the top tags row used to repeat
+   the exact same fact a second time until the same-day dedup fix above.
 #}
-{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+{% from 'dashboard/_dashboard_macros.html' import dash_card, dash_row_people %}
 
 {% set at_risk_summary %}
 <span class="dash-mini-stat dash-mini-stat--{{ 'red' if at_risk_projects|length > 0 else 'green' }}">
@@ -35,14 +73,17 @@
     {% if at_risk_projects %}
         {% for item in at_risk_projects %}
         <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
-            <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+            <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
             <span class="dash-row-main">
                 <span class="dash-row-title">{{ item.name }}</span>
+                {% if item.tags %}
                 <span class="dash-row-tags">
                     {% for tag in item.tags %}
-                    <span class="dash-risk-tag">{{ tag }}</span>
+                    <span class="dash-risk-tag{{ ' dash-risk-tag--' + tag.variant if tag.variant != 'plain' else '' }}">{{ tag.label }}</span>
                     {% endfor %}
                 </span>
+                {% endif %}
+                {{ dash_row_people(item.cs_lead, item.designers) }}
             </span>
         </a>
         {% endfor %}

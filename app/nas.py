@@ -59,6 +59,32 @@ def _logout(host, port, sid):
 
 # ------ Folder Operations --------
 
+def _rename_folder(host, port, sid, folder_path, new_name):
+    """
+    Rename a single NAS folder in-place.
+    folder_path is the FULL path to the existing folder;
+    new_name is just the new folder name (not a full path).
+    Logs a warning on failure — never raises.
+    """
+    resp = requests.get(
+        f'https://{host}:{port}/webapi/entry.cgi',
+        verify=False,
+        params={
+            'api':     'SYNO.FileStation.Rename',
+            'version': '2',
+            'method':  'rename',
+            'path':    json.dumps([folder_path]),
+            'name':    json.dumps([new_name]),
+            '_sid':    sid,
+        },
+        timeout=10,
+    )
+    data = resp.json()
+    if not data.get('success'):
+        current_app.logger.warning(
+            f'NAS rename failed: {folder_path!r} → {new_name!r}: {data}'
+        )
+
 def _create_folder(host, port, sid, parent_path, folder_name):
     """
     Create a single folder inside parent_path.
@@ -248,6 +274,36 @@ def create_project_folders(project):
             _logout(host, port, sid)
     except Exception as e:
         current_app.logger.warning(f'NAS folder creation failed for project {project.id}: {e}')
+
+def rename_project_folder(project, old_name):
+    """
+    Rename the project's top-level NAS folder when project.name changes.
+
+    Call AFTER db.session.commit() so project reflects the new name.
+    old_name is the name the folder currently has on the NAS (captured
+    before the DB mutation).
+
+    If the old folder doesn't exist (e.g. was never created), the rename
+    is a no-op and create_project_folders will build the correct tree
+    under the new name on the next call.
+
+    Failures are logged as warnings and never crash the calling route.
+    """
+    try:
+        sid, host, port = _get_session()
+        try:
+            root        = current_app.config['NAS_PROJECT_ROOT']
+            year        = project.created_at.year
+            client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
+            old_path    = f'{root}/{year}/{client_name}/{old_name}'
+            _rename_folder(host, port, sid, old_path, project.name)
+        finally:
+            _logout(host, port, sid)
+    except Exception as e:
+        current_app.logger.warning(
+            f'NAS folder rename failed for project {project.id} '
+            f'({old_name!r} → {project.name!r}): {e}'
+        )
 
 def build_file_path(project, subfolder, filename):
     """

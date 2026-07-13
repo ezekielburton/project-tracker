@@ -1,0 +1,274 @@
+/* ── Transfer Deliverable Modal ──────────────────────────────────────────────
+   Styles for the C&CM deliverable transfer flow (move / duplicate to another customer).
+   Companion to projects_transfer.js and the modal HTML block at the bottom of detail.html.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Trigger button — sits inline in each C&CM deliverable row */
+.btn-transfer-deliverable {
+    font-size: 0.78rem;
+    font-family: var(--font-body);
+    font-weight: 700;
+    color: var(--pine);
+    background: transparent;
+    border: 1.5px solid var(--pine);
+    border-radius: 5px;
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-transfer-deliverable:hover {
+    background: var(--pine);
+    color: var(--white);
+}
+
+/* ── Modal overlay ─────────────────────────────────────────────────────────── */
+.transfer-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 26, 26, 0.55);
+    z-index: 1200;
+    align-items: center;
+    justify-content: center;
+}
+
+.transfer-modal-overlay.active {
+    display: flex;
+}
+
+.transfer-modal {
+    background: var(--white);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(26, 26, 26, 0.18);
+    padding: 2rem;
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+/* ── Modal header ──────────────────────────────────────────────────────────── */
+.transfer-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.transfer-modal-title {
+    font-family: var(--font-headline);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--black);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.transfer-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.transfer-modal-close:hover {
+    color: var(--black);
+}
+
+/* ── Source label ──────────────────────────────────────────────────────────── */
+.transfer-from-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+}
+
+.transfer-from-label strong {
+    color: var(--black);
+    font-weight: 700;
+}
+
+/* ── Section labels ────────────────────────────────────────────────────────── */
+.transfer-modal label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--black);
+    font-family: var(--font-body);
+    margin-bottom: 0.35rem;
+}
+
+/* ── Customer search input ─────────────────────────────────────────────────── */
+.transfer-customer-search {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    padding: 0.55rem 0.75rem;
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    background: var(--white);
+    color: var(--black);
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.transfer-customer-search:focus {
+    border-color: var(--pine);
+}
+
+/* ── Customer list (filtered results) ─────────────────────────────────────── */
+.transfer-customer-list {
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    display: flex;
+    flex-direction: column;
+}
+
+.transfer-customer-option {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.88rem;
+    font-family: var(--font-body);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border: none;
+    background: none;
+    text-align: left;
+    color: var(--black);
+    transition: background 0.1s;
+}
+
+.transfer-customer-option:hover,
+.transfer-customer-option.selected {
+    background: var(--sandstone);
+}
+
+.transfer-customer-option.selected {
+    font-weight: 700;
+}
+
+.transfer-customer-option .transfer-region-tag {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.transfer-customer-none {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+    font-family: var(--font-body);
+}
+
+/* ── Move / Duplicate toggle ───────────────────────────────────────────────── */
+.transfer-mode-group {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.transfer-mode-btn {
+    flex: 1;
+    padding: 0.55rem 0.5rem;
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    background: var(--white);
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.transfer-mode-btn:hover {
+    border-color: var(--pine);
+    color: var(--pine);
+}
+
+.transfer-mode-btn.active {
+    border-color: var(--pine);
+    background: var(--pine);
+    color: var(--white);
+}
+
+.transfer-mode-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    line-height: 1.45;
+    margin-top: 0.25rem;
+}
+
+/* ── Footer / confirm ──────────────────────────────────────────────────────── */
+.transfer-modal-footer {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+}
+
+.transfer-confirm-btn {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--white);
+    background: var(--pine);
+    border: none;
+    border-radius: 7px;
+    padding: 0.6rem 1.4rem;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.transfer-confirm-btn:hover {
+    opacity: 0.88;
+}
+
+.transfer-confirm-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.transfer-cancel-btn {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: none;
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.transfer-cancel-btn:hover {
+    border-color: var(--black);
+    color: var(--black);
+}
+
+.transfer-modal-error {
+    font-size: 0.82rem;
+    color: #cc2200;
+    font-family: var(--font-body);
+    margin-top: -0.5rem;
+}

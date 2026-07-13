@@ -669,6 +669,16 @@
                         {% if _nas_url %}
                         <a href="{{ _nas_url }}" target="_blank" rel="noopener" class="btn-nas-folder" title="Open Design Files folder on NAS">📁 Files</a>
                         {% endif %}
+                        {% if effective_user.role in ['admin', 'cs', 'management'] %}
+                        <button type="button"
+                            class="btn-transfer-deliverable"
+                            data-action="open-transfer-modal"
+                            data-deliverable-id="{{ deliverable.id }}"
+                            data-deliverable-name="{{ deliverable.name | e }}"
+                            data-source-customer="{{ pc.customer.name | e }} ({{ pc.customer.region | upper }})">
+                            ⇄ Transfer
+                        </button>
+                        {% endif %}
                         {% if effective_user.role != 'admin' %}
                         <span class="status-badge s-{{ deliverable.status }}">{{ deliverable.status | replace('_', ' ')
                             | title }}</span>
@@ -3103,5 +3113,61 @@
         </div>
     </div>
 </div>
+
+{% if project.brief_type == 'ccm' %}
+{# ══════════════════════════════════════════════════════════════════════════════
+   Transfer Deliverable Modal
+   Shown when a CS / admin clicks "⇄ Transfer" on any C&CM deliverable row.
+   JS lives in projects_transfer.js (IIFE); data is in TRANSFER_CUSTOMERS below.
+   ══════════════════════════════════════════════════════════════════════════════ #}
+
+{# Inject customer data for the modal's search list.
+   var (not const/let) — SPA renav re-executes scripts; const re-declaration throws. #}
+<script>
+    var TRANSFER_CUSTOMERS  = {{ all_customers_by_region | tojson }};
+    var DETAIL_PROJECT_ID   = {{ project.id | tojson }};
+</script>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/projects_transfer.css') }}">
+<script src="{{ url_for('static', filename='js/projects_transfer.js') }}"></script>
+
+<div id="transfer-modal-overlay" class="transfer-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="transfer-modal-title">
+    <div class="transfer-modal">
+
+        <div class="transfer-modal-header">
+            <h2 class="transfer-modal-title" id="transfer-modal-title">Transfer Deliverable</h2>
+            <button type="button" class="transfer-modal-close" id="transfer-modal-close" aria-label="Close">✕</button>
+        </div>
+
+        <div>
+            <p class="transfer-modal-title" style="font-size:0.95rem;font-family:var(--font-body);text-transform:none;letter-spacing:0;" id="transfer-modal-deliverable-name"></p>
+            <p class="transfer-from-label" id="transfer-from-label" style="margin-top:0.25rem;"></p>
+        </div>
+
+        <div>
+            <label for="transfer-customer-search">Transfer to Customer</label>
+            <input type="text" id="transfer-customer-search" class="transfer-customer-search"
+                   placeholder="Search by name or region…" autocomplete="off">
+            <div id="transfer-customer-list" class="transfer-customer-list" style="margin-top:0.4rem;"></div>
+        </div>
+
+        <div>
+            <label>Mode</label>
+            <div class="transfer-mode-group">
+                <button type="button" class="transfer-mode-btn active" id="transfer-mode-move">Move</button>
+                <button type="button" class="transfer-mode-btn" id="transfer-mode-duplicate">Duplicate</button>
+            </div>
+            <p class="transfer-mode-hint" id="transfer-mode-hint">The deliverable (and its revision history, assignments, and flags) moves to the new customer. The original slot is removed.</p>
+        </div>
+
+        <p class="transfer-modal-error" id="transfer-modal-error"></p>
+
+        <div class="transfer-modal-footer">
+            <button type="button" class="transfer-cancel-btn" id="transfer-cancel-btn">Cancel</button>
+            <button type="button" class="transfer-confirm-btn" id="transfer-confirm-btn" disabled>Confirm Transfer</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 {% endblock %}

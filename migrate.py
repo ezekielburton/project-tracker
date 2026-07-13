@@ -15,7 +15,7 @@ import psycopg2
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), 'migrations')
 

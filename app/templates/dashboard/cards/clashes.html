@@ -45,8 +45,61 @@
    only rated "potential". By Project has no severity split: execution_date
    has no time component, so there's nothing to distinguish there — every
    by-project group is a plain, certain clash.
+
+   Missing-designer tag (added 13 Jul 2026, per Ezekiel — same request
+   that added this tag to Next Actions and recoloured At Risk's version:
+   "make the tag the same RED it is in in my week / my day for all").
+   Each deliverable/project entry now carries its own missing_designer_tags
+   (_missing_designer_tags() in dashboard.py) — checked per-entry, not
+   per-group, because a single clash group can span more than one project
+   (e.g. two different projects' deliverables colliding on the same
+   designer/day), so "is a design team missing" can genuinely differ
+   between two rows in the same group. Renders as the same
+   .dash-risk-tag--red chip used everywhere else on the dashboard. No JS
+   mirror needed here — unlike Due/Next Actions/Decisions, this card's
+   panels are fully server-rendered with no fetch-on-toggle (see the big
+   comment above), so there's nothing client-side to keep in sync.
+
+   Person chips + title inversion (added 13 Jul 2026, same request as the
+   missing-designer tag above: "add the tags you have already made (with
+   their profile pic included) for the relevant designers and CS leads...
+   [and] invert the text so that deliverable is first and bold, project is
+   second and grey"). By Deliverable rows now render
+   dash_row_people(d.cs_lead, d.designers) (designers scoped to THAT
+   deliverable's own teams, d.teams) and an inverted title — deliverable
+   name bold/first, project name grey/second (was the reverse), matching
+   dash_due_row()'s inversion. By Project rows get the same person chips
+   (project-level design_teams_requested fallback, same as At Risk) but
+   keep a plain project-name title — there's no deliverable to invert
+   against on a whole-project clash.
+
+   Pulsing Clash Detected (13 Jul 2026, same-day follow-up, per Ezekiel:
+   "make clash detected red and pulsing also").
+   .dash-clash-severity-tag--detected (both panels — By Project always
+   renders this variant, By Deliverable only when severity == 'clash')
+   is now red (#E60000, same deepened red the At Risk Overdue tag uses)
+   and pulses via the same shared dash-risk-tag-pulse keyframes/
+   prefers-reduced-motion override — see dashboard.css.
+   --potential (amber, static) is unchanged.
+
+   Group heading — three same-day flip-flops, final state below (13 Jul
+   2026). (1) Designer name/pic added via dash_person_chip(c.designer,
+   'Unassigned'), per "Designer name -> Profile picture + name". (2)
+   Immediately called redundant and removed — the same designer already
+   appears via the per-row dash_row_people(...) chips just below (that
+   designer is who's assigned to the colliding deliverable/project in
+   the first place), so a second copy at the group level added nothing;
+   date was made the visually-primary element instead ("organised by
+   date, rather than by designer"). (3) Ezekiel then asked to keep the
+   chip after all ("keep the designer name and pic, but make the date
+   bigger and bolder") — so both now coexist: date leads (big/bold, new
+   .dash-clash-group-date — see dashboard.css) followed by the designer
+   chip, then the severity tag. Backend's c['designer'] stayed
+   _serialize_person() (added in step 1, never reverted) throughout —
+   it needs avatar_filename for dash_person_chip() regardless of whether
+   the chip is currently shown.
 #}
-{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+{% from 'dashboard/_dashboard_macros.html' import dash_card, dash_row_people, dash_person_chip %}
 {% set clash_count = clashes.by_deliverable|length + clashes.by_project|length %}
 
 {# Collapsed summary reworked 10 Jul 2026 — broken into "N Detected" /
@@ -106,20 +159,26 @@
         {% if clashes.by_deliverable %}
             {% for c in clashes.by_deliverable %}
             <div class="dash-clash-group">
+                <div class="dash-clash-date-header">
+                    <span class="dash-clash-group-date">{{ c.date }}</span>
+                </div>
                 <div class="dash-col-heading" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                    <span class="dash-owner-tag">{{ c.designer.name if c.designer else 'Unassigned' }}</span>
+                    {{ dash_person_chip(c.designer, 'Unassigned') }}
                     <span class="dash-clash-severity-tag dash-clash-severity-tag--{{ 'detected' if c.severity == 'clash' else 'potential' }}">
                         {{ 'Clash Detected' if c.severity == 'clash' else 'Potential Clash' }}
                     </span>
-                    <span>{{ c.date }}</span>
                 </div>
                 {% for d in c.deliverables %}
                 <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
                     <span class="dash-row-main">
-                        <span class="dash-row-title">{{ d.project_name }} <span class="dash-row-title-detail">&mdash; {{ d.name }}</span></span>
+                        <span class="dash-row-title">{{ d.name }} <span class="dash-row-title-detail">&mdash; {{ d.project_name }}</span></span>
                         <span class="dash-row-tags">
                             <span class="dash-action-tag">{{ d.time if d.time else 'No time set' }}</span>
+                            {% for tag in d.missing_designer_tags %}
+                            <span class="dash-risk-tag dash-risk-tag--red">{{ tag }}</span>
+                            {% endfor %}
                         </span>
+                        {{ dash_row_people(d.cs_lead, d.designers) }}
                     </span>
                 </a>
                 {% endfor %}
@@ -134,15 +193,25 @@
         {% if clashes.by_project %}
             {% for c in clashes.by_project %}
             <div class="dash-clash-group">
+                <div class="dash-clash-date-header">
+                    <span class="dash-clash-group-date">{{ c.date }}</span>
+                </div>
                 <div class="dash-col-heading" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                    <span class="dash-owner-tag">{{ c.designer.name if c.designer else 'Unassigned' }}</span>
+                    {{ dash_person_chip(c.designer, 'Unassigned') }}
                     <span class="dash-clash-severity-tag dash-clash-severity-tag--detected">Clash Detected</span>
-                    <span>{{ c.date }}</span>
                 </div>
                 {% for proj in c.projects %}
                 <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=proj.id) }}?from=dashboard">
                     <span class="dash-row-main">
                         <span class="dash-row-title">{{ proj.name }}</span>
+                        {% if proj.missing_designer_tags %}
+                        <span class="dash-row-tags">
+                            {% for tag in proj.missing_designer_tags %}
+                            <span class="dash-risk-tag dash-risk-tag--red">{{ tag }}</span>
+                            {% endfor %}
+                        </span>
+                        {% endif %}
+                        {{ dash_row_people(proj.cs_lead, proj.designers) }}
                     </span>
                 </a>
                 {% endfor %}

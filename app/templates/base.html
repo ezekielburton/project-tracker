@@ -6,25 +6,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Vitamin-E{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/blog.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/feedback.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/wiki.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/blog.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/feedback.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wiki.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css?v={{ config.STATIC_VERSION }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/preview.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/achievements.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/drag-drop.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/file-templates.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/preview.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/achievements.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/drag-drop.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/file-templates.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}?v={{ config.STATIC_VERSION }}">
+    
 </head>
 
-{# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}
+<script>
+    var HELIX_VERSION = {{ config.STATIC_VERSION | tojson }};
+</script>
+
+{# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}                      
 
 <body class="{% if current_user.is_authenticated %}has-sidebar{% endif %}">
 
@@ -1113,20 +1118,20 @@
         const HELIX_SOUND_PREFS = {{ sound_prefs | tojson }};
     </script>
 
-    <script src="{{ url_for('static', filename='js/preview.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/detail.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/drag-drop.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/rich-editor.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/preview.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/notifications.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/detail.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/drag-drop.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/rich-editor.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}
-    <script src="{{ url_for('static', filename='js/polling.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/wizard.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/polling.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/wizard.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     {% endif %}
 

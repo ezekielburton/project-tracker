@@ -4,7 +4,7 @@
 # These routes are called by polling.js on an interval — they return only
 # the minimal data needed to detect changes, keeping response times fast.
 
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, session, current_app
 from flask_login import login_required, current_user
 from app import db
 from app.models import Project, User, ProjectDesigner, ProjectSecondaryCS, Client, Contact
@@ -29,6 +29,10 @@ def zip_download(zip_id):
     if response is None:
         abort(404)
     return response
+
+@api_bp.route('/api/version')
+def app_version():
+    return jsonify(version=current_app.config['STATIC_VERSION'])
 
 
 @api_bp.route('/clients/<int:client_id>/contacts')
@@ -115,6 +119,8 @@ def client_projects(client_id):
 
     projects = Project.query.filter_by(client_id=client.id).order_by(Project.created_at.desc()).all()
     return jsonify([_directory_project_entry(p) for p in projects])
+
+
 
 
 @api_bp.route('/contacts/<int:contact_id>/projects')

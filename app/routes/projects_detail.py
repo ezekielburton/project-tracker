@@ -351,6 +351,17 @@ def detail(project_id):
         if ch.status == 'approved'
     }
 
+    # All customers grouped by region — passed to the transfer modal so CS can
+    # pick any customer in the system as the transfer target.
+    # Only queried for C&CM projects (the only ones with the transfer button).
+    if project.brief_type == 'ccm':
+        _all_customers_raw = Customer.query.order_by(Customer.region, Customer.name).all()
+        all_customers_by_region = {}
+        for c in _all_customers_raw:
+            all_customers_by_region.setdefault(c.region, []).append({'id': c.id, 'name': c.name})
+    else:
+        all_customers_by_region = {}
+
     return render_template(
         'projects/detail.html',
         project=project,
@@ -399,6 +410,7 @@ def detail(project_id):
             ).order_by(ProjectRevision.sent_at.desc()).first()
             if project.brief_type == 'ccm' else None
         ),
+        all_customers_by_region=all_customers_by_region,
 
         # Fingerprint of the full project state at render time.
         # Stored as data-fp on #section-assignments in the template.
@@ -938,6 +950,49 @@ def resolve_flag(project_id, flag_id):
 
 # ── Decision Escalation (Management) ──────────────────────────────────────────
 
+def _decision_flag_recipients(project):
+    """
+    Everyone whose OWN dashboard would already show this project's
+    Decisions Needed flag — the same population dashboard.py's
+    _scoped_projects() includes for this project: the CS lead, any
+    secondary CS, and every project-level assigned designer
+    (project.assigned_designers — the "Assigned Lead Designers" table,
+    NOT the wider per-deliverable DeliverableAssignment chip-assign
+    population _get_project_designers() uses elsewhere in
+    notifications.py for submission/approval emails). Deliberately the
+    NARROWER, dashboard-scoping definition — notifying someone via the
+    wider chip-assign population would ping people whose own dashboard
+    wouldn't actually show them the flag, which is exactly backwards from
+    what this is for.
+
+    Added 13 Jul 2026, per Ezekiel: "make sure flags show to all relevant
+    parties. E.g is CS flags something to management - the assigned
+    designers should see that flag on their dashboard and vice versa."
+    Used by flag_management() and resolve_decision() below so the same
+    "who's relevant to this project" definition backs both the raise and
+    the resolve notification.
+    """
+    from app.models import ProjectSecondaryCS
+    seen_ids = set()
+    recipients = []
+
+    if project.cs_lead:
+        seen_ids.add(project.cs_lead.id)
+        recipients.append(project.cs_lead)
+
+    for assignment in ProjectSecondaryCS.query.filter_by(project_id=project.id).all():
+        if assignment.user and assignment.user.id not in seen_ids:
+            seen_ids.add(assignment.user.id)
+            recipients.append(assignment.user)
+
+    for pd in project.assigned_designers:
+        if pd.designer and pd.designer.id not in seen_ids:
+            seen_ids.add(pd.designer.id)
+            recipients.append(pd.designer)
+
+    return recipients
+
+
 @detail_bp.route('/projects/<int:project_id>/flag-management', methods=['POST'])
 @login_required
 @role_required('admin', 'cs', 'designer', 'team_lead', 'management')  # anyone can escalate a blocker to management
@@ -962,10 +1017,49 @@ def flag_management(project_id):
     # create_notification() handles both the in-app notification (always
     # created) and the email (only if the recipient hasn't opted out of
     # email_decision_flag via /account/notification-prefs) — see app/notifications.py.
-    for recipient in User.query.filter_by(role='management').all():
+    #
+    # Recipients widened 13 Jul 2026 to role IN ('management', 'admin') —
+    # was 'management' only. Verified per Ezekiel's "make sure that
+    # management accounts get an email when something is flagged" — the
+    # management-only path itself was already correct (create_notification
+    # defaults recipient.wants_notification() to True when no pref is
+    # saved, so nothing was silently opting anyone out), but admin was
+    # missing from the recipient list even though admin sees this exact
+    # queue on the dashboard (Decisions Needed is gated to
+    # ('management', 'admin') — see _SCOPE_SWITCHER_ROLES-adjacent gating
+    # in dashboard.py) and can resolve it (see the Resolve button, added
+    # same day, explicitly framed as "management/admin oversight queue").
+    # An admin flagging something to themselves still gets an email too —
+    # no self-exclusion, same as every other notify_* function in this file.
+    notified_ids = set()
+    for recipient in User.query.filter(User.role.in_(['management', 'admin'])).all():
+        notified_ids.add(recipient.id)
         create_notification(
             recipient=recipient,
             message=f'{actor.name} flagged "{project.name}" for a Management decision.',
+            notification_type='decision_flag',
+            project=project,
+            triggered_by=actor,
+            pref_key='email_decision_flag'
+        )
+
+    # Widened 13 Jul 2026, per Ezekiel: "make sure flags show to all
+    # relevant parties. E.g is CS flags something to management - the
+    # assigned designers should see that flag on their dashboard and vice
+    # versa." Management/admin above are the ones who ACT on a flag; this
+    # second loop covers everyone else who already sees this project on
+    # their OWN dashboard (see _decision_flag_recipients()) and would
+    # otherwise have no idea a flag went up until they happened to open
+    # their Decisions Needed card. Skips the actor (no self-notify) and
+    # anyone already in the management/admin loop above (avoids a
+    # double-notify if, say, an admin is also this project's CS lead).
+    for recipient in _decision_flag_recipients(project):
+        if recipient.id == actor.id or recipient.id in notified_ids:
+            continue
+        notified_ids.add(recipient.id)
+        create_notification(
+            recipient=recipient,
+            message=f'{actor.name} flagged "{project.name}" for a Management decision: "{decision_note}"',
             notification_type='decision_flag',
             project=project,
             triggered_by=actor,
@@ -1001,10 +1095,29 @@ def resolve_decision(project_id):
     project.decision_note = None
     db.session.commit()
 
+    notified_ids = set()
     if raised_by:
+        notified_ids.add(raised_by.id)
         create_notification(
             recipient=raised_by,
             message=f'{actor.name} resolved the Management decision you flagged on "{project.name}".',
+            notification_type='decision_resolved',
+            project=project,
+            triggered_by=actor,
+            pref_key='email_decision_flag'
+        )
+
+    # Widened 13 Jul 2026, same reasoning/recipient set as flag_management()
+    # above (see _decision_flag_recipients()) — everyone whose own
+    # dashboard showed this flag should also see it clear, not just
+    # whoever happened to raise it.
+    for recipient in _decision_flag_recipients(project):
+        if recipient.id == actor.id or recipient.id in notified_ids:
+            continue
+        notified_ids.add(recipient.id)
+        create_notification(
+            recipient=recipient,
+            message=f'{actor.name} resolved the Management decision on "{project.name}".',
             notification_type='decision_resolved',
             project=project,
             triggered_by=actor,
@@ -1531,7 +1644,12 @@ def upload_project_file(project_id):
     db.session.add(project_file)
     db.session.commit()
     
-    log_activity('file_uploaded', f'Reference file "{original_filename}" uploaded to "{project.name}"',
+    # Description deliberately omits the filename (13 Jul 2026, per
+    # Ezekiel — the "Changes since Yesterday" dashboard card was showing
+    # long/messy filenames like 'WhatsApp Image 2026-07-10 at
+    # 4.13.40 PM (1).jpeg', which read as noise): was
+    # f'Reference file "{original_filename}" uploaded to "{project.name}"'.
+    log_activity('file_uploaded', f'Reference file was uploaded to "{project.name}"',
                  user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({

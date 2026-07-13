@@ -85,6 +85,27 @@
         bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
     }
 
+    // Re-measures an already-expanded tile body's max-height after its
+    // content changes WITHOUT a full open/close cycle — e.g. an AJAX fetch
+    // swapping in a longer or shorter list. expandBody() only captures
+    // scrollHeight once, at the moment a tile opens; it has no way to know
+    // the content inside changed afterward, so if a later fetch renders
+    // something taller than that original snapshot, the extra content is
+    // silently clipped by the same overflow: hidden that makes the
+    // open/close animation work in the first place. Real bug (13 Jul 2026,
+    // per Ezekiel, after the request-sequencing fix above didn't fully
+    // resolve it: "It still doesn't always load the full list on Other's
+    // Actions") — the data was always there, it was just visually clipped
+    // whenever the fetched list was taller than whatever content originally
+    // set the max-height (My Actions on first tile-open, or an even
+    // shorter still-collapsed measurement). No-op if the body isn't
+    // currently expanded — nothing visible to fix in that case.
+    function remeasureExpandedBody(bodyEl) {
+        if (bodyEl && bodyEl.classList.contains('expanded')) {
+            bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
+        }
+    }
+
     function collapseBody(bodyEl) {
         if (!bodyEl) return;
         // Give max-height a concrete starting pixel value before dropping
@@ -263,15 +284,6 @@
             '</span>';
     }
 
-    // item.owner from the API is polymorphic — null | {id,name} | [{id,name}, ...] —
-    // see the big comment on dash_due_row in _dashboard_macros.html for why.
-    // Returns a plain display string, or '' if there's no owner to show.
-    function ownerNames(owner) {
-        if (!owner) return '';
-        if (Array.isArray(owner)) return owner.map(function (u) { return u.name; }).join(', ');
-        return owner.name;
-    }
-
     // Mirrors dash_person_chip() in _dashboard_macros.html — avatar+name
     // chip, or a .dash-risk-tag when `person` is falsy and a label was
     // given. missingClass defaults to the plain rose .dash-risk-tag (CS
@@ -296,6 +308,25 @@
         return '';
     }
 
+    // Mirrors dash_row_people() in _dashboard_macros.html (extracted 13 Jul
+    // 2026 alongside that macro) — CS lead chip first, then one chip per
+    // assigned designer or a red missing-team tag. Only renderDueRow()
+    // below calls this today (At Risk/Clashing Projects got the same chips
+    // added the same day, but those two cards' row lists have no JS mirror
+    // — see their card partials' docstrings), kept as its own function
+    // anyway so a future JS mirror for either card can reuse it.
+    function personPeopleRow(csLead, designers) {
+        var people = personChip(csLead, 'CS Missing');
+        (designers || []).forEach(function (teamEntry) {
+            if (teamEntry.users && teamEntry.users.length) {
+                teamEntry.users.forEach(function (u) { people += personChip(u); });
+            } else {
+                people += personChip(null, teamEntry.missing_label, 'dash-risk-tag dash-risk-tag--red');
+            }
+        });
+        return '<span class="dash-row-people">' + people + '</span>';
+    }
+
     // Builds the exact same markup dash_due_row() produces server-side —
     // see the comment above this section for why these two must be kept in
     // sync. REDESIGNED 13 Jul 2026 alongside the macro: guidance/owner
@@ -305,23 +336,23 @@
     // right-hand "Next Action" block (item.guidance, sized up) instead of
     // the old inline .dash-action-tag pill. item.owner is still present on
     // the payload but no longer rendered here.
+    //
+    // Title INVERTED same day, per Ezekiel: "Invert the text so that
+    // deliverable is first and bold, project is second and grey" — was
+    // project (bold, main) — deliverable/customer (grey, detail); now
+    // deliverable/customer (bold, main) — project (grey, detail). A plain
+    // project-level row (item.type === 'project') has nothing to invert.
     function renderDueRow(item) {
-        var title = escapeHtml(item.project_name);
+        var title;
         if (item.type === 'deliverable') {
-            title += ' <span class="dash-row-title-detail">— ' + escapeHtml(item.deliverable_name) + '</span>';
-        }
-        if (item.type === 'customer' && item.customer_name) {
-            title += ' <span class="dash-row-title-detail">— ' + escapeHtml(item.customer_name) + '</span>';
+            title = escapeHtml(item.deliverable_name) + ' <span class="dash-row-title-detail">— ' + escapeHtml(item.project_name) + '</span>';
+        } else if (item.type === 'customer' && item.customer_name) {
+            title = escapeHtml(item.customer_name) + ' <span class="dash-row-title-detail">— ' + escapeHtml(item.project_name) + '</span>';
+        } else {
+            title = escapeHtml(item.project_name);
         }
 
-        var people = personChip(item.cs_lead, 'CS Missing');
-        (item.designers || []).forEach(function (teamEntry) {
-            if (teamEntry.users && teamEntry.users.length) {
-                teamEntry.users.forEach(function (u) { people += personChip(u); });
-            } else {
-                people += personChip(null, teamEntry.missing_label, 'dash-risk-tag dash-risk-tag--red');
-            }
-        });
+        var people = personPeopleRow(item.cs_lead, item.designers);
 
         // NOTE: this URL is hardcoded to match project_detail.detail's
         // route (/projects/<id>) rather than built with Flask's url_for —
@@ -334,11 +365,18 @@
         // both changed 13 Jul 2026, same-day follow-up — see the matching
         // comment on dash_due_row() in _dashboard_macros.html and the CSS
         // comments on .dash-row-date/.dash-row-next-action-tag.
+        //
+        // "No deadline" fallback added same day when Next Actions started
+        // reusing this function — Due's own rows never have a null
+        // deadline (only overdue items reach this card), but Next Actions
+        // rows can (e.g. a project still 'in_queue' with no deliverable
+        // deadlines set yet). Harmless no-op for Due since item.deadline
+        // is always truthy there.
         return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
-            '<span class="dash-row-date">' + escapeHtml(item.deadline) + '</span>' +
+            '<span class="dash-row-date">' + escapeHtml(item.deadline || 'No deadline') + '</span>' +
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + title + '</span>' +
-            '<span class="dash-row-people">' + people + '</span>' +
+            people +
             '</span>' +
             '<span class="dash-row-next-action">' +
             '<span class="dash-row-next-action-label">Next Action</span>' +
@@ -359,9 +397,14 @@
                     // refresh call site below) — fixed copy instead of the
                     // old generic "Nothing matches this filter." text.
                     container.innerHTML = '<p class="dash-empty-state">Nothing overdue this week.</p>';
-                    return;
+                } else {
+                    container.innerHTML = items.map(renderDueRow).join('');
                 }
-                container.innerHTML = items.map(renderDueRow).join('');
+                // Same fix as fetchAndRenderNextActions() (13 Jul 2026) —
+                // see remeasureExpandedBody()'s big comment. Latent here
+                // too: an SSE-triggered refresh can grow this list past
+                // whatever height was captured when the tile was opened.
+                remeasureExpandedBody(container.closest('.dash-card-body-content'));
             })
             .catch(function () {
                 // Network blip — leave whatever list was already showing
@@ -483,6 +526,9 @@
                 list.innerHTML = items.length
                     ? items.map(renderDecisionRow).join('')
                     : '<p class="dash-empty-state">No decisions currently needed.</p>';
+                // Same fix as fetchAndRenderNextActions()/fetchAndRenderDue()
+                // (13 Jul 2026) — see remeasureExpandedBody()'s big comment.
+                remeasureExpandedBody(list.closest('.dash-card-body-content'));
             })
             .catch(function () {
                 // Network blip — same "leave it stale" convention as
@@ -606,46 +652,67 @@
     // the list, same pattern as fetchAndRenderDue() above. Clicking back
     // to "My Actions" re-fetches too, rather than caching the original
     // SSR content — simpler, and the extra request is cheap.
+    //
+    // Row layout matched to Overdue (13 Jul 2026, per Ezekiel: "make the
+    // layout of the rows match Overdue layout") — this card no longer has
+    // its own bespoke row markup or render function. next_actions.html now
+    // calls dash_due_row(item) directly and this JS mirror calls
+    // renderDueRow(item) directly (see that macro/function's own big
+    // comments for the row shape: date+divider, CS lead/designer person
+    // chips, right-hand pine "Next Action" tag). The old owner tag
+    // ("Assigned to: X", previously shown only on the Others' Actions tab)
+    // and the separate flat missing_designer_tags chips are both gone —
+    // CS lead/designer person chips now cover both: who's relevant to the
+    // project, and which teams are unstaffed (red fallback chips), same
+    // "one missing-designer indicator per row" rule the At Risk card's
+    // duplicate-tag fix established. item.owner/item.owner_role are still
+    // computed server-side (_is_owner() needs them to split mine/others)
+    // but, like Due's own rows, are no longer rendered — renderNextActionRow()
+    // and ownerNames() are gone; if you're looking for them, check git
+    // history around 13 Jul 2026.
 
-    // Hand-written JS mirror of the row markup in next_actions.html — same
-    // duplication tradeoff as renderDueRow()/renderDecisionRow() above.
-    // Unlike those two, this render function needs to know which tab is
-    // active: the owner tag is only ever shown on the Others' Actions
-    // tab (see the big comment in next_actions.html for why), so
-    // fetchAndRenderNextActions() passes the current filter through.
-    // Reworked 10 Jul 2026 alongside renderDueRow() — guidance/owner are now
-    // separate colour-coded pills (.dash-action-tag / .dash-owner-tag)
-    // instead of stacked plain-text lines.
-    function renderNextActionRow(item, filterType) {
-        var tags = '<span class="dash-action-tag">' + escapeHtml(item.guidance) + '</span>';
-        if (filterType === 'others') {
-            var owners = ownerNames(item.owner);
-            tags += '<span class="dash-owner-tag">' + escapeHtml(owners || 'Unassigned') + '</span>';
-        }
-
-        return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
-            '<span class="rag-badge rag-' + item.rag + '">' + escapeHtml(item.deadline || 'No deadline') + '</span>' +
-            '<span class="dash-row-main">' +
-            '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
-            '<span class="dash-row-tags">' + tags + '</span>' +
-            '</span>' +
-            '</a>';
-    }
+    // Guards against a real race condition (fixed 13 Jul 2026, per
+    // Ezekiel: "clicking other's actions sometimes doesn't load the full
+    // details"). fetchAndRenderNextActions() had no way to know if a
+    // response it was about to render was still the one the user actually
+    // wanted. Two ways this went wrong: (1) rapid tab clicking — "Others'"
+    // then quickly back to "Mine" — where the network reorders the two
+    // responses and the slower "Others'" response lands last, silently
+    // showing the wrong (or, from the user's perspective, incomplete/
+    // stale-looking) list under the now-active "Mine" tab; (2) an
+    // SSE-triggered background refresh (see refreshDashboardFromSSE()
+    // below) landing mid-flight against a manual tab click. This is the
+    // one card left where it can actually happen — fetchAndRenderDue()
+    // has the identical gap in its own code, but Due's filter is pinned
+    // to a single fixed value now (see its fourth follow-up in
+    // CLAUDE.md), so there's no second filter value left for a race to
+    // manifest against there. nextActionsRequestSeq is bumped on every
+    // call; a response is only rendered if it's still the most recent
+    // request issued when it comes back.
+    var nextActionsRequestSeq = 0;
 
     function fetchAndRenderNextActions(filterType) {
         var container = document.getElementById('dash-next-actions-list');
         if (!container) return;
 
+        var requestSeq = ++nextActionsRequestSeq;
+
         fetch(withDashScope('/dashboard/api/next-actions?filter=' + encodeURIComponent(filterType)))
             .then(function (r) { return r.json(); })
             .then(function (items) {
+                if (requestSeq !== nextActionsRequestSeq) return; // superseded by a newer request — discard
+
                 if (!items.length) {
                     container.innerHTML = '<p class="dash-empty-state">' +
                         (filterType === 'mine' ? 'Nothing needs your action right now.' : 'Nothing is currently waiting on anyone else.') +
                         '</p>';
-                    return;
+                } else {
+                    container.innerHTML = items.map(renderDueRow).join('');
                 }
-                container.innerHTML = items.map(function (item) { return renderNextActionRow(item, filterType); }).join('');
+                // See remeasureExpandedBody()'s big comment above — without
+                // this, a longer "Others'" list than whatever content last
+                // set the tile's max-height gets silently clipped.
+                remeasureExpandedBody(container.closest('.dash-card-body-content'));
             })
             .catch(function () {
                 // Same "leave it stale on a network blip" convention as

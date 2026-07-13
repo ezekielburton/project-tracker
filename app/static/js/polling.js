@@ -321,7 +321,20 @@
         // Always tear down before reinitialising — prevents duplicate
         // streams/intervals when the user navigates via the sidebar
         teardown();
+        
+        fetch('/api/version')
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.version !== HELIX_VERSION) {
+                    window.location.reload();
+                }
+            })
+            .catch(function() {
 
+            });
+        
         // Dashboard: identified by one of the view container IDs that only exist
         // on dashboard pages. We do NOT use .dashboard-toggle here because that
         // class is also on the notification panel in base.html, which would make

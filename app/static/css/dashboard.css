@@ -530,9 +530,25 @@
    simultaneously). Empty (all children collapsed via .dash-card-body-
    content below) by default, so it takes no visible space until ANY tile
    anywhere in the grid is clicked — no separate "is anything open" class
-   needed on the wrapper itself, same as the old per-row version. */
+   needed on the wrapper itself, same as the old per-row version.
+
+   Narrowed + centered (13 Jul 2026, per Ezekiel: "the expandable section
+   needs to be a bit smaller - right now it's way too wide. Center it and
+   ensure that it's just as wide as it needs to be, since we are
+   standardizing the layout"). Was full page width (same width as the
+   5-column .dash-tiles-grid above it, since neither had a max-width) —
+   at that width, a single row's date/title/chips/next-action content sat
+   with huge empty margins on a wide monitor. 900px comfortably fits a row
+   with a date divider, a title, a wrapped line of person chips, and a
+   right-aligned Next Action tag without feeling cramped, while reading
+   like a deliberately-sized panel rather than a stretched-out one. Only
+   ONE card's body is ever visible at a time here (see the docstring
+   above), so narrowing the whole wrapper narrows whichever body happens
+   to be open — no per-card override needed. */
 .dash-shared-expand {
     display: block;
+    max-width: 900px;
+    margin: 0 auto;
 }
 
 /* Same JS-measured max-height mechanic as .dash-card-body above (see the
@@ -676,7 +692,12 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.65rem 0;
+    /* Widened 13 Jul 2026, per Ezekiel ("a lot of information condensed" —
+       screenshot of a Clashing Projects row) — 0.65rem -> 1rem so each row
+       gets more breathing room against its neighbours. Shared by every
+       card using .dash-row (Overdue, At Risk, Next Actions, Clashing
+       Projects), so this one change widens all of them consistently. */
+    padding: 1rem 0;
     border-bottom: 1px solid var(--border-subtle);
     text-decoration: none;
     color: inherit;
@@ -727,7 +748,15 @@ a.dash-row:hover {
     min-width: 0;
 }
 
+/* Sized up 13 Jul 2026, per Ezekiel ("make the project name and
+   deliverable name easier to read") — was unset (inherited the ambient
+   ~0.9rem body size). 1.05rem + line-height give the title itself more
+   presence and stop a wrapped title's two lines from crowding each
+   other. Shared across every .dash-row consumer (Overdue, At Risk, Next
+   Actions, Clashing Projects). */
 .dash-row-title {
+    font-size: 1.05rem;
+    line-height: 1.4;
     font-weight: 600;
     color: var(--black);
 }
@@ -741,6 +770,18 @@ a.dash-row:hover {
     color: var(--grey-dark);
 }
 
+/* "Changes since Yesterday" only (13 Jul 2026, per Ezekiel: "can we make
+   the entry less bold") — this card's rows are purely informational
+   free-text log lines (see the RAG-mini-stat comment in what_changed.html
+   on why this card is flat green, never a severity), so a lighter title
+   weight fits its lower-urgency tone than the shared 600 every other
+   .dash-row consumer (Overdue, At Risk, Next Actions, Clashing Projects)
+   still uses. Scoped to this card's tile body specifically rather than
+   changed on the shared .dash-row-title rule above. */
+.dash-card-body-content[data-card="what_changed"] .dash-row-title {
+    font-weight: 500;
+}
+
 .dash-row-sub {
     font-size: 0.8rem;
     color: var(--grey-dark);
@@ -752,12 +793,15 @@ a.dash-row:hover {
    two pieces of information ("what needs doing" vs. "who's doing it") are
    visually distinct at a glance instead of running together as one grey
    sentence. */
+/* margin-top widened 0.3rem -> 0.55rem 13 Jul 2026, same "less condensed"
+   pass as .dash-row/.dash-row-title above, so the tag row doesn't sit
+   right on top of a now-larger title. */
 .dash-row-tags {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     flex-wrap: wrap;
-    margin-top: 0.3rem;
+    margin-top: 0.55rem;
 }
 
 .dash-action-tag,
@@ -851,12 +895,15 @@ a.dash-row:hover {
 
 /* Row of avatar chips + missing-team tags under the title, replacing the
    old guidance/owner .dash-row-tags line for this macro specifically. */
+/* margin-top widened 0.4rem -> 0.55rem 13 Jul 2026, same pass as
+   .dash-row-tags above — keeps the chip row's spacing consistent whether
+   it sits directly under the title or under a .dash-row-tags line. */
 .dash-row-people {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
-    margin-top: 0.4rem;
+    margin-top: 0.55rem;
 }
 
 .dash-person-chip {
@@ -930,13 +977,50 @@ a.dash-row:hover {
     background: #E60000;
 }
 
+/* Overdue tag — red + pulsing (13 Jul 2026, same-day follow-up, per
+   Ezekiel: "Make overdue red and make it pulse or flash", added
+   alongside matching the At Risk card's row layout to Overdue's). Same
+   #E60000 red as .dash-risk-tag--red above, but visually distinguished
+   from that STATIC red via a looping opacity pulse — Overdue describes a
+   live, worsening-by-the-day condition (unlike a missing designer, which
+   is just a data gap until someone's assigned), so it earns its own
+   attention-grabbing animation rather than sharing designer-missing's
+   plain static red. Compound selector, same specificity-safety reason
+   .dash-risk-tag.dash-risk-tag--red uses above (a bare .dash-risk-tag--
+   overdue would lose to the later, equal-specificity base .dash-risk-tag
+   rule). prefers-reduced-motion users get the solid red with no
+   animation — pulsing/flashing chrome is exactly the kind of motion that
+   preference exists to suppress. */
+.dash-risk-tag.dash-risk-tag--overdue {
+    background: #E60000;
+    animation: dash-risk-tag-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dash-risk-tag-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-risk-tag.dash-risk-tag--overdue,
+    .dash-clash-severity-tag--detected {
+        animation: none;
+    }
+}
+
 /* Plain deadline text (13 Jul 2026, same-day follow-up, per Ezekiel:
    "remove the green wrapper, add a vertical divider between it and rest of
    the information") — replaces the old .rag-badge rag-{red/yellow/green}
    coloured pill dash_due_row used to render here. .rag-badge/.rag-red/
    .rag-yellow/.rag-green themselves are UNTOUCHED — still used as-is by
-   Next Actions, Decisions, Clashes, At Risk, and the deep-dive row macros,
-   this row type just stopped using them.
+   Next Actions, Decisions, Clashes, and the deep-dive row macros. At Risk
+   ALSO switched to this same .dash-row-date class the same day (per
+   Ezekiel: "it should follow the same visual pattern [as Overdue]"),
+   generic/unscoped enough to reuse directly with no At-Risk-specific
+   override needed — item.rag is still computed and returned by
+   _compute_at_risk_projects() but is no longer rendered anywhere on that
+   card's row, same "kept on the payload, not currently used" status
+   dash_due_row's own item.rag field already has.
 
    align-self: stretch overrides .dash-row's own align-items: center for
    just this child, so the border-right divider spans the FULL row height
@@ -1003,6 +1087,37 @@ a.dash-row:hover {
     border-radius: var(--radius-sm);
 }
 
+/* Clash group date header (13 Jul 2026, same-day follow-up — the fourth
+   round on this heading in one session, see the big comment in
+   clashes.html for the full history). Per Ezekiel: "let's have each date
+   in its own div wrapper so it's easy to see the divide" — the date
+   (previously just the first inline span in the same flex row as the
+   designer chip/severity tag) now gets its OWN full-width block above
+   that row, with a bottom border acting as a visible divider between one
+   clash group's date and the next group's. This reads as a section
+   header for everything below it (designer chip, severity tag, and every
+   row in the group), which is also why it's a separate div rather than
+   still living inside .dash-col-heading — a flex child can't become a
+   full-width divider without either stretching the whole row or forcing
+   a manual flex-basis: 100% hack; a sibling block is simpler. */
+.dash-clash-date-header {
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.6rem;
+    border-bottom: 2px solid var(--border-subtle);
+}
+
+/* font-mono to match every other date/time display on this page
+   (.dash-row-date, .dash-action-tag). Bigger/bolder than the plain grey
+   text this used to be, per the same-day request right before this one:
+   "make the date bigger and bolder... organised by date, rather than by
+   designer." */
+.dash-clash-group-date {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--black);
+}
+
 /* Clashing Projects card — "Clash Detected" vs "Potential Clash" (see
    _clash_severity() in dashboard_logic.py). Reuses the same rag-red/
    rag-yellow colours the rest of the dashboard already uses for urgency,
@@ -1023,9 +1138,17 @@ a.dash-row:hover {
     white-space: nowrap;
 }
 
+/* Red + pulsing (13 Jul 2026, same-day follow-up, per Ezekiel: "make clash
+   detected red and pulsing also") — matches At Risk's
+   .dash-risk-tag--overdue treatment exactly: same deepened #E60000 (not
+   pure #FF0000) and the same shared dash-risk-tag-pulse keyframes, reused
+   rather than duplicated. Was var(--rose) (soft brand pink), flat, no
+   animation. .dash-clash-severity-tag--potential (amber, static) is
+   unchanged — this only touches the certain-conflict state. */
 .dash-clash-severity-tag--detected {
-    background: var(--rose);
+    background: #E60000;
     color: var(--white);
+    animation: dash-risk-tag-pulse 1.4s ease-in-out infinite;
 }
 
 .dash-clash-severity-tag--potential {

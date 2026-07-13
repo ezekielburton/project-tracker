@@ -351,6 +351,41 @@ _TEAM_MISSING_LABELS = {
 }
 
 
+def _missing_designer_tags(project):
+    """
+    Which of a project's REQUESTED design teams (design_teams_requested)
+    have no project-level Lead Designer assigned yet — the exact staffing-
+    gap check _compute_at_risk_projects() originated (12 Jul 2026). Pulled
+    out into its own helper 13 Jul 2026 so Next Actions and Clashing
+    Projects can show the same tag without copying the logic a second
+    time — see CLAUDE.md's "Missing-designer tag, everywhere" section.
+
+    Checks project.assigned_designers (the project-level "Assigned Lead
+    Designers" table), NOT per-deliverable assignment — same scope
+    _compute_at_risk_projects() and _due_row_people()'s project-level
+    fallback already use, so a project reads as "missing" or "staffed" the
+    same way regardless of which card is looking at it.
+
+    Returns a list of label strings — usually 0 or 1 entries ('All
+    Designers Missing' replaces the individual per-team labels once every
+    requested team is unstaffed, same collapsing rule as before), never
+    per-team AND the "All" label at once.
+    """
+    requested_teams = [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
+    if not requested_teams:
+        return []
+
+    assigned_teams = {d.team for d in project.assigned_designers}
+    missing_teams = [t for t in requested_teams if t not in assigned_teams]
+    if not missing_teams:
+        return []
+
+    if len(missing_teams) == len(requested_teams):
+        return ['All Designers Missing']
+
+    return [_TEAM_MISSING_LABELS.get(t, f'{t} Missing') for t in missing_teams]
+
+
 def _compute_at_risk_projects(user):
     """
     "At Risk" card (added 12 Jul 2026, per management review). NOT the same
@@ -385,41 +420,71 @@ def _compute_at_risk_projects(user):
     A project can carry more than one tag at once (e.g. missing a designer
     AND overdue this week) — that's still one row with multiple tags, never
     duplicate rows for the same project.
+
+    Each tag is now a {'label':, 'variant':} dict, not a bare string
+    (changed 13 Jul 2026 alongside _missing_designer_tags() below, reshaped
+    again same day from an earlier {'label':,'red':} boolean version so
+    Overdue could get its OWN look instead of sharing the designer-missing
+    red). `variant` is one of:
+      - 'overdue' — red + pulsing (per Ezekiel: "Make overdue red and make
+        it pulse or flash") — see .dash-risk-tag--overdue in dashboard.css.
+      - 'designer_missing' — solid red, same .dash-risk-tag--red
+        dash_due_row()'s missing-designer chips use everywhere else.
+      - 'plain' — the card's original rose .dash-risk-tag (CS Missing
+        only) — a data gap, not a staffing gap or a schedule miss, so it
+        doesn't borrow either of the other two colours.
+    Tag ORDER also changed same day, per Ezekiel ("date in plain black
+    text, vertical divider, then the name, overdue tag then 2D designer
+    missing"): Overdue now appended FIRST, then CS Missing — was
+    designer-missing-then-Overdue. Safe to reshape/reorder without a JS
+    parity update — this card's row list has no live-refresh JS mirror,
+    only its mini-stat count does (see at_risk.html's docstring).
+
+    Designer-missing labels are DELIBERATELY NOT in this `tags` list
+    anymore (same-day follow-up, per Ezekiel: "at risk is duplicating the
+    tags - only one missing tag is needed") — they used to be appended
+    here too, which meant a missing team showed BOTH as a top-row
+    .dash-risk-tag AND as a red chip in the dash_row_people() line below
+    (see item.designers), the exact same fact stated twice on one row.
+    The chip version is strictly more informative (it's IN the people row,
+    next to who's actually assigned) so it wins; `has_missing_designer`
+    below still folds the check into whether the project qualifies as
+    "at risk" at all, it just doesn't duplicate it into `tags`.
     """
     today = date.today()
     results = []
 
     for p in _scoped_projects(user, active_only=True).all():
         tags = []
-
-        if not p.cs_lead_id:
-            tags.append('CS Missing')
-
-        requested_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
-        if requested_teams:
-            assigned_teams = {d.team for d in p.assigned_designers}
-            missing_teams = [t for t in requested_teams if t not in assigned_teams]
-            if missing_teams and len(missing_teams) == len(requested_teams):
-                tags.append('All Designers Missing')
-            else:
-                for t in missing_teams:
-                    tags.append(_TEAM_MISSING_LABELS.get(t, f'{t} Missing'))
+        has_missing_designer = bool(_missing_designer_tags(p))
 
         deadline = nearest_deadline(p)
         if deadline:
             days_overdue = (today - deadline).days
             if 1 <= days_overdue <= 7:
-                tags.append('Overdue')
+                tags.append({'label': 'Overdue', 'variant': 'overdue'})
 
-        if not tags:
+        if not p.cs_lead_id:
+            tags.append({'label': 'CS Missing', 'variant': 'plain'})
+
+        if not tags and not has_missing_designer:
             continue
 
+        # Added 13 Jul 2026, per Ezekiel: "add the tags you have already
+        # made (with their profile pic included) for the relevant
+        # designers and CS leads" — same dash_person_chip() avatar+name
+        # chips dash_due_row() shows, project-level (there's no single
+        # deliverable to scope to on this card, same fallback
+        # _due_row_people()'s project/customer rows already use).
+        requested_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
         results.append({
             'project_id': p.id,
             'name': p.name,
             'tags': tags,
             'deadline': deadline.isoformat() if deadline else None,
             'rag': get_project_rag(p),
+            'cs_lead': _serialize_person(p.cs_lead),
+            'designers': _due_row_people(p, requested_teams),
         })
 
     # Nearest deadline first, same convention as the deep-dive zone's
@@ -614,6 +679,16 @@ def _compute_what_changed(user):
     existing free-text description rather than structured field/old/new
     values — ActivityLog only ever stored a description string, so there's
     no old/new value data to surface (deliberate call, not an oversight).
+
+    Row layout matched to Overdue (13 Jul 2026, per Ezekiel: "date on the
+    left like overdue... information on top, project name small
+    underneath, name of owner of the information on the right with their
+    profile pic"). 'changed_by' switched from a plain name string to
+    _serialize_person(e.user) so what_changed.html can render it through
+    dash_person_chip() (needs avatar_filename) instead of a plain
+    .dash-owner-tag pill — same avatar+name treatment as everywhere else
+    on the dashboard now. Still None for system-triggered entries with no
+    user_id, same as before.
     """
     projects = _scoped_projects(user, active_only=False).all()
     project_ids = [p.id for p in projects]
@@ -635,7 +710,7 @@ def _compute_what_changed(user):
             'project_name': projects_by_id[e.entity_id].name if e.entity_id in projects_by_id else e.entity_name,
             'description': e.description,
             'timestamp': e.created_at.isoformat(),
-            'changed_by': e.user.name if e.user else None
+            'changed_by': _serialize_person(e.user) if e.user else None
         }
         for e in entries
     ]
@@ -847,6 +922,25 @@ def _compute_next_actions(user, filter_type):
     case (e.g. a project stuck 'in_queue' with no deliverable deadlines
     set yet still needs someone's action), so the sentinel is needed here
     specifically.
+
+    Row layout matched to Overdue (13 Jul 2026, per Ezekiel: "make the
+    layout of the rows match Overdue layout") — this function now emits
+    the same shape dash_due_row()/renderDueRow() expect: 'type': 'project'
+    (there's no deliverable/customer to invert the title against, same as
+    a plain project-level Due row), 'cs_lead' (_serialize_person(p.cs_lead))
+    and 'designers' (_due_row_people(p, requested_teams), project-level
+    fallback — no single deliverable to scope to here, same as At Risk/
+    Clashing Projects' by-project rows). 'missing_designer_tags' was
+    REMOVED from this payload in the same pass — it's now fully redundant
+    with the red fallback chips 'designers' already produces per unstaffed
+    team (both ultimately check project.assigned_designers against
+    design_teams_requested via the same _TEAM_MISSING_LABELS wording), and
+    showing it a second time as a flat tag would repeat the exact
+    duplicate-indicator bug the At Risk card had to be fixed for earlier
+    the same day. 'owner'/'owner_role' stay on the payload (still needed
+    internally for the is_mine split above) but, like Due's own rows,
+    aren't rendered by dash_due_row() — CS lead/designer chips replace
+    what the owner tag used to show.
     """
     results = []
     for p in _scoped_projects(user, active_only=True).all():
@@ -859,14 +953,18 @@ def _compute_next_actions(user, filter_type):
             continue
 
         deadline = nearest_deadline(p)
+        requested_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
         results.append({
             'project_id': p.id,
+            'type': 'project',
             'project_name': p.name,
             'guidance': owner_info['guidance'],
             'owner': _serialize_owner(owner_info['user']),
             'owner_role': owner_info['role'],
             'rag': get_project_rag(p),
             'deadline': deadline.isoformat() if deadline else None,
+            'cs_lead': _serialize_person(p.cs_lead),
+            'designers': _due_row_people(p, requested_teams),
         })
 
     results.sort(key=lambda r: r['deadline'] or '9999-12-31')
@@ -903,13 +1001,31 @@ def _compute_flaggable_projects(user):
 
 
 def _compute_clashes_response(user):
+    """
+    cs_lead/designers added 13 Jul 2026, per Ezekiel: "add the tags you
+    have already made (with their profile pic included) for the relevant
+    designers and CS leads. Add it to at risk, clashing projects." Same
+    _serialize_person()/_due_row_people() pair dash_due_row() and At Risk
+    use. By-deliverable entries scope designers to that deliverable's OWN
+    teams (d.teams — "designer assigned to THAT deliverable", same as
+    _compute_due()'s deliverable rows); by-project entries fall back to
+    the project's design_teams_requested (no single deliverable to scope
+    to), same as At Risk.
+
+    Group-heading designer (the one clashing designer a whole group is
+    named after, NOT the per-row cs_lead/designers above) switched from
+    _serialize_user() to _serialize_person() same-day follow-up, per
+    Ezekiel: "Designer name -> Profile picture + name" — needs
+    avatar_filename so clashes.html can render it through
+    dash_person_chip() instead of a plain text .dash-owner-tag pill.
+    """
     projects = _scoped_projects(user, active_only=True).all()
     clashes = compute_clashes(projects)
 
     return {
         'by_deliverable': [
             {
-                'designer': _serialize_user(User.query.get(c['designer_id'])),
+                'designer': _serialize_person(User.query.get(c['designer_id'])),
                 'date': c['date'].isoformat(),
                 # 'clash' | 'potential' — see _clash_severity() in
                 # dashboard_logic.py for the exact rule. Rendered as
@@ -926,6 +1042,18 @@ def _compute_clashes_response(user):
                         # stays None (not '—') so the template can decide
                         # how to phrase "no time set" itself.
                         'time': d.design_deadline_time.strftime('%H:%M') if d.design_deadline_time else None,
+                        # Added 13 Jul 2026, per Ezekiel — same red
+                        # missing-designer tag as At Risk/Overdue/Next
+                        # Actions, checked against d's OWN project (a clash
+                        # group can span multiple projects, so this can't
+                        # be hoisted up to the group level) — see
+                        # _missing_designer_tags().
+                        'missing_designer_tags': _missing_designer_tags(d.project),
+                        'cs_lead': _serialize_person(d.project.cs_lead),
+                        'designers': _due_row_people(
+                            d.project,
+                            [t.strip() for t in (d.teams or '').split(',') if t.strip()]
+                        ),
                     }
                     for d in c['deliverables']
                 ]
@@ -934,9 +1062,21 @@ def _compute_clashes_response(user):
         ],
         'by_project': [
             {
-                'designer': _serialize_user(User.query.get(c['designer_id'])),
+                'designer': _serialize_person(User.query.get(c['designer_id'])),
                 'date': c['date'].isoformat(),
-                'projects': [{'id': proj.id, 'name': proj.name} for proj in c['projects']]
+                'projects': [
+                    {
+                        'id': proj.id,
+                        'name': proj.name,
+                        'missing_designer_tags': _missing_designer_tags(proj),
+                        'cs_lead': _serialize_person(proj.cs_lead),
+                        'designers': _due_row_people(
+                            proj,
+                            [t.strip() for t in (proj.design_teams_requested or '').split(',') if t.strip()]
+                        ),
+                    }
+                    for proj in c['projects']
+                ]
             }
             for c in clashes['by_project']
         ]

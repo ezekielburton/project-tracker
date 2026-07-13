@@ -142,6 +142,34 @@
 
 
 {#
+   dash_row_people(cs_lead, designers)
+   ─────────────────────────────────────
+   Row of avatar+name chips (CS lead first, then one chip per assigned
+   designer / missing-team tag) — extracted 13 Jul 2026 from dash_due_row()
+   below into its own macro so other cards can reuse the exact same chip
+   row instead of copying its inline loop. Added per Ezekiel: "add the
+   tags you have already made (with their profile pic included) for the
+   relevant designers and CS leads. Add it to at risk, clashing projects."
+   Now used by dash_due_row (Overdue/Summary), at_risk.html, and
+   clashes.html. `designers` is the _due_row_people() shape: [{'team':,
+   'users': [...], 'missing_label':}, ...] — pass [] for rows with no
+   design-team data (there are none today, but the macro tolerates it).
+#}
+{% macro dash_row_people(cs_lead, designers) %}
+<span class="dash-row-people">
+    {{ dash_person_chip(cs_lead, 'CS Missing') }}
+    {%- for team_entry in designers %}
+        {%- if team_entry.users %}
+            {%- for u in team_entry.users %}{{ dash_person_chip(u) }}{% endfor -%}
+        {%- else %}
+            {{ dash_person_chip(None, team_entry.missing_label, 'dash-risk-tag dash-risk-tag--red') }}
+        {%- endif -%}
+    {%- endfor %}
+</span>
+{% endmacro %}
+
+
+{#
    dash_due_row(item) — REDESIGNED 13 Jul 2026, per Ezekiel:
    "Put the action needed to do on the right and make it bigger. Above it
    put the text 'Next Action'. Underneath the project name and deliverable
@@ -178,26 +206,35 @@
    throughout this file) — if you change this macro's output, update
    renderDueRow() and its buildPersonChip()/DASH_TEAM_MISSING_LABELS
    companions to match.
+
+   Title INVERTED 13 Jul 2026, per Ezekiel: "the layout you have made for
+   [Overdue] is very very clean. Invert the text so that deliverable is
+   first and bold, project is second and grey." Was project (bold, main)
+   — deliverable/customer (grey, detail); now deliverable/customer (bold,
+   main) — project (grey, detail). A plain project-level row (no
+   deliverable/customer — item.type == 'project') has nothing to invert,
+   so it's unchanged: just the project name, bold, on its own.
+
+   Person-chip row extracted into dash_row_people() (above) the same day,
+   so At Risk and Clashing Projects can render the identical avatar+name
+   chips without copying this loop — see that macro's docstring.
 #}
 {% macro dash_due_row(item) %}
 <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
-    <span class="dash-row-date">{{ item.deadline }}</span>
+    {# "No deadline" fallback added 13 Jul 2026 when Next Actions started
+       reusing this macro (see the big comment above) — Due's own rows
+       never have a null deadline (only overdue items reach that card),
+       but Next Actions rows can (e.g. a project still 'in_queue' with no
+       deliverable deadlines set yet). Harmless no-op for Due. #}
+    <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
     <span class="dash-row-main">
         <span class="dash-row-title">
-            {{ item.project_name }}
-            {%- if item.type == 'deliverable' %} <span class="dash-row-title-detail">&mdash; {{ item.deliverable_name }}</span>{% endif -%}
-            {%- if item.type == 'customer' and item.customer_name %} <span class="dash-row-title-detail">&mdash; {{ item.customer_name }}</span>{% endif -%}
+            {%- if item.type == 'deliverable' %}{{ item.deliverable_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- elif item.type == 'customer' and item.customer_name %}{{ item.customer_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- else %}{{ item.project_name }}
+            {%- endif %}
         </span>
-        <span class="dash-row-people">
-            {{ dash_person_chip(item.cs_lead, 'CS Missing') }}
-            {%- for team_entry in item.designers %}
-                {%- if team_entry.users %}
-                    {%- for u in team_entry.users %}{{ dash_person_chip(u) }}{% endfor -%}
-                {%- else %}
-                    {{ dash_person_chip(None, team_entry.missing_label, 'dash-risk-tag dash-risk-tag--red') }}
-                {%- endif -%}
-            {%- endfor %}
-        </span>
+        {{ dash_row_people(item.cs_lead, item.designers) }}
     </span>
     <span class="dash-row-next-action">
         <span class="dash-row-next-action-label">Next Action</span>
