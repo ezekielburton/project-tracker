@@ -1,23 +1,19 @@
 /* app/static/css/dashboard.css
-   Role-based dashboard — card grid, expand/collapse mechanic, RAG badges,
-   and the deep-dive zone. Reuses established Helix tokens/components
-   throughout (--tangerine/--sandstone/--pine/--rose/--canary, .team-tag-btn
-   for pills, .modal-overlay/.modal for the Flag to Management modal) — no
-   new design language. The deep-dive zone used .data-table for a wide
-   browsable projects/deliverables grid until 10 Jul 2026, when it was cut
-   down to at-risk-only .dash-row lists (same component every card on this
-   page uses) — see the big comment on the deep-dive zone in dashboard.html. */
+   Role-based dashboard — card grid, expand/collapse mechanic, RAG badges.
+   Reuses established Helix tokens/components throughout
+   (--tangerine/--sandstone/--pine/--rose/--canary, .team-tag-btn for pills,
+   .modal-overlay/.modal for the Flag to Management modal) — no new design
+   language. Used to also style a "deep-dive zone" (Projects/Deliverables
+   tabs at the bottom of the page) — removed entirely 13 Jul 2026, see
+   CLAUDE.md and git history around that date. */
 
 /* ── Management/admin view-switcher (added 11 Jul 2026, extended to admin
    12 Jul 2026) ───────────────────────────────────────────────────────────
    My View / one tab per CS lead / All Projects — see the big comment on
    _resolve_dashboard_scope() in dashboard.py. Reuses .dash-tab-btn as-is
-   (same look as the deep-dive zone's Projects/Deliverables tabs further
-   down) since these ARE real links causing full page loads, not a
-   client-toggled pair — .dash-tab-bar's flex-row layout is close but
-   assumes exactly two tabs plus a right-aligned toggle button, which
-   doesn't fit an arbitrary-length, left-aligned list of CS leads, hence
-   its own small wrapper rule instead of reusing that class outright. */
+   (same underlying pill look) since these ARE real links causing full page
+   loads, not a client-toggled pair — hence its own small flex wrapper here
+   rather than a generic multi-purpose tab-bar class. */
 .dash-view-tabs {
     display: flex;
     gap: 0.5rem;
@@ -1186,25 +1182,9 @@ a.dash-row:hover {
     padding: 0.5rem 0;
 }
 
-/* ── Deep-dive zone ───────────────────────────────────────────────────── */
-
-.dash-divider {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 2rem 0;
-}
-
-.dash-tab-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-}
-
-.dash-tabs {
-    display: flex;
-    gap: 0.5rem;
-}
+/* .dash-tab-btn is shared with the management/admin scope-switcher tab bar
+   at the top of the dashboard (see dashboard.html) — kept even though the
+   deep-dive zone that originally introduced it was removed 13 Jul 2026. */
 
 .dash-tab-btn {
     padding: 0.5rem 1.2rem;
@@ -1224,84 +1204,11 @@ a.dash-row:hover {
     border-bottom-color: var(--tangerine);
 }
 
-.dash-deep-dive-panels {
-    display: block;
-}
-
-/* Explicit base rule (found missing during the UI verification pass,
-   Chunk 10) — single-tab mode was already working fine without this,
-   since block is a <div>'s default display anyway and .hidden (global
-   utility class) does the actual show/hide, but leaving it implicit made
-   it look like this class carried no rules of its own at all. Stated
-   here for clarity; the side-by-side override below still needs
-   !important to win over whichever of .hidden / this rule applies. */
-.dash-tab-panel {
-    display: block;
-}
-
-/* Side-by-side mode: both tab panels visible as two columns instead of
-   switching. .dash-side-by-side is toggled on the panels container by
-   dashboard.js; individual panel show/hide (single-tab mode) is handled
-   by toggling .hidden on each panel directly. */
-.dash-deep-dive-panels.dash-side-by-side {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-}
-
-.dash-deep-dive-panels.dash-side-by-side .dash-tab-panel {
-    display: block !important;
-}
-
-@media (max-width: 1200px) {
-    .dash-deep-dive-panels.dash-side-by-side {
-        grid-template-columns: 1fr;
-    }
-}
-
-/* Boxed-card look for each deep-dive panel (added 12 Jul 2026) — same
-   white/radius/shadow recipe as .dash-card above, so "Projects" and
-   "Deliverables" each read as their own distinct section instead of rows
-   floating directly on the page background. Matters most in side-by-side
-   mode, where both panels sit next to each other at once — the
-   .dash-col-heading label inside (see dashboard.html) is what actually
-   tells them apart there, since the tab buttons above stop being a
-   reliable "which one is this" cue once both are visible simultaneously. */
-.dash-deep-dive-box {
-    background: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 1.2rem 1.4rem;
-}
-
 .dash-filter-chips {
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
     margin-bottom: 1rem;
-}
-
-/* Small caption above the deep-dive zone's tab panels, added 10 Jul 2026
-   when the zone was cut down to at-risk-only rows — spells out the scope
-   change explicitly (a wide browsable table quietly becoming a narrow
-   at-risk list is the kind of thing people notice and wonder if something
-   broke) and points at the old Projects page for anyone who wants the full
-   directory instead. See the big comment on the deep-dive zone in
-   dashboard.html / _is_at_risk() in dashboard.py for the full reasoning. */
-.dash-deep-dive-caption {
-    font-size: 0.85rem;
-    color: var(--grey-dark);
-    margin-bottom: 1rem;
-}
-
-.dash-deep-dive-caption a {
-    color: var(--tangerine);
-    font-weight: 600;
-    text-decoration: none;
-}
-
-.dash-deep-dive-caption a:hover {
-    text-decoration: underline;
 }
 
 /* Groups one designer + one clashing date's rows together inside the
@@ -1316,10 +1223,3 @@ a.dash-row:hover {
 .dash-clash-group:last-child {
     margin-bottom: 0;
 }
-
-/* NOTE: .dash-customer-progress (C&CM "X of Y customers" pill) was removed
-   10 Jul 2026 — it only ever existed for the deep-dive zone's old wide
-   Projects table, which no longer shows that field (see the big comment on
-   the deep-dive zone in dashboard.html). If a C&CM customer-progress pill
-   is needed again somewhere on this page, it's cheap to re-add; check git
-   history for the exact rule. */

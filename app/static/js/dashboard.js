@@ -21,7 +21,6 @@
     'use strict';
 
     var STORAGE_PREFIX = 'helixDashCard:';
-    var SIDE_BY_SIDE_KEY = 'helixDashSideBySide';
 
     // ── Management view-switcher: scope-aware fetch helper ──────────────
     // Added 11 Jul 2026 alongside the ?scope= tab bar in dashboard.html
@@ -207,34 +206,6 @@
         document.querySelectorAll('.dash-card-body-content.expanded').forEach(function (body) {
             body.style.maxHeight = body.scrollHeight + 'px';
         });
-    }
-
-    // ── Deep-dive zone: tab switching + side-by-side toggle ─────────────
-    // Just the shell mechanic (tab buttons, panel visibility, side-by-side
-    // layout toggle). There used to be a second section down here for
-    // table content filtering/sorting (applyDeepDiveFilter()/
-    // sortDashboardTable()) — removed 10 Jul 2026 when the deep-dive zone
-    // became an always-at-risk-only row list (see the big comment above
-    // _is_at_risk() in app/routes/dashboard.py): nothing left to filter
-    // (every row already IS "at risk") or sort (already server-sorted).
-
-    function switchTab(tabName) {
-        document.querySelectorAll('.dash-tab-btn[data-tab]').forEach(function (btn) {
-            btn.classList.toggle('active', btn.dataset.tab === tabName);
-        });
-        document.querySelectorAll('.dash-tab-panel[data-panel]').forEach(function (panel) {
-            panel.classList.toggle('hidden', panel.dataset.panel !== tabName);
-        });
-    }
-
-    function setSideBySide(on) {
-        var panels = document.getElementById('dash-deep-dive-panels');
-        var toggleBtn = document.getElementById('dash-side-by-side-toggle');
-        if (!panels) return;
-
-        panels.classList.toggle('dash-side-by-side', on);
-        if (toggleBtn) toggleBtn.classList.toggle('active', on);
-        localStorage.setItem(SIDE_BY_SIDE_KEY, on ? '1' : '0');
     }
 
     // ── Due card: filter pills ────────────────────────────────────────
@@ -725,11 +696,10 @@
     // Both panels are already fully server-rendered (see clashes.html) —
     // clash lists are always small, so unlike the Due/Next Actions/
     // Decisions cards there's no separate fetch here, just show/hide
-    // between two pre-built blocks. Structurally identical to switchTab()
-    // above (deep-dive zone's Projects/Deliverables tabs), duplicated as
-    // its own small function rather than generalized, since it targets a
-    // different pair of elements ([data-clashes-panel] instead of
-    // [data-panel]) scoped to a single card rather than the whole page.
+    // between two pre-built blocks. This is its own small, independent
+    // function (not shared with anything else on the page) since it
+    // targets a specific pair of elements ([data-clashes-panel]) scoped to
+    // this one card.
     function switchClashesTab(filterValue) {
         document.querySelectorAll('[data-action="clashes-tab"]').forEach(function (btn) {
             btn.classList.toggle('active', btn.dataset.filter === filterValue);
@@ -948,10 +918,6 @@
 
     initCards();
 
-    if (localStorage.getItem(SIDE_BY_SIDE_KEY) === '1') {
-        setSideBySide(true);
-    }
-
     // ── Runs exactly once per page session — see file header ─────────────
 
     if (!window._dashboardListenersBound) {
@@ -1042,9 +1008,6 @@
                 return;
             }
 
-            var tabBtn = e.target.closest('[data-action="switch-tab"]');
-            if (tabBtn) { switchTab(tabBtn.dataset.tab); return; }
-
             // NOTE: the Due card's filter pills (All Today/Overdue/Due
             // Today/Due This Week, data-action="due-filter") were removed
             // 12 Jul 2026 (fourth follow-up) when that card was narrowed
@@ -1069,19 +1032,12 @@
             var clashesBtn = e.target.closest('[data-action="clashes-tab"]');
             if (clashesBtn) { switchClashesTab(clashesBtn.dataset.filter); return; }
 
-            // NOTE: the deep-dive zone's "All"/"At Risk" filter chips and
-            // deadline-sort pills were removed 10 Jul 2026 along with their
-            // handlers here — see the comment above the tab-switching
-            // section further up for why. If you're looking for
-            // applyDeepDiveFilter()/sortDashboardTable(), they're gone;
-            // check git history if you need to resurrect that mechanic.
-
-            var sideBtn = e.target.closest('[data-action="toggle-side-by-side"]');
-            if (sideBtn) {
-                var panels = document.getElementById('dash-deep-dive-panels');
-                if (panels) setSideBySide(!panels.classList.contains('dash-side-by-side'));
-                return;
-            }
+            // NOTE: the dashboard's deep-dive zone (Projects/Deliverables
+            // tabs at the bottom of the page, including its own "All"/
+            // "At Risk" filter chips, deadline-sort pills, and side-by-side
+            // toggle) was removed entirely 13 Jul 2026 — see CLAUDE.md and
+            // git history around that date if any of this needs
+            // resurrecting.
         });
     }
 

@@ -244,69 +244,7 @@
 {% endmacro %}
 
 
-{#
-   dash_deep_dive_project_row(item)
-   ─────────────────────────────────
-   Deep-dive zone's Projects panel, ONE row per AT-RISK project (added 10
-   Jul 2026 when the deep-dive zone stopped being a wide, all-projects
-   <table> — see the big comment above _is_at_risk() in dashboard.py for
-   why). Deliberately built to LOOK like a due/next-actions row — same
-   rag-badge + title + action-tag/owner-tag shape — because it IS the same
-   kind of data (guidance/owner straight from get_next_action_owner()), just
-   surfaced in a different card. That's what "essential info that relates to
-   the cards above" means here: this row tells you nothing the Next Actions
-   card couldn't already tell you about the same project.
-
-   Expected shape of `item` (see _compute_deep_dive_projects() in
-   app/routes/dashboard.py): project_id, name, rag, deadline (ISO string or
-   None), guidance, owner (polymorphic — see dash_due_row's comment above).
-#}
-{% macro dash_deep_dive_project_row(item) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
-    <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline if item.deadline else 'No deadline' }}</span>
-    <span class="dash-row-main">
-        <span class="dash-row-title">{{ item.name }}</span>
-        <span class="dash-row-tags">
-            <span class="dash-action-tag">{{ item.guidance }}</span>
-            {%- if item.owner %}
-                {%- if item.owner is mapping %}
-                <span class="dash-owner-tag">{{ item.owner.name }}</span>
-                {%- else %}
-                <span class="dash-owner-tag">{{ item.owner | map(attribute='name') | join(', ') }}</span>
-                {%- endif -%}
-            {%- endif -%}
-        </span>
-    </span>
-</a>
-{% endmacro %}
-
-
-{#
-   dash_deep_dive_deliverable_row(item)
-   ───────────────────────────────────────
-   Deep-dive zone's Deliverables panel, ONE row per AT-RISK deliverable
-   (same 10 Jul 2026 rework as dash_deep_dive_project_row above). Shows
-   team tag(s) instead of an owner-tag — deliverables in this app's data
-   model are assigned to a TEAM, not one specific designer (see
-   _compute_deep_dive_deliverables()'s docstring for the team-matching rule
-   that already filters this list per Designer/Team Lead) — so a person's
-   name isn't available to show here even if it would otherwise fit the
-   action-tag/owner-tag pattern above.
-
-   Expected shape of `item` (see _compute_deep_dive_deliverables() in
-   app/routes/dashboard.py): deliverable_id, project_id, project_name,
-   name, teams (list of strings), deadline (ISO string or None), rag.
-#}
-{% macro dash_deep_dive_deliverable_row(item) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
-    <span class="rag-badge rag-{{ item.rag }}">{{ item.deadline if item.deadline else 'No deadline' }}</span>
-    <span class="dash-row-main">
-        <span class="dash-row-title">{{ item.project_name }} <span class="dash-row-title-detail">&mdash; {{ item.name }}</span></span>
-        <span class="dash-row-tags">
-            {% for t in item.teams %}
-            <span class="team-tag team-{{ t | lower }}">{{ t }}</span>
-            {% endfor %}
-        </span>
-    </span>
-</a>
-{% endmacro %}
+{# dash_deep_dive_project_row() / dash_deep_dive_deliverable_row() —
+   removed 13 Jul 2026 along with the whole deep-dive zone at the bottom of
+   the dashboard (see CLAUDE.md). Check git history around that date if
+   either ever needs resurrecting. #}

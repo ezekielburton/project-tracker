@@ -125,11 +125,13 @@ def rag_for_deadline(deadline):
     Red = due today or overdue, Yellow = due within 2 calendar days,
     Green = 3+ days away or no deadline at all.
 
-    Factored out of get_project_rag() below so the deep-dive zone's
-    Deliverables tab (UI Chunk 8) — which needs a RAG colour based on ONE
-    deliverable's own deadline, not a whole project's nearest deadline —
-    can reuse the exact same thresholds instead of re-deriving them
-    separately and risking the two drifting apart later.
+    Factored out of get_project_rag() below so anything needing a RAG
+    colour based on ONE specific deadline (rather than a whole project's
+    nearest deadline) can reuse the exact same thresholds instead of
+    re-deriving them separately and risking the two drifting apart. (Originally
+    factored out for the dashboard's deep-dive zone, since removed 13 Jul
+    2026 — see CLAUDE.md; kept as its own function since other callers may
+    still want it.)
     """
     from datetime import date
 

@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from 'dashboard/_dashboard_macros.html' import dash_deep_dive_project_row, dash_deep_dive_deliverable_row %}
 
 {% block title %}Dashboard — Vitamin-E{% endblock %}
 
@@ -93,86 +92,27 @@
         {% endfor %}
     </div>
 
-    <hr class="dash-divider">
-
-    {# ── Deep-dive zone ───────────────────────────────────────────────
-       REWORKED 10 Jul 2026 — see the big comment above _is_at_risk() in
-       app/routes/dashboard.py for the full reasoning. Short version: this
-       used to be an all-scoped-projects browsable <table> (search-free
-       copy of the old Projects page's job), which (a) duplicated a page
-       that already does that better, and (b) was too wide to fit next to
-       its sibling panel in side-by-side mode. It's now a narrow, always-
-       at-risk-only extension of the cards above — same .dash-row shape
-       used everywhere else on this page, no filter chip (nothing to
-       filter — every row here IS "at risk"), no deadline-sort toggle
-       (already sorted, one deadline per row). Tab switching + side-by-side
-       toggle (mechanic wired in dashboard.js, unchanged) still apply. #}
-    <div class="dash-tab-bar">
-        <div class="dash-tabs">
-            <button type="button" class="dash-tab-btn{% if default_tab == 'projects' %} active{% endif %}"
-                    data-action="switch-tab" data-tab="projects">Projects</button>
-            <button type="button" class="dash-tab-btn{% if default_tab == 'deliverables' %} active{% endif %}"
-                    data-action="switch-tab" data-tab="deliverables">Deliverables</button>
-        </div>
-        <button type="button" class="team-tag-btn" id="dash-side-by-side-toggle" data-action="toggle-side-by-side">
-            Side by Side
-        </button>
-    </div>
-
-    <p class="dash-deep-dive-caption">
-        Showing at-risk items only — the detail behind the cards above.
-        <a href="{{ url_for('main.projects') }}">View all projects &rarr;</a>
-    </p>
-
-    <div class="dash-deep-dive-panels" id="dash-deep-dive-panels">
-
-        {# ── Projects tab ──────────────────────────────────────────────
-           Fully server-rendered from deep_dive_projects (see
-           _compute_deep_dive_projects() in dashboard.py) — already
-           filtered to at-risk-only and sorted by nearest deadline, so
-           this loop has nothing left to do but render.
-
-           .dash-deep-dive-box (added 12 Jul 2026) gives this panel the
-           same boxed-card look (white bg, radius, shadow) as every card
-           above it, instead of rows floating directly on the page
-           background — and its .dash-col-heading label means the panel
-           still reads as "Projects" even in side-by-side mode, where
-           both panels are visible at once and the tab buttons above no
-           longer tell you which column is which. #}
-        <div class="dash-tab-panel{% if default_tab != 'projects' %} hidden{% endif %}" data-panel="projects">
-            <div class="dash-deep-dive-box">
-                <div class="dash-col-heading">Projects</div>
-                {% if deep_dive_projects %}
-                    {% for p in deep_dive_projects %}
-                        {{ dash_deep_dive_project_row(p) }}
-                    {% endfor %}
-                {% else %}
-                <p class="dash-empty-state">No at-risk projects right now.</p>
-                {% endif %}
-            </div>
-        </div>
-
-        {# ── Deliverables tab ──────────────────────────────────────────
-           Same idea as Projects above, one row per AT-RISK deliverable
-           (not grouped by project) — see _compute_deep_dive_deliverables()'s
-           docstring in dashboard.py for the Designer/Team Lead team-
-           matching rule (a designer only sees deliverables for the
-           team(s) they're actually assigned to on that specific project,
-           not every deliverable on every project they touch). #}
-        <div class="dash-tab-panel{% if default_tab != 'deliverables' %} hidden{% endif %}" data-panel="deliverables">
-            <div class="dash-deep-dive-box">
-                <div class="dash-col-heading">Deliverables</div>
-                {% if deep_dive_deliverables %}
-                    {% for d in deep_dive_deliverables %}
-                        {{ dash_deep_dive_deliverable_row(d) }}
-                    {% endfor %}
-                {% else %}
-                <p class="dash-empty-state">No at-risk deliverables right now.</p>
-                {% endif %}
-            </div>
-        </div>
-
-    </div>
+    {# Deep-dive zone (side-by-side Projects/Deliverables panels) REMOVED
+       13 Jul 2026, per Ezekiel: "remove the side by side view on the
+       bottom of the dashboard page, remove that section entirely. the
+       bottom of the page should only be the expandable section." The
+       tile grid + .dash-shared-expand area right above this comment is
+       now genuinely the last thing on the page. Removed alongside this:
+       dashboard.py's DEFAULT_TAB dict, _is_at_risk(),
+       _compute_deep_dive_projects()/_compute_deep_dive_deliverables()
+       and their /api/deep-dive/* routes; dashboard.js's switchTab()/
+       setSideBySide()/SIDE_BY_SIDE_KEY and their click-handler branches;
+       dashboard.css's .dash-divider/.dash-tab-bar/.dash-tabs/
+       .dash-deep-dive-panels/.dash-tab-panel/.dash-deep-dive-box/
+       .dash-deep-dive-caption rules; and _dashboard_macros.html's
+       dash_deep_dive_project_row()/dash_deep_dive_deliverable_row()
+       macros. .dash-tab-btn (reused by the scope-switcher tabs above),
+       .dash-filter-chips (reused by Clashing Projects/Next Actions), and
+       .dash-clash-group (Clashing Projects' own rows, which happened to
+       live under this same CSS section header) were all deliberately
+       left alone — see CLAUDE.md for the full "what's shared vs.
+       exclusive" breakdown. Check git history around 13 Jul 2026 if this
+       ever needs resurrecting. #}
 
 </div>
 

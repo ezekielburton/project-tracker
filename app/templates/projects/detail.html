@@ -911,6 +911,7 @@
                     {% elif f.file_type == 'pdf' %}📄
                     {% elif f.file_type == 'docx' %}📝
                     {% elif f.file_type == 'xlsx' %}📊
+                    {% elif f.file_type in ['mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v'] %}🎬
                     {% else %}📎
                     {% endif %}
                 </span>

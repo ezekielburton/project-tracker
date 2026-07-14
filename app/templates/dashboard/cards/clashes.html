@@ -23,9 +23,9 @@
    context var on every render) contains BOTH breakdowns in full up front,
    since clash lists are always small (a handful of entries at most, not
    something worth paginating or filtering server-side). Both panels are
-   server-rendered here; dashboard.js just shows/hides between them, the
-   same "toggle a stored .active/.hidden pair" mechanic already used for
-   the deep-dive zone's Projects/Deliverables tabs (switchTab()).
+   server-rendered here; dashboard.js just shows/hides between them via
+   switchClashesTab(), a simple "toggle a stored .active/.hidden pair"
+   mechanic scoped to this one card.
 
    Each clash is a GROUP: one designer, one date, and the 2+ deliverables
    (or projects) that collide on it — grouped visually under a small

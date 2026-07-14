@@ -1608,7 +1608,8 @@ ptAddDelForm.addEventListener('submit', function (e) {
                     var noFilesMsg = list.querySelector('.no-files-msg');
                     if (noFilesMsg) noFilesMsg.remove();
 
-                    var icons = { jpg: '🖼', jpeg: '🖼', png: '🖼', pdf: '📄', docx: '📝', xlsx: '📊' };
+                    var icons = { jpg: '🖼', jpeg: '🖼', png: '🖼', pdf: '📄', docx: '📝', xlsx: '📊',
+                                  mp4: '🎬', mov: '🎬', avi: '🎬', webm: '🎬', mkv: '🎬', wmv: '🎬', m4v: '🎬' };
                     var icon = icons[data.file.file_type] || '📎';
 
                     var item = document.createElement('div');

@@ -5,7 +5,7 @@ from sqlalchemy import nullslast
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable
 from app.utils import get_actor
-from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, rag_for_deadline
+from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for() call for this blueprint's routes uses that, e.g.
@@ -52,18 +52,6 @@ CARD_ORDER = {
     'designer':   _STAT_TILES + ['clashes', 'due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'brief_quality'],
     'team_lead':  _STAT_TILES + ['clashes', 'due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'brief_quality'],
 }
-
-# Deep-dive zone default tab per role (Management/CS/Admin → Projects,
-# Designer/Team Lead → Deliverables). Just the initial tab shown — the
-# side-by-side toggle and manual tab switching both still work regardless.
-DEFAULT_TAB = {
-    'management': 'projects',
-    'admin':      'projects',
-    'cs':         'projects',
-    'designer':   'deliverables',
-    'team_lead':  'deliverables',
-}
-
 
 # ── Management/admin view-switcher (added 11 Jul 2026, extended to admin
 #    12 Jul 2026) ───────────────────────────────────────────────────────
@@ -161,12 +149,12 @@ def index():
     initial_view = request.args.get('view', '')
     scope_mode, scope_user, cs_leads = _resolve_dashboard_scope(user)
 
-    # Card order + deep-dive default tab normally follow the REAL role.
-    # Exception: previewing a specific CS lead's tab should look like
-    # their actual dashboard, ordering included — not management's own
-    # layout with someone else's data dropped into it. 'my' mode keeps
-    # management's own order (it's still fundamentally "my dashboard",
-    # just narrowed), only 'cs_<id>' borrows the 'cs' role's order.
+    # Card order normally follows the REAL role. Exception: previewing a
+    # specific CS lead's tab should look like their actual dashboard,
+    # ordering included — not management's own layout with someone else's
+    # data dropped into it. 'my' mode keeps management's own order (it's
+    # still fundamentally "my dashboard", just narrowed), only 'cs_<id>'
+    # borrows the 'cs' role's order.
     layout_role = 'cs' if (scope_mode or '').startswith('cs_') else user.role
 
     return render_template(
@@ -176,7 +164,6 @@ def index():
         cs_leads=cs_leads,
         card_order=CARD_ORDER.get(layout_role, CARD_ORDER['management']),
         initial_expanded_card=VIEW_TO_CARD.get(initial_view),
-        default_tab=DEFAULT_TAB.get(layout_role, 'projects'),
         # Feeds the three stat tiles (stat_active/stat_pending/stat_total
         # — first 3 in CARD_ORDER as of 12 Jul 2026's twelfth follow-up,
         # was a separate non-tile stat row before that) — see
@@ -219,12 +206,6 @@ def index():
         # previewing a CS lead's tab must never grant management the
         # ability to submit a flag as that person.
         flaggable_projects=_compute_flaggable_projects(user) if user.role in ('cs', 'designer', 'team_lead') else [],
-        # Deep-dive zone — at-risk-only extension of the cards above (see the
-        # big comment on _is_at_risk()/_compute_deep_dive_projects() further
-        # down for the 10 Jul 2026 rework). Fully server-rendered, no
-        # client-side filter/sort left to do — this IS the complete dataset.
-        deep_dive_projects=_compute_deep_dive_projects(scope_user),
-        deep_dive_deliverables=_compute_deep_dive_deliverables(scope_user),
     )
 
 
@@ -389,11 +370,11 @@ def _missing_designer_tags(project):
 def _compute_at_risk_projects(user):
     """
     "At Risk" card (added 12 Jul 2026, per management review). NOT the same
-    thing as _is_at_risk() further down (that's the deep-dive zone's
-    BriefFlag/decision/RAG-red filter, a completely different rule for a
-    completely different section of the page) — this is a staffing-gap +
-    overdue check, one row per project, each row carrying whichever tags
-    apply:
+    thing as the dashboard's now-removed deep-dive zone, which used to have
+    its own separate BriefFlag/decision/RAG-red filter (_is_at_risk(),
+    deleted 13 Jul 2026 along with that whole section — see CLAUDE.md) —
+    this is a staffing-gap + overdue check, one row per project, each row
+    carrying whichever tags apply:
 
       - 'CS Missing' — project.cs_lead_id is unset. cs_lead_id is NOT NULL
         in the schema today ("there is always a CS on a project now" —
@@ -487,8 +468,8 @@ def _compute_at_risk_projects(user):
             'designers': _due_row_people(p, requested_teams),
         })
 
-    # Nearest deadline first, same convention as the deep-dive zone's
-    # project list — projects with no deadline at all sort last.
+    # Nearest deadline first, same convention every dashboard row list uses
+    # — projects with no deadline at all sort last.
     results.sort(key=lambda r: r['deadline'] or '9999-12-31')
     return results
 
@@ -1090,180 +1071,14 @@ def api_clashes():
     return jsonify(_compute_clashes_response(scope_user))
 
 
-# ── Deep-dive zone ────────────────────────────────────────────────────────
-# Projects/Deliverables tabs at the bottom of the dashboard.
-#
-# REWORKED 10 Jul 2026 — originally an all-scoped-projects browsable table
-# (every column: job number, type, teams, CS Lead, status, an "All"/"At Risk"
-# filter chip, a deadline-sort toggle — see git history / UI Chunk 8 for that
-# version). That table substantially duplicated the OLD Projects page
-# (main.projects — cs.html/designer.html/team_lead.html), which already does
-# full search + CS Lead/Status/Designer filtering + multiple views, and doing
-# it BETTER than a cut-down copy ever would. Two "browse all projects"
-# screens meant neither was fully trusted, and the wide table also couldn't
-# fit in the side-by-side layout without horizontal overflow.
-#
-# Decision (discussed with Ezekiel 10 Jul 2026): draw a hard line —
-# Dashboard = at-a-glance, "here's what needs your eyes"; old Projects page =
-# where you go to actually search/filter/manage/edit. So the deep-dive zone
-# stopped being a second directory and became a narrow extension of the
-# cards above it: ONLY at-risk projects/deliverables (same _is_at_risk() rule
-# already used elsewhere on this page), rendered as compact .dash-row rows
-# (like every other card) instead of a wide <table>, with no filter chip
-# (there's only ever one thing to show now) and no deadline-sort toggle
-# (already pre-sorted by nearest deadline, same as Due/Next Actions). This
-# also fixed the side-by-side overflow — a .dash-row wraps in a narrow
-# column; a multi-column <table> didn't.
-#
-# Both compute functions below are still fully server-rendered with no
-# separate filter/sort JS — there's just nothing left to filter or sort
-# client-side now that "at risk" is the only state a row can be in.
-
-def _is_at_risk(project, rag):
-    """
-    "At Risk" as defined when this was originally built: an open
-    (unresolved) BriefFlag on the project, OR decision_needed=True, OR the
-    deadline this row is judging itself by is today or already passed
-    ("less than a day away" — that's rag == 'red', reusing whatever RAG was
-    already computed for this row rather than re-deriving deadline math a
-    second time here).
-
-    Takes `rag` as a parameter rather than computing it internally because
-    the two callers below need DIFFERENT deadlines for it: a project row's
-    rag is based on nearest_deadline(project) (get_project_rag), but a
-    deliverable row's rag is based on that ONE deliverable's own deadline
-    (rag_for_deadline(d.design_deadline)) — the "at risk" RULE is identical
-    either way, only which deadline feeds it differs per caller.
-
-    Since 10 Jul 2026 this isn't just a per-row flag anymore — it's the
-    actual FILTER for whether a project/deliverable appears in the deep-dive
-    zone at all (see the section comment above).
-    """
-    has_open_flag = any(not f.is_resolved for f in project.brief_flags)
-    return has_open_flag or bool(project.decision_needed) or rag == 'red'
-
-
-def _compute_deep_dive_projects(user):
-    """
-    Deep-dive zone's Projects panel — ONE row per AT-RISK scoped project
-    only (see the big section comment above for why). Deliberately reuses
-    get_next_action_owner() and nearest_deadline() — the exact same calls
-    the Next Actions card uses — so a project's guidance/owner text here
-    always agrees with what that card says about the same project. This is
-    NOT a general "list every project" view; the old Projects page
-    (main.projects) is where that lives.
-    """
-    results = []
-    for p in _scoped_projects(user, active_only=True).all():
-        rag = get_project_rag(p)
-        if not _is_at_risk(p, rag):
-            continue
-
-        owner_info = get_next_action_owner(p)
-        deadline = nearest_deadline(p)
-        results.append({
-            'project_id': p.id,
-            'name': p.name,
-            'rag': rag,
-            'deadline': deadline.isoformat() if deadline else None,
-            'guidance': owner_info['guidance'],
-            'owner': _serialize_owner(owner_info['user']),
-        })
-
-    results.sort(key=lambda r: r['deadline'] or '9999-12-31')
-    return results
-
-
-@dashboard_bp.route('/api/deep-dive/projects')
-@login_required
-def api_deep_dive_projects():
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
-    return jsonify(_compute_deep_dive_projects(scope_user))
-
-
-def _compute_deep_dive_deliverables(user):
-    """
-    Deep-dive zone's Deliverables panel — ONE row per AT-RISK deliverable
-    belonging to a scoped active project (same at-risk-only narrowing as
-    _compute_deep_dive_projects() above).
-
-    Team-matching for Designer/Team Lead: _scoped_projects() only scopes at
-    the PROJECT level (via ProjectDesigner), which isn't tight enough here
-    — a project can carry deliverables for a team this designer ISN'T on
-    (e.g. they're assigned to the 3D team on a project that also has 2D
-    deliverables). The old role dashboards handle this with a
-    Deliverable.teams.contains(team) filter (see app/routes/__init__.py's
-    designer_dashboard/team_lead_dashboard) — replicated here by first
-    collecting which team(s) this user is actually assigned to on EACH of
-    their projects (a designer can be on different teams on different
-    projects), then only keeping a deliverable if its own teams overlap.
-    CS/Admin/Management see every deliverable on every scoped project, no
-    team filtering — matches cs.html's "all deliverables" behaviour.
-    """
-    projects = _scoped_projects(user, active_only=True).all()
-    project_ids = [p.id for p in projects]
-    projects_by_id = {p.id: p for p in projects}
-
-    user_teams_by_project = None
-    if user.role in ('designer', 'team_lead'):
-        user_teams_by_project = {}
-        assignments = ProjectDesigner.query.filter(
-            ProjectDesigner.user_id == user.id,
-            ProjectDesigner.project_id.in_(project_ids)
-        ).all()
-        for a in assignments:
-            user_teams_by_project.setdefault(a.project_id, set()).add(a.team)
-
-    if not project_ids:
-        return []
-
-    deliverables = Deliverable.query.filter(Deliverable.project_id.in_(project_ids)).all()
-
-    results = []
-    for d in deliverables:
-        p = projects_by_id.get(d.project_id)
-        if p is None:
-            continue  # shouldn't happen (project_ids came from projects_by_id's own keys), defensive only
-
-        d_teams = set(t.strip() for t in (d.teams or '').split(',') if t.strip())
-
-        if user_teams_by_project is not None:
-            my_teams = user_teams_by_project.get(d.project_id, set())
-            if not (my_teams & d_teams):
-                continue
-
-        # Deliverables on a C&CM customer inherit that customer's deadline
-        # when they have none of their own — same fallback the old
-        # deliverable tables use (cs.html / designer.html / team_lead.html).
-        deadline = d.design_deadline or (d.project_customer.design_deadline if d.project_customer else None)
-        rag = rag_for_deadline(deadline)
-
-        # "At risk" for a deliverable row rides on its PARENT project's
-        # flag/decision state (a flag is raised against the project or a
-        # specific deliverable, but either way it's the whole project's
-        # next action that's blocked) combined with this deliverable's OWN
-        # deadline urgency, not the project's nearest deadline overall. This
-        # is now a hard filter, not just a data-* attribute — see the
-        # section comment above.
-        if not _is_at_risk(p, rag):
-            continue
-
-        results.append({
-            'deliverable_id': d.id,
-            'project_id': d.project_id,
-            'project_name': p.name,
-            'name': d.name,
-            'teams': sorted(d_teams),
-            'deadline': deadline.isoformat() if deadline else None,
-            'rag': rag,
-        })
-
-    results.sort(key=lambda r: r['deadline'] or '9999-12-31')
-    return results
-
-
-@dashboard_bp.route('/api/deep-dive/deliverables')
-@login_required
-def api_deep_dive_deliverables():
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
-    return jsonify(_compute_deep_dive_deliverables(scope_user))
+# The deep-dive zone (Projects/Deliverables tabs at the bottom of the
+# dashboard — _is_at_risk(), _compute_deep_dive_projects(),
+# _compute_deep_dive_deliverables(), and their /api/deep-dive/* routes)
+# was REMOVED 13 Jul 2026, per Ezekiel: "remove the side by side view on
+# the bottom of the dashboard page, remove that section entirely. the
+# bottom of the page should only be the expandable section." See
+# CLAUDE.md for the full removal writeup and what's shared vs. exclusive
+# (the At Risk CARD's _compute_at_risk_projects() is a different,
+# unrelated staffing-gap/overdue check that is NOT part of this removal —
+# see its own docstring). Check git history around 13 Jul 2026 if this
+# ever needs resurrecting.

@@ -3,9 +3,11 @@
    ───────────────────────────────────────────
    At Risk card — added 12 Jul 2026, per management review.
 
-   NOT the deep-dive zone's "at-risk" filter (BriefFlag/decision/RAG-red —
-   see _is_at_risk() in dashboard.py) — this is a staffing-gap + overdue
-   check, one row per project. See _compute_at_risk_projects()'s docstring
+   NOT the same thing as the dashboard's now-removed deep-dive zone, which
+   used to have its own separate BriefFlag/decision/RAG-red "at-risk" filter
+   (_is_at_risk(), deleted 13 Jul 2026 along with that whole section — see
+   CLAUDE.md) — this is a staffing-gap + overdue check, one row per project.
+   See _compute_at_risk_projects()'s docstring
    in dashboard.py for the full tag logic (CS Missing / <Team> Designer
    Missing / All Designers Missing / Overdue, context-aware against
    design_teams_requested so a team that was never requested never gets
