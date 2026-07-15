@@ -869,6 +869,95 @@ class ProjectSubmissionFile(db.Model):
         return f'<ProjectSubmissionFile {self.original_filename} submission={self.submission_id}>'
 
 
+class TechnicalSubmission(db.Model):
+    """A single uploaded technical file (drawing/CAD/etc.) for one deliverable,
+    and its own internal review cycle.
+
+    This is a DELIBERATELY SEPARATE track from ProjectSubmission (the design-tab
+    submission flow) and from project.project_status. A project can be, say,
+    'in_progress' on the design side while its technical drawings are sitting
+    in 'internal_review' here — the two never read or write each other's state.
+
+    A deliverable accumulates one row per upload over time (initial upload,
+    then one new row per revision cycle) rather than being edited in place —
+    this is what makes the "submission history" list in the UI possible: the
+    newest row for a given deliverable_id is its current status, and every
+    older row for that same deliverable_id is history.
+    """
+    __tablename__ = 'technical_submissions'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Which project and deliverable this file belongs to. Both are stored
+    # (not just deliverable_id) so a "give me every technical submission for
+    # this project" query doesn't need to join through deliverables first —
+    # same reasoning ProjectSubmissionFile uses for storing project_id
+    # alongside submission_id.
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
+
+    # The auto-generated filename (e.g. "Technical Drawing - Acme Rebrand -
+    # Initial.pdf" or "... - Revision 2.dwg") and its lowercase extension
+    # without the dot (e.g. "pdf", "dwg") — same shape as
+    # ProjectSubmission.original_filename / file_type.
+    original_filename = db.Column(db.String(500), nullable=False)
+    file_type = db.Column(db.String(10), nullable=False)
+
+    # Who uploaded this specific file, and when. Every row keeps its own
+    # uploader — this does NOT get overwritten on flag/approve, since those
+    # actions are performed by a different person (CS/admin/management) and
+    # need their own separate actor + timestamp fields below.
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Lifecycle state for this row. One of:
+    #   'uploaded'            -> file is on the NAS, not yet sent for review
+    #   'internal_review'     -> designer/team lead explicitly submitted it
+    #   'internal_revision'   -> CS/admin/management flagged it, back to designer
+    #   'internally_approved' -> terminal state, signed off internally
+    # This column is intentionally unrelated to ProjectSubmission.status and
+    # to project.project_status — see the class docstring above.
+    status = db.Column(db.String(50), nullable=False, default='uploaded')
+
+    # Only meaningful when status == 'internal_revision': the free-text
+    # explanation of what needs to change, plus who flagged it and when.
+    # Left NULL for every other status/row.
+    flag_message = db.Column(db.Text, nullable=True)
+    flagged_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    flagged_at = db.Column(db.DateTime, nullable=True)
+
+    # Only meaningful when status == 'internally_approved': who approved it
+    # internally and when. This is a terminal state — nothing in this feature
+    # currently moves a row out of 'internally_approved' once set.
+    internally_approved_at = db.Column(db.DateTime, nullable=True)
+    internally_approved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # --- Relationships -------------------------------------------------
+    # backref='technical_submissions' on both Project and Deliverable lets
+    # existing code do project.technical_submissions / deliverable.technical_submissions
+    # without needing a new query helper. cascade='all, delete-orphan' means
+    # deleting a project or a deliverable automatically deletes its technical
+    # submissions too, mirroring the ON DELETE CASCADE set at the DB level in
+    # migrations/add_technical_submissions.py (belt-and-braces: the DB-level
+    # cascade protects raw SQL/other tools, this ORM-level cascade protects
+    # anything done through SQLAlchemy that hasn't flushed yet).
+    project = db.relationship('Project', backref=db.backref('technical_submissions', cascade='all, delete-orphan'))
+    deliverable = db.relationship('Deliverable', backref=db.backref('technical_submissions', cascade='all, delete-orphan'))
+
+    # Three separate User relationships because three different people can
+    # be involved in one row's lifecycle: whoever uploaded it, whoever
+    # flagged it (if flagged), whoever internally approved it (if approved).
+    # foreign_keys=[...] is required on all three since there's more than one
+    # FK to the same 'users' table on this model — without it SQLAlchemy
+    # can't tell which column each relationship should join on.
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+    flagged_by = db.relationship('User', foreign_keys=[flagged_by_id])
+    internally_approved_by = db.relationship('User', foreign_keys=[internally_approved_by_id])
+
+    def __repr__(self):
+        return f'<TechnicalSubmission {self.original_filename} deliverable={self.deliverable_id} status={self.status}>'
+
+
 class SidebarClick(db.Model):
     """Analytics table — records every sidebar link click.
     Used by admin to see which tools and pages are most used.

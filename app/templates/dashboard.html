@@ -10,109 +10,177 @@
         <h1 class="dashboard-greeting">Welcome, <span>{{ effective_user.name.split()[0] }}</span></h1>
     </div>
 
-    {# ── Management/admin view-switcher (added 11 Jul 2026, extended to
-       admin 12 Jul 2026) ──────────────────────────────────────────────
-       Management and admin only — see the big comment above
+    {# ── Management/admin view-switcher — MOVED TO THE VERY TOP OF THE PAGE
+       (15 Jul 2026, later still, second reorder pass) ─────────────────────
+       Per Ezekiel: "Put the my view, all projects, cs, designer for
+       admin and management views at the very top - above the buttons
+       (decision needed etc)." Used to sit between the content area and the
+       toggle row (see git history around 15 Jul 2026, earlier the same
+       day, for that version); now it's the very first interactive element
+       on the page, right after the welcome header, above the tab strip
+       entirely. Management and admin only — see the big comment above
        _resolve_dashboard_scope() in dashboard.py for the full reasoning
-       and why this is NOT the emulation system. Real <a> links, not a
-       client-toggled tab: switching scope changes almost every card's
-       data plus the deep-dive zone, so a full page reload is simpler and
-       more honest here than threading scope-awareness through every
-       card's individual JS re-render function on top of the filter/tab
-       state each of them already juggles. #}
+       and why this is NOT the emulation system. The actual scope switch
+       is still real <a> links, not client-side: switching scope changes
+       almost every card's data, so a full page reload is simpler and more
+       honest here than threading scope-awareness through every card's
+       individual JS re-render function on top of the filter/tab state
+       each of them already juggles.
+
+       CS/Designer picker is a toggle (per Ezekiel: "Next to All Projects
+       put CS button and Designer button. When they click those buttons,
+       the below expands to show each name as a button as it is now...
+       toggle - so when they click CS, then designer, it replaces the CS
+       buttons with designer ones and vice versa"). CS and Designer are
+       plain <button>s living in the SAME top .dash-view-tabs row as My
+       View/All Projects — they don't switch scope themselves, they just
+       show/hide their .dash-group-tabs row of real scope-switching <a>
+       links underneath. Only one group row is ever visible at a time;
+       dashboard.js's toggle-group click handler owns the show/hide +
+       active-state swap. Whichever group the CURRENTLY PREVIEWED scope
+       belongs to (if any) starts expanded on page load (via the `.hidden`
+       class conditions below), so reloading mid-preview doesn't hide the
+       picker for the person already being viewed. #}
     {% if effective_role in ('management', 'admin') %}
     <div class="dash-view-tabs">
         <a href="{{ url_for('projects.index', scope='my') }}"
            class="dash-tab-btn{% if scope_mode == 'my' %} active{% endif %}">My View</a>
-        {% for cs in cs_leads %}
-        <a href="{{ url_for('projects.index', scope='cs_' ~ cs.id) }}"
-           class="dash-tab-btn{% if scope_mode == ('cs_' ~ cs.id|string) %} active{% endif %}">{{ cs.name }}</a>
-        {% endfor %}
         <a href="{{ url_for('projects.index', scope='all') }}"
            class="dash-tab-btn{% if scope_mode == 'all' %} active{% endif %}">All Projects</a>
+        {% if cs_leads %}
+        <button type="button" data-action="toggle-group" data-group="cs"
+            class="dash-tab-btn dash-group-toggle-btn{% if scope_mode and scope_mode.startswith('cs_') %} active{% endif %}">CS</button>
+        {% endif %}
+        {% if designers %}
+        <button type="button" data-action="toggle-group" data-group="designer"
+            class="dash-tab-btn dash-group-toggle-btn{% if scope_mode and scope_mode.startswith('designer_') %} active{% endif %}">Designer</button>
+        {% endif %}
     </div>
+    {% if cs_leads %}
+    <div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('cs_')) %} hidden{% endif %}" data-group="cs">
+        <div class="dash-view-tabs">
+            {% for cs in cs_leads %}
+            <a href="{{ url_for('projects.index', scope='cs_' ~ cs.id) }}"
+               class="dash-tab-btn{% if scope_mode == ('cs_' ~ cs.id|string) %} active{% endif %}">{{ cs.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% if designers %}
+    <div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('designer_')) %} hidden{% endif %}" data-group="designer">
+        <div class="dash-view-tabs">
+            {% for designer in designers %}
+            <a href="{{ url_for('projects.index', scope='designer_' ~ designer.id) }}"
+               class="dash-tab-btn{% if scope_mode == ('designer_' ~ designer.id|string) %} active{% endif %}">{{ designer.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
     {% if scope_mode and scope_mode.startswith('cs_') %}
         {% set previewed_cs = cs_leads | selectattr('id', 'equalto', scope_mode[3:] | int) | first %}
         {% if previewed_cs %}
-        <p class="dash-previewing-as">Previewing {{ previewed_cs.name }}'s view — data and "my actions" below are theirs, not yours.</p>
+        <div class="dash-previewing-as">Previewing {{ previewed_cs.name }}'s view — data and "my actions" below are theirs, not yours.</div>
+        {% endif %}
+    {% elif scope_mode and scope_mode.startswith('designer_') %}
+        {% set previewed_designer = designers | selectattr('id', 'equalto', scope_mode[9:] | int) | first %}
+        {% if previewed_designer %}
+        <div class="dash-previewing-as">Previewing {{ previewed_designer.name }}'s view — data and "my actions" below are theirs, not yours.</div>
         {% endif %}
     {% endif %}
     {% endif %}
 
-    {# Cards zone. Summary always renders first, full-width, and keeps its
-       original self-contained expand-in-place behaviour unchanged — it's
-       the one card the 12 Jul 2026 tile rework below deliberately left
-       alone (see the big comment on `mode` in _dashboard_macros.html's
-       dash_card()). Moved ABOVE the stat row (12 Jul 2026, third
-       follow-up, per Ezekiel) — was below it originally; "My Day / My
-       Week" is the one thing on this page meant to be read first. #}
-    <div class="dash-cards-grid">
-        {% include 'dashboard/cards/summary.html' %}
-    </div>
+    {# ── Tab strip (added 15 Jul 2026, sits directly below the
+       view-switcher as of the second reorder pass later the same day)
+       ─────────────────────────────────────────────────────────────────
+       Per Ezekiel's original request: "Bring the tabs up to the top of
+       the page" — later refined the same day to: "Put the my view, all
+       projects, cs, designer for admin and management views at the very
+       top - above the buttons (decision needed etc)", which pushed the
+       view-switcher above THIS block instead. For non-management/admin
+       roles (no view-switcher rendered at all) this is still the first
+       interactive element on the page, right after the welcome header.
 
-    {# ── Tile grid + single shared expand area (12 Jul 2026, third
-       follow-up — replaces the per-row-of-3 band design from earlier the
-       same day) ───────────────────────────────────────────────────────
-       Every OTHER card (card_order, role-dependent — see CARD_ORDER in
-       dashboard.py) is a small fixed-size tile, 5 per row (.dash-tiles-grid).
-       Clicking a tile doesn't grow the tile itself and doesn't open a band
-       tied to its own row anymore — it opens ONE shared area below the
-       ENTIRE grid (.dash-shared-expand) showing that card's body content.
-       Only ever one card open at a time, page-wide (was "one per row,
-       up to 3 simultaneously" before) — clicking any tile closes whatever
-       was previously open, even if it was a tile in a different row.
-       See the toggle-card click handler in dashboard.js.
+       'summary' is no longer one of the cards looped here — see the big
+       comment on CARD_ORDER in dashboard.py: My Day/My Week is now its
+       own always-visible toggle box (.dash-toggle-row, further down this
+       page), not a tab, per Ezekiel: "Remove myday/my week button since
+       it will be redundant."
 
        Each card partial still gets `{% include %}`'d TWICE — once with
-       dash_render_mode='tile' (into .dash-tiles-grid), once with
-       dash_render_mode='body' (into .dash-shared-expand, collapsed unless
-       that card is the one currently open). See dash_card()'s `mode`
-       param in _dashboard_macros.html for how a single macro produces
-       both. No more batch(3)/row-group wrapper needed — every tile is a
-       sibling in one flat grid now, and there's only one body container
-       for the whole page instead of one per row.
-
-       EXCEPTION: the three stat tiles (stat_active/stat_pending/
-       stat_total, added 12 Jul 2026 twelfth follow-up, always first in
-       CARD_ORDER) don't use dash_card() at all — they're pure numbers
-       with no expandable content, so they only render something on the
-       'tile' pass and render nothing on the 'body' pass. They still get
-       `{% include %}`'d twice like every other card_key, the second
-       include just produces empty output for these three. #}
-    <div class="dash-tiles-grid">
+       dash_render_mode='tab' (into .dash-content-tabs, here), once with
+       dash_render_mode='body' (into .dash-content-area, directly below —
+       MOVED back here, above the toggle row, in the third reorder pass
+       16 Jul 2026, see that block's comment for why). See dash_card()'s
+       `mode` param in _dashboard_macros.html for how a single macro
+       produces both. #}
+    <div class="dash-content-tabs">
         {% for card_key in card_order %}
-        {% set dash_render_mode = 'tile' %}
+        {% set dash_render_mode = 'tab' %}
         {% include 'dashboard/cards/' + card_key + '.html' %}
         {% endfor %}
     </div>
-    <div class="dash-shared-expand" id="dash-shared-expand">
+
+    {# ── Single interactive content area — MOVED BACK ABOVE the toggle row
+       (16 Jul 2026, third reorder pass) ─────────────────────────────────
+       Per Ezekiel: "have the interactive area above the overdue/at risk
+       and my day/my week." Previously sat below the toggle row (see git
+       history around 15 Jul 2026, later still, for that version); now
+       it's directly below the tab strip again, above the toggle row.
+
+       Also per Ezekiel, same message: "have it hidden until a user
+       selects a tab" — dashboard.py's `index()` no longer defaults
+       `initial_expanded_card` to `card_order[0]` (that fallback was
+       removed the same day), so on first paint every card's
+       `expanded=(initial_expanded_card == '<key>')` check is False and
+       nothing is `.expanded`. Since `.dash-content-area` itself has no
+       padding/border/background of its own (see its CSS rule — just
+       `display: block`) and every child `.dash-card-body-content` is
+       `max-height: 0; overflow: hidden` until `.expanded`, an area with
+       nothing expanded already collapses to zero visible height with no
+       extra CSS needed — "hidden until a tab is selected" fell out of the
+       existing collapse mechanic for free, same as "open by default" did
+       for the toggle boxes below.
+
+       Nothing about the tab-click mechanic needed to change for the
+       reposition — the click handler in dashboard.js scopes its
+       single-open-accordion queries to `#dash-content-area
+       .dash-card-body-content...` via an ID selector, which is
+       position-independent and keeps working regardless of where this
+       div sits in the page. #}
+    <div class="dash-content-area" id="dash-content-area">
         {% for card_key in card_order %}
         {% set dash_render_mode = 'body' %}
         {% include 'dashboard/cards/' + card_key + '.html' %}
         {% endfor %}
     </div>
 
-    {# Deep-dive zone (side-by-side Projects/Deliverables panels) REMOVED
-       13 Jul 2026, per Ezekiel: "remove the side by side view on the
-       bottom of the dashboard page, remove that section entirely. the
-       bottom of the page should only be the expandable section." The
-       tile grid + .dash-shared-expand area right above this comment is
-       now genuinely the last thing on the page. Removed alongside this:
-       dashboard.py's DEFAULT_TAB dict, _is_at_risk(),
-       _compute_deep_dive_projects()/_compute_deep_dive_deliverables()
-       and their /api/deep-dive/* routes; dashboard.js's switchTab()/
-       setSideBySide()/SIDE_BY_SIDE_KEY and their click-handler branches;
-       dashboard.css's .dash-divider/.dash-tab-bar/.dash-tabs/
-       .dash-deep-dive-panels/.dash-tab-panel/.dash-deep-dive-box/
-       .dash-deep-dive-caption rules; and _dashboard_macros.html's
-       dash_deep_dive_project_row()/dash_deep_dive_deliverable_row()
-       macros. .dash-tab-btn (reused by the scope-switcher tabs above),
-       .dash-filter-chips (reused by Clashing Projects/Next Actions), and
-       .dash-clash-group (Clashing Projects' own rows, which happened to
-       live under this same CSS section header) were all deliberately
-       left alone — see CLAUDE.md for the full "what's shared vs.
-       exclusive" breakdown. Check git history around 13 Jul 2026 if this
-       ever needs resurrecting. #}
+    {# ── Toggle row: Overdue/At Risk (left) + My Day/My Week (right)
+       (added 15 Jul 2026, later still — SUPERSEDES both the old
+       .dash-pinned-row Overdue+At Risk two-box section AND summary.html's
+       old tab-strip card, both removed the same day) ────────────────────
+       Per Ezekiel: "Make overdue/at risk on the left side (put button
+       toggles). Bring my day/my week to the right side (put button
+       toggles). Make them smaller also the divs." Clarified via
+       AskUserQuestion: one box per side (not two boxes just repositioned),
+       toggle buttons swap which list shows inside each box, and both are
+       collapsible — open by default on page load, exactly like every
+       .dash-card-body-content.expanded elsewhere on this page (initCards()
+       in dashboard.js already syncs inline max-height for any element with
+       that combination on first paint, so "open by default" needed no new
+       init code — see toggle_overdue_at_risk.html's docstring for the
+       full mechanic).
+
+       Sits below the interactive content area now (MOVED back above this
+       row, third reorder pass 16 Jul 2026 — see that block's comment) —
+       the last thing on the page. due_default/at_risk_projects/
+       due_today_items/due_week_items/summary are all UNCHANGED data,
+       computed exactly as before in dashboard.py's index() — only WHERE
+       they render moved. See toggle_overdue_at_risk.html and
+       toggle_my_day_week.html for the two boxes themselves. #}
+    <div class="dash-toggle-row">
+        {% include 'dashboard/toggle_overdue_at_risk.html' %}
+        {% include 'dashboard/toggle_my_day_week.html' %}
+    </div>
 
 </div>
 
@@ -208,5 +276,14 @@
 </script>
 
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+{# Reused as-is (added 15 Jul 2026) for the Average Project Time card's
+   inline Expand All/Collapse All buttons — same .tt-deliverables
+   <details>/<summary> elements, same time_tracking.js file the standalone
+   /time-tracking page uses (see stat_avg_time.html's docstring). Harmless
+   no-op on every other page/role: it only ever queries for
+   [data-action="expand-all"/"collapse-all"], which simply don't exist
+   unless an admin/management viewer has that specific tab open. #}
+<script src="{{ url_for('static', filename='js/time_tracking.js') }}"></script>
 
 {% endblock %}

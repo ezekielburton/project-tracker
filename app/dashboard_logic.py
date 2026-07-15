@@ -54,13 +54,44 @@ def get_next_action_owner(project):
         return {'user': project.cs_lead, 'role': 'cs', 'guidance': 'Review flag and provide information'}
 
     # No open flags — fall back to status.
+    #
+    # REBUILT 15 Jul 2026, per Ezekiel: "If a project is in internal review -
+    # the next action across all sections should show 'Check Internal
+    # Submission'. If a project is in submitted to client status, the next
+    # action should show 'Follow up with client'." While making that change,
+    # audited this whole map against the ACTUAL current project_status
+    # values (VALID list in projects_detail.py's set_project_status route:
+    # briefed, in_queue, in_progress, submitted, internal_review,
+    # internal_revision, submitted_to_client, revision_in_queue,
+    # revision_in_progress, approved, on_hold, awaiting_posm_details) and
+    # found this map was built for an OLDER status scheme (awaiting_review /
+    # revision_requested / re_submitted — none of which are in the current
+    # VALID list at all) that had drifted out of sync with the real
+    # submission flow (see the "Project Submission Routes" flow comment
+    # above upload_submission() in projects_detail.py, and the
+    # record_project_status() call sites across projects_submission.py /
+    # projects_detail.py / projects_approval.py). Any project sitting in
+    # 'briefed', 'internal_revision', 'revision_in_queue', or
+    # 'revision_in_progress' was silently falling through to the generic
+    # ('cs', 'Check project status') default below — confirmed via grep that
+    # none of those four ever matched a status_map key before this rebuild.
+    # 'in_queue' and 'submitted' are no longer SET anywhere in live code
+    # (grepped for record_project_status(..., 'in_queue'/'submitted') and
+    # found zero call sites — both are legacy values, still in the VALID
+    # whitelist for old data / a manual admin status-dropdown override), but
+    # kept here with their original guidance since they're still reachable
+    # that way and a project sitting in one shouldn't fall back to the
+    # generic default either.
     status_map = {
+        'briefed':               ('designer', 'Start the project'),  # start-project route requires 'briefed' + a requested-team designer/team_lead (or admin) to fire it
         'in_queue':              ('designer', 'Check brief and start work, or raise a flag'),
         'in_progress':           ('designer', 'Submit work'),
         'submitted':             ('cs', 'Review work internally'),
-        'awaiting_review':       ('cs', 'Follow up for client feedback'),
-        'revision_requested':    ('designer', 'Check revision request and start work or flag'),
-        're_submitted':          ('cs', 'Review revision'),
+        'internal_review':       ('cs', 'Check Internal Submission'),
+        'internal_revision':     ('designer', 'Address internal revision and resubmit'),
+        'submitted_to_client':   ('cs', 'Follow up with client'),
+        'revision_in_queue':     ('designer', 'Check client revision request and start work, or raise a flag'),
+        'revision_in_progress':  ('designer', 'Submit revised work'),
         'approved':              ('cs', 'Release files and start production if applicable'),
         'on_hold':               ('cs', 'Unblock project'),
         'awaiting_posm_details': ('cs', 'Add POSM details when available'),
@@ -82,6 +113,38 @@ def get_next_action_owner(project):
         user = project.cs_lead
 
     return {'user': user, 'role': role, 'guidance': guidance}
+
+
+def guidance_for_viewer(owner_info, viewer):
+    """
+    Returns the "Next Action" text a specific VIEWER should see for a
+    project — not necessarily the same text get_next_action_owner()
+    returned, which is role-neutral (it just answers "whose turn is it and
+    what should they do", regardless of who's looking at it).
+
+    Added 15 Jul 2026, per Ezekiel: "for designers and team leads, they
+    dont need to see the next action that is only for client servicing
+    (e.g follow up with client) it should show no action required." A
+    CS-role action — 'Follow up with client', 'Check Internal Submission',
+    'Release files and start production if applicable', 'Unblock project',
+    'Add POSM details when available', 'Review work internally', or the
+    flag-reply guidance 'Review flag and provide information' — isn't
+    something a designer/team lead can act on no matter which specific
+    project it's attached to, so it's replaced with a flat "No action
+    required" for that viewer. CS/management/admin viewers (and a
+    designer/team-lead viewer looking at a project where the action IS
+    theirs, i.e. owner_info['role'] == 'designer') see the real guidance
+    unchanged.
+
+    `viewer` is whatever `user` a card's compute function was called with
+    (the scope_user — see _resolve_dashboard_scope() in dashboard.py) so
+    this correctly reflects what a previewed CS/designer tab would show
+    too, not just the real logged-in user.
+    """
+    if viewer.role in ('designer', 'team_lead') and owner_info['role'] == 'cs':
+        return 'No action required'
+    return owner_info['guidance']
+
 
 def nearest_deadline(project):
     """

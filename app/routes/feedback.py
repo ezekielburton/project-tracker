@@ -86,7 +86,8 @@ def submit_feature():
             message=f'{actor.name} submitted a feature request: "{feature.title}"',
             notification_type='feature_request',
             triggered_by=actor,
-            link=f'/feature-requests#fr-{feature.id}'
+            link=f'/feature-requests#fr-{feature.id}',
+            send_email=False  # notify_admin_of_new_feedback() already sent a direct email above
         )
 
     log_activity('feature_request_submitted', f'Feature request "{feature.title}" submitted by {actor.name}',
@@ -299,7 +300,8 @@ def submit_bug():
             message=f'{actor.name} reported a bug: "{bug.title}"',
             notification_type='bug_report',
             triggered_by=actor,
-            link=f'/bug-reports#br-{bug.id}'
+            link=f'/bug-reports#br-{bug.id}',
+            send_email=False  # notify_admin_of_new_feedback() already sent a direct email above
         )
 
     log_activity('bug_report_submitted', f'Bug report "{bug.title}" submitted by {actor.name}',

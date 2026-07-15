@@ -20,7 +20,7 @@
 //                Falls back to a full reload only if a project was added or removed.
 // Detail:        reloads the page if anything in its fingerprint changed.
 // New dashboard: refresh logic lives in dashboard.js, not here — see the
-//                big comment on the .dash-cards-grid check in init() below.
+//                big comment on the .dash-content-tabs check in init() below.
 //
 // SPA-aware: sidebar.js dispatches 'helix:navigated' after every content swap.
 // init() is called on both the initial page load and after every navigation,
@@ -354,15 +354,21 @@
         }
 
         // New role-based dashboard (app/templates/dashboard.html): identified
-        // by .dash-cards-grid, unique to that page (same idea as the old
+        // by .dash-content-tabs, unique to that page (same idea as the old
         // dashboard's container-ID check above — pick a marker that can't
-        // also appear on other pages). Reuses the SAME /sse/dashboard route
-        // the old dashboard subscribes to above — sse.py's dashboard_stream()
-        // is a generic "something about some project changed" doorbell (see
-        // CLAUDE.md's Live Updates section), not tied to either dashboard's
-        // specific markup, so both pages can safely listen to it at once
-        // (never simultaneously in practice, since they're different pages,
-        // but nothing here assumes otherwise).
+        // also appear on other pages). Was .dash-cards-grid before the 15
+        // Jul 2026 tab-strip redesign (see CLAUDE.md) — that class was
+        // deleted along with the old Summary-only card wrapper it marked,
+        // so this had to move to a class that still renders unconditionally
+        // for every role. .dash-content-tabs (the tab strip itself) fits:
+        // every role's card_order has at least 'summary' in it, so this div
+        // always renders on this page, and only this page. Reuses the SAME
+        // /sse/dashboard route the old dashboard subscribes to above —
+        // sse.py's dashboard_stream() is a generic "something about some
+        // project changed" doorbell (see CLAUDE.md's Live Updates section),
+        // not tied to either dashboard's specific markup, so both pages can
+        // safely listen to it at once (never simultaneously in practice,
+        // since they're different pages, but nothing here assumes otherwise).
         //
         // Unlike pollDashboard()/pollDetail() above, this page's own refresh
         // logic doesn't live in this file — it's owned by dashboard.js
@@ -371,7 +377,7 @@
         // polling.js deliberately doesn't know anything about this new
         // dashboard's cards/DOM beyond "does this marker exist" — same
         // separation-of-concerns sse.py's own comment describes for itself.
-        if (document.querySelector('.dash-cards-grid')) {
+        if (document.querySelector('.dash-content-tabs')) {
             _roleDashboardStream = _connectLiveStream('/sse/dashboard', function () {
                 if (window.helixDashboardRefresh) window.helixDashboardRefresh();
             }, _FALLBACK_INTERVAL_MS);

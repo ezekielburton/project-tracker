@@ -1,17 +1,18 @@
 // app/static/js/dashboard.js
 //
-// Role-based dashboard. Chunk 1 covers the card expand/collapse mechanic
-// and its localStorage persistence — tab switching, filter chips, the Flag
-// to Management modal, and SSE live-updates are added in later chunks
-// (each appends its own section to this file rather than replacing it).
+// Role-based dashboard. Tab strip + single interactive content area (see
+// the big comment on .dash-content-tabs/.dash-content-area in
+// dashboard.css, redesigned 15 Jul 2026), filter chips, the Flag to
+// Management modal, and SSE live-updates — each added in its own section
+// of this file rather than replacing what came before.
 //
 // This page is reachable via the SPA sidebar nav (sidebar.js swaps
 // #main-content's innerHTML and re-executes any <script> tags found in it —
 // see execScripts() there). That means this whole IIFE can run more than
 // once per browser session if the user navigates away and back without a
-// full reload. State-restoring code (initCards, side-by-side restore) is
-// SAFE to rerun — it just reapplies localStorage to whatever cards/panels
-// are in the DOM right now. Event listeners are NOT safe to rerun: attaching
+// full reload. State-restoring code (initCards) is SAFE to rerun — it just
+// syncs inline max-height to whatever the server rendered as .expanded on
+// this particular load. Event listeners are NOT safe to rerun: attaching
 // document.addEventListener() again on a second run would stack a duplicate
 // handler on top of the first (same class of bug CLAUDE.md's achievements
 // system hit with _helixBound). window._dashboardListenersBound guards
@@ -19,8 +20,6 @@
 
 (function () {
     'use strict';
-
-    var STORAGE_PREFIX = 'helixDashCard:';
 
     // ── Management view-switcher: scope-aware fetch helper ──────────────
     // Added 11 Jul 2026 alongside the ?scope= tab bar in dashboard.html
@@ -38,10 +37,6 @@
         if (typeof HELIX_DASH_SCOPE === 'undefined' || !HELIX_DASH_SCOPE) return url;
         var sep = url.indexOf('?') === -1 ? '?' : '&';
         return url + sep + 'scope=' + encodeURIComponent(HELIX_DASH_SCOPE);
-    }
-
-    function setStoredOpen(key, open) {
-        localStorage.setItem(STORAGE_PREFIX + key, open ? '1' : '0');
     }
 
     // Client-side mirror of decisions.html's `effective_role in ('admin',
@@ -66,14 +61,10 @@
     // "closed". Measuring the real height with JS and animating max-height
     // to that exact pixel value avoids both problems.
     //
-    // bodyEl is whichever element actually carries the max-height CSS
-    // rule — .dash-card-body for Summary, .dash-card-body-content for
-    // every tile (see dashboard.css). Both used the same class name,
-    // .expanded, for their own "looks like an open card" styling (or, for
-    // Summary's body, harmlessly unused — its visuals key off the ANCESTOR
-    // .dash-card's .expanded class instead, toggled separately in
-    // applyOpenState() below), so these two helpers work for both without
-    // needing to know which one they were called on.
+    // bodyEl is always a .dash-card-body-content element (see
+    // dashboard.css) — every card, Summary included as of the 15 Jul 2026
+    // tab-strip redesign, shares this one body wrapper class now, so
+    // there's nothing else these two helpers need to branch on.
     function expandBody(bodyEl) {
         if (!bodyEl) return;
         // Add .expanded FIRST — for tile bodies this turns on
@@ -132,77 +123,27 @@
         });
     }
 
-    function applyOpenState(card, open) {
-        card.classList.toggle('expanded', open); // drives the chevron rotation/colour, unchanged
-        var body = card.querySelector('.dash-card-body');
-        if (open) {
-            expandBody(body);
-        } else {
-            collapseBody(body);
-        }
-    }
-
-    // ── Card expand/collapse + localStorage ─────────────────────────────
+    // ── initCards() ───────────────────────────────────────────────────
     //
-    // On first load via the login redirect (?view=...), the server has
-    // already rendered exactly one card as .expanded (see
-    // initial_expanded_card in dashboard.py). We persist THAT choice to
-    // localStorage so a plain reload afterwards (no ?view=) keeps it.
-    //
-    // On any other load (no ?view=), localStorage — not the server default
-    // — decides each card's state, so the user's own open/closed layout
-    // from last time sticks across visits.
-    //
-    // :not(.dash-card--static) excludes Summary ("My Day / My Week") —
-    // changed 12 Jul 2026 (fourth follow-up) to always be open with no
-    // toggle at all (see .dash-card-body--static in dashboard.css and the
-    // mode=None branch in _dashboard_macros.html). Without this exclusion,
-    // a STALE '0' left in localStorage from before that change would call
-    // applyOpenState(card, false) below and incorrectly collapse it again.
-    // In practice this loop currently matches nothing (Summary was the
-    // only card ever using this selector), kept for whatever mode=None
-    // card, if any, comes along later that ISN'T meant to be static.
+    // Simplified 15 Jul 2026 redesign — every card (Summary included) is
+    // now a tab+body pair with NO localStorage persistence at all; AT MOST
+    // one tab is active on any given page load, decided purely by the
+    // server (initial_expanded_card — see index() in dashboard.py). As of
+    // 16 Jul 2026, per Ezekiel ("have it hidden until a user selects a
+    // tab"), there's no default fallback anymore — initial_expanded_card
+    // is None unless a ?view= deep link maps to a real card, so on a
+    // normal page load NO tab is active and this loop simply finds
+    // nothing to sync, leaving .dash-content-area collapsed to zero
+    // height until the user clicks a tab. This function otherwise still
+    // does the same one-time sync of inline max-height to whatever
+    // .expanded the server DID render (deep-link case), so that tab's
+    // body appears instantly at its full height on first paint instead of
+    // growing into place (the visible height comes from an inline style
+    // JS sets, not a CSS rule keyed off the class — without this sync it
+    // would render visually collapsed despite having .expanded on it).
+    // Also covers the two toggle boxes below (Overdue/At Risk, My Day/My
+    // Week), which ARE still open by default and share this same class.
     function initCards() {
-        var hasViewParam = new URLSearchParams(window.location.search).has('view');
-
-        document.querySelectorAll('.dash-card[data-card]:not(.dash-card--static)').forEach(function (card) {
-            if (card.classList.contains('dash-card--muted')) return; // not togglable
-
-            var key = card.dataset.card;
-
-            // Sync the body's inline max-height to whatever .expanded
-            // already says, directly (not via expandBody/collapseBody) —
-            // this runs synchronously before first paint, so there's no
-            // "previous frame" for the CSS transition to animate from,
-            // meaning this appears instantly correct rather than growing
-            // into place. Needed because (since 12 Jul 2026) the visible
-            // height comes from an inline style JS sets, not a CSS rule
-            // keyed off the class, so an already-open card would otherwise
-            // render visually collapsed despite having .expanded on it.
-            var body = card.querySelector('.dash-card-body');
-            if (body && card.classList.contains('expanded')) {
-                body.style.maxHeight = body.scrollHeight + 'px';
-            }
-
-            if (hasViewParam) {
-                setStoredOpen(key, card.classList.contains('expanded'));
-                return;
-            }
-
-            var stored = localStorage.getItem(STORAGE_PREFIX + key);
-            if (stored !== null) {
-                applyOpenState(card, stored === '1');
-            }
-            // No stored preference yet and no ?view= — leave the server
-            // default, which is collapsed for every card.
-        });
-
-        // Tile bodies (every card except Summary) — same "sync inline
-        // height to whatever .expanded already says" idea, for whichever
-        // ONE card a ?view= deep link server-rendered as already open. No
-        // localStorage path here — see the big comment on the tile branch
-        // of the toggle-card click handler further down for why tiles
-        // always start fresh/minimized on load otherwise.
         document.querySelectorAll('.dash-card-body-content.expanded').forEach(function (body) {
             body.style.maxHeight = body.scrollHeight + 'px';
         });
@@ -253,6 +194,30 @@
             valueHtml +
             '<span class="dash-mini-stat-label">' + escapeHtml(label) + '</span>' +
             '</span>';
+    }
+
+    // Small shared helper for the two toggle boxes (Overdue/At Risk and My
+    // Day/My Week — added 15 Jul 2026, later still, see toggle_overdue_
+    // at_risk.html/toggle_my_day_week.html) — each box has TWO view-switch
+    // buttons, each carrying its own .dash-mini-stat badge (no shared
+    // box-level badge the way tab-strip cards have one). Finds the button
+    // matching (boxKey, view) and swaps its badge's outerHTML via
+    // miniStat(), same "replace the whole mini-stat span" approach every
+    // other live-refresh block on this page uses. Label is always '' — the
+    // button's own text already says what the number means (see the SSR
+    // template, which never renders a label span at all for these).
+    // No-op (same as every other `if (el)` guard in this file) if the
+    // button isn't found — harmless on a page where a role's card_order
+    // doesn't happen to include one of these (shouldn't happen today, both
+    // boxes render for every role, but matches the defensive convention
+    // used everywhere else here).
+    function toggleBoxBadge(boxKey, view, color, value) {
+        var btn = document.querySelector(
+            '[data-toggle-box="' + boxKey + '"] .dash-toggle-box-btn[data-view="' + view + '"]'
+        );
+        if (!btn) return;
+        var badge = btn.querySelector('.dash-mini-stat');
+        if (badge) badge.outerHTML = miniStat(color, value, '');
     }
 
     // Mirrors dash_person_chip() in _dashboard_macros.html — avatar+name
@@ -372,9 +337,23 @@
                     container.innerHTML = items.map(renderDueRow).join('');
                 }
                 // Same fix as fetchAndRenderNextActions() (13 Jul 2026) —
-                // see remeasureExpandedBody()'s big comment. Latent here
-                // too: an SSE-triggered refresh can grow this list past
-                // whatever height was captured when the tile was opened.
+                // see remeasureExpandedBody()'s big comment: an SSE-
+                // triggered refresh could grow this list past whatever
+                // height was captured when the box was last opened, and
+                // without this the extra rows would be silently clipped by
+                // the collapse mechanic's overflow: hidden.
+                //
+                // Went through TWO ownership changes since: while Overdue
+                // briefly lived in the always-visible pinned section (15
+                // Jul 2026, mode='static' — see git history), this was a
+                // permanent no-op (no .dash-card-body-content ancestor
+                // existed for that markup at all). Now that Overdue lives
+                // in the Overdue/At Risk toggle box (15 Jul 2026, later
+                // still — see toggle_overdue_at_risk.html), the ancestor
+                // exists again — the toggle box's own collapse mechanic
+                // reuses .dash-card-body-content — so this call is live and
+                // meaningful once more, no code change needed to make that
+                // true, just the ancestor coming back into existence.
                 remeasureExpandedBody(container.closest('.dash-card-body-content'));
             })
             .catch(function () {
@@ -483,8 +462,8 @@
         fetch(withDashScope('/dashboard/api/decisions'))
             .then(function (r) { return r.json(); })
             .then(function (items) {
-                var tile = document.querySelector('.dash-tile[data-card="decisions"]');
-                var summaryEl = tile ? tile.querySelector('.dash-tile-summary') : null;
+                var tab = document.querySelector('.dash-content-tab[data-card="decisions"]');
+                var summaryEl = tab ? tab.querySelector('.dash-content-tab-badge') : null;
                 if (summaryEl) {
                     // Matches decisions.html's decisions_summary block
                     // (reworked 12 Jul 2026 — RAG mini-stat, red/green by
@@ -709,6 +688,66 @@
         });
     }
 
+    // ── Toggle boxes: Overdue/At Risk (left) + My Day/My Week (right) ───
+    // (added 15 Jul 2026, later still — see toggle_overdue_at_risk.html/
+    // toggle_my_day_week.html for the full markup/mechanic writeup)
+    //
+    // switchToggleBoxView() — same "both panels already fully
+    // server-rendered, just show/hide" idea as switchClashesTab() directly
+    // above, generalized to work for EITHER box via a boxKey param (Clashes
+    // only ever needed one instance of this pattern; these two boxes need
+    // two INDEPENDENT instances, so a shared parameterized function beats
+    // copy-pasting switchClashesTab() twice). Queries are scoped with
+    // `[data-toggle-box="boxKey"]` so switching the view inside one box
+    // never touches the other box's buttons/panels.
+    function switchToggleBoxView(boxKey, view) {
+        var box = document.querySelector('[data-toggle-box="' + boxKey + '"]');
+        if (!box) return;
+        box.querySelectorAll('.dash-toggle-box-btn').forEach(function (btn) {
+            btn.classList.toggle('active', btn.dataset.view === view);
+        });
+        box.querySelectorAll('[data-toggle-view-panel]').forEach(function (panel) {
+            panel.classList.toggle('hidden', panel.dataset.toggleViewPanel !== view);
+        });
+        // Real bug, fixed 16 Jul 2026: swapping panels changes the body's
+        // real content height (e.g. "Today" empty-state vs. a taller
+        // "This Week" list with several rows), but the outer
+        // .dash-card-body-content's max-height is an inline pixel value
+        // captured ONCE by expandBody() when the box was opened — same
+        // "stale measurement" root cause as remeasureExpandedBody()'s big
+        // comment near the top of this file (AJAX-swapped Due/Next
+        // Actions lists, the tt-deliverables <details> listener). Without
+        // this, switching to a taller panel gets clipped by the shorter
+        // panel's old max-height, and because overflow:hidden clips
+        // mid-row rather than hiding it cleanly, the cut-off row visually
+        // overlaps the row above it. No-ops if the box is currently
+        // collapsed (nothing visible to fix — toggleBoxCollapse's own
+        // expandBody() call captures a fresh height next time it opens).
+        remeasureExpandedBody(box.querySelector('[data-toggle-box-body="' + boxKey + '"]'));
+    }
+
+    // toggleBoxCollapse() — independent per-box collapse/expand, NOT the
+    // page-wide single-open accordion the tab-strip's toggle-card handler
+    // uses (further down) — both toggle boxes can be open or closed at the
+    // same time, unrelated to each other and unrelated to whichever tab is
+    // active. Reuses the exact same expandBody()/collapseBody() JS-measured
+    // max-height mechanic every tab-strip card body already uses (see the
+    // big comment on those two functions near the top of this file) — the
+    // only genuinely new piece here is flipping the collapse button's own
+    // .expanded class so its chevron rotates (see .dash-toggle-box-chevron
+    // in dashboard.css).
+    function toggleBoxCollapse(boxKey, btn) {
+        var body = document.querySelector('[data-toggle-box-body="' + boxKey + '"]');
+        if (!body) return;
+        var nowExpanded = !body.classList.contains('expanded');
+        if (nowExpanded) {
+            expandBody(body);
+        } else {
+            collapseBody(body);
+        }
+        btn.classList.toggle('expanded', nowExpanded);
+    }
+
     // ── SSE integration: refresh hook called by polling.js ───────────────
     //
     // polling.js (UI Chunk 9) opens an EventSource on /sse/dashboard for
@@ -740,13 +779,17 @@
         fetch(withDashScope('/dashboard/api/summary'))
             .then(function (r) { return r.json(); })
             .then(function (summary) {
-                // Due tile's three mini-stats — rebuilt wholesale from
-                // scratch rather than patched number-by-number; cheap, and
+                // Due tab's mini-stat — rebuilt wholesale from scratch
+                // rather than patched number-by-number; cheap, and
                 // guarantees this always matches due.html's exact original
                 // markup (see the due_summary Jinja block there). Selector
-                // targets .dash-tile (not .dash-card) — every card except
-                // Summary moved to the tile/shared-expand layout 12 Jul
-                // 2026, see the big comment on .dash-tiles-grid in dashboard.css.
+                // targets .dash-content-tab (the 15 Jul 2026 tab-strip
+                // redesign — see the big comment on .dash-content-tabs in
+                // dashboard.css); every tab-card's badge lives at
+                // .dash-content-tab-badge now, NOT .dash-tile-summary
+                // (that class still exists, but only for the 4 static stat
+                // tiles above the tab strip — see the stat_* block further
+                // down, which is deliberately unchanged).
                 //
                 // FIXED 12 Jul 2026 (fifth follow-up): this used to rebuild
                 // THREE mini-stats (Overdue/Today/This Week) — a bug left
@@ -761,10 +804,26 @@
                 // the card's own title already says Overdue). Colour is
                 // count-based since the eleventh follow-up (green at
                 // zero, red at 1+) — keep in sync with due.html.
-                var dueSummaryEl = document.querySelector('.dash-tile[data-card="due"] .dash-tile-summary');
-                if (dueSummaryEl) {
-                    dueSummaryEl.innerHTML = miniStat(summary.overdue === 0 ? 'green' : 'red', summary.overdue, 'This Week');
-                }
+                //
+                // Selector moved TWICE now: .dash-content-tab[...] (tab
+                // strip) -> .dash-pinned-card[...] (always-visible pinned
+                // card, 15 Jul 2026) -> the current
+                // [data-toggle-box="overdue_at_risk"] .dash-toggle-box-btn
+                // form (15 Jul 2026, later still), when Overdue/At Risk
+                // were rebuilt as one toggle box with two view-switch
+                // buttons instead of two separate always-visible cards —
+                // see the big comment on .dash-toggle-row in dashboard.css.
+                // Each button carries its OWN badge now (no shared box-level
+                // badge), so this replaces just the .dash-mini-stat span
+                // living inside the "Overdue" button specifically —
+                // toggleBoxBadge() (below) is a tiny shared helper for this
+                // exact "find the mini-stat inside a toggle button and swap
+                // it" pattern, used by both this block and the "At Risk"
+                // block right after it. Label stays '' — the button's own
+                // text already says "Overdue"/"At Risk", so a label here
+                // would repeat it, same reasoning stat_active/stat_pending's
+                // badges above use.
+                toggleBoxBadge('overdue_at_risk', 'overdue', summary.overdue === 0 ? 'green' : 'red', summary.overdue);
 
                 // Matches next_actions.html's next_actions_summary block
                 // (reworked 12 Jul 2026 — RAG mini-stats, red=mine,
@@ -773,7 +832,7 @@
                 // flat yellow to green-at-zero/orange-otherwise — keep
                 // this in sync with next_actions_summary in
                 // next_actions.html.
-                var nextActionsSummaryEl = document.querySelector('.dash-tile[data-card="next_actions"] .dash-tile-summary');
+                var nextActionsSummaryEl = document.querySelector('.dash-content-tab[data-card="next_actions"] .dash-content-tab-badge');
                 if (nextActionsSummaryEl) {
                     nextActionsSummaryEl.innerHTML =
                         miniStat('red', summary.my_actions, 'Needed From Me') +
@@ -784,7 +843,7 @@
                 // (reworked 12 Jul 2026 — single green mini-stat instead of
                 // an ashen action-tag pill; still flat-coloured regardless
                 // of count — informational, not urgent). Keep in sync.
-                var whatChangedSummaryEl = document.querySelector('.dash-tile[data-card="what_changed"] .dash-tile-summary');
+                var whatChangedSummaryEl = document.querySelector('.dash-content-tab[data-card="what_changed"] .dash-content-tab-badge');
                 if (whatChangedSummaryEl) {
                     whatChangedSummaryEl.innerHTML =
                         miniStat('green', summary.what_changed, 'Update' + (summary.what_changed !== 1 ? 's' : ''));
@@ -795,9 +854,9 @@
                 // instead of severity-tag pills; needs the clashes_detected/
                 // clashes_potential fields _compute_summary() returns
                 // alongside the plain clashes total). Keep in sync.
-                var clashesTileEl = document.querySelector('.dash-tile[data-card="clashes"]');
-                if (clashesTileEl) {
-                    var clashesSummaryEl = clashesTileEl.querySelector('.dash-tile-summary');
+                var clashesTabEl = document.querySelector('.dash-content-tab[data-card="clashes"]');
+                if (clashesTabEl) {
+                    var clashesSummaryEl = clashesTabEl.querySelector('.dash-content-tab-badge');
                     if (clashesSummaryEl) {
                         if (summary.clashes > 0) {
                             var clashPills = '';
@@ -813,7 +872,7 @@
                         }
                     }
                     // NOTE: this toggles the muted VISUAL state live, but the
-                    // tile's data-action="toggle-card" attribute (set
+                    // tab's data-action="toggle-card" attribute (set
                     // server-side by the dash_card() macro, see
                     // _dashboard_macros.html — only rendered when NOT muted)
                     // is NOT re-added here — a card that goes from 0 to 1+
@@ -821,7 +880,7 @@
                     // stay unclickable until the next reload. Small, known
                     // gap; not worth a bigger DOM-attribute dance for
                     // something that self-corrects on the user's next visit.
-                    clashesTileEl.classList.toggle('dash-tile--muted', summary.clashes === 0);
+                    clashesTabEl.classList.toggle('dash-content-tab--muted', summary.clashes === 0);
                 }
 
                 // Matches at_risk.html's at_risk_summary block (added 12
@@ -829,47 +888,73 @@
                 // row list itself isn't re-fetched here, same as Clashes
                 // above — see at_risk.html's docstring for why that's
                 // acceptable staleness for this card.
-                var atRiskSummaryEl = document.querySelector('.dash-tile[data-card="at_risk"] .dash-tile-summary');
-                if (atRiskSummaryEl) {
-                    atRiskSummaryEl.innerHTML = miniStat(
-                        summary.at_risk_count > 0 ? 'red' : 'green',
-                        summary.at_risk_count,
-                        'At Risk'
-                    );
-                }
+                //
+                // Same toggleBoxBadge() move as Overdue directly above —
+                // see that block's comment for the full history.
+                toggleBoxBadge('overdue_at_risk', 'at_risk', summary.at_risk_count > 0 ? 'red' : 'green', summary.at_risk_count);
+
+                // My Day/My Week toggle box (added 15 Jul 2026, later
+                // still, replacing summary.html's old Today/This Week
+                // .dash-two-col split — see toggle_my_day_week.html).
+                // NEW live-refresh, not a move: the old Summary card had
+                // NO SSE refresh at all (it was "always open, not
+                // collapsible" with no JS mirror function), so its
+                // due_today/due_week mini-stats just sat static until the
+                // next full page load. Now that Today/This Week are a
+                // toggle box's own view-switch button badges — visually
+                // equivalent to every other live-refreshed badge on this
+                // page — they get the same treatment for consistency.
+                toggleBoxBadge('my_day_week', 'today', summary.due_today > 0 ? 'red' : 'green', summary.due_today);
+                toggleBoxBadge('my_day_week', 'week', summary.due_week > 0 ? 'red' : 'green', summary.due_week);
             })
             .catch(function () {
                 // Same "leave it stale on a network blip" convention as
                 // every other fetch in this file.
             });
 
-        // Stat tiles (added 12 Jul 2026, own small fetch rather than being
+        // Stat cards (added 12 Jul 2026, own small fetch rather than being
         // folded into the /api/summary handler above — matches
         // _compute_project_stats() in dashboard.py exactly). Rebuilt via
-        // miniStat() same as every other tile's mini-stat as of the
-        // twelfth follow-up, when these stopped being a separate
-        // getElementById-targeted component and became ordinary
-        // .dash-tile entries (see stat_active.html/stat_pending.html/
-        // stat_total.html/stat_avg_time.html) — label is '' for the first
-        // three since the tile's own heading already says what the number
-        // means, same as the Jinja templates render an empty label span
-        // rather than omitting it, so the two markups stay byte-for-byte
-        // matched. stat_avg_time (added 13 Jul 2026) is the one exception —
-        // its label is 'HRS', matching stat_avg_time.html exactly, since a
-        // bare number there would be ambiguous.
+        // miniStat() same as every other tab's badge above.
+        //
+        // Moved from .dash-tile/.dash-tile-summary to
+        // .dash-content-tab/.dash-content-tab-badge (15 Jul 2026, same day
+        // as the rest of the tab-strip redesign's badge selectors) when
+        // these four stopped being static non-interactive tiles and became
+        // ordinary tab+body cards, last in card_order — see the big
+        // comment on CARD_ORDER in dashboard.py. .dash-tile now has NO
+        // consumers left on this page at all.
+        //
+        // Label is '' for stat_active/stat_pending since the tab's own
+        // title already says what the number means, same as the Jinja
+        // templates render an empty label span rather than omitting it, so
+        // the two markups stay byte-for-byte matched. stat_avg_time is the
+        // one exception — its label is 'HRS', matching stat_avg_time.html
+        // exactly, since a bare number there would be ambiguous.
+        // (stat_total REMOVED 15 Jul 2026, later still — see the comment
+        // further down where its block used to be.) Note this only ever
+        // rebuilds the BADGE — the row-list bodies (Active/Pending's
+        // project lists, Avg Time's full table) are server-rendered only,
+        // same "acceptable staleness until next full page load" convention
+        // At Risk/Clashing Projects already use for their own row lists.
         fetch(withDashScope('/dashboard/api/project-stats'))
             .then(function (r) { return r.json(); })
             .then(function (stats) {
-                var statActiveEl = document.querySelector('.dash-tile[data-card="stat_active"] .dash-tile-summary');
+                var statActiveEl = document.querySelector('.dash-content-tab[data-card="stat_active"] .dash-content-tab-badge');
                 if (statActiveEl) statActiveEl.innerHTML = miniStat('green', stats.your_active, '');
 
-                var statPendingEl = document.querySelector('.dash-tile[data-card="stat_pending"] .dash-tile-summary');
+                var statPendingEl = document.querySelector('.dash-content-tab[data-card="stat_pending"] .dash-content-tab-badge');
                 if (statPendingEl) statPendingEl.innerHTML = miniStat('blue', stats.pending_approval, '');
 
-                var statTotalEl = document.querySelector('.dash-tile[data-card="stat_total"] .dash-tile-summary');
-                if (statTotalEl) statTotalEl.innerHTML = miniStat('orange', stats.total_active, '');
+                // stat_total REMOVED 15 Jul 2026, later still, per Ezekiel:
+                // "Remove total active projects also" — this block used to
+                // rebuild its badge from stats.total_active. That field is
+                // still present in the /api/project-stats response (see
+                // _compute_project_stats()'s docstring in dashboard.py for
+                // why it was left in rather than torn out), just nothing
+                // reads it here anymore.
 
-                var statAvgTimeEl = document.querySelector('.dash-tile[data-card="stat_avg_time"] .dash-tile-summary');
+                var statAvgTimeEl = document.querySelector('.dash-content-tab[data-card="stat_avg_time"] .dash-content-tab-badge');
                 if (statAvgTimeEl) statAvgTimeEl.innerHTML = miniStat('oak', stats.average_time, 'HRS');
             })
             .catch(function () {
@@ -877,20 +962,18 @@
                 // every other fetch in this file.
             });
 
-        // Due card's LIST: only worth refetching if actually expanded.
-        // No filter pills to read anymore (removed 12 Jul 2026, fourth
-        // follow-up — the card only ever shows one thing now: overdue
+        // Due card's LIST: UNCONDITIONAL, still — Overdue isn't part of
+        // the tab strip's single-open system (it moved out entirely 15 Jul
+        // 2026, first into an always-visible pinned card, then later the
+        // same day into the Overdue/At Risk toggle box — see
+        // toggle_overdue_at_risk.html), so there's no "is this tab even
+        // open" question to gate on here even though the BOX itself can
+        // now be collapsed by the user — refreshing the data underneath a
+        // collapsed box is harmless and keeps it correct the moment it's
+        // reopened. No filter pills to read either (removed 12 Jul 2026,
+        // fourth follow-up — the card only ever shows one thing: overdue
         // this week), so this always refetches with 'overdue', full stop.
-        //
-        // Selector targets .dash-card-body-content, not .dash-tile — since
-        // 12 Jul 2026 the tile and its body are separate elements (the
-        // body lives in the single .dash-shared-expand area, not next to
-        // its tile — see dashboard.css), and .expanded lives on/in the
-        // body now, not the tile.
-        var dueBodyEl = document.querySelector('.dash-card-body-content[data-card="due"]');
-        if (dueBodyEl && dueBodyEl.classList.contains('expanded')) {
-            fetchAndRenderDue('overdue');
-        }
+        fetchAndRenderDue('overdue');
 
         // Decisions: refreshDecisionsCard() already updates both the
         // collapsed count and the expanded list (only if expanded) in one
@@ -926,13 +1009,14 @@
         document.addEventListener('click', function (e) {
             // These four are checked FIRST, ahead of toggle-card below, on
             // purpose: the "Flag a Project" button lives inside decisions.html's
-            // expanded body, which is itself inside .dash-card-body — NOT
-            // inside the .dash-card-header that carries data-action="toggle-card"
-            // — so there's no actual bubbling conflict here today. They're
-            // still ordered first defensively, so that if a future chunk
-            // ever moves one of these triggers somewhere that IS nested
-            // inside the header, matching happens here before it would
-            // reach (and wrongly fire) the toggle-card branch below.
+            // expanded body, which is itself inside .dash-card-body-content
+            // in .dash-content-area — NOT inside the .dash-content-tab
+            // button that carries data-action="toggle-card" — so there's
+            // no actual bubbling conflict here today. They're still
+            // ordered first defensively, so that if a future chunk ever
+            // moves one of these triggers somewhere that IS nested inside
+            // a tab, matching happens here before it would reach (and
+            // wrongly fire) the toggle-card branch below.
             if (e.target.closest('[data-action="open-flag-management-modal"]')) {
                 openFlagManagementModal();
                 return;
@@ -961,50 +1045,97 @@
                 return;
             }
 
+            // CS/Designer picker toggle (added 15 Jul 2026, per Ezekiel:
+            // "Next to All Projects put CS button and Designer button. When
+            // they click those buttons, the below expands to show each name
+            // as a button as it is now... toggle - so when they click CS,
+            // then designer, it replaces the CS buttons with designer ones
+            // and vice versa"). These two <button>s (dashboard.html, inside
+            // .dash-view-tabs next to My View/All Projects) don't switch
+            // scope themselves — they just show/hide the .dash-group-tabs
+            // row of real scope-switching <a> links underneath. Checked
+            // ahead of toggle-card below for the same defensive-ordering
+            // reason as the other data-actions above, though there's no
+            // actual nesting conflict today either.
+            var groupToggle = e.target.closest('[data-action="toggle-group"]');
+            if (groupToggle) {
+                var group = groupToggle.dataset.group;
+                var targetRow = document.querySelector('.dash-group-tabs[data-group="' + group + '"]');
+                var wasOpen = targetRow && !targetRow.classList.contains('hidden');
+
+                // Single-open: hide every group row and clear every toggle
+                // button's active state first, regardless of which one was
+                // clicked — this is what makes clicking Designer while CS is
+                // showing REPLACE it instead of showing both at once.
+                document.querySelectorAll('.dash-group-tabs').forEach(function (row) {
+                    row.classList.add('hidden');
+                });
+                document.querySelectorAll('.dash-group-toggle-btn').forEach(function (btn) {
+                    btn.classList.remove('active');
+                });
+
+                // Clicking the ALREADY-open group's button again closes it
+                // (both rows now hidden, both buttons now inactive) rather
+                // than reopening it — an accordion toggle, not a fixed
+                // 2-state switch, since the group buttons aren't tied to a
+                // scope of their own (unlike the tab-strip's toggle-card,
+                // which always keeps exactly one tab open).
+                if (!wasOpen && targetRow) {
+                    targetRow.classList.remove('hidden');
+                    groupToggle.classList.add('active');
+                }
+                return;
+            }
+
             var toggleHeader = e.target.closest('[data-action="toggle-card"]');
             if (toggleHeader) {
-                // Tile (every card except Summary, since 12 Jul 2026) —
-                // single-open PAGE-WIDE as of the third follow-up the same
-                // day (was single-open-per-row, when each row of 3 had its
-                // own .dash-row-expand band — see git history around 12
-                // Jul 2026 if that's ever needed again). Now there's just
-                // one .dash-shared-expand area for the whole tile grid
-                // (.dash-tiles-grid, 5 per row — see dashboard.css), so
-                // opening any tile closes whichever OTHER tile was active
-                // ANYWHERE on the page, not just within the same row. No
-                // localStorage here (unlike the old .dash-card path
-                // below) — tiles always start fresh/minimized on load,
-                // matching the wireframe's default state, except whichever
-                // one a ?view= deep link server-rendered as already open.
-                var tile = toggleHeader.closest('.dash-tile');
-                if (tile) {
-                    if (tile.classList.contains('dash-tile--muted')) return;
-                    var wasActive = tile.classList.contains('active');
+                // Tab strip (EVERY card including Summary, as of the 15
+                // Jul 2026 redesign — see the big comment on
+                // .dash-content-tabs in dashboard.css). Single-open
+                // page-wide: opening any tab closes whichever OTHER tab
+                // was active anywhere on the page and shows this one's
+                // body in the single .dash-content-area instead.
+                //
+                // Clicking the ALREADY-active tab is a no-op (real tab
+                // semantics, not accordion toggle-open/toggle-closed) —
+                // the content area is meant to always show exactly one
+                // card, never nothing, since it's the same box that used
+                // to be the permanently-populated "My Day / My Week" area.
+                var tab = toggleHeader.closest('.dash-content-tab');
+                if (tab) {
+                    if (tab.classList.contains('dash-content-tab--muted')) return;
+                    if (tab.classList.contains('active')) return; // already showing — nothing to do
 
-                    document.querySelectorAll('.dash-tile.active').forEach(function (t) {
+                    document.querySelectorAll('.dash-content-tab.active').forEach(function (t) {
                         t.classList.remove('active');
                     });
-                    document.querySelectorAll('.dash-card-body-content.expanded').forEach(function (b) {
+                    // Scoped to #dash-content-area specifically (added 15
+                    // Jul 2026, later still — real bug fix, not a style
+                    // nit) — this USED to be an unscoped
+                    // document.querySelectorAll('.dash-card-body-content.
+                    // expanded'), which was harmless when .dash-card-body-
+                    // content only ever appeared inside #dash-content-area.
+                    // That stopped being true the moment the Overdue/At
+                    // Risk and My Day/My Week toggle boxes started reusing
+                    // the SAME class for their own independent collapse
+                    // mechanic (see toggle_overdue_at_risk.html/toggle_my_
+                    // day_week.html) — without this scoping, clicking ANY
+                    // tab in the strip would also silently collapse both
+                    // toggle boxes as a side effect, since they'd match the
+                    // same blanket query. Single-open page-wide semantics
+                    // are still correct WITHIN the tab strip's own content
+                    // area — just no longer bleed outside it.
+                    document.querySelectorAll('#dash-content-area .dash-card-body-content.expanded').forEach(function (b) {
                         collapseBody(b);
                     });
 
-                    if (!wasActive) {
-                        tile.classList.add('active');
-                        var body = document.querySelector(
-                            '.dash-card-body-content[data-card="' + tile.dataset.card + '"]');
-                        expandBody(body);
-                    }
+                    tab.classList.add('active');
+                    var body = document.querySelector(
+                        '#dash-content-area .dash-card-body-content[data-card="' + tab.dataset.card + '"]');
+                    expandBody(body);
                     return;
                 }
 
-                // No Summary branch here anymore — its header stopped
-                // carrying data-action="toggle-card" entirely as of 12
-                // Jul 2026's fourth follow-up (always open, no toggle —
-                // see .dash-card--static in dashboard.css), so this
-                // `if (toggleHeader)` block is now only ever reachable via
-                // a tile click above. applyOpenState()/setStoredOpen()
-                // are still defined further up for whatever future
-                // mode=None card, if any, might need real toggle behaviour.
                 return;
             }
 
@@ -1032,6 +1163,48 @@
             var clashesBtn = e.target.closest('[data-action="clashes-tab"]');
             if (clashesBtn) { switchClashesTab(clashesBtn.dataset.filter); return; }
 
+            // Toggle boxes (Overdue/At Risk + My Day/My Week, added 15 Jul
+            // 2026, later still) — checked here, ahead of nothing in
+            // particular (unlike the flag-management/resolve-decision
+            // checks at the top of this handler, there's no real bubbling
+            // conflict to guard against: the view buttons, collapse
+            // button, and box body are all siblings/independent elements,
+            // never nested inside one another — see the big comment on
+            // .dash-toggle-box-header in dashboard.css).
+            var toggleBoxViewBtn = e.target.closest('[data-action="toggle-box-view"]');
+            if (toggleBoxViewBtn) {
+                switchToggleBoxView(toggleBoxViewBtn.dataset.box, toggleBoxViewBtn.dataset.view);
+                return;
+            }
+            var toggleBoxCollapseBtn = e.target.closest('[data-action="toggle-box-collapse"]');
+            if (toggleBoxCollapseBtn) {
+                toggleBoxCollapse(toggleBoxCollapseBtn.dataset.box, toggleBoxCollapseBtn);
+                return;
+            }
+            // Click-anywhere-in-header-to-collapse (added 16 Jul 2026) — per
+            // Ezekiel: "improve the UX so when you select anywhere in the
+            // header that isn't the toggle button - it collapses the
+            // header." Reached only when neither of the two checks above
+            // matched, i.e. the click landed somewhere in the header OTHER
+            // than a view-switch button or the chevron button itself
+            // (empty padding, the gap between buttons, etc.) — both of
+            // those already returned above, so there's no risk of this
+            // double-firing on top of a view switch or the chevron's own
+            // click. Reuses toggleBoxCollapse() as-is, just resolving the
+            // box key + chevron button from the header itself instead of
+            // from a dedicated data-action element, so the chevron still
+            // rotates correctly regardless of where in the header the
+            // click actually landed.
+            var toggleBoxHeader = e.target.closest('.dash-toggle-box-header');
+            if (toggleBoxHeader) {
+                var headerBox = toggleBoxHeader.closest('[data-toggle-box]');
+                var headerChevronBtn = toggleBoxHeader.querySelector('[data-action="toggle-box-collapse"]');
+                if (headerBox && headerChevronBtn) {
+                    toggleBoxCollapse(headerBox.dataset.toggleBox, headerChevronBtn);
+                }
+                return;
+            }
+
             // NOTE: the dashboard's deep-dive zone (Projects/Deliverables
             // tabs at the bottom of the page, including its own "All"/
             // "At Risk" filter chips, deadline-sort pills, and side-by-side
@@ -1039,6 +1212,32 @@
             // git history around that date if any of this needs
             // resurrecting.
         });
+
+        // Average Project Time card's embedded .tt-deliverables <details>
+        // (added 15 Jul 2026 — see stat_avg_time.html). The native 'toggle'
+        // event does NOT bubble, so this has to be a capture-phase listener
+        // on document rather than living inside the click handler above
+        // (which relies on bubbling). Fires whether a <details> was opened
+        // by the user clicking its <summary> OR programmatically via
+        // time_tracking.js's Expand All/Collapse All buttons setting
+        // .open directly — both go through the same 'toggle' event per the
+        // HTML spec.
+        //
+        // Necessary because expandBody() only measures scrollHeight ONCE,
+        // at the moment the stat_avg_time TAB itself is opened (see the
+        // big comment on expandBody/remeasureExpandedBody above) — opening
+        // a deliverable breakdown inside an already-open tab body grows
+        // that body's real content height past whatever max-height was
+        // captured at tab-open time, and without this listener the extra
+        // content would be silently clipped by the same overflow:hidden
+        // that makes the open/close animation work. Same root cause as the
+        // Next Actions "doesn't always load the full list" bug (13 Jul
+        // 2026) — see remeasureExpandedBody()'s docstring.
+        document.addEventListener('toggle', function (e) {
+            if (e.target.classList && e.target.classList.contains('tt-deliverables')) {
+                remeasureExpandedBody(e.target.closest('.dash-card-body-content'));
+            }
+        }, true);
     }
 
 })();

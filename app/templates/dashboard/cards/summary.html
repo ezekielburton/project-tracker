@@ -1,9 +1,33 @@
 {#
+   ORPHANED (15 Jul 2026, later still) — no longer included ANYWHERE.
+   'summary' was removed from CARD_ORDER entirely (dashboard.py) and this
+   card's Today/This Week columns were rebuilt as the new My Day/My Week
+   toggle box (app/templates/dashboard/toggle_my_day_week.html — reuses
+   dash_due_row() the same way this file did), per Ezekiel: "Bring my day/
+   my week to the right side (put button toggles)... Remove myday/my week
+   button since it will be redundant." Left in place rather than deleted
+   (couldn't rm it in this environment — permission denied) purely as
+   reference/history.
+
    app/templates/dashboard/cards/summary.html
    ───────────────────────────────────────────
-   The "My Today / My Week Summary" card — full-width, always rendered
-   FIRST regardless of role (see dashboard.html — this include is outside
-   the role-ordered card_order loop).
+   The "My Today / My Week Summary" card — always FIRST in CARD_ORDER
+   regardless of role (see dashboard.py), and the tab that's ACTIVE by
+   default on page load (initial_expanded_card defaults to 'summary').
+
+   Redesigned 15 Jul 2026, per Ezekiel: "Have the my day/my week div be
+   the interactive area where the information populates. Where my day/my
+   week is lets have the tabs for each card that are clickable." Used to
+   be a special case — its own permanently-open, non-toggling mode=None
+   branch in dash_card(), rendered separately ABOVE the tile grid (see git
+   history around 12-15 Jul 2026 for that design). It's now an ordinary
+   tab+body card exactly like every other card on this page — same
+   `{% call dash_card(..., mode=dash_render_mode) %}` pattern, included
+   via the SAME card_order loop in dashboard.html (twice — once per
+   dash_render_mode, like every other card partial). The only thing that
+   makes it special now is being first in CARD_ORDER and defaulting
+   `expanded=True` (via initial_expanded_card) so the content area starts
+   populated with it rather than empty.
 
    Data comes from dashboard.py's index() route, computed server-side
    BEFORE the page renders (no client-side fetch/spinner — matches how
@@ -52,13 +76,12 @@
 </span>
 {% endset %}
 
-{# ALWAYS OPEN, not collapsible (changed 12 Jul 2026, fourth follow-up,
-   per Ezekiel) — mode is left at its default (None), which as of this
-   change means "static card, no toggle" rather than "self-contained
-   expand-in-place". `expanded`/`muted` aren't passed since dash_card()
-   ignores both for mode=None now; see the big comment in
-   _dashboard_macros.html. #}
-{% call dash_card('summary', 'My Today / My Week', summary_pills, full=True) %}
+{# Ordinary tab+body card as of the 15 Jul 2026 redesign — see the
+   docstring above. `expanded` matches every other card's pattern
+   (initial_expanded_card defaults to 'summary', so this is True on a
+   fresh page load unless a ?view= deep link asks for a different tab). #}
+{% call dash_card('summary', 'My Today / My Week', summary_pills,
+    expanded=(initial_expanded_card == 'summary'), mode=dash_render_mode) %}
 
     <div class="dash-two-col">
 

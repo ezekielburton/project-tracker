@@ -196,14 +196,19 @@ def _send_notification_email(recipient, message, project=None):
 # ── Core factory ──────────────────────────────────────────────────────────────
 
 def create_notification(recipient, message, notification_type, project=None,
-                        triggered_by=None, pref_key=None, link=None):
+                        triggered_by=None, pref_key=None, link=None,
+                        send_email=True):
     """
     Create a single in-app notification and (optionally) send an email.
 
-    pref_key — the key to check against recipient.notification_prefs before
-               sending the email. If None, email always fires (backwards-
-               compatible for calls that predate the preference system).
-               In-app notification is ALWAYS created regardless of pref.
+    pref_key  — the key to check against recipient.notification_prefs before
+                sending the email. If None, email always fires (backwards-
+                compatible for calls that predate the preference system).
+                In-app notification is ALWAYS created regardless of pref.
+    send_email — set to False to suppress the email entirely, regardless of
+                 pref_key. Use when a separate direct email has already been
+                 sent for the same event (e.g. notify_admin_of_new_feedback)
+                 to avoid duplicates. In-app notification is still created.
     """
     notification = Notification(
         recipient_id=recipient.id,
@@ -218,7 +223,8 @@ def create_notification(recipient, message, notification_type, project=None,
 
     # Gate the email on the user's saved preference for this type.
     # Missing pref_key (legacy callers) → always send.
-    if pref_key is None or recipient.wants_notification(pref_key):
+    # send_email=False → always skip (caller already sent a direct email).
+    if send_email and (pref_key is None or recipient.wants_notification(pref_key)):
         _send_notification_email(recipient, message, project)
 
     return notification

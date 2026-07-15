@@ -8,12 +8,16 @@
    CLAUDE.md and git history around that date. */
 
 /* ── Management/admin view-switcher (added 11 Jul 2026, extended to admin
-   12 Jul 2026) ───────────────────────────────────────────────────────────
-   My View / one tab per CS lead / All Projects — see the big comment on
-   _resolve_dashboard_scope() in dashboard.py. Reuses .dash-tab-btn as-is
-   (same underlying pill look) since these ARE real links causing full page
-   loads, not a client-toggled pair — hence its own small flex wrapper here
-   rather than a generic multi-purpose tab-bar class. */
+   12 Jul 2026, extended to designers 15 Jul 2026, reworked into a
+   CS/Designer toggle 15 Jul 2026 later the same day) ─────────────────────
+   My View / All Projects / one tab per CS lead / one tab per designer —
+   see the big comment on _resolve_dashboard_scope() in dashboard.py.
+   Reuses .dash-tab-btn as-is (same underlying pill look) for both the real
+   scope-switching <a> links AND the CS/Designer toggle <button>s below —
+   .dash-tab-btn already sets cursor/border/background/font explicitly, so
+   it renders identically regardless of which element carries it. Its own
+   small flex wrapper here rather than a generic multi-purpose tab-bar
+   class. */
 .dash-view-tabs {
     display: flex;
     gap: 0.5rem;
@@ -21,114 +25,71 @@
     margin-bottom: 0.75rem;
 }
 
+/* Wraps ONE group's row of name-tabs (CS or Designers), shown/hidden by
+   dashboard.js's toggle-group click handler via the shared .hidden utility
+   class (main.css) — see the big comment on the CS/Designer buttons in
+   dashboard.html. Was a permanently-visible labeled row for each group
+   (added 15 Jul 2026, per Ezekiel: "group those cards by designer or CS")
+   before being reworked into this collapsible version the same day, per
+   Ezekiel: "the below expands to show each name as a button... toggle -
+   so when they click CS, then designer, it replaces the CS buttons with
+   designer ones" — the small uppercase "CS"/"Designers" label that used to
+   sit in front of each row is gone too, since the toggle button itself
+   (labeled "CS"/"Designer") now conveys that. My View/All Projects stay in
+   the plain .dash-view-tabs row above (general navigation, not a role
+   group), so .dash-group-tabs only ever wraps the CS/Designers rows. */
+.dash-view-tabs-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.dash-view-tabs-row .dash-view-tabs {
+    margin-bottom: 0;
+}
+
 /* "Previewing as X" line under the view-switcher when a management user
    is on a specific CS lead's tab — exists so it's unmistakable that "3
    actions needed from me" etc. below refers to that CS, not the
    management user actually looking at the screen (see
    _resolve_dashboard_scope()'s docstring on why ownership language fully
-   flips to the previewed CS's perspective on that tab). */
+   flips to the previewed CS's perspective on that tab).
+
+   Restyled 15 Jul 2026, per Ezekiel: "I need the text about the section
+   being a preview of e.g eddie to be styled in a div, and not italic.
+   Make it white with tangerine text. Nice rounded rectagle." — was a bare
+   italic grey line with no container; now a proper rounded white pill/card
+   (same --radius/--shadow recipe every other card-like element on this
+   page uses) so it reads as a distinct callout instead of ambient text.
+   Markup changed from <p> to <div> in dashboard.html to match "styled in a
+   div" literally. */
 .dash-previewing-as {
+    display: inline-block;
     font-size: 0.85rem;
-    color: var(--grey-dark);
-    font-style: italic;
-    margin-bottom: 1.5rem;
-}
-
-/* ── Stat tiles (added 12 Jul 2026, removed as a separate component in
-   the twelfth follow-up the same day) ────────────────────────────────────
-   Your Active Projects / Pending Approval / Total Active Projects used to
-   be their own small component (.dash-stats-row/.dash-stat-card) pinned
-   above the tile grid — per Ezekiel ("make them in the same style as the
-   others and same size and make them the first 3 cards"), they're now
-   ordinary .dash-tile entries (see stat_active.html/stat_pending.html/
-   stat_total.html), just always first in CARD_ORDER. Check git history
-   around 12 Jul 2026 if the old standalone markup/CSS ever needs
-   resurrecting. Their colours (green/ashen-blue/tangerine) carried over
-   unchanged into the new .dash-mini-stat--green/--blue/--orange variants
-   used by those tile partials. */
-
-/* ── Cards zone ───────────────────────────────────────────────────────── */
-
-.dash-cards-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 2rem;
-}
-
-/* Summary card spans both columns and always sits first — see dashboard.html */
-.dash-card--full {
-    grid-column: 1 / -1;
-}
-
-@media (max-width: 900px) {
-    .dash-cards-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.dash-card {
+    font-weight: 600;
+    color: var(--tangerine);
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    overflow: hidden;
+    padding: 0.65rem 1.1rem;
+    margin-bottom: 1.5rem;
 }
 
-.dash-card-header {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1.1rem 1.4rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    font-family: var(--font-body);
-}
-
-.dash-card-title {
-    font-family: var(--font-headline);
-    text-transform: uppercase;
-    font-weight: 700;
-    font-size: 1.6rem; /* 13 Jul 2026: bumped up per Ezekiel ("My Today / My Week bigger too") — this class is only ever used by the Summary card's header (see dash-card-summary comment above), so it's safe to size independently of .dash-tile-title */
-    letter-spacing: 0.02em;
-    color: var(--black);
-    flex-shrink: 0;
-}
-
-/* Summary card's collapsed-header mini-stats ("Due Today" / "Needed From
-   You") — the ONLY consumer of .dash-card-header/.dash-card-summary (every
-   other card uses the tile system's .dash-tile-summary instead), so it's
-   safe to size these up here without touching the shared
-   .dash-mini-stat-value/-label rules used by tiles. Bumped up (13 Jul
-   2026, per Ezekiel: "make it much larger") and pushed to the right edge
-   of the header via justify-content: flex-end — .dash-card-title keeps
-   flex-shrink: 0 so it stays put on the left, and this flex:1 span just
-   claims the rest of the row. */
-.dash-card-summary {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 1.6rem;
-    flex-wrap: wrap;
-    color: var(--grey-dark);
-    font-size: 0.9rem;
-}
-
-.dash-card-summary .dash-mini-stat-dot {
-    width: 0.9rem;
-    height: 0.9rem;
-}
-
-.dash-card-summary .dash-mini-stat-value {
-    font-size: 2.2rem;
-}
-
-.dash-card-summary .dash-mini-stat-label {
-    font-size: 1rem;
-}
+/* ── Stat cards (added 12 Jul 2026, went through two more component
+   changes since) ─────────────────────────────────────────────────────
+   Your Active Projects / Pending Approval / Total Active Projects
+   started as their own small component (.dash-stats-row/.dash-stat-card)
+   pinned above the tile grid, became ordinary (but static, non-
+   interactive) .dash-tile entries the same day, then — 15 Jul 2026,
+   alongside Average Project Time — became ordinary .dash-content-tab
+   entries with real bodies, last in every role's CARD_ORDER (see the big
+   comment on CARD_ORDER in dashboard.py and stat_active.html etc.). The
+   intermediate .dash-tile-based CSS was removed the same day — check git
+   history around 12-15 Jul 2026 if any of it ever needs resurrecting.
+   Their colours (green/ashen-blue/tangerine/oak) carried over unchanged
+   through every stage, into the .dash-mini-stat--green/--blue/--orange/
+   --oak variants those card partials still use. */
 
 /* ── Collapsed-card mini stats (reworked 12 Jul 2026) ─────────────────────
    Replaces the old rag-badge/action-tag/owner-tag "pill" summaries with a
@@ -226,339 +187,385 @@
 .dash-mini-stat--oak .dash-mini-stat-dot { background: var(--oak); }
 .dash-mini-stat--oak .dash-mini-stat-value { color: var(--oak); }
 
-.dash-card-chevron {
-    flex-shrink: 0;
-    font-size: 1.4rem;
-    line-height: 1;
-    color: var(--grey-mid);
-    transition: transform 0.2s ease;
-}
-
-.dash-card.expanded .dash-card-chevron {
-    transform: rotate(90deg);
-    color: var(--tangerine);
-}
-
-/* Height-transition expand, not display:none — animates smoothly.
-   max-height, but JS-measured (see expandBody()/collapseBody()/
-   applyOpenState() in dashboard.js), not a fixed guess: transitioning
-   max-height from 0 to some large fixed number (9999px, the very first
-   version of this) animates at a CONSTANT RATE across that whole range, so
-   the fraction covering the content's actual height (a few hundred px) is
-   tiny — it reads as an almost-instant "pop" rather than a smooth grow.
-   A CSS-only grid-template-rows (0fr -> 1fr) alternative was tried next
-   (12 Jul 2026) to avoid the JS measurement, but didn't reliably collapse
-   to zero height across browsers — content stayed visible, unboxed,
-   outside its card. JS setting an exact pixel max-height sidesteps both
-   problems: the transition covers exactly the visible distance, and 0
-   really means 0. */
-.dash-card-body {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.35s ease;
-}
-
+/* .dash-card-body-inner is always nested inside .dash-card-body-content
+   now (the mode=None static-card markup that used to also render this
+   class directly was removed in the 15 Jul 2026 tab-strip redesign — see
+   CLAUDE.md), so there's just one rule instead of a base + override pair. */
 .dash-card-body-inner {
-    padding: 0 1.4rem 1.4rem;
-    border-top: 1px solid var(--border-subtle);
-    padding-top: 1.2rem;
+    padding: 1.4rem;
 }
 
-/* Static/always-open card (added 12 Jul 2026, fourth follow-up) — used
-   ONLY by Summary ("My Day / My Week"), mode=None's markup as of this
-   change (see _dashboard_macros.html). No collapse mechanic at all: the
-   body always renders at its natural height instead of the JS-measured
-   max-height every other card's body uses, and the header isn't
-   clickable — no chevron, no cursor change, no toggle-card data-action. */
-.dash-card-body--static {
-    max-height: none;
-    overflow: visible;
-    transition: none;
-}
+/* ── Stat tiles — REMOVED (15 Jul 2026) ───────────────────────────────
+   .dash-stat-tiles-grid/.dash-tile/.dash-tile--static/.dash-tile--link/
+   .dash-tile-title/.dash-tile-summary (+ its .dash-mini-stat overrides)
+   used to style the 4 stat cards (Your Active/Pending Approval/Total
+   Active/Average Project Time) as a small static row above the tab strip.
+   Deleted when those four moved down into ordinary .dash-content-tab
+   entries, last in every role's card_order — see the big comment on
+   CARD_ORDER in dashboard.py and stat_active.html etc. Confirmed via grep
+   across app/templates that nothing renders any .dash-tile* class anymore
+   before deleting this block — check git history around 12-15 Jul 2026 if
+   any of it ever needs resurrecting. */
 
-.dash-card-header--static {
-    cursor: default;
-}
-
-/* Muted state — Clashing Projects card at zero clashes. No chevron
-   (rendered conditionally by the macro), reduced opacity, not clickable. */
-.dash-card--muted {
-    opacity: 0.55;
-}
-
-.dash-card--muted .dash-card-header {
-    cursor: default;
-}
-
-/* ── Tile grid + shared expand area (added 12 Jul 2026, reworked twice
-   more the same day — see the dated comments below for each pass) ───────
-   Every card except Summary (which keeps the .dash-card/.dash-card-header/
-   .dash-card-body rules above, untouched) is a small fixed-size tile —
-   clicking one doesn't grow the tile itself, it opens ONE shared area
-   below the whole grid showing the body content (originally one band per
-   row of 3; collapsed to a single page-wide area in the third follow-up,
-   see below). See the big comment on dash_card()'s `mode` param in
-   _dashboard_macros.html and on the tile-grid loop in dashboard.html for
-   the full mechanic; this is just the visual layer, wired up by
-   dashboard.js's click handler. */
-
-/* 5 tiles per row (changed 12 Jul 2026, third follow-up — was 3), with a
-   single shared expand area (.dash-shared-expand, further down) below the
-   WHOLE grid instead of one band per row of 3. That's what let this
-   collapse from a row-batching layout to one flat grid: there's no longer
-   a per-row band that needs to sit directly under its own row, so nothing
-   here needs to know about "rows" at all anymore — just narrower tiles,
-   more of them across. */
-.dash-tiles-grid {
+/* ── Toggle boxes: Overdue/At Risk (left) + My Day/My Week (right)
+   (added 15 Jul 2026, later still — REPLACES the old always-visible
+   pinned Overdue+At Risk cards AND Summary's old .dash-two-col Today/
+   This Week split, both removed the same day) ──────────────────────────
+   Per Ezekiel: "Make overdue/at risk on the left side (put button
+   toggles). Bring my day/my week to the right side (put button
+   toggles). Make them smaller also the divs." Two side-by-side boxes —
+   still a plain, unscoped 2-column grid, NOT .dash-two-col (deliberately
+   scoped to Summary's own now-removed .dash-row background/border
+   override — see git history around 15 Jul 2026 if that's ever needed
+   again) — but each box now holds TWO lists with a button toggle between
+   them instead of one fixed list each. */
+.dash-toggle-row {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 1rem;
-    margin-bottom: 1rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
 }
 
-@media (max-width: 1200px) {
-    .dash-tiles-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
-}
-
-@media (max-width: 700px) {
-    .dash-tiles-grid {
+@media (max-width: 900px) {
+    .dash-toggle-row {
         grid-template-columns: 1fr;
     }
 }
 
-/* Column layout, title pinned to the TOP (changed 12 Jul 2026, fourth
-   follow-up — was vertically centered via justify-content: center in the
-   third follow-up). justify-content: flex-start anchors the title against
-   the tile's top edge regardless of how much room the stat below it needs,
-   instead of the whole title+stat block floating centered in the tile.
-
-   FIXED height, not min-height (changed 12 Jul 2026, fifth follow-up, per
-   Ezekiel — "reduce the vertical size to be the size of all to match the
-   size needed for the biggest div"). Before this, CSS Grid's default
-   row-stretch behaviour meant a tile's actual height depended on whichever
-   OTHER tile happened to share its row — Next Actions/Clashes (2 stacked
-   mini-stats) made their whole row taller, so a single-stat tile like
-   Decisions in a DIFFERENT row could end up visibly shorter than one in
-   Next Actions' row. One fixed height sized for the tallest realistic
-   content (Next Actions, per Ezekiel) makes every tile the same size
-   everywhere, not just within its own row. 12rem is a judgment-call
-   estimate (padding + up to a 2-line title + divider + gap + two stacked
-   mini-stats) — nudge it up if a longer title/label combination ever
-   clips. gap increased from 0.55rem to 0.9rem in the same pass — see
-   .dash-tile-title's border-bottom below for why less gap was needed
-   there before. */
-.dash-tile {
+/* The box itself — same white/radius/shadow recipe every other card's
+   body uses. No fixed height on the box itself (contrast with the old
+   .dash-pinned-card, which WAS a fixed-height flex column) — this box
+   collapses to just its header when its body's .dash-card-body-content
+   is collapsed, same as every tab-strip card. See toggle_overdue_at_risk.
+   html's docstring for the full collapse mechanic (reuses expandBody()/
+   collapseBody()/initCards() as-is, no new JS needed for "open by
+   default"). */
+.dash-toggle-box {
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    border: 1.5px solid transparent;
-    padding: 1.1rem 1.2rem;
-    cursor: pointer;
+}
+
+/* Header — two view-switch buttons on the left, one small collapse
+   chevron button on the right. All three are SIBLINGS, deliberately not
+   nested inside one another (same "don't nest interactive content inside
+   interactive content" reasoning dash_person_chip() and the Decisions
+   Needed Resolve button follow) — clicking a view button never also
+   triggers the collapse button or vice versa, no click-target surgery
+   needed in dashboard.js.
+
+   Whole-header click-to-collapse (added 16 Jul 2026) — per Ezekiel:
+   "improve the UX so when you select anywhere in the header that isn't
+   the toggle button - it collapses the header." dashboard.js's click
+   handler checks the two buttons FIRST (both return early), so a click
+   here only ever reaches the generic "collapse" fallback when it lands on
+   the header's own background/padding, never on a button. cursor: pointer
+   signals that the whole strip (not just the small chevron) is now
+   clickable; the buttons already set their own cursor/hover, so this is
+   purely for the empty space between/around them. */
+.dash-toggle-box-header {
     display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 0.9rem;
-    height: 12rem;
-}
-
-/* Active — the one tile (at most, page-wide) whose body is currently
-   showing in the single shared expand area below the grid. Same tangerine
-   accent .dash-card.expanded's chevron uses, so "this is the open one"
-   reads the same way it always has on this page. */
-.dash-tile.active {
-    border-color: var(--tangerine);
-}
-
-/* Muted — Clashing Projects tile at zero clashes. No data-action on the
-   element itself (set conditionally by the macro), reduced opacity, not
-   clickable — same convention .dash-card--muted used before this rework. */
-.dash-tile--muted {
-    opacity: 0.55;
-    cursor: default;
-}
-
-/* Static — the three stat tiles (stat_active/stat_pending/stat_total,
-   added 12 Jul 2026 twelfth follow-up). Unlike .dash-tile--muted this is
-   full opacity/full colour, NOT dimmed — these numbers should read just
-   as clearly as any other tile's. The only thing "static" means here is
-   cursor: default, since these tiles never carry data-action="toggle-card"
-   (no expandable body — see the stat_*.html partials) and .dash-tile's
-   base cursor: pointer would otherwise misleadingly suggest they're
-   clickable. */
-.dash-tile--static {
-    cursor: default;
-}
-
-/* stat_avg_time.html only (13 Jul 2026) — the one stat tile that's an
-   actual link (to /time-tracking, admin/management only) rather than
-   purely static. text-decoration/color resets undo the browser's default
-   <a> styling so it looks identical to the other three non-linkable
-   tiles at rest; cursor: pointer + a subtle hover lift are the only
-   visual cues that this one is clickable. */
-.dash-tile--link {
-    cursor: pointer;
-    text-decoration: none;
-    color: inherit;
-    transition: box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.dash-tile--link:hover {
-    box-shadow: var(--shadow-hover, 0 4px 14px rgba(0, 0, 0, 0.1));
-    transform: translateY(-1px);
-}
-
-/* Switched to Public Sans Bold (--font-body) and sized up again, centered
-   (changed 12 Jul 2026, fourth follow-up — was Barlow Condensed/
-   --font-headline at 1.05rem, left-aligned by default as the top line of
-   a column). Pinned to the top of the tile via .dash-tile's
-   justify-content: flex-start above.
-
-   Divider added 12 Jul 2026 (fifth follow-up, per Ezekiel — "add a
-   horizontal dividing line under the heading... across all cards"):
-   padding-bottom is the small gap between the heading text and the line
-   ("a few px underneath"), border-bottom is the line itself. As a flex
-   item in a column .dash-tile, this span already stretches to the tile's
-   full width (flex items are blockified regardless of their original
-   display value), so the border-bottom spans edge-to-edge with no extra
-   width/display rule needed. */
-.dash-tile-title {
-    font-family: var(--font-body);
-    text-transform: uppercase;
-    font-weight: 700;
-    font-size: 0.9rem; /* 13 Jul 2026: reduced ~30% from 1.3rem per Ezekiel */
-    letter-spacing: 0.01em;
-    line-height: 1.2;
-    text-align: center;
-    color: var(--black);
-    padding-bottom: 0.6rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1.1rem 1.25rem;
     border-bottom: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+    cursor: pointer;
 }
 
-/* Centered (changed 12 Jul 2026, fourth follow-up — was right-aligned via
-   justify-content: flex-end) and stacked VERTICALLY when a tile has more
-   than one mini-stat (Next Actions, Clashes) instead of wrapping them
-   side by side — flex-direction: column + align-items: center does both
-   at once: a single stat centers under the title, multiple stats stack
-   as their own centered column. These ONLY apply inside a tile's summary,
-   not the Summary ("My Day/My Week") card's own header, which was never
-   part of the tile rework.
-
-   flex: 1 1 auto + justify-content: center (added 12 Jul 2026, sixth
-   follow-up, per Ezekiel — "move the text down so it's centered") — the
-   title above this has a fixed natural height, but .dash-tile itself is a
-   FIXED height (12rem, see .dash-tile above) sized for the tallest tile's
-   content. Without this, a short tile like Decisions (one stat) left its
-   stat sitting right under the title's divider with a block of empty
-   space below it, since .dash-tile's justify-content: flex-start only
-   pins the START of the column, it doesn't center leftover space. Giving
-   .dash-tile-summary flex: 1 makes it claim ALL the space the tile isn't
-   using for its title, and justify-content: center then centers whatever
-   stat(s) it holds within THAT space — so the stat sits centered in the
-   room actually left over below the header, not centered in the whole
-   tile (which would push it too close to/under the divider). */
-.dash-tile-summary {
+.dash-toggle-box-btns {
     display: flex;
-    flex-direction: column;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+/* Enlarged 16 Jul 2026 — per Ezekiel: "make the overdue / at risk toggles
+   bigger, same for my day / my week... let them be large." Previously
+   deliberately smaller/plainer than .dash-content-tab ("make them
+   smaller", 15 Jul 2026) — that instruction is superseded by this one, so
+   these are now sized UP PAST .dash-content-tab's own dimensions (0.6rem
+   1.1rem padding / 0.85rem font), not just restored to match it. Same
+   active-state solid-fill recipe (.dash-risk-tag/.rag-green/
+   .dash-content-tab.active) used everywhere else on this page, unchanged. */
+.dash-toggle-box-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.85rem 1.4rem;
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--white);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--black);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dash-toggle-box-btn:hover {
+    background: var(--surface-hover);
+}
+
+.dash-toggle-box-btn.active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
+
+/* Same contrast fix .dash-content-tab.active uses — a mini-stat's own
+   red/green colour can lose contrast against the tangerine fill. */
+.dash-toggle-box-btn.active .dash-mini-stat-value {
+    color: var(--white);
+}
+
+.dash-toggle-box-btn.active .dash-mini-stat-dot {
+    box-shadow: 0 0 0 1.5px var(--white);
+}
+
+/* Compact badge, no label span (the button's own text already says
+   "Overdue"/"At Risk"/"Today"/"This Week" — repeating it in the badge
+   would be redundant, same reasoning .dash-content-tab-badge hides its
+   label for). The SSR template never renders a label span here at all,
+   but toggleBoxBadge()'s JS refresh (dashboard.js) rebuilds via the
+   shared miniStat() helper, which always includes one (empty text) —
+   this rule hides it defensively so a post-refresh badge stays visually
+   identical to its first-paint SSR version. */
+.dash-toggle-box-btn .dash-mini-stat {
+    align-items: center;
+}
+
+.dash-toggle-box-btn .dash-mini-stat-label {
+    display: none;
+}
+
+.dash-toggle-box-btn .dash-mini-stat-dot {
+    width: 0.65rem;
+    height: 0.65rem;
+}
+
+.dash-toggle-box-btn .dash-mini-stat-value {
+    font-size: 1.05rem;
+}
+
+/* Enlarged to stay proportional to the bigger view-switch buttons above
+   (16 Jul 2026 — see the big comment on .dash-toggle-box-btn). Also now
+   the click target that fires for most of the header's empty space, not
+   just this button, via the header-wide collapse handler in dashboard.js
+   — kept as a real, still-independently-clickable button (rather than
+   folded into plain header text) so its own click still resolves via the
+   specific toggle-box-collapse check, ahead of the generic header
+   fallback, and so screen readers/keyboard users still have an explicit
+   labelled control. */
+.dash-toggle-box-collapse-btn {
+    display: flex;
     align-items: center;
     justify-content: center;
-    flex: 1 1 auto;
-    gap: 0.35rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
     color: var(--grey-dark);
+    cursor: pointer;
+}
+
+.dash-toggle-box-chevron {
+    display: inline-block;
     font-size: 0.9rem;
+    transition: transform 0.2s ease;
 }
 
-/* align-items: center (sixth follow-up, was the default "baseline") —
-   baseline aligned the dot/label to the NUMBER's baseline, which sits
-   near the bottom of its glyph, so the label read as sitting low/
-   off-center against a big number instead of level with its middle.
-   center aligns all three (dot/number/label) against the vertical middle
-   of the tallest one. This is the row layout, still used by tiles with
-   MULTIPLE stats (Next Actions, Clashes) — see the :only-child override
-   further down for the single-stat "big number, stacked" treatment. */
-.dash-tile-summary .dash-mini-stat {
-    gap: 0.5rem;
-    align-items: center;
+/* Collapsed state (button's own .expanded class removed by dashboard.js
+   on collapse — see toggle_overdue_at_risk.html's docstring) rotates the
+   chevron to point sideways instead of down, same "closed accordion"
+   affordance used elsewhere in this app. */
+.dash-toggle-box-collapse-btn:not(.expanded) .dash-toggle-box-chevron {
+    transform: rotate(-90deg);
 }
 
-.dash-tile-summary .dash-mini-stat-dot {
-    width: 0.85rem;
-    height: 0.85rem;
+/* Smaller internal list area — "make them smaller" — capped height +
+   internal scroll, same technique the old .dash-pinned-card used (see
+   git history around 15 Jul 2026, earlier the same day) just at a
+   smaller cap (300px vs the old box's 480px TOTAL height, header
+   included) since each box now shows one list at a time instead of a
+   fixed 2-column split. Scoped to .dash-toggle-box specifically so this
+   doesn't affect .dash-card-body-inner's other use inside the tab-strip's
+   .dash-card-body-content (that one should keep growing to fit whichever
+   tab is open, uncapped). Because this cap lives on the INNER element,
+   .dash-card-body-content's own scrollHeight (what expandBody() reads to
+   animate open) is naturally bounded by it too — the outer JS-measured
+   max-height mechanic and this inner CSS cap compose without conflicting. */
+.dash-toggle-box .dash-card-body-inner {
+    max-height: 300px;
+    overflow-y: auto;
 }
 
-.dash-tile-summary .dash-mini-stat-value {
-    font-size: 2.75rem;
+/* Only one of the two view panels inside a box is ever visible — plain
+   show/hide via .hidden (main.css utility class), toggled by
+   switchToggleBoxView() in dashboard.js, same mechanic switchClashesTab()
+   already uses for Clashing Projects' By Deliverable/By Project toggle. */
+
+/* Text header that updates depending on which view you're on (added 16
+   Jul 2026) — per Ezekiel: "let there be a text header that updates
+   depending on which view u are on." Lives INSIDE each
+   [data-toggle-view-panel] div, one per view, right where due.html's/
+   at_risk.html's old card titles used to sit — so it updates for free via
+   the exact same .hidden show/hide switchToggleBoxView() already does for
+   the rest of the panel's content, no new JS needed (same "let the
+   existing mechanic do it" pattern used for "open by default"/"hidden
+   until a tab is selected" elsewhere on this page). h1-h6 are globally
+   uppercased (see CLAUDE.md's CSS Facts) so this is a plain div, not a
+   heading element — text-transform/letter-spacing are reset explicitly
+   anyway in case that global rule ever changes shape. */
+.dash-toggle-box-view-title {
+    font-family: var(--font-body);
+    font-weight: 800;
+    font-size: 1.3rem;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--black);
+    margin-bottom: 0.85rem;
 }
 
-.dash-tile-summary .dash-mini-stat-label {
-    font-size: 0.78rem;
-}
-
-/* Single-stat tiles ONLY (added 12 Jul 2026, seventh follow-up, per
-   Ezekiel — "for these cards specifically" — Decisions, At Risk, Overdue,
-   What Changed, and Clashes' own zero-state "No Clashes" pill): number
-   bigger and centered, label underneath it, instead of the dot/number/
-   label row every other tile still uses (see above). :only-child targets
-   exactly this case with no template changes needed — a tile with ONE
-   .dash-mini-stat gets the big stacked treatment automatically, a tile
-   with TWO OR MORE (Next Actions, Clashes' non-zero state) keeps the
-   compact row layout. Deliberate, not just convenient: two stats at this
-   size stacked inside the fixed 12rem tile (see .dash-tile) would
-   overflow, so only single-stat tiles — which have the room to spare —
-   get the bigger treatment. DOM order (dot, then value, then label) is
-   unchanged; switching just this element from row to column naturally
-   puts the dot on top, the big number in the middle, and the label
-   caption underneath, with no markup reordering needed. */
-.dash-tile-summary .dash-mini-stat:only-child {
+/* ── Tab strip (added 15 Jul 2026 redesign) ───────────────────────────
+   One button per card, INCLUDING Summary — see the big comment on
+   dash_card()'s `mode` param in _dashboard_macros.html. Reuses the same
+   white-pill/tangerine-active visual language as .dash-tab-btn (the
+   management/admin scope-switcher tabs above) for consistency, but is its
+   own class since these carry a badge and are real <button>s wired to
+   dashboard.js's toggle-card click handler, not <a> links. */
+.dash-content-tabs {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.dash-content-tab {
+    display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.5rem;
+    padding: 0.6rem 1.1rem;
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--white);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--grey-dark);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.dash-tile-summary .dash-mini-stat:only-child .dash-mini-stat-value {
-    font-size: 3.4rem;
+.dash-content-tab:hover {
+    background: var(--surface-hover);
 }
 
-/* ONE shared area below the entire tile grid (changed 12 Jul 2026, third
-   follow-up — was one band per row of 3, so up to 3 could be open
-   simultaneously). Empty (all children collapsed via .dash-card-body-
-   content below) by default, so it takes no visible space until ANY tile
-   anywhere in the grid is clicked — no separate "is anything open" class
-   needed on the wrapper itself, same as the old per-row version.
+/* Active — the one tab (at most, page-wide) whose body is currently
+   showing in .dash-content-area below. Solid tangerine fill, same
+   solid-tag recipe used elsewhere on this page (.dash-risk-tag,
+   .rag-green) rather than just a border accent, so the active tab reads
+   unmistakably against the others. */
+.dash-content-tab.active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
 
-   Narrowed + centered (13 Jul 2026, per Ezekiel: "the expandable section
-   needs to be a bit smaller - right now it's way too wide. Center it and
-   ensure that it's just as wide as it needs to be, since we are
-   standardizing the layout"). Was full page width (same width as the
-   5-column .dash-tiles-grid above it, since neither had a max-width) —
-   at that width, a single row's date/title/chips/next-action content sat
-   with huge empty margins on a wide monitor. 900px comfortably fits a row
-   with a date divider, a title, a wrapped line of person chips, and a
-   right-aligned Next Action tag without feeling cramped, while reading
-   like a deliberately-sized panel rather than a stretched-out one. Only
-   ONE card's body is ever visible at a time here (see the docstring
-   above), so narrowing the whole wrapper narrows whichever body happens
-   to be open — no per-card override needed. */
-.dash-shared-expand {
+/* Muted — Clashing Projects tab at zero clashes, Average Project Time tab
+   for non-admin/management viewers. No data-action on the element itself
+   (set conditionally by the macro), not clickable. Opacity raised from an
+   original 0.55 (15 Jul 2026, later still) — per Ezekiel, that read as too
+   faded/hard to read at a glance; 0.85 keeps the "not clickable" cue
+   subtle without making the title/badge hard to see. */
+.dash-content-tab--muted {
+    opacity: 0.85;
+    cursor: default;
+}
+
+.dash-content-tab-title {
+    white-space: nowrap;
+}
+
+/* Compact badge — reuses the same .dash-mini-stat markup every card's
+   summary_html already builds (dot + number + label), just sized down and
+   with the label hidden: the tab's own title already gives context (e.g.
+   "Overdue"), so repeating "This Week" as a label next to it would be
+   redundant in a slim horizontal tab the way it wasn't in the old
+   12rem-tall tile. */
+.dash-content-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.dash-content-tab-badge .dash-mini-stat {
+    align-items: center;
+}
+
+.dash-content-tab-badge .dash-mini-stat-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+}
+
+.dash-content-tab-badge .dash-mini-stat-value {
+    font-size: 0.85rem;
+}
+
+.dash-content-tab-badge .dash-mini-stat-label {
+    display: none;
+}
+
+/* On the active (tangerine-filled) tab, a mini-stat's own red/green/
+   yellow colour can lose contrast against the fill — force the number to
+   white and ring the dot in white so the signal (something needs
+   attention) still reads without the specific hue fighting the tab's own
+   colour. */
+.dash-content-tab.active .dash-content-tab-badge .dash-mini-stat-value {
+    color: var(--white);
+}
+
+.dash-content-tab.active .dash-content-tab-badge .dash-mini-stat-dot {
+    box-shadow: 0 0 0 1.5px var(--white);
+}
+
+/* The single interactive content area — the same box that used to be
+   "My Day / My Week" only (see the big comment on CARD_ORDER in
+   dashboard.py). Empty (all children collapsed via .dash-card-body-
+   content below) only for a brief instant before the default tab's body
+   renders — in practice one card (Summary, unless a ?view= deep link asks
+   for another) is ALWAYS expanded here, so this never actually reads as
+   empty to a user. Full width (no max-width cap) — this is deliberately
+   the same footprint "My Day / My Week" always had, since that's the area
+   this now IS, not a narrower popover-style panel (contrast with the
+   pre-redesign .dash-shared-expand, which WAS capped at 900px because it
+   was a secondary reveal area below a fixed tile grid, not the page's
+   primary content). */
+/* margin-bottom added 16 Jul 2026 — per Ezekiel: "there is no gap between
+   the interactive area and the divs below." Before the third reorder pass
+   the toggle row sat ABOVE this area, so its own gap (see .dash-toggle-row
+   below) covered the space; now .dash-content-area is the one directly
+   above .dash-toggle-row, and it had no bottom margin of its own —
+   whether a tab was open (visible content butting straight up against the
+   toggle row) or closed (zero-height area, no gap at all), there was
+   nothing separating the two. Matches .dash-content-tabs' own
+   margin-bottom (1rem) directly above it, for the same visual rhythm. */
+.dash-content-area {
     display: block;
-    max-width: 900px;
-    margin: 0 auto;
+    margin-bottom: 1rem;
 }
 
-/* Same JS-measured max-height mechanic as .dash-card-body above (see the
-   big comment there), self-toggling via its own .expanded class instead
-   of a parent .dash-card.expanded selector — there's no longer a single
-   wrapping card element tying a tile to its body, they're siblings of
-   every other card's body inside the one shared expand area now (see
-   dashboard.html). This element
-   is the COLLAPSE wrapper only — max-height + overflow:hidden, no visual
-   styling of its own. The white/shadow/radius "card" look lives one level
-   deeper, on .dash-card-body-visual, because overflow:hidden clips a box's
-   OWN box-shadow when they're on the same element (the shadow extends
-   outside the border-box by definition, exactly what overflow:hidden
-   exists to cut off) — with only ONE wrapper, an expanded tile body would
+/* Same JS-measured max-height mechanic used throughout this page (see
+   expandBody()/collapseBody() in dashboard.js), self-toggling via its own
+   .expanded class. This element is the COLLAPSE wrapper only — max-height
+   + overflow:hidden, no visual styling of its own. The white/shadow/
+   radius "card" look lives one level deeper, on .dash-card-body-visual,
+   because overflow:hidden clips a box's OWN box-shadow when they're on
+   the same element (the shadow extends outside the border-box by
+   definition, exactly what overflow:hidden exists to cut off) — with only
+   ONE wrapper, an expanded body would
    render with a visibly clipped/missing shadow on top and bottom. Splitting
    "clips overflow" and "looks like a card" across two nested elements
    avoids that; .dash-card-body / .dash-card-body-inner didn't need this
@@ -1184,24 +1191,40 @@ a.dash-row:hover {
 
 /* .dash-tab-btn is shared with the management/admin scope-switcher tab bar
    at the top of the dashboard (see dashboard.html) — kept even though the
-   deep-dive zone that originally introduced it was removed 13 Jul 2026. */
+   deep-dive zone that originally introduced it was removed 13 Jul 2026.
 
+   Restyled 15 Jul 2026, per Ezekiel: "style the tabs as right now they
+   blend into the background." Was a bare underline-tab (no background, no
+   border, grey-dark text on the sandstone page background — nothing to
+   visually separate an unselected tab from the page itself). Now a proper
+   pill: white background + subtle border when unselected (so it reads as
+   a distinct clickable element against --sandstone), solid tangerine fill
+   + white text when active (matches the solid-tag recipe used elsewhere on
+   this page, e.g. .dash-risk-tag/.rag-green) instead of the old
+   thin-underline active state. */
 .dash-tab-btn {
     padding: 0.5rem 1.2rem;
-    border: none;
-    background: none;
-    font-family: var(--font-headline);
+    border: 1.5px solid var(--border-subtle);
+    background: var(--white);
+    font-family: var(--font-body);
     text-transform: uppercase;
     font-weight: 700;
     font-size: 0.95rem;
     color: var(--grey-dark);
     cursor: pointer;
-    border-bottom: 3px solid transparent;
+    border-radius: var(--radius);
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-tab-btn:hover {
+    background: var(--surface-hover);
 }
 
 .dash-tab-btn.active {
-    color: var(--tangerine);
-    border-bottom-color: var(--tangerine);
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
 }
 
 .dash-filter-chips {

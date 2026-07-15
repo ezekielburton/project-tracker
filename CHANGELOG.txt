@@ -47,6 +47,8 @@ New Features:
 - Added download all for reference files and submisson file history.
 - TIme tracking has been added to all projects. It works on a 9:30am - 6:30 pm system and tracks the hours of every stage. Weekends only count if a status is changed.
 - Browser now automatically pulls latest project version without needing to refresh.
+- Overhauled submission flow completely to be on a deliverable level + internal flow for technical or emeergency production aw/3d.
+- Option to apply POSM to another customer (duplicate for that customer). If any POSM is missing, add the matches and notify trhem what was missing)
 
 Adjustments:
 

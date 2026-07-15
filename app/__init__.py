@@ -23,9 +23,13 @@ def create_app():
     init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
 
     import subprocess
-    app.config['STATIC_VERSION'] = subprocess.check_output(
-    ['/usr/bin/git', 'rev-parse', '--short', 'HEAD']
-    ).decode().strip()
+    try:
+        app.config['STATIC_VERSION'] = subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        app.config['STATIC_VERSION'] = 'dev'
 
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'

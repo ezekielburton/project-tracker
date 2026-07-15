@@ -1,70 +1,143 @@
 {#
    app/templates/dashboard/cards/stat_avg_time.html
    ───────────────────────────────────────────────────
-   "Average Time" stat tile — 4th of the stat-tile family, added 13 Jul
-   2026 per Ezekiel: "add a card that has the project tracking number from
-   the model we added earlier ... let it be 'Average Time' so it will
-   display the average time of the numbers tracked." See stat_active.html's
-   docstring for the shared history/reasoning (no dash_card() tile/body
-   split, static non-clickable tile — MOSTLY still true, see below) and
-   _compute_project_stats()'s big comment on `average_time` in dashboard.py
-   for what's actually being averaged (business hours, derived on demand
-   from ProjectStatusLog history via app/time_tracking_logic.py — not a
-   raw stored field).
+   "Average Project Time" — 4th of the stat-card family. Added 13 Jul 2026
+   as a static tile whose only interaction was a link out to the
+   standalone /time-tracking page (admin/management only). See
+   stat_active.html's docstring for the shared stat-card history.
 
-   Colour is oak (--mini-stat--oak, new 13 Jul 2026) — the one brand token
-   not already claimed by the other three stat tiles (green/ashen-blue/
-   tangerine), so this reads as its own distinct thing rather than
-   reusing a colour that already means something else on this row.
+   REDESIGNED 15 Jul 2026, same day as the other three stat cards moving
+   down into the tab strip, per Ezekiel: "have the rest of the cards ...
+   move down also ... For the average project time, it should show the
+   information on that page in the active project area here" — clarified
+   via follow-up: "Keep it management only for clickable, which shows the
+   full table" and "keep [the standalone /time-tracking page] but unlink
+   it, we can work on it later."
 
-   Label is "HRS" (not blank like the other three) since a bare number
-   here would be ambiguous — those three are self-evidently project
-   counts, this one needs the unit spelled out.
+   So, unlike the other three stat cards (which any role can open):
+     - The badge/number is unchanged for every role — still each viewer's
+       OWN personal scoped average (project_stats.average_time, see
+       _compute_project_stats()'s docstring in dashboard.py for the
+       scoping rules — same number as before, just now living in a tab
+       instead of a static tile).
+     - Only admin/management can actually OPEN the tab. Every other role
+       gets `muted=True` — same mechanic Clashing Projects uses at zero
+       clashes (tab renders, dimmed, data-action="toggle-card" omitted by
+       dash_card() itself, so dashboard.js's click handler never fires for
+       it) — replacing the old <a>-vs-<div> link-swap this tile used to do.
+     - The BODY, when it does open, is NOT the viewer's own personal
+       breakdown — it's the exact same full company-wide table the
+       standalone /time-tracking page shows (time_tracking_rows, built by
+       build_time_tracking_rows() in app/routes/time_tracking.py and
+       passed in by dashboard.py's index() — see the big comment above
+       CARD_ORDER there for why it's fetched there rather than scoped to
+       `user`). That standalone page itself is UNCHANGED and still
+       reachable directly at /time-tracking — this card just no longer
+       links to it.
+     - Markup below is the exact same .tt-* structure/classes as
+       time_tracking.html (time_tracking.css is loaded globally via
+       base.html, so no extra stylesheet include is needed here) — kept
+       byte-for-byte equivalent on purpose so the two views never look
+       inconsistent with each other. The Expand All/Collapse All buttons
+       reuse time_tracking.js as-is (now also included on dashboard.html —
+       see that file); dashboard.js adds a capture-phase 'toggle' listener
+       that re-measures this card's .dash-card-body-content whenever a
+       .tt-deliverables <details> opens/closes inside it, since opening
+       one changes this body's real height AFTER the tab was already
+       expanded and its max-height captured — see the big comment on
+       remeasureExpandedBody() in dashboard.js for the general version of
+       this problem.
 
-   Clickable link to /time-tracking, admin/management only (added same
-   day, per Ezekiel: "this card will open a different dashboard page...
-   Management and admin can open the time tracking dashboard for now") —
-   the one exception to every other stat tile being non-interactive. CS/
-   Designer/Team Lead still see the tile and its number, just can't click
-   through yet; `.dash-tile--link` (dashboard.css) restores the pointer
-   cursor `.dash-tile--static` otherwise removes. Renders as an <a> for
-   linkable roles, a plain <div> otherwise — same tile markup either way,
-   just the wrapping tag differs, so this stays a static display-only
-   .dash-tile for the roles that can't open the page (no
-   data-action="toggle-card" is ever added here, so the click handler in
-   dashboard.js never touches this tile regardless of role).
-
-   Fixed to be emulation-aware (13 Jul 2026, same-day follow-up, per
-   Ezekiel: "it's not emulation aware") — was gated on
-   `current_user.role`, which is always the REAL logged-in user
-   (Flask-Login's current_user is never swapped during emulation, only
-   get_actor()'s return value is — see the Emulation-aware actor pattern
-   in CLAUDE.md). That meant an admin emulating a CS/Designer/Team Lead
-   still saw this tile as a clickable link, even though a real user in
-   that role never would — the dashboard's emulation preview is supposed
-   to show exactly what that role sees. Switched to `effective_role`,
-   the context var `index()` already passes as `user.role` from
-   `get_actor()` (dashboard.py) — the same var `decisions.html`'s Resolve
-   button already gates on for the identical reason.
+   `effective_role` (not layout_role/scope_mode) gates both `muted` and
+   whether the body has anything to show — same "keyed on the REAL
+   user.role, not the management/admin view-switcher preview" reasoning
+   flaggable_projects and the old link-gate already used. Colour (oak) and
+   the "HRS" label are unchanged from the original tile.
 #}
-{% if dash_render_mode == 'tile' %}
-{% set is_linkable = effective_role in ('admin', 'management') %}
-{% if is_linkable %}
-<a class="dash-tile dash-tile--static dash-tile--link" data-card="stat_avg_time" href="{{ url_for('time_tracking.index') }}">
-{% else %}
-<div class="dash-tile dash-tile--static" data-card="stat_avg_time">
-{% endif %}
-    <span class="dash-tile-title">Average Time</span>
-    <span class="dash-tile-summary">
-        <span class="dash-mini-stat dash-mini-stat--oak">
-            <span class="dash-mini-stat-dot"></span>
-            <span class="dash-mini-stat-value">{{ project_stats.average_time }}</span>
-            <span class="dash-mini-stat-label">HRS</span>
-        </span>
-    </span>
-{% if is_linkable %}
-</a>
-{% else %}
-</div>
-{% endif %}
-{% endif %}
+{% from 'dashboard/_dashboard_macros.html' import dash_card %}
+
+{% set is_openable = effective_role in ('admin', 'management') %}
+
+{% set stat_avg_time_summary %}
+<span class="dash-mini-stat dash-mini-stat--oak">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ project_stats.average_time }}</span>
+    <span class="dash-mini-stat-label">HRS</span>
+</span>
+{% endset %}
+
+{% call dash_card('stat_avg_time', 'Average Project Time', stat_avg_time_summary,
+    expanded=(initial_expanded_card == 'stat_avg_time'), muted=(not is_openable), mode=dash_render_mode) %}
+
+    {% if is_openable %}
+        {% if time_tracking_rows %}
+        <div class="tt-header">
+            <p class="tt-subtitle">Business hours (Mon–Fri, 10AM–6PM Dubai time) per project and deliverable, broken down by status. Weekend hours only count when a status actually changed over that weekend. Company-wide — same table as <a href="{{ url_for('time_tracking.index') }}">/time-tracking</a>.</p>
+            <div class="tt-header-actions">
+                <button type="button" class="tt-btn" data-action="expand-all">Expand All</button>
+                <button type="button" class="tt-btn" data-action="collapse-all">Collapse All</button>
+            </div>
+        </div>
+        <div class="tt-project-list">
+            {% for row in time_tracking_rows %}
+            <div class="tt-project">
+                <div class="tt-project-main">
+                    <a class="tt-project-name" href="{{ url_for('project_detail.detail', project_id=row.id) }}?from=dashboard">{{ row.name }}</a>
+                    <span class="tt-overall">
+                        <span class="tt-overall-value">{{ row.overall }}</span>
+                        <span class="tt-overall-label">HRS OVERALL</span>
+                    </span>
+                </div>
+
+                {% if row.by_status %}
+                <div class="tt-status-chips">
+                    {% for status, hours in row.by_status.items() %}
+                    <span class="tt-status-chip">
+                        <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
+                        <span class="tt-status-chip-value">{{ hours }}h</span>
+                    </span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="tt-empty">No status history yet.</p>
+                {% endif %}
+
+                {% if row.deliverables %}
+                <details class="tt-deliverables">
+                    <summary>{{ row.deliverables | length }} deliverable{{ 's' if row.deliverables | length != 1 }}</summary>
+                    <div class="tt-deliverable-list">
+                        {% for d in row.deliverables %}
+                        <div class="tt-deliverable">
+                            <div class="tt-deliverable-main">
+                                <span class="tt-deliverable-name">{{ d.name }}</span>
+                                <span class="tt-overall tt-overall--small">
+                                    <span class="tt-overall-value">{{ d.overall }}</span>
+                                    <span class="tt-overall-label">HRS OVERALL</span>
+                                </span>
+                            </div>
+                            {% if d.by_status %}
+                            <div class="tt-status-chips">
+                                {% for status, hours in d.by_status.items() %}
+                                <span class="tt-status-chip">
+                                    <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
+                                    <span class="tt-status-chip-value">{{ hours }}h</span>
+                                </span>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <p class="tt-empty">No status history yet.</p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="tt-empty">No projects to show.</p>
+        {% endif %}
+    {% endif %}
+
+{% endcall %}

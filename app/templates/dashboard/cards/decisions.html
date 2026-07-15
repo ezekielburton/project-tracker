@@ -19,6 +19,15 @@
    plain-grey text), and when it was raised (Dubai local time, kept as a
    plain timestamp on the right — it's a stamp, not a labelled fact).
 
+   Card TITLE is role-conditional (added 15 Jul 2026, per Ezekiel: "Rename
+   decisions needed card to 'Flag a project' for CS, team lead and designer
+   roles. Only management and admin should see 'Decisions Needed'"). Same
+   underlying card/key/data everywhere — `effective_role` (the REAL actor's
+   role, already used by the Resolve-button gate below and by
+   isManagementOrAdmin() in dashboard.js) just picks which string
+   dash_card() renders as the title, in both the tab-strip button and the
+   content-area header, since both read from the same `title` argument.
+
    "Flag a Project" button: per spec, CS/Designer/Team Lead get a button
    here that opens the Flag to Management modal; Management/Admin get none
    (they're the ones the flag is FOR, not the ones raising it). This
@@ -65,7 +74,10 @@
 </span>
 {% endset %}
 
-{% call dash_card('decisions', 'Decisions Needed', decisions_summary,
+{# Title split by role — see the big comment above. #}
+{% set decisions_title = 'Decisions Needed' if effective_role in ('admin', 'management') else 'Flag a Project' %}
+
+{% call dash_card('decisions', decisions_title, decisions_summary,
     expanded=(initial_expanded_card == 'decisions'), mode=dash_render_mode) %}
 
     {% if effective_role in ('cs', 'designer', 'team_lead') %}

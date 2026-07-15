@@ -1,47 +1,46 @@
 {#
    app/templates/dashboard/cards/stat_active.html
    ────────────────────────────────────────────────
-   "Your Active Projects" stat tile — first of the stat-tile family
+   "Your Active Projects" — first of the stat-card family
    (stat_active/stat_pending/stat_total/stat_avg_time, see _STAT_TILES in
-   dashboard.py) added 12 Jul 2026 (twelfth follow-up, per Ezekiel: "make
-   them in the same style as the others and same size and make them the
-   first 3 cards"; stat_avg_time joined the family 13 Jul 2026). Was a
-   separate, non-tile .dash-stats-row above the grid before this — now an
-   ordinary-looking tile like every other card, just always first
-   regardless of role.
+   dashboard.py). Added 12 Jul 2026 as a static, non-interactive tile;
+   MOVED DOWN into an ordinary dash_card() tab+body card 15 Jul 2026, per
+   Ezekiel: "have the rest of the cards ... move down also. And when they
+   click them it shows the relevant information in the information area."
+   See the big comment above CARD_ORDER in dashboard.py for the full
+   history — these four are now last in every role's tab order, same
+   tab/body mechanic every other card on this page already uses.
 
-   Deliberately does NOT use dash_card()'s mode='tile'/'body' split the
-   way every other card partial does — there's no expandable content
-   here, just a number, so there's nothing to put in a 'body' pass. This
-   file renders the tile markup directly on dash_render_mode == 'tile'
-   and renders NOTHING on the 'body' pass (dashboard.html still includes
-   this file twice, once per mode, same as every other card — it's just
-   a no-op the second time).
+   Body is a plain project list (dash_stat_project_row()) of every project
+   counted in `project_stats.your_active` — your_active_projects
+   (dashboard.py's _compute_your_active_projects()) is the exact same
+   _scoped_projects(user, active_only=True) query, just serialized into
+   full rows instead of a bare count.
 
-   .dash-tile--static (not .dash-tile--muted) — full opacity/colour, just
-   no data-action="toggle-card" attribute, so the click handler in
-   dashboard.js never matches it and nothing happens on click. Colour is
-   green (--mini-stat--green, same pure green the RAG system uses) — per
-   Ezekiel: "Your projects should be green... bright green please not
-   pine, it's not visible".
-
-   No mini-stat-label — the tile's own heading ("Your Active Projects")
-   already says what the number means, so a caption underneath would
-   just repeat it (unlike Decisions/At Risk/Overdue, whose labels
-   clarify something the heading alone doesn't). An empty label span is
-   still included so this markup matches what dashboard.js's SSE rebuild
-   produces via miniStat() byte-for-byte — see the big comment on that
-   function's callers elsewhere in dashboard.js.
+   Colour is green (--mini-stat--green, same pure green the RAG system
+   uses) — per Ezekiel: "Your projects should be green... bright green
+   please not pine, it's not visible". No mini-stat-label — the tab's own
+   title ("Your Active Projects") already says what the number means.
 #}
-{% if dash_render_mode == 'tile' %}
-<div class="dash-tile dash-tile--static" data-card="stat_active">
-    <span class="dash-tile-title">Your Active Projects</span>
-    <span class="dash-tile-summary">
-        <span class="dash-mini-stat dash-mini-stat--green">
-            <span class="dash-mini-stat-dot"></span>
-            <span class="dash-mini-stat-value">{{ project_stats.your_active }}</span>
-            <span class="dash-mini-stat-label"></span>
-        </span>
-    </span>
-</div>
-{% endif %}
+{% from 'dashboard/_dashboard_macros.html' import dash_card, dash_stat_project_row %}
+
+{% set stat_active_summary %}
+<span class="dash-mini-stat dash-mini-stat--green">
+    <span class="dash-mini-stat-dot"></span>
+    <span class="dash-mini-stat-value">{{ project_stats.your_active }}</span>
+    <span class="dash-mini-stat-label"></span>
+</span>
+{% endset %}
+
+{% call dash_card('stat_active', 'Your Active Projects', stat_active_summary,
+    expanded=(initial_expanded_card == 'stat_active'), mode=dash_render_mode) %}
+
+    {% if your_active_projects %}
+        {% for item in your_active_projects %}
+            {{ dash_stat_project_row(item) }}
+        {% endfor %}
+    {% else %}
+        <p class="dash-empty-state">No active projects.</p>
+    {% endif %}
+
+{% endcall %}

@@ -1,0 +1,122 @@
+{#
+   app/templates/dashboard/toggle_overdue_at_risk.html
+   ─────────────────────────────────────────────────────
+   LEFT-side toggle box (added 15 Jul 2026, later still). Replaces the
+   two-column .dash-pinned-row (Overdue box + At Risk box, side by side,
+   added earlier the same day — see CLAUDE.md's "Overdue + At Risk pinned
+   always-visible above tab strip" section) with ONE box containing two
+   buttons that swap which list is showing inside it.
+
+   Per Ezekiel: "Bring the tabs up to the top of the page. Make overdue/at
+   risk on the left side (put button toggles)... Make them smaller also
+   the divs." Clarified via AskUserQuestion: one box, toggle between the
+   two (not two boxes just repositioned); collapsible, open by default on
+   page load.
+
+   Reuses due_default/at_risk_projects exactly as before (both still
+   computed in dashboard.py's index() — only WHERE they render moved) and
+   the SAME row macros due.html/at_risk.html used to call — dash_due_row()
+   for Overdue, dash_at_risk_row() for At Risk (the latter extracted from
+   at_risk.html's old inline markup into _dashboard_macros.html the same
+   day, specifically so this file wouldn't have to duplicate it).
+
+   Collapse mechanic reuses the EXISTING JS-measured max-height system
+   (.dash-card-body-content / .dash-card-body-visual / .dash-card-body-inner,
+   expandBody()/collapseBody() in dashboard.js) rather than inventing a
+   new one — this box's body starts with the `expanded` class already
+   present (open by default), which initCards()'s existing page-load loop
+   (`.dash-card-body-content.expanded` → sync inline max-height) already
+   handles for free, no new init code needed. Only the COLLAPSE TRIGGER is
+   new: a dedicated small chevron button (data-action="toggle-box-collapse"),
+   deliberately a SIBLING of the two view-switch buttons rather than a
+   click-anywhere-in-the-header handler — avoids the nested-interactive-
+   elements bubbling problem this codebase has hit before (see
+   dash_person_chip()'s docstring and the Decisions Needed Resolve button's
+   .dash-decision-row split), since all three buttons here are plain
+   siblings, not nested inside one another.
+
+   View switching (Overdue ↔ At Risk) is a pure client-side class toggle —
+   both lists are already fully server-rendered on page load, so there's
+   nothing to fetch. Mirrors switchClashesTab()'s exact mechanic
+   (data-action + data-filter/data-view attributes, .active on the clicked
+   button, .hidden on the non-matching panel) — see switchToggleBoxView()
+   in dashboard.js.
+
+   `data-box="overdue_at_risk"` scopes every query in dashboard.js's
+   handlers to just this box, so this box's toggle/collapse state never
+   affects the My Day/My Week box on the right, which uses the identical
+   markup shape with `data-box="my_day_week"` instead (see
+   toggle_my_day_week.html).
+
+   Enlarged + text header + click-anywhere-to-collapse (16 Jul 2026). Per
+   Ezekiel: "Make the overdue / at risk toggles bigger... let them be
+   large and let there be a text header that updates depending on which
+   view u are on" — the two view buttons themselves got bigger (see
+   .dash-toggle-box-btn in dashboard.css), and each panel below now opens
+   with a `.dash-toggle-box-view-title` div ("Overdue"/"At Risk") that
+   swaps for free via the exact same .hidden toggle switchToggleBoxView()
+   already does for the rest of the panel — no new JS needed. Separately,
+   per Ezekiel: "improve the UX so when you select anywhere in the header
+   that isn't the toggle button - it collapses the header" — clicking the
+   header's own background (not either view button, not the chevron
+   itself) now also triggers the same collapse the chevron does, handled
+   by a new fallback branch in dashboard.js's click handler, reached only
+   when the two button-specific checks above it didn't match.
+#}
+{% from 'dashboard/_dashboard_macros.html' import dash_due_row, dash_at_risk_row %}
+
+{% set overdue_count = due_default|length %}
+{% set at_risk_count = at_risk_projects|length %}
+
+<div class="dash-toggle-box" data-toggle-box="overdue_at_risk">
+    <div class="dash-toggle-box-header">
+        <div class="dash-toggle-box-btns">
+            <button type="button" class="dash-toggle-box-btn active"
+                data-action="toggle-box-view" data-box="overdue_at_risk" data-view="overdue">
+                <span class="dash-toggle-box-btn-label">Overdue</span>
+                <span class="dash-mini-stat dash-mini-stat--{{ 'green' if overdue_count == 0 else 'red' }}">
+                    <span class="dash-mini-stat-dot"></span>
+                    <span class="dash-mini-stat-value">{{ overdue_count }}</span>
+                </span>
+            </button>
+            <button type="button" class="dash-toggle-box-btn"
+                data-action="toggle-box-view" data-box="overdue_at_risk" data-view="at_risk">
+                <span class="dash-toggle-box-btn-label">At Risk</span>
+                <span class="dash-mini-stat dash-mini-stat--{{ 'green' if at_risk_count == 0 else 'red' }}">
+                    <span class="dash-mini-stat-dot"></span>
+                    <span class="dash-mini-stat-value">{{ at_risk_count }}</span>
+                </span>
+            </button>
+        </div>
+        <button type="button" class="dash-toggle-box-collapse-btn expanded"
+            data-action="toggle-box-collapse" data-box="overdue_at_risk" aria-label="Collapse">
+            <span class="dash-toggle-box-chevron">&#9660;</span>
+        </button>
+    </div>
+    <div class="dash-card-body-content expanded" data-toggle-box-body="overdue_at_risk">
+        <div class="dash-card-body-visual">
+            <div class="dash-card-body-inner">
+                <div data-toggle-view-panel="overdue">
+                    <div class="dash-toggle-box-view-title">Overdue</div>
+                    {% if due_default %}
+                        {% for item in due_default %}
+                            {{ dash_due_row(item) }}
+                        {% endfor %}
+                    {% else %}
+                        <p class="dash-empty-state">Nothing overdue this week.</p>
+                    {% endif %}
+                </div>
+                <div data-toggle-view-panel="at_risk" class="hidden">
+                    <div class="dash-toggle-box-view-title">At Risk</div>
+                    {% if at_risk_projects %}
+                        {% for item in at_risk_projects %}
+                            {{ dash_at_risk_row(item) }}
+                        {% endfor %}
+                    {% else %}
+                        <p class="dash-empty-state">No projects currently at risk.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -5,7 +5,7 @@ from sqlalchemy import nullslast
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable
 from app.utils import get_actor
-from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes
+from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for() call for this blueprint's routes uses that, e.g.
@@ -16,41 +16,104 @@ dashboard_bp = Blueprint('projects', __name__, url_prefix='/dashboard')
 # the card key that should auto-expand on first paint. This is the only
 # place that mapping lives — dashboard.js reads initial_expanded_card from
 # the page rather than re-deriving it from the URL itself.
+#
+# 'due'/'at-risk' REMOVED (15 Jul 2026, same day as the rest of this
+# section's redesign) — 'due' and 'at_risk' are no longer tab keys at all
+# (see the big comment above CARD_ORDER below), so mapping either of them
+# here would resolve initial_expanded_card to a card that doesn't exist in
+# card_order, leaving NOTHING marked active on page load. Neither was ever
+# actually reachable in production (no login redirect or link in the app
+# sets ?view=due or ?view=at-risk — confirmed via a repo-wide search before
+# removing), so this is a preemptive fix for a latent footgun, not a real
+# regression.
+#
+# 'my-week' -> 'summary' REMOVED too (15 Jul 2026, later still, same day
+# as the top-of-page redesign — see the big comment above CARD_ORDER) —
+# 'summary' is no longer a card_order key at all now that My Day/My Week
+# lives in its own always-visible toggle box instead of a tab, so this
+# entry would hit the exact same "resolves to a card that doesn't exist"
+# footgun the 'due'/'at-risk' removal above was written to avoid. Like
+# those two, this was already unreachable in production (auth.py's
+# ?view=my-week login redirect is commented out — see auth.py's login()).
 VIEW_TO_CARD = {
     'decisions': 'decisions',
-    'due': 'due',
-    # 'my-week' -> 'summary' is now a no-op: Summary ("My Day / My Week")
-    # is always open regardless of initial_expanded_card as of 12 Jul 2026's
-    # fourth follow-up (see summary.html / dash_card()'s mode=None branch
-    # in _dashboard_macros.html) — left here since auth.py's login redirect
-    # may still send ?view=my-week and there's no harm in the key resolving
-    # to something, it just no longer does anything on the receiving end.
-    'my-week': 'summary',
-    'at-risk': 'at_risk',
 }
 
-# Card order below the always-full-width Summary card, per role. Only the
-# FIRST entry per role is actually specified in the brief ("X card appears
-# first") — the rest of the order is a judgment call, easy to change later
-# since it's just a list.
+# ── Dashboard layout, redesigned 15 Jul 2026 ────────────────────────────
+# Per Ezekiel: "Have the my day/my week div be the interactive area where
+# the information populates. Where my day/my week is lets have the tabs
+# for each card that are clickable." Previously Summary ("My Day / My
+# Week") was a separate, permanently-open, non-interactive block ABOVE a
+# 5-per-row tile grid + a single shared expand area below it (see
+# dashboard.html's git history around 12 Jul 2026 for that design). Then
+# there was exactly one interactive content area — the same box that used
+# to be Summary-only — driven by a tab strip directly above it, one tab
+# per card INCLUDING Summary itself (first tab, active by default).
 #
-# 'stat_active' / 'stat_pending' / 'stat_total' (added 12 Jul 2026,
-# twelfth follow-up, per Ezekiel: "make them in the same style as the
-# others and same size and make them the first 3 cards") are prepended to
-# EVERY role's list — these used to be the separate, non-tile
-# .dash-stats-row above the grid (see dashboard.html's git history around
-# 12 Jul 2026 if that markup needs resurrecting); they're now ordinary
-# tiles like everything else, just always first regardless of role. See
-# stat_active.html / stat_pending.html / stat_total.html for why they
-# don't use dash_card()'s tile/body split the way every other card does.
-_STAT_TILES = ['stat_active', 'stat_pending', 'stat_total', 'stat_avg_time']
+# SUPERSEDED again, later the same day — see the "tab strip to top of
+# page" section in CLAUDE.md. Per Ezekiel: "Bring the tabs up to the top
+# of the page... Bring my day/my week to the right side... Remove myday/
+# my week button since it will be redundant." My Day/My Week (and Overdue/
+# At Risk, moved out of the tab strip earlier the same day) are now BOTH
+# permanent, collapsible toggle boxes sitting above the tab strip — see
+# .dash-toggle-row in dashboard.html — so 'summary' is REMOVED from
+# CARD_ORDER entirely below, the same "don't render the same data twice,
+# once as a tab and once elsewhere" reasoning 'due'/'at_risk' were removed
+# for. See _dashboard_macros.html's dash_card() docstring for the
+# remaining tab/body mode mechanic and dashboard.html for the markup.
+#
+# _STAT_TILES (Your Active / Pending Approval / Average Project Time —
+# 'stat_total' REMOVED same day, per Ezekiel: "Remove total active
+# projects also" — see _compute_total_active_projects()'s docstring,
+# below, for where that card's old compute function went) — added 12-13
+# Jul 2026 as a separate non-tab static tile row above the tab strip (no
+# expandable body content). MOVED DOWN into ordinary tab+body cards 15 Jul
+# 2026, same day as the CS/Designer toggle rework, per Ezekiel: "have the
+# rest of the cards ... move down also. And when they click them it shows
+# the relevant information in the information area." Now just a plain
+# suffix appended to the END of every role's CARD_ORDER list below (per
+# Ezekiel: tab order should have these "last, after all the other
+# cards") — each now has a real `dash_card()` body:
+#   stat_active/stat_pending — a plain project list (see
+#     dash_stat_project_row() in _dashboard_macros.html and
+#     _compute_your_active_projects()/_compute_pending_approval_projects()
+#     below) of exactly the projects counted in that tile's number.
+#   stat_avg_time — admin/management ONLY (per Ezekiel: "keep it
+#     management only for clickable"): the full company-wide project +
+#     deliverable hours breakdown, same data/markup as the standalone
+#     /time-tracking page (build_time_tracking_rows(), imported from
+#     app.routes.time_tracking — see stat_avg_time.html). Every other role
+#     still sees the tile's own number (their personal scoped average,
+#     unchanged), just can't click into it — same `muted` mechanic Clashing
+#     Projects uses at zero clashes, not the old <a>-vs-<div> link swap.
+#     The standalone /time-tracking route/page itself is UNCHANGED and
+#     still reachable directly — this card no longer links out to it
+#     (per Ezekiel: "keep it but unlink it, we can work on it later").
+_STAT_TILES = ['stat_active', 'stat_pending', 'stat_avg_time']
 
+# Tab order, per role. _STAT_TILES is always last (see the big comment
+# above). The rest is a judgment call, easy to change later since it's
+# just a list.
+#
+# 'summary' REMOVED from every list (15 Jul 2026, later still) — see the
+# big comment above. 'due'/'at_risk' REMOVED from every list earlier the
+# same day, per Ezekiel: "Move overdue and at risk down, so they are
+# always visible, the interactive area goes below. Also remove their
+# cards since it will be redundant" — Overdue and At Risk are no longer
+# tabs at all. `due_default`/`at_risk_projects`/`due_today_items`/
+# `due_week_items` are still computed in index() exactly as before — only
+# WHERE they render changed (now the two toggle boxes above the tab
+# strip — see dashboard.html), not what data feeds them.
+# 'brief_quality' moved to the very end (15 Jul 2026, later still) — per
+# Ezekiel: "Move average brief quality to the end." Was positioned right
+# before the stat tiles in every role's list; now it's after them, so
+# it's the last tab, full stop, in every role's tab strip.
 CARD_ORDER = {
-    'management': _STAT_TILES + ['decisions', 'at_risk', 'what_changed', 'due', 'next_actions', 'clashes', 'brief_quality'],
-    'admin':      _STAT_TILES + ['decisions', 'at_risk', 'what_changed', 'due', 'next_actions', 'clashes', 'brief_quality'],
-    'cs':         _STAT_TILES + ['due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'clashes', 'brief_quality'],
-    'designer':   _STAT_TILES + ['clashes', 'due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'brief_quality'],
-    'team_lead':  _STAT_TILES + ['clashes', 'due', 'decisions', 'at_risk', 'what_changed', 'next_actions', 'brief_quality'],
+    'management': ['decisions', 'what_changed', 'next_actions', 'clashes'] + _STAT_TILES + ['brief_quality'],
+    'admin':      ['decisions', 'what_changed', 'next_actions', 'clashes'] + _STAT_TILES + ['brief_quality'],
+    'cs':         ['decisions', 'what_changed', 'next_actions', 'clashes'] + _STAT_TILES + ['brief_quality'],
+    'designer':   ['clashes', 'decisions', 'what_changed', 'next_actions'] + _STAT_TILES + ['brief_quality'],
+    'team_lead':  ['clashes', 'decisions', 'what_changed', 'next_actions'] + _STAT_TILES + ['brief_quality'],
 }
 
 # ── Management/admin view-switcher (added 11 Jul 2026, extended to admin
@@ -109,23 +172,32 @@ def _resolve_dashboard_scope(user):
              same 'cs' branch, but with THAT user's id. Decisions stays
              normally scoped here (not widened) — this is a preview of
              their real page, not a management/admin-specific view.
+      'designer_<id>' (added 15 Jul 2026, per Ezekiel: "add the designers
+             also to management/admin view as tabs") — exactly what that
+             designer's own dashboard shows them. Same idea as 'cs_<id>',
+             but scoped via _ScopeUser(target.id, 'designer') so
+             _scoped_projects() falls into its designer/team_lead branch
+             (ProjectDesigner assignment) instead of the CS one. Decisions
+             stays normally scoped here too, same reasoning as 'cs_<id>'.
       'all' — today's original behaviour: everything, unfiltered.
 
-    Returns (scope_mode, scope_user, cs_leads) — cs_leads (every role='cs'
-    user, for building one tab per lead) is returned even when scope_mode
-    is None since dashboard.html needs it any time it's rendering for a
-    management/admin user, and computing it here once is cheaper than
-    every caller re-querying it.
+    Returns (scope_mode, scope_user, cs_leads, designers) — cs_leads (every
+    role='cs' user) and designers (every role='designer' user), for
+    building one tab per lead/designer, are returned even when scope_mode
+    is None since dashboard.html needs them any time it's rendering for a
+    management/admin user, and computing them here once is cheaper than
+    every caller re-querying them.
     """
     cs_leads = User.query.filter_by(role='cs').order_by(User.name.asc()).all()
+    designers = User.query.filter_by(role='designer').order_by(User.name.asc()).all()
 
     if user.role not in _SCOPE_SWITCHER_ROLES:
-        return None, user, cs_leads
+        return None, user, cs_leads, designers
 
     requested = request.args.get('scope', 'my')
 
     if requested == 'all':
-        return 'all', user, cs_leads
+        return 'all', user, cs_leads, designers
 
     if requested.startswith('cs_'):
         try:
@@ -134,12 +206,22 @@ def _resolve_dashboard_scope(user):
             target_id = None
         target = next((c for c in cs_leads if c.id == target_id), None)
         if target:
-            return requested, _ScopeUser(target.id, 'cs'), cs_leads
+            return requested, _ScopeUser(target.id, 'cs'), cs_leads, designers
         # Unknown/stale id (e.g. a CS lead removed since this URL/tab was
         # bookmarked) — fall through to 'my' rather than 403ing or
         # silently rendering the full unfiltered 'all' view.
 
-    return 'my', _ScopeUser(user.id, 'cs'), cs_leads
+    if requested.startswith('designer_'):
+        try:
+            target_id = int(requested[len('designer_'):])
+        except ValueError:
+            target_id = None
+        target = next((d for d in designers if d.id == target_id), None)
+        if target:
+            return requested, _ScopeUser(target.id, 'designer'), cs_leads, designers
+        # Same stale-id fallback as the cs_ branch above.
+
+    return 'my', _ScopeUser(user.id, 'cs'), cs_leads, designers
 
 
 @dashboard_bp.route('')
@@ -147,28 +229,79 @@ def _resolve_dashboard_scope(user):
 def index():
     user = get_actor()
     initial_view = request.args.get('view', '')
-    scope_mode, scope_user, cs_leads = _resolve_dashboard_scope(user)
+    scope_mode, scope_user, cs_leads, designers = _resolve_dashboard_scope(user)
 
     # Card order normally follows the REAL role. Exception: previewing a
-    # specific CS lead's tab should look like their actual dashboard,
-    # ordering included — not management's own layout with someone else's
-    # data dropped into it. 'my' mode keeps management's own order (it's
-    # still fundamentally "my dashboard", just narrowed), only 'cs_<id>'
-    # borrows the 'cs' role's order.
-    layout_role = 'cs' if (scope_mode or '').startswith('cs_') else user.role
+    # specific CS lead's or designer's tab should look like their actual
+    # dashboard, ordering included — not management's own layout with
+    # someone else's data dropped into it. 'my' mode keeps management's own
+    # order (it's still fundamentally "my dashboard", just narrowed), only
+    # 'cs_<id>'/'designer_<id>' borrow that role's own order.
+    if (scope_mode or '').startswith('cs_'):
+        layout_role = 'cs'
+    elif (scope_mode or '').startswith('designer_'):
+        layout_role = 'designer'
+    else:
+        layout_role = user.role
+
+    # Average Project Time's inline body (admin/management only — see the
+    # big comment above CARD_ORDER) reuses the EXACT SAME row-building
+    # function the standalone /time-tracking page calls, so the two never
+    # drift apart. Imported inside the function (not at module level) to
+    # avoid a circular import, same convention CLAUDE.md documents for
+    # activity logging — app.routes.time_tracking doesn't import from
+    # dashboard.py, but importing Flask route modules at module level
+    # tends to create import-order footguns in this codebase regardless.
+    # Skipped entirely (not just hidden) for every other role — same
+    # "don't run a query nobody can see the result of" reasoning
+    # flaggable_projects below already follows, and matches the tile's
+    # `muted` state, which is also keyed on the REAL user.role, not
+    # layout_role/scope (an admin previewing a CS lead's tab still gets
+    # the real company-wide table, not a blocked one — this card was never
+    # part of the scope-preview system to begin with, see its own
+    # docstring in stat_avg_time.html).
+    time_tracking_rows = []
+    if user.role in ('admin', 'management'):
+        from app.routes.time_tracking import build_time_tracking_rows
+        time_tracking_rows = build_time_tracking_rows()
+
+    card_order = CARD_ORDER.get(layout_role, CARD_ORDER['management'])
 
     return render_template(
         'dashboard.html',
         effective_role=user.role,
         scope_mode=scope_mode,
         cs_leads=cs_leads,
-        card_order=CARD_ORDER.get(layout_role, CARD_ORDER['management']),
+        designers=designers,
+        card_order=card_order,
+        # Which tab is active on first paint. Used to default to 'summary'
+        # (My Day/My Week) — REMOVED 15 Jul 2026, later still, along with
+        # 'summary' from CARD_ORDER itself (see the big comment above it):
+        # My Day/My Week is now its own always-open toggle box, not a tab,
+        # so there's no more fixed "always this one" default. Briefly
+        # fell back to `card_order[0]` (auto-expanding the first tab) —
+        # REMOVED AGAIN 16 Jul 2026, per Ezekiel: "have it hidden until a
+        # user selects a tab." No fallback at all now: if `?view=` doesn't
+        # map to a real card (VIEW_TO_CARD), this is None, every card
+        # partial's `expanded=(initial_expanded_card == '<key>')` check is
+        # False for all of them, .dash-content-area has nothing to show
+        # (see its own docstring below), and the page loads with the
+        # content area genuinely empty until the user clicks a tab.
         initial_expanded_card=VIEW_TO_CARD.get(initial_view),
-        # Feeds the three stat tiles (stat_active/stat_pending/stat_total
-        # — first 3 in CARD_ORDER as of 12 Jul 2026's twelfth follow-up,
-        # was a separate non-tile stat row before that) — see
+        # Feeds the stat cards' badges (stat_active/stat_pending/
+        # stat_avg_time — see the big comment above CARD_ORDER) — see
         # _compute_project_stats()'s docstring for the scoping rules.
         project_stats=_compute_project_stats(scope_user),
+        # Row-list BODIES for the two simple stat cards (added 15 Jul
+        # 2026, same day those cards moved into the tab strip) — each is
+        # the exact same _scoped_projects() query _compute_project_stats()
+        # counts for that number, just serialized into full rows instead
+        # of a bare count. total_active_projects/_compute_total_active_
+        # projects() REMOVED same day, later still, per Ezekiel: "Remove
+        # total active projects also."
+        your_active_projects=_compute_your_active_projects(scope_user),
+        pending_approval_projects=_compute_pending_approval_projects(scope_user),
+        time_tracking_rows=time_tracking_rows,
         summary=_compute_summary(scope_user),
         what_changed=_compute_what_changed(scope_user),
         # Due card narrowed 12 Jul 2026 (fourth follow-up) to show ONLY
@@ -476,30 +609,29 @@ def _compute_at_risk_projects(user):
 
 def _compute_summary(user):
     active_projects = _scoped_projects(user, active_only=True).all()
-    today = date.today()
-    week_end = today + timedelta(days=7)
+    today = date.today()  # still needed below for what_changed's yesterday cutoff
 
-    due_today = due_week = overdue = 0
+    # due_today/due_week/overdue counts — FIXED 15 Jul 2026 (same day as the
+    # pinned Overdue/At Risk work above): these used to be counted with a
+    # separate per-project loop keyed on nearest_deadline(p), i.e. ONE
+    # deadline per project — so a project with 2 overdue deliverables only
+    # ever contributed 1 to `overdue`. That silently disagreed with the
+    # actual "Overdue" list (due.html's #dash-due-list, from
+    # _compute_due(user, 'overdue')), which is deliverable/customer-granular
+    # and correctly listed both. Caught live: the badge read "1" while the
+    # expanded card listed 8+ rows for the same scope. due_today_items/
+    # due_week_items (Summary's own two columns, just below these very
+    # mini-stats — see summary.html) ALREADY used _compute_due() under the
+    # hood, so this fix just makes the collapsed NUMBER agree with the
+    # expanded LIST everywhere on this page, using _compute_due() itself as
+    # the one source of truth for all three counts instead of a second,
+    # coarser reimplementation.
+    due_today = len(_compute_due(user, 'today'))
+    due_week = len(_compute_due(user, 'week'))
+    overdue = len(_compute_due(user, 'overdue'))
+
     my_actions = others_actions = 0
     for p in active_projects:
-        deadline = nearest_deadline(p)
-        if deadline:
-            if deadline < today:
-                # Overdue is scoped to "this week" (1-7 days overdue), same
-                # window as _compute_due()'s 'overdue'/'overdue_today'
-                # filters and the At Risk card's own overdue check (see
-                # _compute_at_risk_projects()) — changed 12 Jul 2026 per
-                # management review. This count feeds the Due card's
-                # collapsed mini-stat (due.html reads summary.overdue), so
-                # it has to agree with what the expanded "Overdue" pill
-                # actually lists, or the two would silently disagree.
-                if (today - deadline).days <= 7:
-                    overdue += 1
-            elif deadline == today:
-                due_today += 1
-            elif deadline <= week_end:
-                due_week += 1
-
         owner = get_next_action_owner(p)['user']
         if _is_owner(owner, user):
             my_actions += 1
@@ -555,23 +687,85 @@ def _compute_summary(user):
     }
 
 
+def _stat_project_rows(projects):
+    """
+    Shared row-serializer for the three simple stat cards' bodies (Your
+    Active / Pending Approval / Total Active — added 15 Jul 2026 when they
+    moved from static tiles into real tab+body cards, see the big comment
+    above CARD_ORDER). Deliberately plain — just enough for a membership
+    list ("which projects make up this number"), not an actionable row
+    like Due/Next Actions, so no cs_lead/designers/guidance fields here.
+
+    status_label uses the exact same `.replace('_', ' ').title()` pattern
+    api.py's own status_label already uses for this — same display
+    convention, not a new one invented for this card.
+    """
+    rows = [{
+        'project_id': p.id,
+        'name': p.name,
+        'deadline': (lambda d: d.isoformat() if d else None)(nearest_deadline(p)),
+        'status_label': (p.project_status or '').replace('_', ' ').title(),
+    } for p in projects]
+    # Nearest deadline first, no-deadline last — same convention every
+    # other row list on this page sorts by (see _compute_at_risk_projects()
+    # etc.).
+    rows.sort(key=lambda r: r['deadline'] or '9999-12-31')
+    return rows
+
+
+def _compute_your_active_projects(user):
+    """Body for the 'Your Active Projects' stat card — the exact same
+    _scoped_projects(user, active_only=True) query _compute_project_stats()
+    counts for 'your_active', now serialized into full rows."""
+    return _stat_project_rows(_scoped_projects(user, active_only=True).all())
+
+
+def _compute_pending_approval_projects(user):
+    """Body for the 'Pending Approval' stat card — same query
+    _compute_project_stats() counts for 'pending_approval'."""
+    return _stat_project_rows(
+        _scoped_projects(user, active_only=True)
+        .filter(Project.project_status == 'submitted_to_client').all()
+    )
+
+
+# _compute_total_active_projects() REMOVED 15 Jul 2026, later still, per
+# Ezekiel: "Remove total active projects also" — used to return the body
+# for the 'Total Active Projects' stat card (same UNSCOPED query
+# _compute_project_stats() below still counts for its 'total_active'
+# badge number). That badge number itself is LEFT IN _compute_project_
+# stats()'s return dict below rather than torn out — it's still computed
+# there for the /api/project-stats SSE endpoint's response shape, and
+# leaving one unused dict key is harmless where surgically narrowing a
+# shared, multi-consumer function's return contract is not. stat_total.html,
+# the 'stat_total' entry in _STAT_TILES, and the total_active_projects=
+# kwarg this function used to feed were all removed in the same pass — see
+# CLAUDE.md for the full list of what changed.
+
+
 def _compute_project_stats(user):
     """
-    The stat tiles — Your Active Projects / Pending Approval / Total
-    Active Projects / Average Time, in that order, always first in
-    CARD_ORDER (see _STAT_TILES above). The first three were added 12 Jul
-    2026 as a separate non-tile stat row above the grid; folded into the
-    normal tile grid as its own first-3 entries in the twelfth follow-up
-    the same day, per Ezekiel ("same style as the others and same size").
-    Average Time was added 13 Jul 2026 as a 4th entry in this same family
-    (see the big comment further down, near `average_time`). Unlike every
-    other tile these are pure display: no expand/collapse, no body, no
-    filter pills, just a number — so unlike the rest of card_order,
-    stat_active.html/stat_pending.html/stat_total.html/stat_avg_time.html
-    don't use dash_card()'s mode='tile'/'body' split at all, they just
-    render a static .dash-tile directly on the 'tile' pass and nothing on
-    the 'body' pass. This one function still feeds both the initial page
-    load and the SSE live-refresh's /api/project-stats fetch.
+    Badge numbers for the stat cards — Your Active Projects / Pending
+    Approval / Average Project Time, always LAST in CARD_ORDER (see
+    _STAT_TILES above). Still returns a 'total_active' key too (see the
+    comment just above this function) even though 'stat_total' itself was
+    removed 15 Jul 2026 — nothing renders it anymore, kept only because
+    this dict also feeds the /api/project-stats SSE endpoint's response
+    shape. Added 12-13 Jul 2026 as a separate non-interactive stat row;
+    moved down into ordinary dash_card() tab+body cards 15 Jul 2026 (see
+    the big comment above CARD_ORDER) — this function still only returns
+    the bare numbers for each card's badge. The two simple cards' actual
+    BODY content (a project list) comes from the sibling
+    _compute_your_active_projects()/_compute_pending_approval_projects()
+    functions above, which deliberately re-run the same underlying
+    queries rather than reshaping this function's output, matching the
+    "each card independently re-queries _scoped_projects()" convention
+    every other card on this page already follows. Average Project Time's
+    body (admin/management only) comes from build_time_tracking_rows(),
+    fetched separately in index() — see that function's own docstring.
+    This function still feeds both the initial page load and the SSE
+    live-refresh's /api/project-stats fetch (badges only, never bodies —
+    see dashboard.js).
 
     'your_active' and 'pending_approval' both respect `user` — in
     practice this is always scope_user from _resolve_dashboard_scope() at
@@ -638,7 +832,7 @@ def _compute_project_stats(user):
 @dashboard_bp.route('/api/project-stats')
 @login_required
 def api_project_stats():
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_project_stats(scope_user))
 
 
@@ -650,7 +844,7 @@ def api_summary():
     # ?scope= the page currently has loaded (see HELIX_DASH_SCOPE in
     # dashboard.html) so the collapsed pills never drift back to the
     # unfiltered view mid-session. See _resolve_dashboard_scope().
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_summary(scope_user))
 
 
@@ -700,7 +894,7 @@ def _compute_what_changed(user):
 @dashboard_bp.route('/api/what-changed')
 @login_required
 def api_what_changed():
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_what_changed(scope_user))
 
 
@@ -756,7 +950,14 @@ def _compute_due(user, filter_type):
         cs_lead_json = _serialize_person(p.cs_lead)
         project_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
         common = {
-            'rag': rag, 'owner': owner_json, 'owner_role': owner['role'], 'guidance': owner['guidance'],
+            # guidance_for_viewer() (15 Jul 2026, per Ezekiel — see
+            # dashboard_logic.py's docstring) swaps CS-role guidance for a
+            # flat "No action required" when `user` (the scope_user this
+            # whole function was called with) is a designer/team lead —
+            # owner['guidance'] itself is untouched, still the real
+            # role-neutral text.
+            'rag': rag, 'owner': owner_json, 'owner_role': owner['role'],
+            'guidance': guidance_for_viewer(owner, user),
             'cs_lead': cs_lead_json,
         }
 
@@ -816,7 +1017,7 @@ def api_due():
     # 'today'/'week' filter values are still fully supported and still
     # used by the Summary card's due_today_items/due_week_items (see
     # index() above), just no longer reachable from the Due card itself.
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     filter_type = request.args.get('filter', 'overdue')
     return jsonify(_compute_due(scope_user, filter_type))
 
@@ -869,7 +1070,7 @@ def _compute_decisions(user, all_flags=False):
 @dashboard_bp.route('/api/decisions')
 @login_required
 def api_decisions():
-    scope_mode, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    scope_mode, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_decisions(scope_user, all_flags=(scope_mode == 'my')))
 
 
@@ -939,7 +1140,11 @@ def _compute_next_actions(user, filter_type):
             'project_id': p.id,
             'type': 'project',
             'project_name': p.name,
-            'guidance': owner_info['guidance'],
+            # guidance_for_viewer() (15 Jul 2026) — same swap as
+            # _compute_due() above: designer/team-lead viewers see "No
+            # action required" for a CS-role next action instead of text
+            # like "Follow up with client" they can't act on.
+            'guidance': guidance_for_viewer(owner_info, user),
             'owner': _serialize_owner(owner_info['user']),
             'owner_role': owner_info['role'],
             'rag': get_project_rag(p),
@@ -955,7 +1160,7 @@ def _compute_next_actions(user, filter_type):
 @dashboard_bp.route('/api/next-actions')
 @login_required
 def api_next_actions():
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     filter_type = request.args.get('filter', 'mine')
     return jsonify(_compute_next_actions(scope_user, filter_type))
 
@@ -1067,7 +1272,7 @@ def _compute_clashes_response(user):
 @dashboard_bp.route('/api/clashes')
 @login_required
 def api_clashes():
-    _, scope_user, _ = _resolve_dashboard_scope(get_actor())
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_clashes_response(scope_user))
 
 

@@ -1,96 +1,82 @@
 {# Shared card shell used by every card partial in app/templates/dashboard/cards/.
    {% call %} lets each card partial supply its expanded body as a block of
-   arbitrary HTML while this macro owns the collapse/expand wrapper markup,
-   so the mechanic (dashboard.css / dashboard.js) only has to be written once.
+   arbitrary HTML while this macro owns the tab/body wrapper markup, so the
+   mechanic (dashboard.css / dashboard.js) only has to be written once.
 
    key         — matches a CARD_ORDER entry in dashboard.py; also the
-                 data-card value dashboard.js and localStorage key off of.
-   title       — card header title.
-   summary_html — collapsed-state summary content (numbers/pills). Passed
-                 as a string and rendered with |safe since it's usually a
-                 small chunk of markup (e.g. RAG pills), not plain text.
-   expanded    — True if this card should start open (matches
-                 initial_expanded_card from the ?view= redirect). IGNORED
-                 by mode=None as of 12 Jul 2026's fourth follow-up — see
-                 below, that branch is now always open regardless of this.
-   muted       — True renders the card visually de-emphasized and
+                 data-card value dashboard.js and the tab-switch logic key
+                 off of.
+   title       — tab label / card header title.
+   summary_html — small badge content shown on the tab (numbers/pills).
+                 Passed as a string and rendered with |safe since it's
+                 usually a small chunk of markup (e.g. mini-stat pills),
+                 not plain text.
+   expanded    — True if this card's tab should be ACTIVE on first paint
+                 (matches initial_expanded_card, which defaults to
+                 'summary' — see index() in dashboard.py). Exactly one
+                 card across the whole page should have this True.
+   muted       — True renders the tab visually de-emphasized and
                  unclickable (used by the Clashing Projects card at zero
-                 clashes). Also ignored by mode=None, same reason.
-   full        — True spans both grid columns. Only ever used by the
-                 Summary card (mode left at its default, see below) — it's
-                 the one card the 12 Jul 2026 tile rework explicitly left
-                 alone (see the big comment on the tile/row-expand pattern
-                 in dashboard.html), so `full` has no meaning in tile/body
-                 mode and is ignored there.
-   mode        — added 12 Jul 2026 for the tile + shared-expand-area
-                 rework (see dashboard.html; reworked again same day,
-                 third follow-up, from per-row bands to ONE shared area).
-                 One of:
-                   None (default) — used ONLY by the Summary card. Was
-                     originally the same self-contained expand-in-place
-                     mechanic every card used before the tile rework;
-                     changed 12 Jul 2026 (fourth follow-up, per Ezekiel)
-                     to a fully static, ALWAYS-OPEN card with no toggle at
-                     all — see the branch itself further down for the
-                     markup/CSS specifics.
-                   'tile'  — renders ONLY the small clickable tile (title +
-                     summary_html), no body at all. Used for every other
-                     card, laid out 5-per-row in dashboard.html's
-                     .dash-tiles-grid.
-                   'body'  — renders ONLY the body content, wrapped for
-                     dashboard.html's single .dash-shared-expand area
-                     (max-height-collapsed unless `expanded`, same
-                     mechanic the old single-card body used, just no
-                     longer nested inside its own tile, and no longer one
-                     of several per-row bands — there's exactly one of
-                     these areas on the whole page now, shared by every
-                     card).
-                 A card partial gets `{% include %}`'d TWICE when in
-                 tile/body mode — once per mode, via dashboard.html
-                 setting the `dash_render_mode` context variable before
-                 each include — so whatever Jinja the partial does above
-                 its `{% call %}` (building summary_html, querying data for
-                 the body, etc.) simply runs twice. Harmless — no writes,
-                 just some redundant string-building. #}
-{% macro dash_card(key, title, summary_html, expanded=False, muted=False, full=False, mode=None) %}
-{% if mode == 'tile' %}
-<div class="dash-tile{% if expanded %} active{% endif %}{% if muted %} dash-tile--muted{% endif %}"
+                 clashes).
+   mode        — One of:
+                   'tab'  — renders ONLY the small clickable tab button
+                     (title + summary_html badge), no body. Used by every
+                     card in card_order, laid out in a horizontal strip in
+                     dashboard.html's .dash-content-tabs (moved to the top
+                     of the page 15 Jul 2026, later still — see
+                     dashboard.html's own docstring on that block).
+                   'body' — renders ONLY the body content, wrapped for
+                     dashboard.html's single .dash-content-area. Max-height-
+                     collapsed unless `expanded`; exactly one body is ever
+                     .expanded at a time, whichever tab is currently
+                     active.
+                 A card partial gets `{% include %}`'d for whichever
+                 mode(s) it's reachable in, via dashboard.html setting the
+                 `dash_render_mode` context variable before each include —
+                 so whatever Jinja the partial does above its `{% call %}`
+                 (building summary_html, querying data for the body, etc.)
+                 simply reruns each time. Harmless — no writes, just some
+                 redundant string-building.
+
+   Redesigned 15 Jul 2026, per Ezekiel: "Have the my day/my week div be
+   the interactive area where the information populates. Where my day/my
+   week is lets have the tabs for each card that are clickable." Before
+   this, Summary ("My Day / My Week") was a special case with its own
+   mode=None branch — a permanently-open, non-toggling card rendered
+   separately from every other card's tile+shared-expand-area system (see
+   git history around 12-15 Jul 2026 for that design, and summary.html's
+   docstring for how it was ported over, now itself orphaned — see below).
+   mode=None no longer exists — every caller passes mode='tab' or
+   mode='body' explicitly (dash_render_mode, set once per include-loop in
+   dashboard.html).
+
+   A THIRD mode, 'static', briefly existed (added 15 Jul 2026, earlier the
+   same day, for Overdue/At Risk's always-visible pinned cards) and was
+   REMOVED again a few hours later, same day, when Overdue/At Risk AND My
+   Day/My Week were both rebuilt as bespoke toggle boxes instead
+   (app/templates/dashboard/toggle_overdue_at_risk.html and
+   toggle_my_day_week.html — see dashboard.html's docstring on
+   .dash-toggle-row) — neither of those needs dash_card() at all anymore,
+   they render their own header/button/body markup directly. Only 'tab'
+   and 'body' remain. #}
+{% macro dash_card(key, title, summary_html, expanded=False, muted=False, mode=None) %}
+{% if mode == 'tab' %}
+<button type="button" class="dash-content-tab{% if expanded %} active{% endif %}{% if muted %} dash-content-tab--muted{% endif %}"
     data-card="{{ key }}" {% if not muted %}data-action="toggle-card"{% endif %}>
-    <span class="dash-tile-title">{{ title }}</span>
-    <span class="dash-tile-summary">{{ summary_html | safe }}</span>
-</div>
+    <span class="dash-content-tab-title">{{ title }}</span>
+    {% if summary_html %}<span class="dash-content-tab-badge">{{ summary_html | safe }}</span>{% endif %}
+</button>
 {% elif mode == 'body' %}
 {# .dash-card-body-visual (added 12 Jul 2026, second pass) is the "looks
    like a card" wrapper — white bg/radius/shadow, only when .expanded — and
    .dash-card-body-content (outer) is purely the "clips to 0 height when
    collapsed" wrapper. They have to be two different elements: overflow:
    hidden clips a box's OWN box-shadow when they're on the same element, so
-   a single combined element would render an expanded tile body with a
-   visibly cut-off shadow. See the big comment on .dash-card-body-content
-   in dashboard.css for the fuller version of this. #}
+   a single combined element would render an expanded body with a visibly
+   cut-off shadow. See the big comment on .dash-card-body-content in
+   dashboard.css for the fuller version of this. #}
 <div class="dash-card-body-content{% if expanded %} expanded{% endif %}" data-card="{{ key }}">
     <div class="dash-card-body-visual">
-        <div class="dash-card-body-inner">
-            {{ caller() }}
-        </div>
-    </div>
-</div>
-{% else %}
-{# mode=None — used ONLY by Summary ("My Day / My Week"), see the docstring
-   above. Changed 12 Jul 2026 (fourth follow-up, per Ezekiel: "my day/
-   week should always be open, not collapsible") from a clickable
-   header that expanded its own body in place to a fully static card:
-   no button, no chevron, no data-action, `expanded`/`muted` params are
-   ignored here (this branch always renders open). The body has no
-   collapse mechanic at all — see .dash-card-body--static in
-   dashboard.css, which sets max-height: none/overflow: visible instead
-   of the JS-measured max-height every other card's body uses. #}
-<div class="dash-card dash-card--static{% if full %} dash-card--full{% endif %}" data-card="{{ key }}">
-    <div class="dash-card-header dash-card-header--static">
-        <span class="dash-card-title">{{ title }}</span>
-        <span class="dash-card-summary">{{ summary_html | safe }}</span>
-    </div>
-    <div class="dash-card-body dash-card-body--static">
         <div class="dash-card-body-inner">
             {{ caller() }}
         </div>
@@ -239,6 +225,76 @@
     <span class="dash-row-next-action">
         <span class="dash-row-next-action-label">Next Action</span>
         <span class="dash-row-next-action-tag">{{ item.guidance }}</span>
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
+   dash_at_risk_row(item) — extracted 15 Jul 2026, later still, from
+   at_risk.html's own inline row markup (unchanged pixel-for-pixel) so the
+   new Overdue/At Risk toggle box (see toggle_overdue_at_risk.html and the
+   big comment on .dash-toggle-row in dashboard.html) can render At Risk
+   rows the same way dash_due_row() lets it render Overdue rows — one
+   macro call per row instead of copy-pasting at_risk.html's markup into
+   a second template. at_risk.html itself is no longer included anywhere
+   (My Day/My Week and Overdue/At Risk both moved out of the tab-strip/
+   pinned-card systems into toggle boxes the same day — see CLAUDE.md),
+   so this macro is now the ONLY place At Risk rows render from.
+
+   `item` is built by _compute_at_risk_projects() in dashboard.py — same
+   shape as before this extraction, nothing about the DATA changed, only
+   where the markup that renders it lives.
+#}
+{% macro dash_at_risk_row(item) %}
+<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">{{ item.name }}</span>
+        {% if item.tags %}
+        <span class="dash-row-tags">
+            {% for tag in item.tags %}
+            <span class="dash-risk-tag{{ ' dash-risk-tag--' + tag.variant if tag.variant != 'plain' else '' }}">{{ tag.label }}</span>
+            {% endfor %}
+        </span>
+        {% endif %}
+        {{ dash_row_people(item.cs_lead, item.designers) }}
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
+   dash_stat_project_row(item) — added 15 Jul 2026, per Ezekiel: "have the
+   rest of the cards ... move down also. And when they click them it shows
+   the relevant information in the information area" (Your Active
+   Projects / Pending Approval / Total Active Projects — moved from static
+   stat tiles into real tab+body cards, see the big comment above
+   CARD_ORDER in dashboard.py and _stat_project_rows() there for how
+   `item` is built).
+
+   Deliberately plain — same .dash-row/.dash-row-date/.dash-row-title
+   shell every other row on this page uses, but no person chips or
+   Next Action block: these three cards are a membership list ("which
+   projects make up this number"), not an actionable row like Due/Next
+   Actions, so there's nothing to chip or act on here. The one thing worth
+   showing beyond the name is the project's current status, as a plain
+   neutral .dash-action-tag pill — reused as-is (still a live, styled
+   class in dashboard.css; it just stopped being dash_due_row()'s own tag
+   when Next Actions was redesigned to reuse that macro, see CLAUDE.md).
+
+   No JS mirror needed — same as At Risk/Clashing Projects, this card's
+   row list is fully server-rendered with no fetch-on-toggle, only its
+   mini-stat badge is live-refreshed via SSE (see dashboard.js).
+#}
+{% macro dash_stat_project_row(item) %}
+<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">{{ item.name }}</span>
+        <span class="dash-row-tags">
+            <span class="dash-action-tag">{{ item.status_label }}</span>
+        </span>
     </span>
 </a>
 {% endmacro %}
