@@ -219,9 +219,25 @@
    override — see git history around 15 Jul 2026 if that's ever needed
    again) — but each box now holds TWO lists with a button toggle between
    them instead of one fixed list each. */
+/* align-items: start added 16 Jul 2026 — real bug, not cosmetic. CSS
+   Grid's default align-items is stretch, so each .dash-toggle-box (a
+   direct grid item) was being force-stretched to match whichever sibling
+   was TALLER — if the left box was open (tall) and the right box was
+   collapsed (just its header), the right box's own header+body still
+   collapsed correctly, but the grid then stretched that shorter box's
+   outer element down to the row's full height anyway, and since the box
+   itself carries the white background/shadow, that showed up as a big
+   empty white rectangle below the collapsed header instead of the box
+   just shrinking to fit its content. Per Ezekiel: "have them independent.
+   If one is collapsed, the other stays open - the collapsed one should
+   collapse, not be an empty white div." align-items: start makes each
+   grid item size to its own natural content height instead of stretching
+   to the row, which is what "independent" actually requires here — no JS
+   change needed, this was purely a CSS layout bug. */
 .dash-toggle-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    align-items: start;
     gap: 1.5rem;
     margin-bottom: 1.5rem;
 }
@@ -396,11 +412,18 @@
    tab is open, uncapped). Because this cap lives on the INNER element,
    .dash-card-body-content's own scrollHeight (what expandBody() reads to
    animate open) is naturally bounded by it too — the outer JS-measured
-   max-height mechanic and this inner CSS cap compose without conflicting. */
-.dash-toggle-box .dash-card-body-inner {
-    max-height: 300px;
-    overflow-y: auto;
-}
+   max-height mechanic and this inner CSS cap compose without conflicting.
+
+   REMOVED 16 Jul 2026 — per Ezekiel: "we can remove the scrolling within
+   the overdue/at risk div and the today/this week div since they get
+   pushed to the bottom." Both boxes moved to the very bottom of the page
+   in the third reorder pass earlier the same day (see the "Third reorder
+   pass" section above), so an internal 300px-capped scroll area no longer
+   serves a purpose — there's nothing below the boxes competing for
+   viewport space the way there was when they sat mid-page. Each box now
+   grows to its full natural content height via the same uncapped
+   JS-measured max-height mechanic every other card body already uses (no
+   rule needed here at all — removing this override is the whole fix). */
 
 /* Only one of the two view panels inside a box is ever visible — plain
    show/hide via .hidden (main.css utility class), toggled by

@@ -34,7 +34,7 @@ Bug Fixes:
 
 
 ================================================================================
-v2.2 - Large feature update
+v2.2 - Dashboard, File Template Directory & Lots of QoL updates
 ================================================================================
 New Features:
 

@@ -7,11 +7,6 @@
 
 <div class="page-container">
 
-    {# Back nav — back_label/back_url are computed in project_detail.detail()
-       from ?from= (dashboard | deliverables | unset). See that route for why
-       both currently point at the same URL. #}
-    <a href="{{ back_url }}" class="back-link" style="display:inline-flex;align-items:center;gap:0.4rem;margin-bottom:1rem;text-decoration:none;color:var(--grey-dark);">&larr; {{ back_label }}</a>
-
     <div class="dashboard-header" style="margin-bottom: 1.5rem;">
         <h1 class="dashboard-greeting">{{ project.name }}</h1>
         <div style="display: flex; gap: 0.75rem; align-items: center;">
@@ -55,7 +50,17 @@
                 data-url="{{ url_for('project_detail.get_nas_link', project_id=project.id) }}">
                 Open Project Folder
             </button>
-            <a href="{{ url_for('main.index') }}" class="btn-secondary sidebar-item--nav">← Back</a>
+            {# Dynamic back button — back_label/back_url are computed in
+               project_detail.detail() from ?from= (dashboard | deliverables |
+               unset), so this always returns to wherever the user actually
+               came from instead of a fixed destination. Used to be a static
+               "← Back" pointing at main.index PLUS a separate duplicate
+               "Back to Projects" link above the page header (see git history
+               around 16 Jul 2026) — consolidated into just this one button,
+               per Ezekiel: "remove the back to projects button. Have the
+               back button already there on the right side dynamically take
+               you back to the page you came from." #}
+            <a href="{{ back_url }}" class="btn-secondary sidebar-item--nav">← {{ back_label }}</a>
         </div>
     </div>
 

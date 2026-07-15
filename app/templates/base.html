@@ -76,11 +76,14 @@
                 <span class="sidebar-section-label">Internal Tools</span>
                 <div class="sidebar-grid">
 
-                            {# Dashboard — temporarily unlinked for testing. Re-enable Monday:
-                               swap <span>/sidebar-item--unlinked back to
-                               <a href="{{ url_for('projects.index') }}"
-                               class="sidebar-item sidebar-item--nav" data-link="dashboard"> #}
-                            <span class="sidebar-item sidebar-item--unlinked" data-link="dashboard" title="Dashboard">
+                            {# Dashboard — re-enabled for all roles 16 Jul 2026 (was temporarily
+                               unlinked for testing; swapped the placeholder <span>/
+                               sidebar-item--unlinked back to a real <a>/sidebar-item--nav,
+                               exactly as the prior version of this comment already
+                               instructed). No role gate here — every role gets this link,
+                               same as Projects/Wiki below. #}
+                            <a href="{{ url_for('projects.index') }}" class="sidebar-item sidebar-item--nav"
+                                data-link="dashboard" title="Dashboard">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round">
@@ -88,7 +91,7 @@
                                     <polyline points="9 22 9 12 15 12 15 22" />
                                 </svg>
                                 <span class="sidebar-item-label">Dashboard</span>
-                            </span>
+                            </a>
 
                             {# Projects — internal nav link, JS intercepts and loads without refresh #}
                             <a href="{{ url_for('main.projects') }}" class="sidebar-item sidebar-item--nav"
@@ -324,8 +327,13 @@
                         <span class="sidebar-item-label">App Update Blog</span>
                     </a>
 
-                    {# Design Outing Board — only visible to designers and admin #}
-                    {% if effective_user.role in ['designer', 'admin'] %}
+                    {# Design Outing Board — visible to designers, team leads, and admin.
+                       team_lead added 16 Jul 2026, per Ezekiel: "add the design team
+                       outing sidebar link (it's greyed out now keep it that way) to be
+                       visible for team leads also as it is not there right now." Still
+                       sidebar-item--unlinked (greyed out/non-clickable) for everyone it's
+                       shown to — that part is unchanged, only the role gate widened. #}
+                    {% if effective_user.role in ['designer', 'team_lead', 'admin'] %}
                     <span class="sidebar-item sidebar-item--unlinked" data-link="outing-board"
                         title="Design Outing Board">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"

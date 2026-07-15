@@ -36,25 +36,32 @@ def detail(project_id):
 
     # Back navigation: which page linked here, so the back button returns
     # the user to where they actually came from instead of always dumping
-    # them on /projects.
+    # them on /projects. Feeds the single dynamic back button on the
+    # right side of the page header (projects/detail.html) — see that
+    # template's docstring on the button itself; there used to ALSO be a
+    # separate static "Back to Projects" link above the header, removed
+    # 16 Jul 2026 when the two were consolidated into just this one.
     #
-    # 'dashboard' TEMPORARILY has no special case (9 Jul 2026 rollback,
-    # matching auth.py's login redirect and base.html's sidebar link) — a
-    # ?from=dashboard link (still appended by every row on the new
-    # role-based dashboard, which is still reachable directly at /dashboard,
-    # just hidden from normal navigation until after Ezekiel shows it to
-    # management) now falls through to the plain 'Back to Projects' default
-    # below instead of getting its own "Back to Dashboard" label/button. To
-    # restore: re-add an `if from_param == 'dashboard':` branch above the
-    # 'deliverables' one, setting back_label/back_url to
-    # ('Back to Dashboard', url_for('projects.index')).
+    # 'dashboard' RESTORED 16 Jul 2026 — was TEMPORARILY disabled (9 Jul
+    # 2026 rollback, matching auth.py's login redirect and base.html's
+    # sidebar link) while the new role-based dashboard was still hidden
+    # from normal navigation ("until after Ezekiel shows it to
+    # management" — see git history for the exact prior wording). The
+    # Dashboard sidebar link went live for all roles the same day this was
+    # restored (see base.html), so a ?from=dashboard link (already
+    # appended by every row on the dashboard — dash_due_row(),
+    # dash_at_risk_row(), the clashes/decisions/what_changed/stat_avg_time
+    # rows, etc.) now correctly sends the user back there instead of
+    # falling through to the generic 'Back to Projects' default.
     #
     # 'deliverables' is a SEPARATE, older thing — the OLD role dashboards'
     # Deliverable View tab (cs.html/designer.html/team_lead.html) links here
     # with ?from=deliverables, and that view only exists on main.projects,
     # so that branch is unaffected by any of the above.
     from_param = request.args.get('from')
-    if from_param == 'deliverables':
+    if from_param == 'dashboard':
+        back_label, back_url = 'Back to Dashboard', url_for('projects.index')
+    elif from_param == 'deliverables':
         back_label, back_url = 'Back to Deliverables', url_for('main.projects')
     else:
         back_label, back_url = 'Back to Projects', url_for('main.projects')
