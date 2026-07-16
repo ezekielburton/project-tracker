@@ -1,0 +1,47 @@
+{#
+   Assign Designer modal — added 16 Jul 2026 for the leadership dashboard's
+   Risk/Overdue and Waiting on Others cards ("Assign Designer"/"Assign"
+   buttons). Same .modal-overlay/.modal-box/.modal-actions shape as
+   _flag_management_modal.html/_reassign_cs_lead_modal.html.
+
+   Team select is pre-populated by dashboard.js from the opening button's
+   data-missing-teams attribute (comma-separated team names — "based on
+   the active teams requested for that project", per Ezekiel), NOT every
+   team the project could theoretically have — a project only ever offers
+   the teams it's actually short-staffed on. Designer select is filtered
+   client-side against the page-level LEADERSHIP_DESIGNERS array
+   (dashboard_leadership.html) to just that team whenever the team select
+   changes — same "team-scoped picker" idea the project detail page's own
+   designer assignment already uses, just built here since this modal has
+   no server round-trip of its own to refetch a filtered list.
+
+   Submits to POST /projects/<id>/assign-lead (projects_detail.py,
+   existing route — gained an admin/management bypass 16 Jul 2026 so this
+   modal can assign a team that currently has no lead at all, see the big
+   comment on that route).
+#}
+<div id="assign-designer-modal" class="modal-overlay hidden" data-action="close-assign-designer-overlay">
+    <div class="modal-box">
+        <h3 class="modal-title">Assign Designer</h3>
+        <p id="assign-designer-project-name" style="margin:-0.5rem 0 1rem; color:var(--grey-dark); font-size:0.9rem;"></p>
+
+        <div class="form-group">
+            <label>Team</label>
+            <select id="assign-designer-team-select" class="form-input"></select>
+        </div>
+
+        <div class="form-group">
+            <label>Designer</label>
+            <select id="assign-designer-select" class="form-input">
+                <option value="">Select a designer…</option>
+            </select>
+        </div>
+
+        <p id="assign-designer-error" class="hidden" style="color:var(--rose); font-size:0.85rem; margin:-0.75rem 0 1rem;"></p>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-action="close-assign-designer-modal">Cancel</button>
+            <button type="button" class="btn-primary" data-action="submit-assign-designer">Assign</button>
+        </div>
+    </div>
+</div>

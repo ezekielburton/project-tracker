@@ -21,28 +21,37 @@
 
    Card TITLE is role-conditional (added 15 Jul 2026, per Ezekiel: "Rename
    decisions needed card to 'Flag a project' for CS, team lead and designer
-   roles. Only management and admin should see 'Decisions Needed'"). Same
-   underlying card/key/data everywhere — `effective_role` (the REAL actor's
-   role, already used by the Resolve-button gate below and by
+   roles. Only management and admin should see 'Decisions Needed'"; label
+   changed again 16 Jul 2026, per Ezekiel: "Rename the flag a project to
+   escalate for any role that isnt admin or management" — so the
+   non-admin/management title is now 'Escalate', not 'Flag a Project'; the
+   underlying card key, data, and everything else about it is unchanged).
+   Same underlying card/key/data everywhere — `effective_role` (the REAL
+   actor's role, already used by the Resolve-button gate below and by
    isManagementOrAdmin() in dashboard.js) just picks which string
    dash_card() renders as the title, in both the tab-strip button and the
    content-area header, since both read from the same `title` argument.
 
-   "Flag a Project" button: per spec, CS/Designer/Team Lead get a button
-   here that opens the Flag to Management modal; Management/Admin get none
-   (they're the ones the flag is FOR, not the ones raising it). This
-   deliberately only appears in the EXPANDED body, not also as a small
-   shortcut next to the collapsed count — the spec describes both, but a
-   clickable button nested inside the card's own clickable header (the
-   whole header has data-action="toggle-card" on it, see
-   _dashboard_macros.html) would need real click-event surgery in
-   dashboard.js to stop the inner button's click from ALSO toggling the
-   card open/closed. One click, one unambiguous action, one tap away
-   (expand the card, then click the button) — not worth the fragility for
-   what's a very small UX convenience.
+   "Escalate" button (renamed 16 Jul 2026 from "Flag a Project" — same
+   Ezekiel request as the title rename above; comments elsewhere in this
+   codebase that still say "Flag a Project"/"Flag to Management" describe
+   the underlying mechanism — the Flag to Management modal itself keeps
+   that name, see dashboard.html — not this button's own label): per spec,
+   CS/Designer/Team Lead get a button here that opens the Flag to
+   Management modal; Management/Admin get none (they're the ones the flag
+   is FOR, not the ones raising it). This deliberately only appears in the
+   EXPANDED body, not also as a small shortcut next to the collapsed count
+   — the spec describes both, but a clickable button nested inside the
+   card's own clickable header (the whole header has
+   data-action="toggle-card" on it, see _dashboard_macros.html) would need
+   real click-event surgery in dashboard.js to stop the inner button's
+   click from ALSO toggling the card open/closed. One click, one
+   unambiguous action, one tap away (expand the card, then click the
+   button) — not worth the fragility for what's a very small UX
+   convenience.
 
    "Resolve" button (added 13 Jul 2026, admin/management only — the
-   reverse counterpart to "Flag a Project" above, since Management/Admin
+   reverse counterpart to "Escalate" above, since Management/Admin
    are the ones the flag is FOR, they're the ones who clear it). Each row
    is now a `.dash-decision-row` wrapper containing the original
    `<a class="dash-row">` PLUS a sibling `<button>` — the button is
@@ -75,14 +84,14 @@
 {% endset %}
 
 {# Title split by role — see the big comment above. #}
-{% set decisions_title = 'Decisions Needed' if effective_role in ('admin', 'management') else 'Flag a Project' %}
+{% set decisions_title = 'Decisions Needed' if effective_role in ('admin', 'management') else 'Escalate' %}
 
 {% call dash_card('decisions', decisions_title, decisions_summary,
     expanded=(initial_expanded_card == 'decisions'), mode=dash_render_mode) %}
 
     {% if effective_role in ('cs', 'designer', 'team_lead') %}
     <button type="button" class="btn-secondary" data-action="open-flag-management-modal" style="margin-bottom: 1rem;">
-        Flag a Project
+        Escalate
     </button>
     {% endif %}
 
@@ -108,6 +117,24 @@
                             <span class="dash-action-tag">{{ d.days_waiting }} day{{ 's' if d.days_waiting != 1 else '' }} waiting</span>
                             {% endif %}
                         </span>
+                        {# Waiting since/for tags — added 16 Jul 2026, see
+                           _compute_decisions()'s docstring for why this
+                           card's waiting_color is always 'red' (every row
+                           here is by definition "senior decision blocking
+                           work"). Kept separate from dash-row-tags above
+                           (that's the pre-existing raised-by/days-waiting
+                           pair) rather than merged in, matching the
+                           dash-row-waiting line dash_due_row() renders on
+                           Next Actions' Others' tab — same visual language,
+                           new dedicated line. #}
+                        {% if d.waiting_since_display %}
+                        <span class="dash-row-waiting">
+                            <span class="dash-waiting-tag dash-waiting-tag--{{ d.waiting_color }}">Waiting since: {{ d.waiting_since_display }}</span>
+                            {% if d.waiting_reason %}
+                            <span class="dash-waiting-tag dash-waiting-tag--{{ d.waiting_color }}">Waiting for: {{ d.waiting_reason }}</span>
+                            {% endif %}
+                        </span>
+                        {% endif %}
                     </span>
                     <span style="text-align: right; flex-shrink: 0; font-size: 0.8rem; color: var(--grey-dark);">
                         {{ d.raised_at | dubai_time }}

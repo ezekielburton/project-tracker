@@ -1152,6 +1152,14 @@ document.addEventListener('click', function (e) {
     var historyToggle = e.target.closest('[data-action="toggle-posm-history"]');
     if (historyToggle) { togglePosmHistory(historyToggle); return; }
 
+    var resetPillBtn = e.target.closest('[data-action="open-pill-reset-modal"]');
+    if (resetPillBtn) { openPillResetModal(resetPillBtn); return; }
+
+    if (e.target.closest('[data-action="close-pill-reset-modal"]')) { closePillResetModal(); return; }
+
+    var pillResetOverlay = e.target.closest('[data-action="close-pill-reset-overlay"]');
+    if (pillResetOverlay && e.target === pillResetOverlay) { closePillResetModal(); return; }
+
     var downloadAllBtn = e.target.closest('[data-action="download-all-zip"]');
     if (downloadAllBtn) { triggerZipDownload(downloadAllBtn); return; }
 
@@ -1294,8 +1302,84 @@ document.addEventListener('submit', function (e) {
         .catch(function () { btnDone(btn); showToast('Could not assign designer.', 'error'); });
 });
 
-// ── Initialise ────────────────────────────────────────────────────────────────
-// Run once on the initial full-page load, then re-run after every SPA
-// navigation so buttons always point at the live detail page DOM.
+// ── Pill reset modal (admin only) ─────────────────────────────────────────────
+
+var _pillResetContext = null;
+
+function openPillResetModal(btn) {
+    _pillResetContext = {
+        pillType:       btn.dataset.pillType,
+        pillLabel:      btn.dataset.pillLabel || 'this pill',
+        posmCountry:    btn.dataset.posmCountry  || null,
+        posmCustomerId: btn.dataset.posmCustomerId || null,
+        projectId:      parseInt(window.location.pathname.split('/')[2])
+    };
+    var desc = document.getElementById('pillResetModalDesc');
+    if (desc) {
+        desc.textContent = 'Reset "' + _pillResetContext.pillLabel + '" — this will permanently delete all submission files and revision history for this pill.';
+    }
+    var revInput = document.getElementById('pillResetRevInput');
+    if (revInput) revInput.value = 0;
+    var modal = document.getElementById('pillResetModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
+    }
+    // Replace the confirm button to strip any stale listeners
+    var oldBtn = document.getElementById('pillResetConfirmBtn');
+    if (oldBtn) {
+        var newBtn = oldBtn.cloneNode(true);
+        oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+        newBtn.addEventListener('click', submitPillReset);
+    }
+}
+
+function closePillResetModal() {
+    var modal = document.getElementById('pillResetModal');
+    if (modal) modal.classList.add('hidden');
+    _pillResetContext = null;
+    if (window.helixPolling) window.helixPolling.resume();
+}
+
+function submitPillReset() {
+    if (!_pillResetContext) return;
+    var revInput = document.getElementById('pillResetRevInput');
+    var targetRevision = revInput ? Math.max(0, parseInt(revInput.value, 10) || 0) : 0;
+    var confirmBtn = document.getElementById('pillResetConfirmBtn');
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Resetting…'; }
+
+    var body = {
+        pill_type:       _pillResetContext.pillType,
+        target_revision: targetRevision
+    };
+    if (_pillResetContext.posmCountry)    body.posm_country     = _pillResetContext.posmCountry;
+    if (_pillResetContext.posmCustomerId) body.posm_customer_id = parseInt(_pillResetContext.posmCustomerId, 10);
+
+    fetch('/projects/' + _pillResetContext.projectId + '/reset-pill', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        if (data.success) {
+            closePillResetModal();
+            showToast('Pill reset to revision ' + targetRevision, 'warning');
+            setTimeout(function () { location.reload(); }, 800);
+        } else {
+            showToast(data.error || 'Reset failed', 'error');
+            if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '↺ Reset Pill'; }
+        }
+    })
+    .catch(function () {
+        showToast('Something went wrong', 'error');
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '↺ Reset Pill'; }
+    });
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+// Wire direct-listener buttons on the current page, and re-wire after every
+// SPA navigation (sidebar.js dispatches helix:navigated once the new page
+// content is in the DOM).
 _initDetailPage();
 document.addEventListener('helix:navigated', _initDetailPage);

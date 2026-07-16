@@ -22,14 +22,52 @@ def create_app():
     from app.sse_relay import init_sse_relay
     init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
 
-    import subprocess
-    try:
-        app.config['STATIC_VERSION'] = subprocess.check_output(
-            ['git', 'rev-parse', '--short', 'HEAD'],
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
-    except Exception:
-        app.config['STATIC_VERSION'] = 'dev'
+    # Cache-busting query string for every static <link>/<script> tag in
+    # base.html (?v={{ config.STATIC_VERSION }}). Originally the short git
+    # commit hash (computed once at process startup) everywhere, gated on
+    # whether it could be worth telling "real production" apart from local
+    # dev — but that gate was tried with GEVENT_WORKER=1 as the signal (the
+    # same flag run.py uses for real prod's gevent monkey-patching) and
+    # turned out to be unreliable: Ezekiel also sets GEVENT_WORKER=1 in his
+    # LOCAL shell, because run.py's gevent patching is what makes the SSE
+    # live-update relay (app/sse_relay.py) work at all, and he wants that
+    # locally too. So GEVENT_WORKER=1 does not uniquely mean "real
+    # production" — using it as the branch condition just silently kept
+    # local dev on the frozen-git-hash path anyway.
+    #
+    # The git hash was always the wrong signal for local dev regardless:
+    # CSS/JS get hand-edited and tested against a locally running server
+    # WITHOUT a commit for every change (that's the whole point of
+    # iterating locally). Since the hash only moves on a new commit,
+    # STATIC_VERSION stayed frozen at whatever commit HEAD was on for an
+    # entire editing session, so every static asset URL was byte-identical
+    # across dozens of edits — the browser's HTTP cache correctly, and
+    # indefinitely, kept serving old CSS/JS, surviving hard refreshes and
+    # even brand-new tabs, since the URL genuinely never changed. This is
+    # what caused the 16 Jul 2026 "This Week Load has no styling" saga (see
+    # CLAUDE.md) — the served bytes and the file on disk were both correct
+    # the whole time, only the browser's cached copy of the frozen-URL
+    # response was stale. Confirmed via `git status`/`git rev-parse HEAD`
+    # directly: dashboard.css showed as modified/uncommitted while
+    # STATIC_VERSION matched HEAD exactly — then confirmed AGAIN after a
+    # first attempted fix (branching on GEVENT_WORKER) still showed the
+    # frozen hash, traced to Ezekiel's local GEVENT_WORKER=1 export.
+    #
+    # Fix: always use the current timestamp at process startup, everywhere,
+    # no GEVENT_WORKER branch at all. Production deploys are always
+    # `git pull && systemctl restart` together anyway (see Infrastructure
+    # section below), so a restart-time timestamp changes exactly when a
+    # deploy happens there too — the git hash's only actual benefit was
+    # cosmetic traceability (eyeballing which commit a running instance's
+    # assets match), never something anything else in the app depends on,
+    # and it's not worth reintroducing a second env-var signal just to get
+    # it back. Still requires restarting the local Flask process to pick up
+    # new CSS/JS (there's no cheaper fix without moving to per-request
+    # computation, which would kill browser caching for stable assets too)
+    # — but a restart is something Ezekiel already does periodically,
+    # whereas a new git commit is not.
+    import time
+    app.config['STATIC_VERSION'] = str(int(time.time()))
 
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'

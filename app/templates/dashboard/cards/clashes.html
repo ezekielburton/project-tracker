@@ -143,7 +143,25 @@
     {% endif %}
 {% endset %}
 
-{% call dash_card('clashes', 'Clashing Projects', clashes_summary,
+{# Title reads "Deadline Clashes" wherever this file is included as part of
+   a Secondary Metrics row (added 16 Jul 2026 for dashboard_cs.html —
+   dash_cs_layout was True only when THAT template included this file, see
+   _CS_SECONDARY_METRICS in dashboard.py — widened same day to
+   dashboard_leadership.html too, per Ezekiel sharing a screenshot of the
+   CS dashboard's Secondary Metrics tiles: "add this to the management
+   view also, at the bottom." Despite the variable's name, it really means
+   "rendered inside a new-style Secondary Metrics row", not "CS
+   specifically" — it just didn't have a second consumer until the
+   leadership page picked it up). Every other role still sees "Clashing
+   Projects" on the unchanged old dashboard.html — same role-conditional-
+   title pattern decisions.html already established for "Decisions
+   Needed"/"Escalate" (effective_role-driven there; dash_cs_layout-driven
+   here since this isn't a per-viewer distinction, it's a per-PAGE one —
+   the same CS user sees "Clashing Projects" if this file is ever reached
+   via the old template and "Deadline Clashes" via either new one). #}
+{% set clashes_title = 'Deadline Clashes' if dash_cs_layout else 'Clashing Projects' %}
+
+{% call dash_card('clashes', clashes_title, clashes_summary,
     expanded=(initial_expanded_card == 'clashes'), muted=(clash_count == 0), mode=dash_render_mode) %}
 
     <div class="dash-filter-chips">

@@ -1,0 +1,81 @@
+{# ── Management/admin view-switcher — extracted 16 Jul 2026 ──────────────
+   Pulled out of dashboard.html verbatim (no markup/behaviour changes) so
+   the CS-only redesigned dashboard (dashboard_cs.html) can include the
+   exact same block — a management/admin user previewing a CS lead's tab
+   (scope_mode starting with 'cs_') now lands on dashboard_cs.html too (see
+   the big comment on the CS-only branch in dashboard.py's index()), and
+   still needs this switcher to navigate between tabs or back to their own
+   view. Both templates just `{% include 'dashboard/_view_switcher.html' %}`
+   in the same spot they used to inline this markup.
+
+   My View / All Projects / one tab per CS lead / one tab per designer —
+   see the big comment on _resolve_dashboard_scope() in dashboard.py.
+   Management and admin only — see that same function's docstring for the
+   full reasoning and why this is NOT the emulation system. The actual
+   scope switch is still real <a> links, not client-side: switching scope
+   changes almost every card's data, so a full page reload is simpler and
+   more honest here than threading scope-awareness through every card's
+   individual JS re-render function on top of the filter/tab state each of
+   them already juggles.
+
+   CS/Designer picker is a toggle (per Ezekiel: "Next to All Projects
+   put CS button and Designer button. When they click those buttons,
+   the below expands to show each name as a button as it is now...
+   toggle - so when they click CS, then designer, it replaces the CS
+   buttons with designer ones and vice versa"). CS and Designer are
+   plain <button>s living in the SAME top .dash-view-tabs row as My
+   View/All Projects — they don't switch scope themselves, they just
+   show/hide their .dash-group-tabs row of real scope-switching <a>
+   links underneath. Only one group row is ever visible at a time;
+   dashboard.js's toggle-group click handler owns the show/hide +
+   active-state swap. Whichever group the CURRENTLY PREVIEWED scope
+   belongs to (if any) starts expanded on page load (via the `.hidden`
+   class conditions below), so reloading mid-preview doesn't hide the
+   picker for the person already being viewed. #}
+{% if effective_role in ('management', 'admin') %}
+<div class="dash-view-tabs">
+    <a href="{{ url_for('projects.index', scope='my') }}"
+       class="dash-tab-btn{% if scope_mode == 'my' %} active{% endif %}">My View</a>
+    <a href="{{ url_for('projects.index', scope='all') }}"
+       class="dash-tab-btn{% if scope_mode == 'all' %} active{% endif %}">All Projects</a>
+    {% if cs_leads %}
+    <button type="button" data-action="toggle-group" data-group="cs"
+        class="dash-tab-btn dash-group-toggle-btn{% if scope_mode and scope_mode.startswith('cs_') %} active{% endif %}">CS</button>
+    {% endif %}
+    {% if designers %}
+    <button type="button" data-action="toggle-group" data-group="designer"
+        class="dash-tab-btn dash-group-toggle-btn{% if scope_mode and scope_mode.startswith('designer_') %} active{% endif %}">Designer</button>
+    {% endif %}
+</div>
+{% if cs_leads %}
+<div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('cs_')) %} hidden{% endif %}" data-group="cs">
+    <div class="dash-view-tabs">
+        {% for cs in cs_leads %}
+        <a href="{{ url_for('projects.index', scope='cs_' ~ cs.id) }}"
+           class="dash-tab-btn{% if scope_mode == ('cs_' ~ cs.id|string) %} active{% endif %}">{{ cs.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% if designers %}
+<div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('designer_')) %} hidden{% endif %}" data-group="designer">
+    <div class="dash-view-tabs">
+        {% for designer in designers %}
+        <a href="{{ url_for('projects.index', scope='designer_' ~ designer.id) }}"
+           class="dash-tab-btn{% if scope_mode == ('designer_' ~ designer.id|string) %} active{% endif %}">{{ designer.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% if scope_mode and scope_mode.startswith('cs_') %}
+    {% set previewed_cs = cs_leads | selectattr('id', 'equalto', scope_mode[3:] | int) | first %}
+    {% if previewed_cs %}
+    <div class="dash-previewing-as">Previewing {{ previewed_cs.name }}'s view — data and "my actions" below are theirs, not yours.</div>
+    {% endif %}
+{% elif scope_mode and scope_mode.startswith('designer_') %}
+    {% set previewed_designer = designers | selectattr('id', 'equalto', scope_mode[9:] | int) | first %}
+    {% if previewed_designer %}
+    <div class="dash-previewing-as">Previewing {{ previewed_designer.name }}'s view — data and "my actions" below are theirs, not yours.</div>
+    {% endif %}
+{% endif %}
+{% endif %}

@@ -187,9 +187,9 @@
                     _ta.innerHTML = decodeURIComponent(result.title);
                     document.title = _ta.value;
                 }
+                if (push !== false) { history.pushState(null, '', url); }
                 document.dispatchEvent(new CustomEvent('helix:navigated'));
                 mainContent.style.opacity = '1';
-                if (push !== false) { history.pushState(null, '', url); }
                 setActiveItem(url);
             }, 150); // matches the 0.15s CSS transition on .main-content
         })

@@ -85,9 +85,18 @@
        via dashboard.js's fetchAndRenderNextActions() — same "id is
        load-bearing" note as dash-due-list in due.html. #}
     <div id="dash-next-actions-list">
+        {# show_waiting=True (widened 16 Jul 2026, same-day follow-up, per
+           Ezekiel: "Apply those changes to the my actions tab too, it's
+           only on other's actions") — originally only shown on Others'
+           Actions, now shown on both tabs. This is always the 'mine' list
+           on first paint (see comment above); the 'others' list is never
+           SSR'd — it's fetched client-side via
+           fetchAndRenderNextActions('others'), which passes
+           showWaiting=true to renderDueRow() on the JS side (now
+           unconditionally, matching this template). #}
         {% if next_actions_default %}
             {% for item in next_actions_default %}
-                {{ dash_due_row(item) }}
+                {{ dash_due_row(item, show_waiting=True) }}
             {% endfor %}
         {% else %}
             <p class="dash-empty-state">Nothing needs your action right now.</p>

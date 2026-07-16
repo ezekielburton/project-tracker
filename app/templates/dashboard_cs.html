@@ -1,0 +1,251 @@
+{#
+   app/templates/dashboard_cs.html
+   ────────────────────────────────
+   CS-only redesigned dashboard (added 16 Jul 2026). Per Ezekiel, sharing a
+   mockup screenshot: "Can we redesign it to be something like this?" —
+   clarified via AskUserQuestion + two follow-up messages into the spec
+   this file implements. FULL REPLACEMENT of the tab-strip/toggle-box
+   layout, but scoped to layout_role == 'cs' only (see the big comment on
+   the branch in dashboard.py's index()) — every other role still renders
+   the unchanged dashboard.html. A management/admin user previewing a CS
+   lead's scope-switcher tab lands here too, same "borrow that role's own
+   page" rule the rest of this app's layout_role logic already follows.
+
+   Structure (top to bottom):
+     1. Header — greeting + a relative "Last updated Xs ago" ticker
+        (dashboard.js), NOT a static timestamp — per Ezekiel: "Since it
+        refreshes every time something new is to display anyway by our
+        polling, it reinforces that the data is accurate."
+     2. Management/admin view-switcher (_view_switcher.html, unchanged,
+        shared with dashboard.html) — invisible for a real CS user, only
+        relevant to a management/admin previewer.
+     3. Today's Focus bar — 5 plain pills (needed from me / due today /
+        overdue / deadline clashes / decisions needed), reusing `summary`
+        fields already computed for every other card on this page.
+        Deliberately NOT clickable — per Ezekiel: "the tags do not need to
+        be clickable" — and the italic annotation text from the mockup
+        ("Action first · Risk second · Metrics third") is a design
+        rationale note, not real UI copy, so it's not rendered here (per
+        the earlier AskUserQuestion round).
+     4. My Priority Actions (left, wide) — chronological, urgency-grouped
+        list of the viewer's OWN next actions (_compute_priority_actions())
+        — no My/Others toggle (Others' Actions moved to Waiting on Others
+        below), and At Risk's old staffing/overdue signal now shows as a
+        per-row tag here instead of its own card. "Escalate" button in the
+        header reuses the existing Flag to Management modal unchanged.
+     5. What Changed (right, top) — the SAME activity log
+        _compute_what_changed() already produces elsewhere on this page,
+        just always-visible with an internal scroll instead of a
+        collapsible tab — per Ezekiel: "What changed remains the same log
+        we have (make it scrollable within its div)."
+     6. Waiting on Others (right, bottom) — projects where it's someone
+        else's turn (_compute_waiting_on_others()), single owner chip +
+        "Waiting since" per row, collapsed by default with a teaser count
+        + "Open waiting list" button (reuses the same JS-measured
+        max-height expand mechanic as everything else on this page).
+     7. Secondary Metrics — Your Active Projects / Pending Approval /
+        Overdue / Deadline Clashes / Average Project Time, reusing the
+        EXACT SAME dash_card() tab+body mechanic (and, for Overdue/
+        Clashes, the exact same due.html/clashes.html partials) every
+        other card on the OLD dashboard already uses — per Ezekiel: "keep
+        the same way the expanded data is shown, just have it below this
+        section." See _CS_SECONDARY_METRICS in dashboard.py.
+
+   KNOWN GAP, flagged rather than silently guessed at: there is currently
+   no way to VIEW or resolve an already-raised decision flag from this
+   page (the old Decisions Needed card/list is retired here — see the big
+   comment on the CS-only branch in dashboard.py). The Today's Focus pill
+   and the Escalate button only cover "how many are flagged" and "raise a
+   new one" — management/admin still resolve flags from their own
+   (unchanged) dashboard. Revisit if Ezekiel wants a way to see raised
+   flags from this page too.
+#}
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Vitamin-E{% endblock %}
+
+{% block content %}
+{% from 'dashboard/_dashboard_macros.html' import dash_priority_action_row, dash_waiting_row, dash_person_chip %}
+
+<div class="page-container">
+
+    <div class="dash-cs-header">
+        <h1 class="dashboard-greeting">Welcome, <span>{{ effective_user.name.split()[0] }}</span></h1>
+        {# Relative-time ticker (dashboard.js) — no server-provided
+           timestamp needed; the JS just records Date.now() at script-
+           execution time (i.e. page load) as its reference point and
+           counts up client-side from there, resetting to "just now"
+           whenever refreshDashboardFromSSE() actually runs (which only
+           fires when something genuinely changed — see that function's
+           own big comment in dashboard.js). Avoids any server/client
+           clock-skew question a passed-in timestamp would raise. The
+           static text here is just the pre-JS fallback, matching what the
+           ticker shows at t=0. #}
+        <span class="dash-last-updated" id="dash-last-updated">Last updated just now</span>
+    </div>
+
+    {% include 'dashboard/_view_switcher.html' %}
+
+    {# ── Today's Focus bar — plain, non-clickable pills (per Ezekiel: "the
+       tags do not need to be clickable"). IDs are read/updated by
+       refreshDashboardFromSSE() in dashboard.js, same live-refresh summary
+       fetch every other card's badge on this page already uses. #}
+    <div class="dash-focus-bar">
+        <span class="dash-focus-title">Today's Focus</span>
+        <span class="dash-focus-pills">
+            <span class="dash-focus-pill dash-focus-pill--red">
+                <span class="dash-focus-pill-dot"></span>
+                <span id="dash-focus-my-actions">{{ summary.my_actions }}</span> needed from me
+            </span>
+            <span class="dash-focus-pill dash-focus-pill--red">
+                <span class="dash-focus-pill-dot"></span>
+                <span id="dash-focus-due-today">{{ summary.due_today }}</span> due today
+            </span>
+            <span class="dash-focus-pill dash-focus-pill--red">
+                <span class="dash-focus-pill-dot"></span>
+                <span id="dash-focus-overdue">{{ summary.overdue }}</span> overdue
+            </span>
+            <span class="dash-focus-pill dash-focus-pill--amber">
+                <span class="dash-focus-pill-dot"></span>
+                <span id="dash-focus-clashes">{{ summary.clashes }}</span> deadline clash{{ 'es' if summary.clashes != 1 else '' }}
+            </span>
+            <span class="dash-focus-pill dash-focus-pill--green">
+                <span class="dash-focus-pill-dot"></span>
+                <span id="dash-focus-decisions">{{ summary.decisions_needed }}</span> decision{{ 's' if summary.decisions_needed != 1 else '' }} needed
+            </span>
+        </span>
+    </div>
+
+    <div class="dash-cs-grid">
+
+        {# ── My Priority Actions (left, wide) ─────────────────────────── #}
+        <div class="dash-priority-card">
+            <div class="dash-priority-card-header">
+                <h2 class="dash-priority-card-title">My Priority Actions</h2>
+                {% if effective_role in ('cs', 'designer', 'team_lead') %}
+                <button type="button" class="btn-secondary" data-action="open-flag-management-modal">Escalate</button>
+                {% endif %}
+            </div>
+            {% if priority_actions %}
+                {% for group in priority_actions %}
+                <div class="dash-priority-group">
+                    <div class="dash-priority-group-heading dash-priority-group-heading--{{ group.key }}">
+                        <span class="dash-priority-group-dot"></span>{{ group.label | upper }}
+                    </div>
+                    {% for item in group.rows %}
+                        {{ dash_priority_action_row(item) }}
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="dash-empty-state">Nothing needs your action right now.</p>
+            {% endif %}
+        </div>
+
+        {# ── Right column: What Changed (top) + Waiting on Others (bottom) #}
+        <div class="dash-cs-side-col">
+
+            <div class="dash-priority-card dash-what-changed-card">
+                <div class="dash-priority-card-header">
+                    <h2 class="dash-priority-card-title">What Changed</h2>
+                </div>
+                {# Scrollable within its own div, per Ezekiel: "What changed
+                   remains the same log we have (make it scrollable within
+                   its div)" — same row markup what_changed.html renders
+                   elsewhere on the old dashboard (date + divider, entry
+                   description, changed-by chip), just capped height +
+                   internal scroll instead of a collapsible tab. #}
+                <div class="dash-what-changed-scroll">
+                    {% if what_changed %}
+                        {% for entry in what_changed %}
+                        <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=entry.project_id) }}?from=dashboard">
+                            <span class="dash-row-date">{{ entry.timestamp | dubai_time }}</span>
+                            <span class="dash-row-main">
+                                <span class="dash-row-title dash-row-title--light">{{ entry.description }}</span>
+                            </span>
+                            {% if entry.changed_by %}
+                                {{ dash_person_chip(entry.changed_by) }}
+                            {% else %}
+                                <span class="dash-row-sub" style="flex-shrink: 0;">System</span>
+                            {% endif %}
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <p class="dash-empty-state">No project changes since yesterday.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="dash-priority-card dash-waiting-card">
+                <div class="dash-priority-card-header" data-action="toggle-waiting-list">
+                    <h2 class="dash-priority-card-title">Waiting on Others</h2>
+                    <button type="button" class="dash-toggle-box-collapse-btn" data-action="toggle-waiting-list" aria-label="Toggle Waiting on Others">
+                        <span class="dash-toggle-box-chevron">&#9660;</span>
+                    </button>
+                </div>
+                <p class="dash-waiting-teaser">
+                    {{ waiting_on_others | length }} item{{ 's' if waiting_on_others | length != 1 else '' }} waiting on client / design input
+                </p>
+                <button type="button" class="btn-secondary dash-waiting-open-btn" data-action="toggle-waiting-list">Open waiting list</button>
+                <div class="dash-card-body-content" data-waiting-list-body>
+                    <div class="dash-card-body-visual">
+                        <div class="dash-card-body-inner">
+                            {% if waiting_on_others %}
+                                {% for item in waiting_on_others %}
+                                    {{ dash_waiting_row(item) }}
+                                {% endfor %}
+                            {% else %}
+                                <p class="dash-empty-state">Nothing waiting on anyone else right now.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    {# ── Secondary Metrics — reuses the exact same dash_card() tab+body
+       mechanic every card on the old dashboard already uses (see
+       _CS_SECONDARY_METRICS in dashboard.py) — "keep the same way the
+       expanded data is shown, just have it below this section." #}
+    <div class="dash-content-tabs dash-secondary-metrics">
+        {% for card_key in secondary_metrics_order %}
+        {% set dash_render_mode = 'tab' %}
+        {% include 'dashboard/cards/' + card_key + '.html' %}
+        {% endfor %}
+    </div>
+    <div class="dash-content-area" id="dash-content-area">
+        {% for card_key in secondary_metrics_order %}
+        {% set dash_render_mode = 'body' %}
+        {% include 'dashboard/cards/' + card_key + '.html' %}
+        {% endfor %}
+    </div>
+
+</div>
+
+{% include 'dashboard/_flag_management_modal.html' %}
+
+{# Same var-not-const/let SPA-renav reasoning as dashboard.html — see that
+   file's own comment on HELIX_DASH_SCOPE/HELIX_EFFECTIVE_ROLE. #}
+<script>
+    var HELIX_DASH_SCOPE = {{ scope_mode | tojson }};
+    var HELIX_EFFECTIVE_ROLE = {{ effective_role | tojson }};
+</script>
+
+{# Reuses dashboard.js as-is, not a new file — this page needs the exact
+   same Flag to Management modal logic, mini-stat/person-chip render
+   helpers, and dash_card tab/body expand mechanic that file already
+   defines; splitting those into a second file would mean either
+   duplicating or importing them, both worse than one shared file serving
+   both templates. Every dashboard.js selector added for THIS page (the
+   last-updated ticker, Waiting on Others' toggle, the Today's Focus pill
+   IDs) is written the same defensively-guarded way every existing
+   selector in that file already is (`if (!el) return`), so it's a
+   harmless no-op on the old dashboard.html, which doesn't render any of
+   these elements. #}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/time_tracking.js') }}"></script>
+
+{% endblock %}

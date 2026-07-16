@@ -196,6 +196,36 @@
             '</span>';
     }
 
+    // ── CS-only redesigned dashboard: relative "last updated" ticker ────
+    // (added 16 Jul 2026, dashboard_cs.html only — #dash-last-updated
+    // doesn't exist on the old dashboard.html, so tickLastUpdated() below
+    // is a harmless no-op there via the standard `if (el)` guard.) Per
+    // Ezekiel: "Have the last updates at the top like 'last updated 5s
+    // ago'. Since it refreshes every time something new is to display
+    // anyway by our polling, it reinforces that the data is accurate."
+    // _dashLastUpdatedAt resets to Date.now() at page load AND every time
+    // refreshDashboardFromSSE() actually runs (see that function, below)
+    // — SSE only fires when something genuinely changed server-side
+    // (sse.py's "deliberately dumb doorbell" design, see CLAUDE.md's Live
+    // Updates section), so every reset really does mean "the data just
+    // got fresher", not a cosmetic/fake tick.
+    var _dashLastUpdatedAt = Date.now();
+
+    function formatRelativeTime(fromMs) {
+        var seconds = Math.max(0, Math.round((Date.now() - fromMs) / 1000));
+        if (seconds < 5) return 'Last updated just now';
+        if (seconds < 60) return 'Last updated ' + seconds + 's ago';
+        var minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return 'Last updated ' + minutes + 'm ago';
+        var hours = Math.floor(minutes / 60);
+        return 'Last updated ' + hours + 'h ago';
+    }
+
+    function tickLastUpdated() {
+        var el = document.getElementById('dash-last-updated');
+        if (el) el.textContent = formatRelativeTime(_dashLastUpdatedAt);
+    }
+
     // Small shared helper for the two toggle boxes (Overdue/At Risk and My
     // Day/My Week — added 15 Jul 2026, later still, see toggle_overdue_
     // at_risk.html/toggle_my_day_week.html) — each box has TWO view-switch
@@ -278,7 +308,16 @@
     // project (bold, main) — deliverable/customer (grey, detail); now
     // deliverable/customer (bold, main) — project (grey, detail). A plain
     // project-level row (item.type === 'project') has nothing to invert.
-    function renderDueRow(item) {
+    //
+    // showWaiting param (added 16 Jul 2026) mirrors dash_due_row()'s new
+    // show_waiting arg in _dashboard_macros.html — defaults false so
+    // Overdue/Today/This Week (the other three callers of this function)
+    // render exactly as before. Only fetchAndRenderNextActions('others')
+    // passes true. item.waiting_since_display/waiting_reason/waiting_color
+    // are always present on the payload regardless of this flag — see
+    // _compute_next_actions()'s docstring in dashboard.py — this param only
+    // gates whether they're rendered.
+    function renderDueRow(item, showWaiting) {
         var title;
         if (item.type === 'deliverable') {
             title = escapeHtml(item.deliverable_name) + ' <span class="dash-row-title-detail">— ' + escapeHtml(item.project_name) + '</span>';
@@ -289,6 +328,14 @@
         }
 
         var people = personPeopleRow(item.cs_lead, item.designers);
+
+        var waiting = '';
+        if (showWaiting && item.waiting_since_display) {
+            waiting = '<span class="dash-row-waiting">' +
+                '<span class="dash-waiting-tag dash-waiting-tag--' + item.waiting_color + '">Waiting since: ' + escapeHtml(item.waiting_since_display) + '</span>' +
+                (item.waiting_reason ? '<span class="dash-waiting-tag dash-waiting-tag--' + item.waiting_color + '">Waiting for: ' + escapeHtml(item.waiting_reason) + '</span>' : '') +
+                '</span>';
+        }
 
         // NOTE: this URL is hardcoded to match project_detail.detail's
         // route (/projects/<id>) rather than built with Flask's url_for —
@@ -313,6 +360,7 @@
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + title + '</span>' +
             people +
+            waiting +
             '</span>' +
             '<span class="dash-row-next-action">' +
             '<span class="dash-row-next-action-label">Next Action</span>' +
@@ -334,7 +382,15 @@
                     // old generic "Nothing matches this filter." text.
                     container.innerHTML = '<p class="dash-empty-state">Nothing overdue this week.</p>';
                 } else {
-                    container.innerHTML = items.map(renderDueRow).join('');
+                    // NOTE: deliberately NOT items.map(renderDueRow) — Array.map
+                    // passes (item, index, array) to its callback, and
+                    // renderDueRow's 2nd param is now showWaiting (added 16 Jul
+                    // 2026), so a bare map would leak the row's numeric INDEX in
+                    // as a truthy showWaiting for every row past the first. Due
+                    // never shows waiting tags (see dash_due_row()'s doc comment —
+                    // that's Others' Actions/Decisions only), so this is called
+                    // with showWaiting omitted (undefined, falsy) explicitly.
+                    container.innerHTML = items.map(function (item) { return renderDueRow(item); }).join('');
                 }
                 // Same fix as fetchAndRenderNextActions() (13 Jul 2026) —
                 // see remeasureExpandedBody()'s big comment: an SSE-
@@ -401,10 +457,72 @@
     // withDashScope() above, which reads HELIX_EFFECTIVE_ROLE — a
     // page-level var dashboard.html sets for exactly this purpose.
     function renderDecisionRow(item) {
-        var tags = '';
-        if (item.raised_by) tags += '<span class="dash-owner-tag">' + escapeHtml(item.raised_by.name) + '</span>';
-        if (item.days_waiting !== null && item.days_waiting !== undefined) {
-            tags += '<span class="dash-action-tag">' + item.days_waiting + ' day' + (item.days_waiting !== 1 ? 's' : '') + ' waiting</span>';
+        var waitingCountTag = (item.days_waiting !== null && item.days_waiting !== undefined)
+            ? '<span class="dash-action-tag">' + item.days_waiting + ' day' + (item.days_waiting !== 1 ? 's' : '') + ' waiting</span>'
+            : '';
+
+        var resolveBtn = isManagementOrAdmin()
+            ? '<button type="button" class="dash-resolve-btn" data-action="resolve-decision" data-project-id="' + item.project_id + '">✓ Resolve</button>'
+            : '';
+
+        // #dash-decisions-list is shared by decisions.html (old dashboard,
+        // designer/team_lead) AND dashboard_leadership.html's Decision
+        // Needed Queue — only one of those two pages is ever rendered at
+        // once, but this one JS function serves both, so it branches on a
+        // marker unique to the leadership page (16 Jul 2026, same-day
+        // follow-up — the queue's row markup became a true CSS Grid, see
+        // .dash-decision-queue-card in dashboard.css) rather than
+        // duplicating refreshDecisionsCard()/resolveDecision() into a
+        // second copy just for one page.
+        if (document.querySelector('.dash-decision-queue-card')) {
+            // Avatar+name chip (16 Jul 2026, same-day follow-up — per
+            // Ezekiel: "the name tag should follow our image + name
+            // system we are using everywhere else on the dashboard"),
+            // via the same personChip() helper renderDueRow() already
+            // uses — mirrors dashboard_leadership.html's
+            // dash_person_chip(d.raised_by) exactly. item.raised_by now
+            // carries avatar_filename (_serialize_person(), dashboard.py).
+            var ownerChip = personChip(item.raised_by);
+            // Inline style="" attributes (16 Jul 2026, fourth attempt) —
+            // mirrors dashboard_leadership.html's SSR markup exactly. The
+            // external .dash-decision-queue-card .dash-decision-row/.dash-row
+            // !important rules in dashboard.css were confirmed, via live
+            // DevTools inspection, to never actually apply in the browser
+            // for a reason never identified (see that template's big
+            // comment) — inline styles can't be silently skipped the same
+            // way, so a JS-rebuilt row (after Resolve) must carry the same
+            // inline declarations or it would regress back to the broken
+            // flex layout on the very next refresh.
+            var gridRowStyle = 'display: grid !important; grid-template-columns: 2fr 2fr 1fr 1fr 130px 100px !important; align-items: center !important; gap: 1rem !important;';
+            var gridRow = '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard" style="display: contents !important;">' +
+                '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
+                '<span class="dash-row-sub">' + escapeHtml(item.note) + '</span>' +
+                '<span class="dash-decision-cell">' + ownerChip + '</span>' +
+                '<span class="dash-decision-cell">' + waitingCountTag + '</span>' +
+                '<span class="dash-decision-date">' + escapeHtml(formatDubaiTime(item.raised_at)) + '</span>' +
+                '</a>';
+            return '<div class="dash-decision-row" style="' + gridRowStyle + '">' + gridRow + resolveBtn + '</div>';
+        }
+
+        // decisions.html / old dashboard.html — still the plain text
+        // .dash-owner-tag pill, unchanged (this page wasn't part of
+        // Ezekiel's request, which was specifically about the leadership
+        // dashboard's Decision Needed Queue).
+        var ownerTag = item.raised_by ? '<span class="dash-owner-tag">' + escapeHtml(item.raised_by.name) + '</span>' : '';
+
+        // decisions.html / old dashboard.html — unchanged flex layout,
+        // including the waiting-since/for tags block (added 16 Jul 2026,
+        // mirrors decisions.html's dash-row-waiting block; the leadership
+        // queue's SSR row never had this block, so the branch above
+        // deliberately omits it too). waiting_color is always 'red' here
+        // (see _compute_decisions()'s docstring) but rendered via
+        // item.waiting_color rather than hardcoded, matching the template.
+        var waiting = '';
+        if (item.waiting_since_display) {
+            waiting = '<span class="dash-row-waiting">' +
+                '<span class="dash-waiting-tag dash-waiting-tag--' + item.waiting_color + '">Waiting since: ' + escapeHtml(item.waiting_since_display) + '</span>' +
+                (item.waiting_reason ? '<span class="dash-waiting-tag dash-waiting-tag--' + item.waiting_color + '">Waiting for: ' + escapeHtml(item.waiting_reason) + '</span>' : '') +
+                '</span>';
         }
 
         // Same hardcoded-URL caveat as renderDueRow() above — no url_for()
@@ -413,15 +531,12 @@
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
             '<span class="dash-row-sub">' + escapeHtml(item.note) + '</span>' +
-            '<span class="dash-row-tags">' + tags + '</span>' +
+            '<span class="dash-row-tags">' + ownerTag + waitingCountTag + '</span>' +
+            waiting +
             '</span>' +
             '<span style="text-align:right; flex-shrink:0; font-size:0.8rem; color:var(--grey-dark);">' +
             escapeHtml(formatDubaiTime(item.raised_at)) + '</span>' +
             '</a>';
-
-        var resolveBtn = isManagementOrAdmin()
-            ? '<button type="button" class="dash-resolve-btn" data-action="resolve-decision" data-project-id="' + item.project_id + '">✓ Resolve</button>'
-            : '';
 
         return '<div class="dash-decision-row">' + row + resolveBtn + '</div>';
     }
@@ -592,6 +707,241 @@
             });
     }
 
+    // ── Leadership dashboard: Reassign CS Lead / Assign Designer modals ──
+    // (added 16 Jul 2026, dashboard_leadership.html only — see the big
+    // comment on _compute_risk_overdue() in dashboard.py). Same
+    // open/close/submit shape as openFlagManagementModal() above, just two
+    // modals instead of one. Both are harmless no-ops on every other page
+    // (getElementById returns null, guarded by `if (!overlay) return`).
+    var _reassignCsLeadProjectId = null;
+    var _assignDesignerProjectId = null;
+
+    function openReassignCsLeadModal(projectId, projectName) {
+        var overlay = document.getElementById('reassign-cs-lead-modal');
+        var nameEl = document.getElementById('reassign-cs-lead-project-name');
+        var selectEl = document.getElementById('reassign-cs-lead-select');
+        var errorEl = document.getElementById('reassign-cs-lead-error');
+        if (!overlay) return;
+
+        _reassignCsLeadProjectId = projectId;
+        nameEl.textContent = projectName || '';
+        selectEl.value = '';
+        errorEl.classList.add('hidden');
+        errorEl.textContent = '';
+
+        overlay.classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
+    }
+
+    function closeReassignCsLeadModal() {
+        var overlay = document.getElementById('reassign-cs-lead-modal');
+        if (overlay) overlay.classList.add('hidden');
+        if (window.helixPolling) window.helixPolling.resume();
+    }
+
+    function submitReassignCsLead() {
+        var selectEl = document.getElementById('reassign-cs-lead-select');
+        var errorEl = document.getElementById('reassign-cs-lead-error');
+        var newCsLeadId = selectEl.value;
+
+        if (!newCsLeadId) {
+            errorEl.textContent = 'Please select a CS lead.';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        fetch('/projects/' + _reassignCsLeadProjectId + '/reassign-cs-lead', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_cs_lead_id: newCsLeadId })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    errorEl.textContent = data.error || 'Something went wrong.';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                closeReassignCsLeadModal();
+                showToast('CS lead reassigned', 'success');
+                // No live re-render of the Risk/Overdue row list (that
+                // card is server-rendered once on load, same as At Risk/
+                // Clashing Projects elsewhere on this page — no fetch
+                // mechanism exists to refresh just this list). A full
+                // reload is the simplest way to reflect the change
+                // everywhere it might now matter (the row's own person
+                // chip, its bucket membership, the Leadership Focus
+                // count) without building a second parallel refresh path.
+                setTimeout(function () { window.location.reload(); }, 700);
+            })
+            .catch(function () {
+                errorEl.textContent = 'Something went wrong. Please try again.';
+                errorEl.classList.remove('hidden');
+            });
+    }
+
+    // Rebuilds the Designer <select> to only the people on the given team
+    // — reads from LEADERSHIP_DESIGNERS (dashboard_leadership.html's
+    // page-level {id, name, team} array, see CLAUDE.md's "JS in
+    // templates — JSON data" rule). Called on modal open (for whichever
+    // team is selected first) and again on the Team <select>'s own
+    // change event.
+    function populateAssignDesignerDesigners(team) {
+        var designerSelect = document.getElementById('assign-designer-select');
+        if (!designerSelect) return;
+        var options = '<option value="">Select a designer…</option>';
+        (window.LEADERSHIP_DESIGNERS || []).forEach(function (d) {
+            if (d.team === team) {
+                options += '<option value="' + d.id + '">' + escapeHtml(d.name) + '</option>';
+            }
+        });
+        designerSelect.innerHTML = options;
+    }
+
+    function openAssignDesignerModal(projectId, projectName, missingTeamsCsv) {
+        var overlay = document.getElementById('assign-designer-modal');
+        var nameEl = document.getElementById('assign-designer-project-name');
+        var teamSelect = document.getElementById('assign-designer-team-select');
+        var errorEl = document.getElementById('assign-designer-error');
+        if (!overlay) return;
+
+        _assignDesignerProjectId = projectId;
+        nameEl.textContent = projectName || '';
+        errorEl.classList.add('hidden');
+        errorEl.textContent = '';
+
+        // Team options come from the button's own data-missing-teams —
+        // "based on the active teams requested for that project" (per
+        // Ezekiel), i.e. only teams THIS project actually asked for and
+        // is short-staffed on, never every team in the company.
+        var teams = (missingTeamsCsv || '').split(',').filter(function (t) { return t; });
+        teamSelect.innerHTML = teams.map(function (t) {
+            return '<option value="' + t + '">' + t + '</option>';
+        }).join('');
+        populateAssignDesignerDesigners(teams[0] || '');
+
+        overlay.classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
+    }
+
+    function closeAssignDesignerModal() {
+        var overlay = document.getElementById('assign-designer-modal');
+        if (overlay) overlay.classList.add('hidden');
+        if (window.helixPolling) window.helixPolling.resume();
+    }
+
+    function submitAssignDesigner() {
+        var teamSelect = document.getElementById('assign-designer-team-select');
+        var designerSelect = document.getElementById('assign-designer-select');
+        var errorEl = document.getElementById('assign-designer-error');
+        var team = teamSelect.value;
+        var designerId = designerSelect.value;
+
+        if (!team || !designerId) {
+            errorEl.textContent = 'Please select a team and a designer.';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        fetch('/projects/' + _assignDesignerProjectId + '/assign-lead', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ team: team, new_designer_id: designerId })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    errorEl.textContent = data.error || 'Something went wrong.';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                closeAssignDesignerModal();
+                showToast('Designer assigned', 'success');
+                // Same "reload rather than build a second live-refresh
+                // path" reasoning as submitReassignCsLead() above.
+                setTimeout(function () { window.location.reload(); }, 700);
+            })
+            .catch(function () {
+                errorEl.textContent = 'Something went wrong. Please try again.';
+                errorEl.classList.remove('hidden');
+            });
+    }
+
+    // ── Designer dashboard: Flag to CS Lead modal (16 Jul 2026) ─────────
+    // (dashboard_designer.html only — see the big comment on
+    // _compute_designer_work_queue() in dashboard.py). Same open/close/
+    // submit shape as the modals above; harmless no-op on every other
+    // page (getElementById returns null, guarded by `if (!overlay)
+    // return`). POSTs to the EXISTING /projects/<id>/flags/create route
+    // (the same "flag module" the project detail page's own Flag an
+    // Issue UI already uses — see _designer_flag_modal.html's own big
+    // comment on why this is NOT the Flag to Management system above),
+    // flag_type hardcoded 'project' since a Blocked queue row has no
+    // single deliverable to scope the flag to.
+    var _designerFlagProjectId = null;
+
+    function openDesignerFlagModal(projectId, projectName) {
+        var overlay = document.getElementById('designer-flag-modal');
+        var nameEl = document.getElementById('designer-flag-project-name');
+        var messageEl = document.getElementById('designer-flag-message');
+        var errorEl = document.getElementById('designer-flag-error');
+        if (!overlay) return;
+
+        _designerFlagProjectId = projectId;
+        nameEl.textContent = projectName || '';
+        messageEl.value = '';
+        errorEl.classList.add('hidden');
+        errorEl.textContent = '';
+
+        overlay.classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
+    }
+
+    function closeDesignerFlagModal() {
+        var overlay = document.getElementById('designer-flag-modal');
+        if (overlay) overlay.classList.add('hidden');
+        if (window.helixPolling) window.helixPolling.resume();
+    }
+
+    function submitDesignerFlag() {
+        var messageEl = document.getElementById('designer-flag-message');
+        var errorEl = document.getElementById('designer-flag-error');
+        var message = messageEl.value.trim();
+
+        if (!message) {
+            errorEl.textContent = 'Please describe what information is needed.';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        fetch('/projects/' + _designerFlagProjectId + '/flags/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ flag_type: 'project', message: message })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.error) {
+                    errorEl.textContent = data.error;
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                closeDesignerFlagModal();
+                showToast('Flag sent to CS lead', 'success');
+                // Same "reload rather than build a second live-refresh
+                // path" reasoning as submitReassignCsLead()/
+                // submitAssignDesigner() above — the Blocked bucket's
+                // membership and the Metrics Summary Blocked count both
+                // need a fresh server-side re-classification, no fetch
+                // mechanism exists to refresh just those two.
+                setTimeout(function () { window.location.reload(); }, 700);
+            })
+            .catch(function () {
+                errorEl.textContent = 'Something went wrong. Please try again.';
+                errorEl.classList.remove('hidden');
+            });
+    }
+
     // ── Next Actions card: My Actions / Others' Actions toggle ──────────
     //
     // Two-way toggle (not a multi-select filter set like the Due card's
@@ -657,7 +1007,13 @@
                         (filterType === 'mine' ? 'Nothing needs your action right now.' : 'Nothing is currently waiting on anyone else.') +
                         '</p>';
                 } else {
-                    container.innerHTML = items.map(renderDueRow).join('');
+                    // showWaiting=true for BOTH tabs (widened 16 Jul 2026,
+                    // same-day follow-up, per Ezekiel: "Apply those changes
+                    // to the my actions tab too, it's only on other's
+                    // actions" — originally 'others'-only). See
+                    // renderDueRow()'s doc comment and dash_due_row()'s
+                    // show_waiting param in _dashboard_macros.html.
+                    container.innerHTML = items.map(function (item) { return renderDueRow(item, true); }).join('');
                 }
                 // See remeasureExpandedBody()'s big comment above — without
                 // this, a longer "Others'" list than whatever content last
@@ -776,9 +1132,53 @@
     // simply call location.reload() here whenever one of those four happens
     // to be expanded at the moment a refresh fires.
     function refreshDashboardFromSSE() {
+        // CS-only redesigned dashboard's "last updated" ticker (added 16
+        // Jul 2026 — see the big comment on tickLastUpdated() above).
+        // Reset unconditionally the moment this function is CALLED, not
+        // after any individual fetch resolves — being called at all is
+        // already the freshness signal (SSE only fires on a real server-
+        // side change), and this function makes several independent
+        // fetches below, so there's no single "the" response to key off.
+        // No-op visually on the old dashboard.html (no #dash-last-updated
+        // element there).
+        _dashLastUpdatedAt = Date.now();
+        tickLastUpdated();
+
         fetch(withDashScope('/dashboard/api/summary'))
             .then(function (r) { return r.json(); })
             .then(function (summary) {
+                // CS-only redesigned dashboard's Today's Focus bar (added
+                // 16 Jul 2026, dashboard_cs.html only) — plain number
+                // swaps, no mini-stat markup to rebuild since these pills
+                // are static text, not the RAG dot-component elsewhere on
+                // this page. No-op via the standard `if (el)` guards below
+                // on the old dashboard.html, which doesn't render any of
+                // these ids.
+                var focusMyActionsEl = document.getElementById('dash-focus-my-actions');
+                if (focusMyActionsEl) focusMyActionsEl.textContent = summary.my_actions;
+                var focusDueTodayEl = document.getElementById('dash-focus-due-today');
+                if (focusDueTodayEl) focusDueTodayEl.textContent = summary.due_today;
+                var focusOverdueEl = document.getElementById('dash-focus-overdue');
+                if (focusOverdueEl) focusOverdueEl.textContent = summary.overdue;
+                var focusClashesEl = document.getElementById('dash-focus-clashes');
+                if (focusClashesEl) focusClashesEl.textContent = summary.clashes;
+                var focusDecisionsEl = document.getElementById('dash-focus-decisions');
+                if (focusDecisionsEl) focusDecisionsEl.textContent = summary.decisions_needed;
+
+                // Due card's badge, reached via the CS-only dashboard's
+                // Secondary Metrics tab strip (dash_card mode='tab') —
+                // NOT a duplicate of the toggleBoxBadge('overdue_at_risk',
+                // 'overdue', ...) call further below, which targets
+                // `[data-toggle-box="overdue_at_risk"] .dash-toggle-box-btn`,
+                // an element that doesn't exist on dashboard_cs.html at all
+                // (Overdue isn't in a toggle box there — see
+                // _CS_SECONDARY_METRICS in dashboard.py). No-op on the old
+                // dashboard.html, which never renders a
+                // `.dash-content-tab[data-card="due"]` element (due.html is
+                // orphaned there — see that file's own docstring).
+                var dueTabBadgeEl = document.querySelector('.dash-content-tab[data-card="due"] .dash-content-tab-badge');
+                if (dueTabBadgeEl) dueTabBadgeEl.innerHTML = miniStat(summary.overdue === 0 ? 'green' : 'red', summary.overdue, 'This Week');
+
                 // Due tab's mini-stat — rebuilt wholesale from scratch
                 // rather than patched number-by-number; cheap, and
                 // guarantees this always matches due.html's exact original
@@ -1001,6 +1401,24 @@
 
     initCards();
 
+    // CS-only redesigned dashboard's "last updated" ticker (added 16 Jul
+    // 2026 — see tickLastUpdated()'s big comment near the top of this
+    // file). Reassigned unconditionally on every execution, same reasoning
+    // as window.helixDashboardRefresh just above — this is a plain
+    // setInterval, not a document-level event listener, so it's NOT inside
+    // the once-ever _dashboardListenersBound guard below: an SPA renav back
+    // to this page must retarget the fresh #dash-last-updated element in
+    // the newly-swapped DOM, not keep ticking a detached one from a
+    // previous visit. clearInterval() on whatever ran before (if anything)
+    // prevents two intervals silently stacking and double-updating the
+    // same element. No-op in effect on the old dashboard.html — the
+    // interval still runs, but tickLastUpdated()'s own `if (el)` guard
+    // means it never finds anything to update there.
+    if (window._dashLastUpdatedInterval) clearInterval(window._dashLastUpdatedInterval);
+    _dashLastUpdatedAt = Date.now();
+    tickLastUpdated();
+    window._dashLastUpdatedInterval = setInterval(tickLastUpdated, 1000);
+
     // ── Runs exactly once per page session — see file header ─────────────
 
     if (!window._dashboardListenersBound) {
@@ -1008,7 +1426,8 @@
 
         document.addEventListener('click', function (e) {
             // These four are checked FIRST, ahead of toggle-card below, on
-            // purpose: the "Flag a Project" button lives inside decisions.html's
+            // purpose: the "Escalate" button (renamed from "Flag a Project"
+            // 16 Jul 2026 — see decisions.html) lives inside decisions.html's
             // expanded body, which is itself inside .dash-card-body-content
             // in .dash-content-area — NOT inside the .dash-content-tab
             // button that carries data-action="toggle-card" — so there's
@@ -1042,6 +1461,108 @@
                 // conflict today — but it's still checked ahead of
                 // toggle-card in case that ever changes.
                 resolveDecision(resolveBtn.getAttribute('data-project-id'), resolveBtn);
+                return;
+            }
+
+            // Leadership dashboard: Reassign CS Lead / Assign Designer
+            // modals (added 16 Jul 2026, dashboard_leadership.html only —
+            // see the big comment on _compute_risk_overdue() in
+            // dashboard.py). Checked in the same defensively-ordered spot
+            // as the flag-management/resolve-decision triggers above,
+            // same reasoning — these buttons live as .dash-decision-row
+            // siblings, not nested inside a toggle-card element, but kept
+            // ahead of it regardless.
+            var openReassignBtn = e.target.closest('[data-action="open-reassign-cs-lead-modal"]');
+            if (openReassignBtn) {
+                openReassignCsLeadModal(
+                    openReassignBtn.getAttribute('data-project-id'),
+                    openReassignBtn.getAttribute('data-project-name')
+                );
+                return;
+            }
+            if (e.target.closest('[data-action="close-reassign-cs-lead-modal"]')) {
+                closeReassignCsLeadModal();
+                return;
+            }
+            var reassignOverlay = e.target.closest('[data-action="close-reassign-cs-lead-overlay"]');
+            if (reassignOverlay && e.target === reassignOverlay) {
+                closeReassignCsLeadModal();
+                return;
+            }
+            if (e.target.closest('[data-action="submit-reassign-cs-lead"]')) {
+                submitReassignCsLead();
+                return;
+            }
+            var openAssignBtn = e.target.closest('[data-action="open-assign-designer-modal"]');
+            if (openAssignBtn) {
+                openAssignDesignerModal(
+                    openAssignBtn.getAttribute('data-project-id'),
+                    openAssignBtn.getAttribute('data-project-name'),
+                    openAssignBtn.getAttribute('data-missing-teams')
+                );
+                return;
+            }
+            var openDesignerFlagBtn = e.target.closest('[data-action="open-designer-flag-modal"]');
+            if (openDesignerFlagBtn) {
+                openDesignerFlagModal(
+                    openDesignerFlagBtn.getAttribute('data-project-id'),
+                    openDesignerFlagBtn.getAttribute('data-project-name')
+                );
+                return;
+            }
+            if (e.target.closest('[data-action="close-designer-flag-modal"]')) {
+                closeDesignerFlagModal();
+                return;
+            }
+            var designerFlagOverlay = e.target.closest('[data-action="close-designer-flag-overlay"]');
+            if (designerFlagOverlay && e.target === designerFlagOverlay) {
+                closeDesignerFlagModal();
+                return;
+            }
+            if (e.target.closest('[data-action="submit-designer-flag"]')) {
+                submitDesignerFlag();
+                return;
+            }
+            if (e.target.closest('[data-action="close-assign-designer-modal"]')) {
+                closeAssignDesignerModal();
+                return;
+            }
+            var assignOverlay = e.target.closest('[data-action="close-assign-designer-overlay"]');
+            if (assignOverlay && e.target === assignOverlay) {
+                closeAssignDesignerModal();
+                return;
+            }
+            if (e.target.closest('[data-action="submit-assign-designer"]')) {
+                submitAssignDesigner();
+                return;
+            }
+
+            // CS-only redesigned dashboard: Waiting on Others expand/
+            // collapse (added 16 Jul 2026, dashboard_cs.html only). THREE
+            // different elements carry this same data-action (the whole
+            // card header, its small chevron button, and the standalone
+            // "Open waiting list" button below the teaser text) — closest()
+            // matches whichever one was actually clicked (or its nearest
+            // ancestor carrying the attribute), so all three trigger the
+            // exact same toggle with no risk of double-firing regardless of
+            // which one the user clicks. Reuses expandBody()/collapseBody()
+            // directly rather than toggleBoxCollapse() — this card isn't
+            // one of the two toggle boxes (no data-toggle-box/data-toggle-
+            // box-body scoping, no view-switch buttons, just one list to
+            // show or hide), so the simpler direct call fits better than
+            // reusing a function built for a different shape. No-op on the
+            // old dashboard.html, which has no [data-waiting-list-body]
+            // element at all.
+            var waitingToggle = e.target.closest('[data-action="toggle-waiting-list"]');
+            if (waitingToggle) {
+                var waitingBody = document.querySelector('[data-waiting-list-body]');
+                if (!waitingBody) return;
+                var waitingNowExpanded = !waitingBody.classList.contains('expanded');
+                if (waitingNowExpanded) { expandBody(waitingBody); } else { collapseBody(waitingBody); }
+                var waitingChevronBtn = document.querySelector('.dash-waiting-card [data-action="toggle-waiting-list"].dash-toggle-box-collapse-btn');
+                if (waitingChevronBtn) waitingChevronBtn.classList.toggle('expanded', waitingNowExpanded);
+                var waitingOpenBtn = document.querySelector('.dash-waiting-open-btn');
+                if (waitingOpenBtn) waitingOpenBtn.textContent = waitingNowExpanded ? 'Close waiting list' : 'Open waiting list';
                 return;
             }
 
@@ -1238,6 +1759,20 @@
                 remeasureExpandedBody(e.target.closest('.dash-card-body-content'));
             }
         }, true);
+
+        // Assign Designer modal's Team select — re-filters the Designer
+        // select whenever the team changes (a project can be missing more
+        // than one team at once). Delegated on `document` like every
+        // other listener in this guarded block, rather than binding
+        // directly to the <select> element, since that element doesn't
+        // exist until the modal's template renders and this whole block
+        // only runs once per page load. Harmless no-op on every page
+        // without an #assign-designer-team-select element.
+        document.addEventListener('change', function (e) {
+            if (e.target && e.target.id === 'assign-designer-team-select') {
+                populateAssignDesignerDesigners(e.target.value);
+            }
+        });
     }
 
 })();

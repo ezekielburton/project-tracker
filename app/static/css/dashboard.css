@@ -7,6 +7,597 @@
    tabs at the bottom of the page) — removed entirely 13 Jul 2026, see
    CLAUDE.md and git history around that date. */
 
+/* ══════════════════════════════════════════════════════════════════════
+   CS-only redesigned dashboard (added 16 Jul 2026 — dashboard_cs.html).
+   Everything in this section is scoped to that template's own classes
+   (.dash-cs-*, .dash-priority-*, .dash-focus-*, .dash-waiting-*) so it
+   can't collide with or accidentally restyle anything on the unchanged
+   old dashboard.html, which every other role still uses. Freely reuses
+   generic shared classes from elsewhere in this file where the look is
+   already right (.dash-row/.dash-row-date/.dash-row-title/.dash-row-tags/
+   .dash-row-people/.dash-risk-tag/.dash-action-tag/.dash-person-chip/
+   .dash-content-tabs/.dash-content-area/.dash-card-body-content/
+   .dash-toggle-box-collapse-btn/.dash-toggle-box-chevron/.dash-tab-btn/
+   .dash-previewing-as, all UNCHANGED by this section) rather than
+   reinventing equivalents. ══════════════════════════════════════════ */
+
+/* Header — greeting left, relative "Last updated Xs ago" ticker right
+   (dashboard.js) instead of dashboard.html's plain static
+   .dashboard-greeting-only header — per Ezekiel: "Have the last updates
+   at the top like 'last updated 5s ago'." */
+.dash-cs-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.dash-last-updated {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--grey-dark);
+    white-space: nowrap;
+}
+
+/* Today's Focus bar — 5 plain, non-clickable pills (per Ezekiel: "the tags
+   do not need to be clickable" — no cursor:pointer, no data-action, no
+   hover state). White card shell, same radius/shadow recipe every other
+   card-like element on this page uses. Colours reuse the exact same pure
+   red/amber/green family the RAG mini-stats define elsewhere on this
+   page — "needed from me"/"due today"/"overdue" are all red (urgency),
+   "deadline clash(es)" is amber (worth a look, not necessarily a fire),
+   "decision(s) needed" is green ONLY in the sense that a count of 0 is
+   the desired steady state — deliberately flat, not count-conditional
+   (unlike the RAG mini-stats elsewhere), since this bar's whole point is
+   "glance and know your day", not a second urgency-encoding system. */
+.dash-focus-bar {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 0.9rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.dash-focus-title {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+    flex-shrink: 0;
+}
+
+.dash-focus-pills {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Colored rounded-rect tags (16 Jul 2026, later still) — per Ezekiel:
+   "Give the items in todays focus colored tags like rounded rectangles
+   around them." Was plain inline text + a small color dot, no background.
+   var(--radius) corners, not a fully-round 999px pill, matching the
+   solid-fill tag recipe used elsewhere on this page (.dash-risk-tag,
+   .rag-green) shape-wise.
+
+   SOFT-TINT variant, not solid fill (same-day follow-up — per Ezekiel:
+   "make the tags less harsh on the eyes, make them soft colors"). A
+   solid #E60000/#00C400 background read as too intense for a bar that's
+   glanced at constantly, unlike .dash-risk-tag's occasional pulsing-alert
+   use. Light tinted background (~12% of the accent color) + a deepened,
+   saturated text color carries the same red/amber/green signal at a much
+   gentler visual weight — same "soften but keep the signal legible"
+   reasoning .dash-waiting-tag--amber already used for canary specifically,
+   just applied to all three colors here rather than only the one that
+   had a contrast problem. */
+.dash-focus-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: default;
+    padding: 0.45rem 0.9rem;
+    border-radius: var(--radius);
+}
+
+.dash-focus-pill-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.dash-focus-pill--red {
+    background: #FBE3E3;
+    color: #C43D3D;
+}
+.dash-focus-pill--red .dash-focus-pill-dot { background: #C43D3D; }
+
+.dash-focus-pill--amber {
+    background: #FBF3D9;
+    color: #8A7328;
+}
+.dash-focus-pill--amber .dash-focus-pill-dot { background: #8A7328; }
+
+.dash-focus-pill--green {
+    background: #DFF3DF;
+    color: #3F8F3F;
+}
+.dash-focus-pill--green .dash-focus-pill-dot { background: #3F8F3F; }
+
+/* Two-column layout: My Priority Actions (wide, left) + What Changed/
+   Waiting on Others stacked (narrower, right) — matches the mockup's
+   roughly 2:1 split. Collapses to one column on narrower screens, same
+   900px breakpoint every other multi-column block on this page uses. */
+.dash-cs-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    align-items: start;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .dash-cs-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-cs-side-col {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Generic white card shell shared by My Priority Actions/What Changed/
+   Waiting on Others — same radius/shadow recipe as .dash-toggle-box and
+   .dash-card-body-visual elsewhere on this page, just always-visible
+   (no tab/toggle mechanic of its own at this level — Waiting on Others'
+   OWN body still uses .dash-card-body-content for its collapse, nested
+   inside this shell). */
+.dash-priority-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.4rem;
+}
+
+.dash-priority-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+/* text-transform/letter-spacing reset — h1-h6 are globally uppercased
+   (see CLAUDE.md's CSS Facts) and this should read as a normal title. */
+.dash-priority-card-title {
+    font-family: var(--font-body);
+    font-size: 1.15rem;
+    font-weight: 800;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--black);
+    margin: 0;
+}
+
+/* One heading per urgency band (_compute_priority_actions()'s group_key —
+   'urgent'/'today'/'this_week'/'later'/'no_deadline', dashboard.py) with a
+   small colour-coded dot ahead of the text, matching the mockup's red-dot
+   URGENT/TODAY headings. Colour intentionally mirrors the Today's Focus
+   bar's own red/amber/grey story rather than inventing a fourth palette:
+   urgent/today read as immediate (red), this_week as a middle ground
+   (amber), later/no_deadline as calm (grey) — there's nothing wrong with
+   a project that's simply not due yet. */
+.dash-priority-group {
+    margin-bottom: 1.5rem;
+}
+
+.dash-priority-group:last-child {
+    margin-bottom: 0;
+}
+
+.dash-priority-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--grey-dark);
+    margin-bottom: 0.5rem;
+}
+
+.dash-priority-group-dot {
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+}
+
+.dash-priority-group-heading--urgent .dash-priority-group-dot,
+.dash-priority-group-heading--today .dash-priority-group-dot {
+    background: #E60000;
+}
+
+.dash-priority-group-heading--this_week .dash-priority-group-dot {
+    background: var(--canary);
+}
+
+.dash-priority-group-heading--later .dash-priority-group-dot,
+.dash-priority-group-heading--no_deadline .dash-priority-group-dot {
+    background: var(--grey-dark);
+}
+
+/* Dividers between every Priority Actions row (16 Jul 2026, later still)
+   — per Ezekiel: "add dividers between the entries in the my priority
+   actions." .dash-row already carries its own border-bottom (see the
+   shared rule further down), but that rule's paired `:last-child { border-
+   bottom: none }` was firing on the LAST ROW OF EACH GROUP, not just the
+   very end of the card — since each urgency band is its own
+   .dash-priority-group container, the last row before a group heading had
+   no divider at all, just the group's margin-bottom gap. Re-asserts the
+   border on every row inside a group, then removes it ONLY from the last
+   row of the last group, so the whole list reads as one continuously
+   divided sequence regardless of how rows are split across urgency
+   bands. */
+.dash-priority-card .dash-priority-group .dash-row {
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dash-priority-card .dash-priority-group:last-child .dash-row:last-child {
+    border-bottom: none;
+}
+
+/* What Changed — scrollable within its own div instead of a collapsible
+   tab, per Ezekiel: "What changed remains the same log we have (make it
+   scrollable within its div)." Same row markup as what_changed.html
+   elsewhere on this page, just height-capped here. */
+.dash-what-changed-scroll {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+/* Lighter title weight for What Changed's rows on THIS layout — same
+   "purely informational, less bold" reasoning the old dashboard's scoped
+   `.dash-card-body-content[data-card="what_changed"] .dash-row-title`
+   override uses, just as a plain class since this card no longer lives
+   inside a .dash-card-body-content wrapper at all. */
+.dash-row-title--light {
+    font-weight: 500;
+}
+
+/* Waiting on Others — collapsed by default (no .expanded class server-
+   rendered, see dashboard_cs.html), teaser line + "Open waiting list"
+   button above the collapsible row list. Reuses .dash-toggle-box-
+   collapse-btn/.dash-toggle-box-chevron as-is for the small header
+   chevron (same rotate-on-collapse rule already defined above), and the
+   generic .dash-card-body-content/.dash-card-body-visual/.dash-card-
+   body-inner mechanic (expandBody()/collapseBody() in dashboard.js) for
+   the row list itself — no new collapse CSS needed, only new toggle
+   affordances around it. */
+.dash-priority-card-header[data-action="toggle-waiting-list"] {
+    cursor: pointer;
+}
+
+.dash-waiting-teaser {
+    font-size: 0.9rem;
+    color: var(--grey-dark);
+    margin: 0 0 0.85rem;
+}
+
+.dash-waiting-open-btn {
+    margin-bottom: 0.5rem;
+}
+
+/* Waiting on Others' row (dash_waiting_row() in _dashboard_macros.html) —
+   smaller/simpler than dash_priority_action_row()/dash_due_row(): no
+   right-hand "Next Action" block, just a plain "Waiting since X" line on
+   the far right. */
+.dash-row-waiting-since {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--grey-dark);
+    white-space: nowrap;
+    padding-left: 1rem;
+}
+
+/* ══════════════════════ end CS-only redesigned dashboard ═══════════════ */
+
+/* ══════════════════════════════════════════════════════════════════════
+   Leadership (management/admin) redesigned dashboard (added 16 Jul 2026 —
+   dashboard_leadership.html). Same reuse-first approach as the CS section
+   above: .dash-focus-bar, .dash-toggle-box, .dash-priority-card, .dash-row,
+   .dash-risk-tag, and .dash-mini-stat are all reused wholesale — only
+   Decision Needed Queue's own grid layout and the Reassign/Assign modals
+   below are genuinely new. */
+
+/* Decision Needed Queue's column-label row (Ezekiel: "Keep it organised
+   with subheaders: Project / Decision needed / Requested By / Waiting").
+
+   First superseded 16 Jul 2026 — per Ezekiel, with a screenshot: "The row
+   for that project should match the headers, so space out the headers
+   and match the information to those headers" — with two SEPARATE (but
+   textually identical) `display: grid` declarations, one for
+   `.dash-col-headers` and one for `.dash-decision-row`. That attempt did
+   NOT actually align in the browser (confirmed a real bug, not caching —
+   a hard refresh and a local server restart both failed to fix it), for
+   reasons that were never conclusively identified from source alone.
+
+   Superseded AGAIN, same day — rather than keep chasing that mystery,
+   the header row was changed to reuse the EXACT SAME `.dash-decision-row`
+   element (see dashboard_leadership.html: the header is now
+   `<div class="dash-decision-row dash-col-headers">`, wrapping the exact
+   same `<span class="dash-row">` display:contents trick every data row
+   uses) instead of being a second, parallel grid declaration. There is
+   now only ONE grid-template-columns definition governing both header
+   and data rows — they structurally cannot drift apart again, regardless
+   of what caused the original divergence. `.dash-col-headers` is now
+   purely a MODIFIER class on top of `.dash-decision-row` (divider +
+   no-hover styling only), not a grid definition of its own. Scoped
+   entirely to `.dash-decision-queue-card` so nothing else that reuses
+   `.dash-row`/`.dash-decision-row` (decisions.html on the old dashboard)
+   is affected.
+
+   THIRD ATTEMPT (16 Jul 2026) — Ezekiel reported this still misaligned in
+   the browser even after the "single shared grid declaration" fix above,
+   with a fresh screenshot showing the header labels bunched tight on the
+   left instead of spread across the row like the data below. A specificity
+   walkthrough of every `.dash-decision-row`/`.dash-row` rule in this file
+   said this SHOULD already win (this rule is 2 classes, the old unscoped
+   `.dash-decision-row { display: flex }` further down is 1 class — lower
+   specificity, can't override regardless of source order) — so rather than
+   trust that analysis a third time against contrary visual evidence,
+   `!important` was added to `display`/`grid-template-columns` here (and to
+   `display: contents` on `.dash-row` below) to remove ANY possibility of
+   an unidentified conflicting rule winning, whatever it is. Combined with
+   removing the header's now-unnecessary `<span class="dash-row">` wrapper
+   (dashboard_leadership.html — the header isn't a link, so it never
+   needed the display:contents promotion trick to begin with; its 4 labels
+   are now direct children of this element, no indirection layer left to
+   go wrong). */
+.dash-decision-queue-card .dash-decision-row {
+    display: grid !important;
+    grid-template-columns: 2fr 2fr 1fr 1fr 130px 100px !important;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.dash-decision-queue-card .dash-decision-row.dash-col-headers {
+    padding: 0 0 0.5rem;
+    margin-bottom: 0.2rem;
+    border-bottom: 2px solid var(--border-subtle);
+}
+
+.dash-col-header-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+}
+
+/* Hover highlight only for actual (clickable) data rows — excludes the
+   header, which isn't a link and shouldn't look interactive. */
+.dash-decision-queue-card .dash-decision-row:not(.dash-col-headers):hover {
+    background: var(--surface-hover);
+}
+
+/* display: contents removes the element's OWN box (no padding/background/
+   border of its own — .dash-decision-row's border-bottom and hover
+   background above already cover what a data row's `.dash-row` box used
+   to provide) while keeping the `<a>` fully interactive: it stays a real
+   link, and a click anywhere on any of its now-direct-grid-item children
+   still bubbles up and navigates, exactly as before. This is what lets a
+   DATA row's children (title/sub/two cells/date) become direct grid items
+   of `.dash-decision-row` instead of being boxed inside their own separate
+   element. The HEADER no longer uses this trick at all (16 Jul 2026, third
+   attempt — see the big comment on the rule above) — its 4 labels are
+   direct children of `.dash-decision-row.dash-col-headers` now, so this
+   rule only ever matches the data rows' `<a class="dash-row">`. `!important`
+   added same pass, alongside the rule above, to remove any possibility of
+   an unidentified conflicting rule overriding `display` here too. */
+.dash-decision-queue-card .dash-row {
+    display: contents !important;
+}
+
+/* The two per-column tag wrappers (Requested By / Waiting) — replaces
+   the old combined .dash-row-tags flex-wrap row (which held both tags
+   together in one cell) now that each tag gets its own grid column. */
+.dash-decision-cell {
+    display: flex;
+    align-items: center;
+}
+
+/* Trailing timestamp column — same font/size/colour the old inline-styled
+   span used, now a proper grid cell instead of a flex sibling. */
+.dash-decision-date {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--grey-dark);
+    white-space: nowrap;
+}
+
+/* Reassign CS Lead / Assign Designer / (placeholder) Follow up buttons —
+   dash_leadership_risk_row()/dash_leadership_waiting_row()
+   (_dashboard_macros.html). Sits inside .dash-decision-row (reused
+   as-is — same sibling-of-the-anchor wrapper the Decisions Needed
+   Resolve button already uses), so no new row-shell CSS was needed, just
+   the button group and button styling. */
+.dash-leadership-risk-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.dash-leadership-action-btn {
+    font-size: 0.78rem;
+    padding: 0.4rem 0.8rem;
+    white-space: nowrap;
+}
+
+.dash-leadership-action-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+/* Risk/Overdue + Waiting on Others share .dash-toggle-row (reused as-is —
+   the same 2-column grid the old dashboard's Overdue/At Risk + My Day/My
+   Week toggle row already used) for their side-by-side layout — no new
+   grid rule needed, just this one modifier for the leadership-specific
+   gap/margin, in case it ever needs to diverge from the old toggle row's
+   own spacing. Currently identical; kept as a hook rather than reusing
+   the bare class directly in the template, in case a leadership-specific
+   tweak is asked for later without touching the old dashboard. */
+.dash-leadership-row {
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Risk/Overdue's header is no longer collapsible (16 Jul 2026 follow-up —
+   per Ezekiel: "the overdue at risk etc doesnt need to be collapsible"),
+   so the base .dash-toggle-box-header's cursor:pointer (a "click anywhere
+   to collapse" affordance — see dashboard.js's header click-fallback) is
+   misleading here since nothing happens on that click anymore. Scoped to
+   .dash-toggle-box--static (added to the risk_overdue box's own class
+   list in the template) rather than touching the shared base rule, so
+   the old dashboard's still-collapsible My Day/My Week and Overdue/At
+   Risk toggle boxes keep their pointer cursor unchanged. */
+.dash-toggle-box--static .dash-toggle-box-header {
+    cursor: default;
+}
+
+/* Role Snapshot — one tile per CS/designer/team_lead
+   (_compute_role_snapshot() in dashboard.py). Same white/radius/shadow
+   tile recipe as .dash-priority-card's own children elsewhere on this
+   page, laid out as a responsive wrapping grid rather than a fixed column
+   count, since the number of people varies by company roster.
+
+   Segregated into CS/Designers 16 Jul 2026, same-day follow-up — per
+   Ezekiel: "Role snapshot needs to be segregrated. Client servicing row.
+   Designer Row (split into the 3 teams, 2d, 3d and technical)." — then
+   turned into an actual toggle (16 Jul 2026, later still, per Ezekiel:
+   "Let's have the role snapshot toggles - Client servicing and
+   Designers"), superseding the original always-visible two-stacked-
+   sections layout entirely. The card is now a `.dash-toggle-box` (see
+   `.dash-role-snapshot-box` in dashboard_leadership.html) — Client
+   Servicing and Designers are `[data-toggle-view-panel]`s switched by the
+   same generic `switchToggleBoxView()` every other toggle box on this
+   page already uses.
+
+   Designers panel laid out as 3 side-by-side columns 16 Jul 2026, later
+   still — per Ezekiel: "make the designers vertical so three columns
+   side by side, 3d, 2d and technical." Was 3 stacked rows (one
+   `.dash-role-snapshot-subsection` per team, top to bottom, that class
+   is now gone — confirmed via grep no template references it anymore).
+   `.dash-role-snapshot-teams-grid` (new) lays the (up to 4, counting the
+   defensive Unassigned bucket) team columns out horizontally;
+   `.dash-role-snapshot-team-col` (new) wraps one team's label + tiles;
+   `.dash-role-snapshot-grid--col` (new modifier) forces that column's own
+   tile grid to a single column (vertical stack) instead of the wrapping
+   multi-column layout `.dash-role-snapshot-grid` uses on its own
+   (Client Servicing panel, unaffected by any of this). */
+.dash-role-snapshot-teams-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+}
+
+@media (max-width: 700px) {
+    .dash-role-snapshot-teams-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dash-role-snapshot-team-col {
+    min-width: 0;
+}
+
+/* One per team column — slightly smaller/lighter than .dash-col-heading
+   itself so the visual hierarchy reads Role Snapshot > Designers >
+   3D/2D/Technical, not equally-weighted headings. */
+.dash-role-snapshot-team-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--grey-dark);
+    opacity: 0.75;
+    margin-bottom: 0.5rem;
+}
+
+.dash-role-snapshot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.85rem;
+}
+
+/* Forces one tile per row within a single team column — "vertical"
+   stacking, since a team column is already narrow (page width / 3) and
+   shouldn't try to wrap tiles into sub-columns of its own the way the
+   Client Servicing panel's wider single .dash-role-snapshot-grid does. */
+.dash-role-snapshot-grid--col {
+    grid-template-columns: 1fr;
+}
+
+.dash-role-tile {
+    background: var(--sandstone);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.9rem 1rem;
+}
+
+.dash-role-tile-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.dash-role-tile-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.dash-role-tile-dot--red { background: #E60000; }
+.dash-role-tile-dot--amber { background: var(--canary); }
+.dash-role-tile-dot--green { background: #00C400; }
+
+.dash-role-tile-name {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--black);
+}
+
+.dash-role-tile-stat {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--grey-dark);
+}
+
+/* ═══════════════════ end leadership redesigned dashboard ═══════════════ */
+
 /* ── Management/admin view-switcher (added 11 Jul 2026, extended to admin
    12 Jul 2026, extended to designers 15 Jul 2026, reworked into a
    CS/Designer toggle 15 Jul 2026 later the same day) ─────────────────────
@@ -464,6 +1055,7 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     margin-bottom: 1rem;
+    margin-top: 1rem;
 }
 
 .dash-content-tab {
@@ -552,6 +1144,49 @@
 
 .dash-content-tab.active .dash-content-tab-badge .dash-mini-stat-dot {
     box-shadow: 0 0 0 1.5px var(--white);
+}
+
+/* Secondary Metrics tab strip — CS-only redesigned dashboard, bigger-tile
+   pass (16 Jul 2026, later still). Per Ezekiel: "make the secondary
+   metrics at the bottom bigger, like bigger tiles." Scoped to
+   .dash-secondary-metrics (added to dashboard_cs.html's Secondary Metrics
+   .dash-content-tabs wrapper only) rather than widening the base
+   .dash-content-tab rule — that class is shared with the OLD dashboard's
+   own tab strip (Decisions/Next Actions/Clashes/What Changed/
+   brief_quality, every non-CS role), which was never asked to change.
+   Same "size this variant up past the base class, scoped to one page"
+   pattern .dash-toggle-box-btn already used against .dash-content-tab (16
+   Jul 2026, earlier the same day). Flips the row layout (icon+title+badge
+   inline) to a column (title on top, badge centered below) so each tab
+   reads as a standalone tile rather than a wide pill — same title-top/
+   stat-below shape the old .dash-tile system used before it was retired,
+   just rebuilt as a variant of the tab instead of a separate component. */
+.dash-secondary-metrics {
+    gap: 0.85rem;
+}
+
+.dash-secondary-metrics .dash-content-tab {
+    flex: 1 1 170px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 1.5rem 1.25rem;
+    min-height: 6.5rem;
+}
+
+.dash-secondary-metrics .dash-content-tab-title {
+    font-size: 1.05rem;
+    white-space: normal;
+    text-align: center;
+}
+
+.dash-secondary-metrics .dash-content-tab-badge .dash-mini-stat-dot {
+    width: 0.75rem;
+    height: 0.75rem;
+}
+
+.dash-secondary-metrics .dash-content-tab-badge .dash-mini-stat-value {
+    font-size: 1.6rem;
 }
 
 /* The single interactive content area — the same box that used to be
@@ -932,6 +1567,58 @@ a.dash-row:hover {
     margin-top: 0.55rem;
 }
 
+/* "Waiting since" / "Waiting for" tags (added 16 Jul 2026, per Ezekiel:
+   "For every item in Decision Needed / Others' Actions, show: Waiting
+   since... Waiting for...") — rendered by dash_due_row()'s new
+   show_waiting param (_dashboard_macros.html, Next Actions' Others' tab
+   only) and decisions.html's row markup (always, every Decisions Needed
+   row). Sits directly under .dash-row-people, same gap/margin-top pattern
+   as that row so a row with both stacks cleanly (person chips, then
+   waiting tags, one line each).
+
+   Shape matches .dash-owner-tag/.dash-action-tag/.dash-risk-tag's shared
+   small-pill recipe (mono font, tight padding, rounded) rather than
+   .rag-badge (too wide/uppercase for a sentence-length tag like "Waiting
+   since: 13 Jul") — see CLAUDE.md's note on why .rag-badge was rejected
+   here. Colour-coded via item.waiting_color ('red'/'amber' — see
+   _compute_decisions()/_compute_next_actions()'s docstrings in
+   dashboard.py for the exact classification rules): red reuses the same
+   deepened #E60000 every other "something's actually wrong" tag on this
+   page uses (.dash-risk-tag--red, .dash-risk-tag--overdue,
+   .dash-clash-severity-tag--detected); amber is --canary, the RAG
+   mini-stat's own amber/yellow brand token, at a readable dark-on-light
+   contrast rather than white-on-canary (canary is too light for white
+   text to read clearly). */
+.dash-row-waiting {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.55rem;
+}
+
+.dash-waiting-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    padding: 0.15rem 0.6rem;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    color: var(--white);
+}
+
+.dash-waiting-tag--red {
+    background: #E60000;
+}
+
+.dash-waiting-tag--amber {
+    background: var(--canary);
+    color: #6B5D00;
+}
+
 .dash-person-chip {
     display: inline-flex;
     align-items: center;
@@ -1269,3 +1956,148 @@ a.dash-row:hover {
 .dash-clash-group:last-child {
     margin-bottom: 0;
 }
+
+/* ── Designer / Team Lead dashboard (16 Jul 2026) ─────────────────────────
+   dashboard_designer.html — see the big comment above
+   _compute_designer_work_queue() in dashboard.py for the full design
+   history. Reuses .dash-toggle-box/.dash-toggle-row/.dash-priority-card/
+   .dash-focus-bar/.dash-row family/.dash-risk-tag/.dash-mini-stat wholesale
+   (zero new structural components needed for those) — everything below is
+   either a genuinely new piece (This Week Load's day boxes) or a missing
+   colour variant this page's markup needed but no earlier page had
+   introduced yet. */
+
+/* .dash-mini-stat--amber — was already referenced by dashboard_leadership
+   .html's Risk/Overdue "No Deadline" toggle button (16 Jul 2026) but the
+   variant itself was never actually defined, a pre-existing gap (that
+   button has been rendering with no dot/value colour at all). Defined
+   here, alongside this page's own new usages (This Week's toggle button,
+   Submitted's stat), using the same canary-dot / deepened-text recipe
+   .dash-waiting-tag--amber already established — one shared "amber"
+   convention across every component on this page instead of a second,
+   slightly different one. */
+.dash-mini-stat--amber .dash-mini-stat-dot { background: var(--canary); }
+.dash-mini-stat--amber .dash-mini-stat-value { color: #6B5D00; }
+
+/* Yellow "No Deadline" deadline text (per Ezekiel: "make that row's
+   deadline text yellow 'No Deadline' instead of a date") — a modifier on
+   the shared .dash-row-date class (dash_designer_queue_row() only; every
+   other .dash-row-date consumer on this page is unaffected, same
+   "modifier class, not a base-rule change" approach the missing-designer
+   red tags use elsewhere). Same deepened-amber text colour as
+   .dash-waiting-tag--amber/.dash-mini-stat--amber above, for one
+   consistent "amber" reading across this whole page rather than a fourth
+   slightly-different yellow. */
+.dash-row-date--warning {
+    color: #8A7328;
+}
+
+/* Revision/waiting-cs tag — compound selector, same specificity-safety
+   reason every other .dash-risk-tag variant on this page uses (a bare
+   .dash-risk-tag--amber would lose to the later, equal-specificity base
+   .dash-risk-tag rule — see the big comment on .dash-risk-tag--red
+   further up this file). Shared by BOTH the "REVISION <n>" tag and the
+   "Waiting on CS" tag (dash_designer_queue_row()) — same colour, since
+   both describe the same underlying thing (a yellow flag on the row) even
+   though the label text differs. */
+.dash-risk-tag.dash-risk-tag--amber {
+    background: var(--canary);
+    color: #6B5D00;
+}
+
+/* "INITIAL" tag — neutral/informational, not an urgency signal (the
+   REVISION/red/amber variants already cover "something needs attention");
+   same ashen tint .dash-action-tag already uses elsewhere on this page,
+   reused here as a .dash-risk-tag variant so it sits correctly alongside
+   REVISION/Waiting-on-CS tags in the same .dash-row-tags row. */
+.dash-risk-tag.dash-risk-tag--initial {
+    background: rgba(148, 180, 187, 0.3);
+    color: #3E5E66;
+}
+
+/* Spacing between the designer dashboard's stacked standalone sections
+   (My Work Queue -> Waiting on Others -> the This Week Load/Metrics
+   Summary row). Real gap, not a screenshot artifact — .dash-toggle-box
+   and .dash-priority-card normally only ever sit INSIDE a
+   .dash-toggle-row/.dash-cs-grid wrapper elsewhere on this app, which
+   supplies the gap between siblings via its own `gap` property; used
+   standalone (one after another, not side-by-side) like this page does,
+   neither class has any margin-bottom of its own, so they were rendering
+   flush against each other. .dash-focus-bar already has its own
+   margin-bottom (unaffected here). */
+.dash-designer-work-queue-box {
+    margin-bottom: 1.5rem;
+}
+
+/* .dash-designer-waiting-card (margin-bottom: 1.5rem) was removed 16 Jul
+   2026 — the Waiting on Others card it targeted moved into the Waiting on
+   Others/Metrics Summary .dash-toggle-row (per Ezekiel: "make waiting on
+   others and assigned projects side by side"), which already supplies its
+   own margin-bottom below the whole row; a second one on just that column
+   would have left uneven whitespace under it relative to Metrics Summary. */
+
+/* This Week Load — Mon-Fri day boxes, colour-coded per Ezekiel: "shows a
+   simple number per day with color coding of how many projects are due
+   that day -> 0-1 green, 2-3 yellow, 4+ red." A NEW component (no earlier
+   card needed a small multi-box heatmap like this), sized to sit
+   comfortably in the left half of .dash-toggle-row next to Metrics
+   Summary on the right. */
+.dash-week-load-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.75rem;
+}
+
+.dash-week-load-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    padding: 0.9rem 0.5rem;
+    border-radius: var(--radius);
+    background: var(--sandstone);
+    border: 1.5px solid var(--border-subtle);
+}
+
+/* Today's box gets a tangerine outline (the app's primary accent, used
+   elsewhere on this page purely to mean "this is the one that's you/now",
+   e.g. .dash-owner-tag) — layered on top of whichever colour variant
+   below already applies, so "today" and "how loaded is it" read as two
+   independent signals rather than one overriding the other. */
+.dash-week-load-day--today {
+    border-color: var(--tangerine);
+    border-width: 2px;
+}
+
+.dash-week-load-day-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--grey-dark);
+}
+
+.dash-week-load-day-count {
+    font-family: var(--font-body);
+    font-size: 1.8rem;
+    font-weight: 800;
+}
+
+.dash-week-load-day-date {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--grey-dark);
+}
+
+/* Count colour — same pure red/green + deepened-amber family every other
+   count-based signal on this page uses (.dash-mini-stat--red/--green,
+   .dash-mini-stat--amber above). Only the NUMBER is coloured (the box
+   itself stays --sandstone regardless) so a 4+ day doesn't turn into a
+   loud solid-red block sitting next to four calmer ones — same
+   "colour the text, not the container" restraint .dash-stat-card--pending
+   originally established for RAG numbers. */
+.dash-week-load-day--green .dash-week-load-day-count { color: #009900; }
+.dash-week-load-day--amber .dash-week-load-day-count { color: #6B5D00; }
+.dash-week-load-day--red .dash-week-load-day-count { color: #E60000; }

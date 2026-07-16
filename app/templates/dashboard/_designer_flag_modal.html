@@ -1,0 +1,45 @@
+{#
+   Flag to CS Lead modal — added 16 Jul 2026 for the designer/team_lead
+   dashboard's Blocked queue rows. Per Ezekiel: "If a brief is missing
+   information, the next action will be 'Flag project to CS Lead' and
+   will load the flag module from that project's detail page directly in
+   the dashboard."
+
+   NOT the same system as _flag_management_modal.html ("Flag to
+   Management" — the decision_needed/Escalate system, a separate concept
+   per CLAUDE.md's own note under the Decisions Needed section). "The flag
+   module from that project's detail page" is the BriefFlag/
+   BriefFlagMessage thread (POST /projects/<id>/flags/create — see
+   create_flag() in projects_detail.py), the same one the project detail
+   page's own "Flag an Issue" UI already posts to — this modal is just
+   that same request, launched inline from the dashboard instead of
+   requiring a navigation away first. flag_type is hardcoded 'project'
+   (not 'deliverable'/'concept'/'kv') since a Blocked row here is a
+   project-level entry, no single deliverable to scope the flag to.
+
+   Same .modal-overlay/.modal-box/.modal-actions shape and close-on-
+   overlay-click pattern (data-action="close-*-overlay", checked against
+   e.target === overlay) every other modal on this page already follows.
+#}
+<div id="designer-flag-modal" class="modal-overlay hidden" data-action="close-designer-flag-overlay">
+    <div class="modal-box">
+        <h3 class="modal-title">Flag to CS Lead</h3>
+
+        <div class="form-group">
+            <label>Project</label>
+            <p id="designer-flag-project-name" style="margin:0; padding:0.65rem 0.85rem; border:1.5px solid var(--grey-light); border-radius: var(--radius); background: var(--sandstone);"></p>
+        </div>
+
+        <div class="form-group">
+            <label>What's missing or blocking this project?</label>
+            <textarea id="designer-flag-message" rows="4" placeholder="Describe what information or input is needed…"></textarea>
+        </div>
+
+        <p id="designer-flag-error" class="hidden" style="color: var(--rose); font-size: 0.85rem; margin: -0.75rem 0 1rem;"></p>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-action="close-designer-flag-modal">Cancel</button>
+            <button type="button" class="btn-primary" data-action="submit-designer-flag">Submit</button>
+        </div>
+    </div>
+</div>

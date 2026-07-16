@@ -1,13 +1,16 @@
 {#
-   ORPHANED (15 Jul 2026, later still) — no longer included ANYWHERE.
-   Overdue's row markup moved into the new Overdue/At Risk toggle box
-   (app/templates/dashboard/toggle_overdue_at_risk.html — reuses this
-   file's dash_due_row() macro directly), per Ezekiel: "Make overdue/at
-   risk on the left side (put button toggles)." Left in place rather than
-   deleted (couldn't rm it in this environment — permission denied) purely
-   as reference/history; do not re-include this file anywhere without
-   first checking whether toggle_overdue_at_risk.html already covers the
-   need.
+   UN-ORPHANED (16 Jul 2026) — back in use as a Secondary Metrics tile on
+   the CS-only redesigned dashboard (dashboard_cs.html, _CS_SECONDARY_
+   METRICS in dashboard.py). Was orphaned 15 Jul 2026 through 16 Jul 2026
+   (Overdue's row markup lived only in the old layout's Overdue/At Risk
+   toggle box — app/templates/dashboard/toggle_overdue_at_risk.html, which
+   still reuses this file's dash_due_row() macro directly and is
+   unaffected by this file's own dash_card() tab/body inclusion coming
+   back). On the OLD dashboard.html (every role except CS) this file is
+   STILL not included — Overdue still only lives in the toggle box there,
+   unchanged. Title/mini-stat wording ("Overdue" / "This Week") needed no
+   changes for the new context — matches the mockup's "Overdue" secondary
+   metric exactly.
 
    app/templates/dashboard/cards/due.html
    ─────────────────────────────────────
@@ -55,6 +58,10 @@
 
 {% call dash_card('due', 'Overdue', due_summary,
     expanded=(initial_expanded_card == 'due'), mode=dash_render_mode) %}
+    {# NOTE: no muted= passed here — unlike Clashes below, Overdue has no
+       "nothing to show" zero-state that should block clicking; an empty
+       list still opens to its own empty-state message, same as every
+       other card on this page. #}
 
     {# dashboard.js replaces THIS element's innerHTML wholesale on SSE
        refresh (see fetchAndRenderDue() in dashboard.js, which looks it up

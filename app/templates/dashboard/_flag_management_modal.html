@@ -1,0 +1,78 @@
+{#
+   Flag to Management modal — extracted 16 Jul 2026 from dashboard.html
+   verbatim (no markup/behaviour changes), so the CS-only redesigned
+   dashboard (dashboard_cs.html) can reuse the exact same modal instead of
+   duplicating ~30 lines of form markup. Both templates just
+   `{% include 'dashboard/_flag_management_modal.html' %}` in the same
+   spot they used to inline this. All of dashboard.js's modal JS
+   (openFlagManagementModal/closeFlagManagementModal/submitFlagManagement,
+   the click-handler branches for open/close/submit) is untouched and
+   already looks these element IDs up by getElementById, so no JS changes
+   were needed for this extraction either.
+
+   CS/Designer/Team Lead only (the "Escalate" button that opens this —
+   renamed from "Flag a Project" 16 Jul 2026, see decisions.html on the
+   old dashboard, and the Priority Actions card header on the new one —
+   is itself role-gated), but there's no harm rendering the (invisible)
+   modal shell regardless of role — it stays hidden unless something calls
+   the open action. The modal's own title stays "Flag to Management" —
+   only the card title/button label that OPENS it were ever renamed, not
+   this modal.
+
+   Structure mirrors the existing "Flag an Issue" modal on the project
+   detail page (app/templates/projects/detail.html, ~line 2160) — same
+   .modal-overlay / .modal-box / .modal-title / .modal-actions classes,
+   same close-on-overlay-click pattern via data-action="close-*-overlay"
+   checked against e.target === overlay in the click handler (dashboard.js)
+   so clicks INSIDE the modal box don't bubble up and close it.
+
+   Project field: this modal supports TWO ways of knowing which project is
+   being flagged, because there are two different launch points per the
+   spec ("triggered from the Decisions Needed card... or from the project
+   detail page") and only one of those actually has a project already in
+   hand when the modal opens:
+     - From the "Escalate" button (old dashboard's Decisions Needed card,
+       or the new dashboard's Priority Actions card header), no project is
+       implied — dashboard.js shows the <select> below, populated from
+       flaggable_projects (this user's own active, not-already-flagged
+       projects — see _compute_flaggable_projects in dashboard.py) so the
+       user picks one.
+     - A future per-project "Flag to Management" trigger (e.g. from the
+       detail page) can instead call openFlagManagementModal(id, name)
+       with both arguments — dashboard.js then hides the <select> and
+       shows projectId/name as plain read-only text, matching the spec's
+       "read-only project name field" description exactly. That trigger
+       isn't built yet, but the modal is ready for it.
+#}
+<div id="flag-management-modal" class="modal-overlay hidden" data-action="close-flag-management-overlay">
+    <div class="modal-box">
+        <h3 class="modal-title">Flag to Management</h3>
+
+        <div class="form-group">
+            <label>Project</label>
+            {# Read-only display — shown instead of the <select> below when
+               the modal is opened already knowing its project (see the
+               big comment above). Hidden by default; dashboard.js toggles
+               which of these two the user sees. #}
+            <p id="flag-management-project-readonly" class="hidden" style="margin:0; padding:0.65rem 0.85rem; border:1.5px solid var(--grey-light); border-radius: var(--radius); background: var(--sandstone);"></p>
+            <select id="flag-management-project-select" class="form-input">
+                <option value="">Select a project…</option>
+                {% for p in flaggable_projects %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Decision Note</label>
+            <textarea id="flag-management-note" rows="4" placeholder="What decision or information is needed?"></textarea>
+        </div>
+
+        <p id="flag-management-error" class="hidden" style="color: var(--rose); font-size: 0.85rem; margin: -0.75rem 0 1rem;"></p>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-action="close-flag-management-modal">Cancel</button>
+            <button type="button" class="btn-primary" data-action="submit-flag-management">Submit</button>
+        </div>
+    </div>
+</div>

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, jsonify, request
 from flask_login import login_required
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import nullslast
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable
@@ -91,6 +91,34 @@ VIEW_TO_CARD = {
 #     (per Ezekiel: "keep it but unlink it, we can work on it later").
 _STAT_TILES = ['stat_active', 'stat_pending', 'stat_avg_time']
 
+# Secondary Metrics row — originally built for the CS-only redesigned
+# dashboard (16 Jul 2026 — see the big comment above _serialize_owners_list()
+# further down). NOT the same list as CARD_ORDER['cs'] below (that one still
+# exists, unused while layout_role == 'cs', only as a harmless leftover for
+# the old template's own CARD_ORDER.get() fallback logic) — per Ezekiel:
+# "Secondary metrics at the bottom holds active projects, pending approval,
+# overdue, clashes, which are all clickable like now and keep the same way
+# the expanded data is shown." 'due' and 'clashes' UN-ORPHANED here —
+# due.html had been orphaned since 15 Jul 2026 (Overdue moved into the
+# toggle box on the old layout) and is reused as-is for its "Overdue"
+# secondary-metric tile; clashes.html was never orphaned, reused as-is too
+# (its by-deliverable/by-project body is unchanged — see clashes.html for
+# the one small title tweak, gated on dash_cs_layout). Reuses the exact
+# same dash_card() tab+body mechanic every card in CARD_ORDER already uses
+# (mode='tab'/'body', see _dashboard_macros.html) — "keep the same way the
+# expanded data is shown" — just a shorter list and a different spot on the
+# page (see dashboard_cs.html).
+#
+# WIDENED to the leadership dashboard too (16 Jul 2026, same day) — per
+# Ezekiel, sharing a screenshot of these exact 5 tiles: "add this to the
+# management view also, at the bottom." Same list, same compute functions
+# (all already role/scope-aware via scope_user — see each function's own
+# docstring), just a second render_template() call in index()'s
+# 'management'/'admin' branch passes the same kwargs dashboard_cs.html's
+# branch already did. No new list needed — CS and leadership share this
+# one.
+_CS_SECONDARY_METRICS = ['stat_active', 'stat_pending', 'due', 'clashes', 'stat_avg_time']
+
 # Tab order, per role. _STAT_TILES is always last (see the big comment
 # above). The rest is a judgment call, easy to change later since it's
 # just a list.
@@ -173,23 +201,37 @@ def _resolve_dashboard_scope(user):
              normally scoped here (not widened) — this is a preview of
              their real page, not a management/admin-specific view.
       'designer_<id>' (added 15 Jul 2026, per Ezekiel: "add the designers
-             also to management/admin view as tabs") — exactly what that
-             designer's own dashboard shows them. Same idea as 'cs_<id>',
-             but scoped via _ScopeUser(target.id, 'designer') so
-             _scoped_projects() falls into its designer/team_lead branch
-             (ProjectDesigner assignment) instead of the CS one. Decisions
-             stays normally scoped here too, same reasoning as 'cs_<id>'.
+             also to management/admin view as tabs"; widened 16 Jul 2026,
+             per Ezekiel: "the designer button should show all designers
+             and team leads, right now it only shows designers" — despite
+             the name, this branch has always covered BOTH roles that
+             live on ProjectDesigner assignments) — exactly what that
+             designer's or team lead's own dashboard shows them. Same idea
+             as 'cs_<id>', but scoped via _ScopeUser(target.id,
+             target.role) — target.role is whichever of 'designer'/
+             'team_lead' this particular user actually has, NOT a
+             hardcoded 'designer' (that would have been harmless today,
+             since _scoped_projects() lumps both into one shared "designer
+             / team_lead" branch by exclusion, and CARD_ORDER's 'designer'
+             and 'team_lead' entries are currently identical lists — but
+             hardcoding it was still a latent footgun for the day either
+             of those two things stops being true) — so _scoped_projects()
+             falls into its designer/team_lead branch (ProjectDesigner
+             assignment) instead of the CS one. Decisions stays normally
+             scoped here too, same reasoning as 'cs_<id>'.
       'all' — today's original behaviour: everything, unfiltered.
 
     Returns (scope_mode, scope_user, cs_leads, designers) — cs_leads (every
-    role='cs' user) and designers (every role='designer' user), for
-    building one tab per lead/designer, are returned even when scope_mode
-    is None since dashboard.html needs them any time it's rendering for a
+    role='cs' user) and designers (every user with role='designer' OR
+    role='team_lead', widened 16 Jul 2026 alongside the 'designer_<id>'
+    branch above — see that entry's docstring), for building one tab per
+    lead/designer/team-lead, are returned even when scope_mode is None
+    since dashboard.html needs them any time it's rendering for a
     management/admin user, and computing them here once is cheaper than
     every caller re-querying them.
     """
     cs_leads = User.query.filter_by(role='cs').order_by(User.name.asc()).all()
-    designers = User.query.filter_by(role='designer').order_by(User.name.asc()).all()
+    designers = User.query.filter(User.role.in_(['designer', 'team_lead'])).order_by(User.name.asc()).all()
 
     if user.role not in _SCOPE_SWITCHER_ROLES:
         return None, user, cs_leads, designers
@@ -218,7 +260,7 @@ def _resolve_dashboard_scope(user):
             target_id = None
         target = next((d for d in designers if d.id == target_id), None)
         if target:
-            return requested, _ScopeUser(target.id, 'designer'), cs_leads, designers
+            return requested, _ScopeUser(target.id, target.role), cs_leads, designers
         # Same stale-id fallback as the cs_ branch above.
 
     return 'my', _ScopeUser(user.id, 'cs'), cs_leads, designers
@@ -232,15 +274,25 @@ def index():
     scope_mode, scope_user, cs_leads, designers = _resolve_dashboard_scope(user)
 
     # Card order normally follows the REAL role. Exception: previewing a
-    # specific CS lead's or designer's tab should look like their actual
-    # dashboard, ordering included — not management's own layout with
-    # someone else's data dropped into it. 'my' mode keeps management's own
-    # order (it's still fundamentally "my dashboard", just narrowed), only
-    # 'cs_<id>'/'designer_<id>' borrow that role's own order.
+    # specific CS lead's, designer's, or team lead's tab should look like
+    # their actual dashboard, ordering included — not management's own
+    # layout with someone else's data dropped into it. 'my' mode keeps
+    # management's own order (it's still fundamentally "my dashboard",
+    # just narrowed), only 'cs_<id>'/'designer_<id>' borrow that role's
+    # own order.
+    #
+    # layout_role = scope_user.role (not a hardcoded 'designer') as of 16
+    # Jul 2026 — the designer_<id> branch now covers team leads too (see
+    # _resolve_dashboard_scope()'s docstring), so a previewed team lead
+    # correctly borrows CARD_ORDER['team_lead'] instead of always
+    # CARD_ORDER['designer']. The two lists happen to be identical today,
+    # so this had no visible effect before, but reading the real role off
+    # scope_user is the correct fix rather than relying on that
+    # coincidence staying true.
     if (scope_mode or '').startswith('cs_'):
         layout_role = 'cs'
     elif (scope_mode or '').startswith('designer_'):
-        layout_role = 'designer'
+        layout_role = scope_user.role
     else:
         layout_role = user.role
 
@@ -266,6 +318,166 @@ def index():
         time_tracking_rows = build_time_tracking_rows()
 
     card_order = CARD_ORDER.get(layout_role, CARD_ORDER['management'])
+
+    # ── CS-only redesigned dashboard branch (16 Jul 2026) ─────────────────
+    # Per Ezekiel, sharing a mockup screenshot: "Can we redesign it to be
+    # something like this?" — see the big comment above
+    # _serialize_owners_list() (further down this file) for the full design
+    # history and _compute_priority_actions()/_compute_waiting_on_others()'s
+    # own docstrings for what replaces Next Actions' old My/Others toggle
+    # and the now-retired At Risk card.
+    #
+    # Keyed on layout_role, not user.role directly — a management/admin
+    # user previewing a CS lead's scope-switcher tab (scope_mode starting
+    # with 'cs_') also gets this new layout, matching every other "borrow
+    # that role's own page" rule layout_role already drives above (the
+    # CARD_ORDER lookup just above, get_next_action_owner()'s guidance,
+    # etc.) — previewing a CS lead should look like THEIR dashboard,
+    # layout included, not the management user's own page with someone
+    # else's data dropped in. Every other role/scope combination
+    # (designer/team_lead always, management/admin's own 'my'/'all'/
+    # 'designer_<id>' views) falls through to the unchanged dashboard.html
+    # below.
+    #
+    # cs_leads/designers/scope_mode are still passed through even though a
+    # REAL CS user never sees the view-switcher UI itself (effective_role
+    # gates that in dashboard_cs.html, same as dashboard.html) — a
+    # management/admin user landing here via a cs_<id> preview still needs
+    # the view-switcher rendered so they can navigate to a different tab or
+    # back to their own view.
+    if layout_role == 'cs':
+        return render_template(
+            'dashboard_cs.html',
+            effective_role=user.role,
+            scope_mode=scope_mode,
+            cs_leads=cs_leads,
+            designers=designers,
+            # dash_cs_layout=True is read by the two reused secondary-metric
+            # partials (due.html, clashes.html) for the one wording tweak
+            # this layout needs — see clashes.html's clashes_title.
+            dash_cs_layout=True,
+            summary=_compute_summary(scope_user),
+            priority_actions=_compute_priority_actions(scope_user),
+            waiting_on_others=_compute_waiting_on_others(scope_user),
+            what_changed=_compute_what_changed(scope_user),
+            secondary_metrics_order=_CS_SECONDARY_METRICS,
+            initial_expanded_card=None,
+            project_stats=_compute_project_stats(scope_user),
+            your_active_projects=_compute_your_active_projects(scope_user),
+            pending_approval_projects=_compute_pending_approval_projects(scope_user),
+            due_default=_compute_due(scope_user, 'overdue'),
+            clashes=_compute_clashes_response(scope_user),
+            # stat_avg_time.html's body is admin/management-only (muted for
+            # every other role via dash_card()'s own muted= mechanic, keyed
+            # on the REAL user.role) — a CS viewer can never open it, so
+            # there's no real table to fetch here. Passed as an empty list
+            # (not omitted) so the partial's Jinja doesn't hit an undefined
+            # variable on the 'body' render pass, same defensive reasoning
+            # dashboard.html's own time_tracking_rows=[] fallback uses for
+            # every non-admin/management role below.
+            time_tracking_rows=[],
+            flaggable_projects=_compute_flaggable_projects(user),
+        )
+
+    # ── Leadership dashboard branch (management/admin, 16 Jul 2026) ───────
+    # See the big comment above _compute_risk_overdue() (further down this
+    # file) for the full design history. Keyed on layout_role, same
+    # "borrow that role's own page" rule the CS branch above already
+    # follows — a management/admin user's own 'my'/'all' tabs keep
+    # layout_role == their real role, so both land here; previewing a
+    # specific cs_<id>/designer_<id> tab already returned above (CS
+    # branch) or falls through to the designer/team_lead render below.
+    # Admin gets this SAME layout for now too, per Ezekiel: "again admin
+    # dashboard we will develop tmw which will be more about app health,
+    # server health etc, but for now I will see what management sees."
+    if layout_role in ('management', 'admin'):
+        decisions = _compute_decisions(scope_user, all_flags=True)
+        risk_overdue = _compute_risk_overdue(scope_user)
+        return render_template(
+            'dashboard_leadership.html',
+            effective_role=user.role,
+            scope_mode=scope_mode,
+            cs_leads=cs_leads,
+            designers=designers,
+            decisions=decisions,
+            risk_overdue=risk_overdue,
+            waiting_on_others=_compute_leadership_waiting_on_others(scope_user),
+            role_snapshot=_compute_role_snapshot(),
+            leadership_focus=_compute_leadership_focus(scope_user, len(decisions), risk_overdue),
+            # Plain {id, name, team} dicts (not raw User objects — those
+            # aren't JSON-serializable via Jinja's |tojson) for the Assign
+            # Designer modal's client-side team-filter, embedded as a
+            # script-block constant per CLAUDE.md's "JS in templates —
+            # JSON data" rule.
+            designers_for_assign=[{'id': u.id, 'name': u.name, 'team': u.team} for u in designers],
+            # Secondary Metrics row (16 Jul 2026, later still) — per
+            # Ezekiel, sharing a screenshot of the CS dashboard's own
+            # Secondary Metrics tiles: "add this to the management view
+            # also, at the bottom." Reuses _CS_SECONDARY_METRICS as-is
+            # (renamed in spirit, not in code — see that constant's own
+            # comment, which now also documents this second consumer) and
+            # the exact same dash_card() tab+body mechanic/data every
+            # field here already feeds on the CS layout. dash_cs_layout=
+            # True is reused for clashes.html's "Deadline Clashes" vs
+            # "Clashing Projects" title switch too — see that file's
+            # updated comment; the flag really means "new-style Secondary
+            # Metrics layout", not "CS specifically", it just didn't have
+            # a second consumer until now.
+            dash_cs_layout=True,
+            secondary_metrics_order=_CS_SECONDARY_METRICS,
+            # Every one of the 5 Secondary Metrics partials' dash_card()
+            # call reads initial_expanded_card (expanded=(initial_expanded_
+            # card == '<key>')) — also missed on the first pass, same class
+            # of bug as the summary= omission below. None here for the same
+            # reason dashboard_cs.html's branch passes None: this page has
+            # no ?view= deep-link support for these tabs, so nothing should
+            # be pre-expanded on load.
+            initial_expanded_card=None,
+            # due.html's mini-stat reads summary.overdue for its red/green
+            # colour (see the big comment above _compute_summary() — the
+            # same function dashboard_cs.html's branch already passes this
+            # under). Missed on the first pass of this addition, causing a
+            # live jinja2.exceptions.UndefinedError: 'summary' is undefined
+            # the moment a management/admin user loaded the page — due.html
+            # is one of the 5 reused Secondary Metrics partials but wasn't
+            # part of this page's payload before today.
+            summary=_compute_summary(scope_user),
+            project_stats=_compute_project_stats(scope_user),
+            your_active_projects=_compute_your_active_projects(scope_user),
+            pending_approval_projects=_compute_pending_approval_projects(scope_user),
+            due_default=_compute_due(scope_user, 'overdue'),
+            clashes=_compute_clashes_response(scope_user),
+            time_tracking_rows=time_tracking_rows,
+        )
+
+    # ── Designer / Team Lead dashboard branch (16 Jul 2026) ───────────────
+    # See the big comment above _compute_designer_work_queue() (further
+    # down this file) for the full design history. Keyed on layout_role,
+    # same "borrow that role's own page" rule the CS/leadership branches
+    # above already follow — a real designer/team_lead's own 'my' scope
+    # keeps layout_role == their real role, so both land here; a
+    # management/admin user previewing a designer_<id> tab also lands here
+    # (layout_role = scope_user.role, see _resolve_dashboard_scope()) —
+    # exactly the "previewing a designer should look like THEIR dashboard"
+    # rule the view-switcher was built for. work_queue/metrics are computed
+    # once here and threaded into both focus= and template= kwargs, same
+    # "don't re-query what's already fetched" rule _compute_leadership_
+    # focus() follows for its own bar.
+    if layout_role in ('designer', 'team_lead'):
+        work_queue = _compute_designer_work_queue(scope_user)
+        metrics = _compute_designer_metrics(scope_user)
+        return render_template(
+            'dashboard_designer.html',
+            effective_role=user.role,
+            scope_mode=scope_mode,
+            cs_leads=cs_leads,
+            designers=designers,
+            focus=_compute_designer_focus(work_queue, metrics),
+            work_queue=work_queue,
+            waiting_on_others=_compute_waiting_on_others(scope_user),
+            week_load=_compute_designer_week_load(scope_user),
+            metrics=metrics,
+        )
 
     return render_template(
         'dashboard.html',
@@ -332,7 +544,8 @@ def index():
         # tags apply. Fully server-rendered, no filter tabs — see
         # _compute_at_risk_projects()'s docstring for the full tag logic.
         at_risk_projects=_compute_at_risk_projects(scope_user),
-        # Only CS/Designer/Team Lead ever see the "Flag a Project" button
+        # Only CS/Designer/Team Lead ever see the "Escalate" button (renamed
+        # from "Flag a Project" 16 Jul 2026 — see decisions.html)
         # (Management has no reason to flag something to itself), so skip
         # the extra query entirely for roles that can't open the modal.
         # Deliberately keyed on the REAL user.role, not layout_role/scope —
@@ -485,19 +698,62 @@ def _missing_designer_tags(project):
     requested team is unstaffed, same collapsing rule as before), never
     per-team AND the "All" label at once.
     """
-    requested_teams = [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
-    if not requested_teams:
-        return []
-
-    assigned_teams = {d.team for d in project.assigned_designers}
-    missing_teams = [t for t in requested_teams if t not in assigned_teams]
+    missing_teams = _missing_designer_teams(project)
     if not missing_teams:
         return []
 
-    if len(missing_teams) == len(requested_teams):
+    if len(missing_teams) == len(_requested_teams_list(project)):
         return ['All Designers Missing']
 
     return [_TEAM_MISSING_LABELS.get(t, f'{t} Missing') for t in missing_teams]
+
+
+def _requested_teams_list(project):
+    """Plain list of a project's requested design teams (parsed CSV), no
+    staffing check — shared helper so _missing_designer_teams() and any
+    caller needing "what teams did this project ask for" don't each
+    re-split project.design_teams_requested their own way."""
+    return [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
+
+
+def _missing_designer_teams(project):
+    """
+    RAW list of team names (e.g. ['3D', 'Technical']) missing a
+    project-level Lead Designer — the same check _missing_designer_tags()
+    above already made, pulled out one level further (16 Jul 2026, for the
+    leadership dashboard's Risk/Overdue card and its "Assign Designer"
+    button) so a caller that needs the actual team names to scope a
+    designer picker isn't stuck parsing _missing_designer_tags()' rendered
+    label strings (which collapse to 'All Designers Missing' and lose the
+    individual team names once every team is unstaffed). Returns [] for a
+    fully-staffed or team-less project, same as _missing_designer_tags().
+    """
+    requested_teams = _requested_teams_list(project)
+    if not requested_teams:
+        return []
+    assigned_teams = {d.team for d in project.assigned_designers}
+    return [t for t in requested_teams if t not in assigned_teams]
+
+
+_DUBAI_TZ = timezone(timedelta(hours=4))
+
+
+def _format_waiting_date(dt):
+    """
+    "Waiting since" display text (added 16 Jul 2026, for the Decisions
+    Needed / Next Actions "Others'" waiting-info feature below) — a short
+    day+month string, e.g. "13 Jul", no year and no time-of-day (contrast
+    with the `dubai_time` Jinja filter in app/__init__.py, which renders a
+    full timestamp). Converts the stored UTC datetime to Dubai local time
+    first via the same fixed `timezone(timedelta(hours=4))` offset every
+    other Dubai-local date/time calculation in this codebase uses (see
+    CLAUDE.md's DB Facts — ZoneInfo needs tzdata, not reliably present on
+    the Windows dev box) — without this, a status change or flag raised
+    late at night UTC could display as the wrong calendar day.
+    """
+    if not dt:
+        return None
+    return dt.replace(tzinfo=timezone.utc).astimezone(_DUBAI_TZ).strftime('%d %b')
 
 
 def _compute_at_risk_projects(user):
@@ -1042,6 +1298,22 @@ def _compute_decisions(user, all_flags=False):
     `user`. Per spec, My View's Decisions Needed shows "ALL flags raised"
     — not narrowed to just the projects this particular viewer happens to
     be CS Lead on, unlike every other card on that tab.
+
+    'waiting_since_display' / 'waiting_reason' / 'waiting_color' (added 16
+    Jul 2026, per Ezekiel: "For every item in Decision Needed / Others'
+    Actions, show: Waiting since... Waiting for... Use red only for:...
+    senior decision blocking work") — every row here already IS "senior
+    decision blocking work" by definition (that's what decision_needed=True
+    means), so waiting_color is unconditionally 'red', no per-row
+    classification needed the way Next Actions requires below.
+    waiting_since_display is decision_raised_at reformatted via
+    _format_waiting_date() (day+month, Dubai-local — see that function).
+    waiting_reason surfaces the SAME missing-designer check At Risk/Next
+    Actions/Clashes already use (_missing_designer_tags()) as plain text
+    ("Designer assignment") rather than a list of per-team tags — this
+    card has no person-chip row to show those in, so a short reason string
+    is the more useful signal in-place; only set when the project actually
+    has an unstaffed requested team, per Ezekiel's "(if relevant)".
     """
     if all_flags:
         base = Project.query.filter(Project.project_status != 'draft')
@@ -1058,10 +1330,21 @@ def _compute_decisions(user, all_flags=False):
         {
             'project_id': p.id,
             'project_name': p.name,
-            'raised_by': _serialize_user(p.decision_raised_by),
+            # Switched from _serialize_user() to _serialize_person() 16 Jul
+            # 2026 (same-day follow-up, per Ezekiel: "the name tag should
+            # follow our image + name system we are using everywhere else
+            # on the dashboard") — carries avatar_filename so dash_person_
+            # chip()/personChip() can render an avatar+name chip instead of
+            # a plain text .dash-owner-tag pill. Harmless superset for
+            # decisions.html's own still-unchanged raised_by usage (that
+            # template only ever read .name).
+            'raised_by': _serialize_person(p.decision_raised_by),
             'raised_at': p.decision_raised_at.isoformat() if p.decision_raised_at else None,
             'note': p.decision_note,
             'days_waiting': (now - p.decision_raised_at).days if p.decision_raised_at else None,
+            'waiting_since_display': _format_waiting_date(p.decision_raised_at),
+            'waiting_reason': 'Designer assignment' if _missing_designer_tags(p) else None,
+            'waiting_color': 'red',
         }
         for p in projects
     ]
@@ -1123,6 +1406,44 @@ def _compute_next_actions(user, filter_type):
     internally for the is_mine split above) but, like Due's own rows,
     aren't rendered by dash_due_row() — CS lead/designer chips replace
     what the owner tag used to show.
+
+    'waiting_since_display' / 'waiting_reason' / 'waiting_color' (added 16
+    Jul 2026, per Ezekiel: "For every item in Decision Needed / Others'
+    Actions, show: Waiting since... Waiting for..."; widened the same day,
+    per Ezekiel's follow-up: "Apply those changes to the my actions tab
+    too, it's only on other's actions") — computed for EVERY row
+    regardless of filter_type (cheap, and keeps the 'mine'/'others'
+    payloads structurally identical), and now RENDERED on both tabs too.
+    dash_due_row()'s show_waiting param still defaults to False (Overdue/
+    Today/This Week never pass it), but both Next Actions render paths now
+    pass True: next_actions.html's SSR 'mine' list passes show_waiting=True
+    directly, and fetchAndRenderNextActions() passes showWaiting=true to
+    renderDueRow() unconditionally (both filter values) — see
+    dashboard.js.
+
+    waiting_since_display: the started_at of the project's CURRENTLY OPEN
+    ProjectStatusLog row (ended_at is None — there's always exactly one,
+    per record_project_status()'s own invariant, see status_tracking.py) —
+    i.e. since the project landed in the status that produced the CURRENT
+    next-action guidance, not since the project was created. Falls back to
+    None (nothing rendered) in the unexpected case no open row exists.
+
+    waiting_color classification (maps the 8 reasons from Ezekiel's spec
+    onto data this page already computes, skipping the two with no
+    reliable signal yet — "due soon" has no defined threshold, "incomplete
+    brief" has no tracked concept — per explicit instruction to leave
+    those out rather than guess):
+      RED   — overdue (deadline has passed) OR missing critical owner
+              (no CS lead, defensively — see _compute_at_risk_projects()'s
+              own comment on why this can't actually fire yet — OR any
+              requested design team unstaffed, same bar the red
+              missing-designer chips elsewhere on this page already use)
+      AMBER — everything else: no deadline, or just plain "waiting on
+              whoever's turn it is" with nothing more specific wrong.
+    waiting_reason is set to 'Designer assignment' whenever ANY requested
+    team is missing (derived from the SAME `designers` list already built
+    below via _due_row_people() — not a second query — so this can never
+    disagree with the red chips the row itself renders).
     """
     results = []
     for p in _scoped_projects(user, active_only=True).all():
@@ -1136,6 +1457,11 @@ def _compute_next_actions(user, filter_type):
 
         deadline = nearest_deadline(p)
         requested_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
+        designers = _due_row_people(p, requested_teams)
+        has_missing_designer = any(not team['users'] for team in designers)
+        is_overdue = bool(deadline) and deadline < date.today()
+        has_no_cs_lead = not p.cs_lead_id
+        waiting_since = next((sl.started_at for sl in p.status_logs if sl.ended_at is None), None)
         results.append({
             'project_id': p.id,
             'type': 'project',
@@ -1150,7 +1476,10 @@ def _compute_next_actions(user, filter_type):
             'rag': get_project_rag(p),
             'deadline': deadline.isoformat() if deadline else None,
             'cs_lead': _serialize_person(p.cs_lead),
-            'designers': _due_row_people(p, requested_teams),
+            'designers': designers,
+            'waiting_since_display': _format_waiting_date(waiting_since),
+            'waiting_reason': 'Designer assignment' if has_missing_designer else None,
+            'waiting_color': 'red' if (is_overdue or has_no_cs_lead or has_missing_designer) else 'amber',
         })
 
     results.sort(key=lambda r: r['deadline'] or '9999-12-31')
@@ -1165,6 +1494,228 @@ def api_next_actions():
     return jsonify(_compute_next_actions(scope_user, filter_type))
 
 
+# ── CS-only redesigned dashboard (16 Jul 2026) ──────────────────────────
+# Per Ezekiel, sharing a mockup screenshot of a much simpler layout —
+# "Can we redesign it to be something like this?" Clarified via
+# AskUserQuestion + two follow-up messages into a specific spec: full
+# replacement of the tab-strip/toggle-box layout, but CS ROLE ONLY for
+# now (management/admin/designer/team_lead keep the existing dashboard.html
+# untouched — see index() below for how the branch works). "My Priority
+# Actions" replaces Next Actions' old My/Others toggle with a single
+# chronological, urgency-grouped list (mine only — Others' Actions moves
+# to the new "Waiting on Others" card instead, so there's no toggle left
+# to build). At Risk's card is retired entirely — its signal survives only
+# as a per-row tag on Priority Actions rows (see _compute_priority_actions
+# below) and is no longer a separate list anywhere. Decisions Needed's
+# card is ALSO retired from this page — it's now just the "0 decision
+# needed" pill in the Today's Focus bar (see dashboard_cs.html) plus the
+# "Escalate" button on the Priority Actions card header (reuses the exact
+# same Flag to Management modal/route unchanged, see
+# _flag_management_modal.html); there is currently NO way to view or
+# resolve an ALREADY-raised flag from this new page — flagged-for-CS
+# resolution happens for management/admin on their own (unchanged)
+# dashboard. Flagged here as a known gap, not an oversight — revisit if
+# Ezekiel wants a way to see raised flags from this page too.
+
+def _serialize_owners_list(owner_user):
+    """
+    get_next_action_owner()['user'] is None | User | list[User] (see
+    _is_owner()'s own comment above) — this normalizes all three shapes
+    into a plain list of _serialize_person() dicts (0, 1, or several) for
+    the Waiting on Others card, which shows one avatar+name chip per
+    current owner rather than the CS-lead-then-designers row every other
+    card on this page uses (there's no "CS lead vs. designer" split to
+    show here — Waiting on Others is specifically about whoever's turn it
+    currently is, singular concept, however many people that turns out to
+    be).
+    """
+    if owner_user is None:
+        return []
+    if isinstance(owner_user, list):
+        return [_serialize_person(u) for u in owner_user]
+    return [_serialize_person(owner_user)]
+
+
+def _compute_priority_actions(user):
+    """
+    "My Priority Actions" (added 16 Jul 2026, CS-only redesign — see the
+    big comment above). Replaces Next Actions' old 'mine' bucket: same
+    underlying _is_owner()/get_next_action_owner() logic as
+    _compute_next_actions(user, 'mine'), but with two differences per
+    Ezekiel's spec:
+
+    1. No My/Others toggle — this function ONLY ever returns the viewer's
+       own actions (Others' Actions now lives on the separate Waiting on
+       Others card, _compute_waiting_on_others() below, so there's nothing
+       left to toggle between on this card).
+    2. Rows are bucketed into urgency GROUPS instead of one flat list, per
+       the mockup ("URGENT" / "TODAY" sections). Ezekiel confirmed the At
+       Risk card should fold into this view "via a tag (so at risk tag on
+       the row entry)" rather than staying a separate section — this
+       function reuses the SAME red/urgent classification
+       _compute_next_actions()'s waiting_color already computes elsewhere
+       on this page (overdue OR no CS lead OR any requested design team
+       unstaffed) to decide BOTH which rows get an at-risk tag AND which
+       bucket a row lands in, so "urgent" here can never disagree with
+       what a Decisions/Next-Actions row would call red elsewhere.
+
+    Bucket order (JUDGMENT CALL — the mockup only shows "URGENT" and
+    "TODAY" in its screenshot, nothing for later/no-deadline projects, so
+    the remaining three bands below are a reasonable extrapolation, not
+    literal spec):
+      'urgent'      — is_overdue OR has_no_cs_lead OR has_missing_designer,
+                       REGARDLESS of deadline (a project with no deadline
+                       but a missing CS lead/designer is still urgent —
+                       matches the mockup's "Shop & Save" row, which shows
+                       under URGENT despite "No deadline").
+      'today'       — deadline == today, not urgent.
+      'this_week'   — deadline within the next 7 days, not urgent/today.
+      'later'       — any other real deadline, not urgent.
+      'no_deadline' — no deadline at all, not urgent.
+    Empty buckets are omitted from the returned list entirely, so
+    dashboard_cs.html's loop never renders an empty "LATER" heading with
+    nothing under it.
+
+    tags on each row are the SAME {'label':,'variant':} shape
+    _compute_at_risk_projects() already uses ('overdue' pulsing red,
+    'plain' rose for CS Missing) — deliberately NOT including a flat
+    "<Team> Designer Missing" tag here, same "one missing-designer
+    indicator per row" rule the At Risk card's own duplicate-tag fix
+    established (12-13 Jul 2026, see CLAUDE.md) — the red fallback chip in
+    item.designers (rendered via dash_row_people()) already covers that
+    fact, so repeating it as a flat tag would reintroduce the exact bug
+    that rule exists to prevent.
+    """
+    today = date.today()
+    week_end = today + timedelta(days=7)
+
+    rows = []
+    for p in _scoped_projects(user, active_only=True).all():
+        owner_info = get_next_action_owner(p)
+        if not _is_owner(owner_info['user'], user):
+            continue
+
+        deadline = nearest_deadline(p)
+        requested_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
+        designers = _due_row_people(p, requested_teams)
+        has_missing_designer = any(not team['users'] for team in designers)
+        is_overdue = bool(deadline) and deadline < today
+        has_no_cs_lead = not p.cs_lead_id
+        is_urgent = is_overdue or has_no_cs_lead or has_missing_designer
+
+        tags = []
+        if is_overdue:
+            tags.append({'label': 'Overdue', 'variant': 'overdue'})
+        if has_no_cs_lead:
+            tags.append({'label': 'CS Missing', 'variant': 'plain'})
+
+        if is_urgent:
+            group_key = 'urgent'
+        elif deadline == today:
+            group_key = 'today'
+        elif deadline and today < deadline <= week_end:
+            group_key = 'this_week'
+        elif deadline:
+            group_key = 'later'
+        else:
+            group_key = 'no_deadline'
+
+        rows.append({
+            'project_id': p.id,
+            'type': 'project',
+            'project_name': p.name,
+            'guidance': guidance_for_viewer(owner_info, user),
+            'deadline': deadline.isoformat() if deadline else None,
+            '_sort_deadline': deadline,
+            'cs_lead': _serialize_person(p.cs_lead),
+            'designers': designers,
+            'tags': tags,
+            'group_key': group_key,
+        })
+
+    rows.sort(key=lambda r: r['_sort_deadline'] or date.max)
+    for r in rows:
+        del r['_sort_deadline']
+
+    labels = {
+        'urgent': 'Urgent',
+        'today': 'Today',
+        'this_week': 'This Week',
+        'later': 'Later',
+        'no_deadline': 'No Deadline',
+    }
+    grouped = []
+    for key in ('urgent', 'today', 'this_week', 'later', 'no_deadline'):
+        group_rows = [r for r in rows if r['group_key'] == key]
+        if group_rows:
+            # 'rows', NOT 'items' — Jinja's `.` accessor tries attribute
+            # lookup before dict-key lookup, and a plain dict already has a
+            # builtin `.items()` method (the standard dict iteration
+            # method). `group.items` in the template would silently resolve
+            # to that BOUND METHOD instead of this list, blowing up with
+            # "TypeError: 'builtin_function_or_method' object is not
+            # iterable" at `{% for item in group.items %}` — caught live via
+            # a traceback from dashboard_cs.html line 135. Same footgun
+            # would apply to a key named 'keys' or 'values'. `group['items']`
+            # (bracket access) would have worked fine — it's specifically
+            # Jinja's dot-shorthand that collides with dict builtins.
+            grouped.append({'key': key, 'label': labels[key], 'rows': group_rows})
+    return grouped
+
+
+def _compute_waiting_on_others(user):
+    """
+    "Waiting on Others" (added 16 Jul 2026, CS-only redesign — see the big
+    comment above). Replaces Next Actions' old 'others' bucket — same
+    underlying _is_owner()/get_next_action_owner() logic as
+    _compute_next_actions(user, 'others'), but rendered as a compact
+    single-owner list per Ezekiel: "shows projects that are in design
+    stage or waiting on client, with the next overall step... It will show
+    the owner (example if it's designer show designer name and image, if
+    it's on CS, show their name and image) and it will show waiting since
+    for each entry."
+
+    'owners' (_serialize_owners_list(), see above) is 0-2 people — almost
+    always exactly 1 (whoever's turn it is), but get_next_action_owner()
+    can return a list for concept/KV split-designer cases, so this stays
+    list-shaped to match rather than silently dropping a second owner.
+
+    'guidance' is the RAW owner_info['guidance'] — deliberately NOT run
+    through guidance_for_viewer() (contrast with Priority Actions/Due/Next
+    Actions elsewhere on this page, which swap CS-role guidance for "No
+    action required" when the VIEWER can't act on it). That swap exists to
+    stop a designer from seeing an actionable-looking CS instruction they
+    can't do anything about; this card is explicitly informational ("what
+    is the other person doing"), not a call to action for the viewer, so
+    showing the real next step (e.g. "Follow up with client") is the
+    correct read here regardless of the viewer's own role.
+
+    waiting_since_display reuses the same "started_at of the currently
+    open ProjectStatusLog row" logic _compute_next_actions() already
+    established — see _format_waiting_date().
+    """
+    results = []
+    for p in _scoped_projects(user, active_only=True).all():
+        owner_info = get_next_action_owner(p)
+        if _is_owner(owner_info['user'], user):
+            continue
+
+        deadline = nearest_deadline(p)
+        waiting_since = next((sl.started_at for sl in p.status_logs if sl.ended_at is None), None)
+        results.append({
+            'project_id': p.id,
+            'project_name': p.name,
+            'guidance': owner_info['guidance'],
+            'owners': _serialize_owners_list(owner_info['user']),
+            'owner_role': owner_info['role'],
+            'deadline': deadline.isoformat() if deadline else None,
+            'waiting_since_display': _format_waiting_date(waiting_since),
+        })
+
+    results.sort(key=lambda r: r['deadline'] or '9999-12-31')
+    return results
+
+
 def _compute_flaggable_projects(user):
     """
     Feeds the project picker inside the Flag to Management modal (see
@@ -1172,7 +1723,8 @@ def _compute_flaggable_projects(user):
     describes a "read-only project name field" — implying the project is
     already known before the modal opens, which is true when the modal is
     launched from a specific project's own page. But the Decisions Needed
-    card's "Flag a Project" shortcut is launched from the DASHBOARD, which
+    card's "Escalate" shortcut (renamed from "Flag a Project" 16 Jul
+    2026 — see decisions.html) is launched from the DASHBOARD, which
     isn't about any one project, so there's no way to pre-know which
     project the user means. This function supplies a dropdown of that
     user's own active projects to choose from instead, as the pragmatic
@@ -1276,6 +1828,335 @@ def api_clashes():
     return jsonify(_compute_clashes_response(scope_user))
 
 
+# ── Leadership dashboard (management/admin) — 16 Jul 2026 ─────────────────
+# Per Ezekiel, sharing a mockup screenshot of a leadership-focused layout
+# (WELCOME/Leadership Focus bar/Decision Needed Queue/Risk-Overdue toggle +
+# Waiting on Others/Role Snapshot), clarified via five plain-text answers:
+# (1) the mockup's small italic-style caption lines ("Greene: separate
+# leadership decisions...", "Show what is late or structurally blocked",
+# "Clarifies where authority sits", the footer "Greene view: ...", the
+# "Visible accountability without surveillance" tagline) are design notes
+# ONLY — none of them render on the page, same treatment the CS mockup's
+# italic subtitles got. (2) Full replacement of the old management/admin
+# dashboard.html (tab-strip/toggle-box layout) — admin gets this too for
+# now, since Ezekiel's dedicated admin app/server-health dashboard is a
+# separate build for tomorrow ("for now I will see what management
+# sees"). (3) The mockup's OWNER column and REQUESTED BY column merge into
+# one — there was never a separate "decision owner" concept in the data
+# model to begin with (_compute_decisions() below has always had exactly
+# one person per flag, decision_raised_by/'raised_by'), so this needed no
+# code change, just confirms the existing single column is correct and no
+# new OWNER field/UI should be added. (4) Risk/Overdue's green "Start
+# project"/"Assign owner" boxes in the mockup are NOT static next-action
+# labels — they're real one-click agency: management can reassign a
+# project's CS lead or assign a designer directly from this card, each via
+# a popup modal matching the app's existing modal style (see
+# _flag_management_modal.html). Assign Designer is scoped to "the active
+# teams requested for that project" — i.e. only designers on a team the
+# project actually asked for, via _missing_designer_teams() below. (5) The
+# mockup's top-right "VIEWING AS Shibi [CS]" badge is the EXISTING global
+# emulation-badge component (base.html's `{% if is_emulating %}` block,
+# unrelated to this dashboard build) — confirmed by design, not rebuilt.
+#
+# The Decision Needed Queue reuses _compute_decisions(user, all_flags=True)
+# UNCHANGED — company-wide, every currently-open flag, matching "My View"'s
+# existing all_flags=True behavior (see _resolve_dashboard_scope()) — no
+# new compute function needed for that card.
+
+def _compute_risk_overdue(user):
+    """
+    Leadership dashboard's "Risk / Overdue" toggle box. Three MUTUALLY
+    EXCLUSIVE buckets — JUDGMENT CALL, not explicit spec: the mockup showed
+    three toggle pills with small, clearly distinct counts ("Overdue 1",
+    "At Risk 2", "No Deadline 1"), which only makes sense if a project
+    can't land in more than one bucket at once (otherwise the same
+    staffing gap could inflate both Overdue's and At Risk's counts for the
+    same project). Priority when a project could qualify for more than
+    one: overdue beats staffing-gap beats no-deadline — deadline pressure
+    is the more urgent signal, so a project that's BOTH overdue AND
+    missing a designer shows under Overdue, not At Risk.
+
+      - 'overdue'     — nearest_deadline(project) has passed, ANY amount
+                         (not the At Risk CARD's 1-7-day window elsewhere
+                         on this page — leadership wants visibility into
+                         everything late, not just this week's).
+      - 'at_risk'     — not overdue, but missing a CS lead or a requested
+                         design team has nobody assigned (same
+                         _missing_designer_teams() check At Risk/Next
+                         Actions/Clashes already use elsewhere, just
+                         consuming the raw team list instead of the
+                         rendered label strings).
+      - 'no_deadline' — neither of the above, and nearest_deadline is None
+                         outright.
+    A project matching none of the three (has a future deadline, fully
+    staffed) is simply omitted — nothing wrong to report.
+
+    Every row carries has_no_cs_lead / missing_teams so
+    dashboard_leadership.html can show a "Reassign CS Lead" / "Assign
+    Designer" button per Ezekiel: "Risk overdue let management reassign a
+    CS lead or reassign a designer so they have that agency" — Assign
+    Designer scoped to missing_teams specifically ("based on the active
+    teams requested for that project").
+    """
+    today = date.today()
+    buckets = {'overdue': [], 'at_risk': [], 'no_deadline': []}
+
+    for p in _scoped_projects(user, active_only=True).all():
+        deadline = nearest_deadline(p)
+        has_no_cs_lead = not p.cs_lead_id
+        missing_teams = _missing_designer_teams(p)
+
+        if deadline and deadline < today:
+            bucket_key = 'overdue'
+        elif has_no_cs_lead or missing_teams:
+            bucket_key = 'at_risk'
+        elif deadline is None:
+            bucket_key = 'no_deadline'
+        else:
+            continue
+
+        tags = []
+        if bucket_key == 'overdue':
+            tags.append({'label': 'Overdue', 'variant': 'overdue'})
+        if has_no_cs_lead:
+            tags.append({'label': 'CS Missing', 'variant': 'plain'})
+
+        requested_teams = _requested_teams_list(p)
+        buckets[bucket_key].append({
+            'project_id': p.id,
+            'name': p.name,
+            'tags': tags,
+            'deadline': deadline.isoformat() if deadline else None,
+            'cs_lead': _serialize_person(p.cs_lead),
+            'designers': _due_row_people(p, requested_teams),
+            'has_no_cs_lead': has_no_cs_lead,
+            'missing_teams': missing_teams,
+        })
+
+    for key in buckets:
+        buckets[key].sort(key=lambda r: r['deadline'] or '9999-12-31')
+
+    return buckets
+
+
+def _compute_leadership_waiting_on_others(user):
+    """
+    Leadership dashboard's "Waiting on Others" card — company-wide (unlike
+    the CS dashboard's card of the same name, which is scoped to that one
+    CS's own projects). Per Ezekiel: "shows all projects that are waiting
+    on people who are not the CS lead, the status and a button to follow
+    up if it's a decision, or assign if a designer hasn't assigned
+    themselves."
+
+    Two DISJOINT row types, checked in this order per project (a project
+    can only ever produce one row here, same "don't double-count" reasoning
+    _compute_risk_overdue() uses):
+      - 'assign'    — a requested design team has nobody assigned
+                       (_missing_designer_teams()) — "Waiting for: Designer
+                       assignment", Assign button.
+      - 'follow_up' — project_status == 'submitted_to_client' (the one
+                       status in the current get_next_action_owner()
+                       status_map whose guidance is literally "Follow up
+                       with client" — see dashboard_logic.py) — "Waiting
+                       for: Client confirmation", Follow up button.
+    Every other project (internal work in progress, nothing externally
+    blocked) is simply not shown — this card is specifically about
+    external/staffing blockers, not a general "what's everyone doing" feed
+    (that's Role Snapshot, below).
+
+    age_days / age_display: days since the CURRENTLY OPEN ProjectStatusLog
+    row started (same "started_at of the open status-log row" signal
+    _format_waiting_date()/Next Actions' waiting_since already use
+    elsewhere), rendered as "Today"/"1 day"/"N days" rather than reusing
+    _format_waiting_date()'s "13 Jul" format — the mockup shows relative
+    age ("Age: Today", "Age: 1 day"), not a calendar date, for this card
+    specifically.
+    """
+    results = []
+    for p in _scoped_projects(user, active_only=True).all():
+        missing_teams = _missing_designer_teams(p)
+        if missing_teams:
+            row_type = 'assign'
+            waiting_for = 'Designer assignment'
+        elif p.project_status == 'submitted_to_client':
+            row_type = 'follow_up'
+            waiting_for = 'Client confirmation'
+        else:
+            continue
+
+        open_log = next((sl for sl in p.status_logs if sl.ended_at is None), None)
+        if open_log and open_log.started_at:
+            age_days = (datetime.utcnow() - open_log.started_at).days
+            age_display = 'Today' if age_days == 0 else ('1 day' if age_days == 1 else f'{age_days} days')
+        else:
+            age_days = None
+            age_display = '—'
+
+        results.append({
+            'project_id': p.id,
+            'project_name': p.name,
+            'row_type': row_type,
+            'waiting_for': waiting_for,
+            'age_display': age_display,
+            'missing_teams': missing_teams,
+        })
+
+    results.sort(key=lambda r: r['project_name'])
+    return results
+
+
+# Priority order for Role Snapshot's single secondary stat per person —
+# JUDGMENT CALL, flagged rather than guessed at silently. The mockup shows
+# a DIFFERENT stat category per person (Kulsoom: "2 next actions", Mohsin:
+# "1 pending", Prim: "3 waiting", Rehan: "1 clash", Waseem: "clear") with
+# no explanation of why each person shows the one they do — read as "show
+# whichever single fact is most worth a leader's attention", so this list
+# is that priority, most urgent first. A person matching more than one
+# category only ever shows the highest-priority one (never stacks two
+# stats on a Role Snapshot tile — there's no room, and the mockup only
+# ever shows one per person).
+#   1. 'clash'   — involved in a deadline clash (compute_clashes()) — a
+#                  scheduling conflict is the most concretely urgent thing
+#                  that can be true about a person's workload.
+#   2. 'actions' — projects where it's currently THIS person's turn to act
+#                  (get_next_action_owner()/_is_owner()) — work is sitting
+#                  waiting on them specifically.
+#   3. 'pending' — CS-only: their projects currently sitting in
+#                  'submitted_to_client' (client-approval limbo) — not
+#                  blocking THEM, but worth a leader knowing it's pending.
+#   4. 'waiting' — their projects where it's someone ELSE'S turn (the
+#                  mirror image of 'actions') — lowest-urgency non-clear
+#                  state, included so "clear" is reserved for genuinely
+#                  nothing outstanding.
+#   5. 'clear'   — none of the above — fallback.
+_ROLE_SNAPSHOT_ROLES = ('cs', 'designer', 'team_lead')
+
+
+def _compute_role_snapshot():
+    """
+    Leadership dashboard's "Role Snapshot" row — one tile per CS/designer/
+    team_lead user (management/admin excluded — this card is about the
+    people doing project work, not about the viewer's own peers), each
+    showing their active project count plus ONE priority-ordered secondary
+    stat (see the big comment above _ROLE_SNAPSHOT_ROLES) and a status dot
+    colour (red for 'clash'/'actions', amber for 'pending'/'waiting', green
+    for 'clear' — same red/amber/green story every other urgency signal on
+    this page tells).
+
+    Always company-wide (User.query, not _scoped_projects(management_user)
+    — this card is inherently about OTHER people's workloads, there's no
+    "viewer's own scope" to narrow it by).
+
+    Segregated 16 Jul 2026, same-day follow-up — per Ezekiel: "Role
+    snapshot needs to be segregrated. Client servicing row. Designer Row
+    (split into the 3 teams, 2d, 3d and technical)." Return shape changed
+    from a flat list to a dict: `cs` (all CS tiles), `designers_by_team`
+    (dict keyed '3D'/'2D'/'Technical', reusing the exact team name strings
+    _TEAM_MISSING_LABELS already uses elsewhere on this page — one source
+    of truth for team naming), and `designers_unassigned` (defensive
+    bucket for a designer/team_lead with no `.team` set — shouldn't
+    normally happen, but better than silently dropping them). team_lead
+    users are grouped into their own team's bucket alongside designers
+    (not a 4th top-level group) — per Ezekiel's literal phrasing this is a
+    "Designer Row" split by team, and a team lead IS on one of the three
+    design teams, same as any designer.
+    """
+    all_projects = Project.query.filter(Project.project_status != 'draft', Project.project_status != 'approved').all()
+    clashes = compute_clashes(all_projects)
+    clash_designer_ids = set()
+    for c in clashes['by_deliverable']:
+        clash_designer_ids.add(c['designer_id'])
+    for c in clashes['by_project']:
+        clash_designer_ids.add(c['designer_id'])
+
+    tiles_cs = []
+    tiles_by_team = {'3D': [], '2D': [], 'Technical': []}
+    tiles_unassigned = []
+
+    for u in User.query.filter(User.role.in_(_ROLE_SNAPSHOT_ROLES)).order_by(User.name.asc()).all():
+        scoped = _scoped_projects(u, active_only=True).all()
+        active_count = len(scoped)
+
+        if u.id in clash_designer_ids:
+            stat_key, stat_count = 'clash', sum(
+                1 for c in clashes['by_deliverable'] if c['designer_id'] == u.id
+            ) + sum(
+                1 for c in clashes['by_project'] if c['designer_id'] == u.id
+            )
+        else:
+            my_actions = sum(1 for p in scoped if _is_owner(get_next_action_owner(p)['user'], u))
+            if my_actions:
+                stat_key, stat_count = 'actions', my_actions
+            elif u.role == 'cs' and any(p.project_status == 'submitted_to_client' for p in scoped):
+                stat_key, stat_count = 'pending', sum(1 for p in scoped if p.project_status == 'submitted_to_client')
+            else:
+                waiting = sum(1 for p in scoped if not _is_owner(get_next_action_owner(p)['user'], u))
+                stat_key, stat_count = ('waiting', waiting) if waiting else ('clear', 0)
+
+        stat_labels = {
+            'clash': 'clash' if stat_count == 1 else 'clashes',
+            'actions': 'next action' if stat_count == 1 else 'next actions',
+            'pending': 'pending',
+            'waiting': 'waiting',
+            'clear': 'clear',
+        }
+        dot_color = {
+            'clash': 'red', 'actions': 'red', 'pending': 'amber', 'waiting': 'amber', 'clear': 'green',
+        }[stat_key]
+
+        tile = {
+            'user_id': u.id,
+            'name': u.name,
+            'avatar_filename': u.avatar_filename,
+            'active_count': active_count,
+            'stat_key': stat_key,
+            'stat_count': stat_count,
+            'stat_label': stat_labels[stat_key],
+            'dot_color': dot_color,
+        }
+
+        if u.role == 'cs':
+            tiles_cs.append(tile)
+        elif u.team in tiles_by_team:
+            tiles_by_team[u.team].append(tile)
+        else:
+            tiles_unassigned.append(tile)
+
+    return {
+        'cs': tiles_cs,
+        'designers_by_team': tiles_by_team,
+        'designers_unassigned': tiles_unassigned,
+    }
+
+
+def _compute_leadership_focus(user, decisions_count, risk_overdue):
+    """
+    Leadership Focus bar's 5 pills. Reuses counts already computed
+    elsewhere in index() (decisions_count from _compute_decisions(),
+    risk_overdue's own bucket lengths) rather than re-querying — the bar
+    is purely a summary of data every other card on this page already
+    fetched.
+    """
+    clashes = compute_clashes(_scoped_projects(user, active_only=True).all())
+    clash_count = len(clashes['by_project']) + len(clashes['by_deliverable'])
+    waiting_count = len(_compute_leadership_waiting_on_others(user))
+
+    return {
+        'decisions_open': decisions_count,
+        'overdue': len(risk_overdue['overdue']),
+        'at_risk': len(risk_overdue['at_risk']),
+        'clashes': clash_count,
+        'waiting_on_others': waiting_count,
+    }
+
+
+@dashboard_bp.route('/api/risk-overdue')
+@login_required
+def api_risk_overdue():
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_risk_overdue(scope_user))
+
+
 # The deep-dive zone (Projects/Deliverables tabs at the bottom of the
 # dashboard — _is_at_risk(), _compute_deep_dive_projects(),
 # _compute_deep_dive_deliverables(), and their /api/deep-dive/* routes)
@@ -1287,3 +2168,259 @@ def api_clashes():
 # unrelated staffing-gap/overdue check that is NOT part of this removal —
 # see its own docstring). Check git history around 13 Jul 2026 if this
 # ever needs resurrecting.
+
+
+# ── Designer / Team Lead dashboard (16 Jul 2026) ─────────────────────────
+# Per Ezekiel: "Let's move on to the designer dashboard, the final one.
+# This applies to team_lead and designer roles only." Full replacement of
+# dashboard.html for layout_role in ('designer', 'team_lead') — same "own
+# dedicated layout" precedent dashboard_cs.html/dashboard_leadership.html
+# already established for their roles. See index()'s designer/team_lead
+# branch (above) for the render_template() call and dashboard_designer.html
+# for the template.
+#
+# A reference mockup ("Designer landing view", Christine) was shared
+# alongside the spec, explicitly for "arrangement inspiration" only — the
+# written spec (quoted in full in CLAUDE.md) is authoritative wherever the
+# two disagree.
+
+def _designer_row_classification(p, user):
+    """
+    Shared per-project classification both _compute_designer_work_queue()
+    and _compute_designer_metrics() need — one source of truth so the
+    Blocked bucket's membership can never drift between "what shows in My
+    Work Queue" and "what the Blocked counter on Metrics Summary counts",
+    the same kind of drift the At Risk card's 13 Jul 2026 duplicate-tag
+    bug came from (see CLAUDE.md).
+
+    'missing_info' (blocked reason 2, "a brief is missing information") is
+    a JUDGMENT CALL, flagged here and in CLAUDE.md — this codebase has
+    never formally defined that phrase anywhere else. Reused the clearest
+    gap this app already tracks: nearest_deadline(p) is None (no deadline
+    set at all) — same signal the leadership dashboard's own "No Deadline"
+    bucket already treats as notable, rather than inventing a new,
+    undefined concept from scratch.
+
+    'blocked_2days' (blocked reason 1) — per Ezekiel: "waiting on CS for
+    more than 2 days." Reuses the exact same "started_at of the currently
+    open ProjectStatusLog row" signal _compute_waiting_on_others() and the
+    Decisions/Next-Actions waiting tags already use elsewhere on this page.
+    """
+    owner_info = get_next_action_owner(p)
+    is_my_turn = _is_owner(owner_info['user'], user)
+    deadline = nearest_deadline(p)
+    waiting_since = next((sl.started_at for sl in p.status_logs if sl.ended_at is None), None)
+    waiting_days = (datetime.utcnow() - waiting_since).days if waiting_since else 0
+    blocked_2days = (not is_my_turn) and owner_info['role'] == 'cs' and waiting_days >= 2
+    missing_info = deadline is None
+
+    return {
+        'owner_info': owner_info,
+        'is_my_turn': is_my_turn,
+        'deadline': deadline,
+        'blocked_2days': blocked_2days,
+        'missing_info': missing_info,
+        'is_blocked': blocked_2days or missing_info,
+    }
+
+
+def _compute_designer_work_queue(user):
+    """
+    "My Work Queue" — Due Today / This Week / Blocked, per Ezekiel's full
+    spec (see CLAUDE.md for the verbatim message). One row per PROJECT
+    (not per-deliverable, unlike _compute_due()) — this card is about
+    "what should I be doing", and Project.revision_count/Project.client
+    are both project-level fields, so a project-level row is the natural
+    grain here, matching how My Priority Actions/Waiting on Others are
+    also project rows elsewhere on this codebase.
+
+    Bucketing (mutually exclusive — a blocked project never ALSO appears
+    in Due Today/This Week, same "no double-counting" rule the leadership
+    dashboard's Risk/Overdue buckets already follow — see
+    _compute_risk_overdue()):
+      'blocked'   — _designer_row_classification()'s is_blocked.
+      'due_today' — deadline == today.
+      'this_week' — deadline within today..+7 days, INCLUSIVE of today
+                    (JUDGMENT CALL: "This week follows the same rules but
+                    for the entire week" is read as a rolling window that
+                    CONTAINS today, not a separate non-overlapping band —
+                    so every Due Today row also appears in This Week).
+
+    Every no-deadline project is classified missing_info=True by
+    _designer_row_classification() above and therefore always lands in
+    Blocked, never Due Today/This Week — so the "No Deadline" yellow-text
+    treatment Ezekiel described for a due-today/this-week row is currently
+    unreachable in practice (there's no code path that puts a null-
+    deadline row in those two buckets). Kept in dash_designer_queue_row()
+    (see _dashboard_macros.html) and its CSS anyway, both because it's
+    cheap to support and in case this classification is ever loosened
+    later (e.g. missing_info narrowed to only fire when is_my_turn, which
+    would let a CS-owned no-deadline project surface in the queue with the
+    yellow "No Deadline" text instead of the Blocked bucket).
+
+    Each row carries a 'tags' list ({'label':,'variant':} — same shape
+    every other card's tags use) and a 'next_action' string:
+      - Blocked: 'Waiting on CS 2+ Days' / 'Missing Brief Info' (red,
+        either or both can apply at once), next_action = 'Flag project to
+        CS Lead' when missing_info (opens the inline flag modal — see
+        dashboard_designer.html) else 'Ping CS Owner'.
+      - Due Today/This Week, my turn: 'INITIAL' or 'REVISION <n>'
+        (Project.revision_count), next_action = 'Submit Initial
+        Submission' / 'Submit Revision <n>'.
+      - Due Today/This Week, CS's turn: 'Waiting on CS' (amber),
+        next_action = 'Ping CS Owner' — per Ezekiel: "If something is
+        waiting on CS action, then add that as a yellow tag."
+    """
+    today = date.today()
+    week_end = today + timedelta(days=7)
+    buckets = {'due_today': [], 'this_week': [], 'blocked': []}
+
+    for p in _scoped_projects(user, active_only=True).all():
+        c = _designer_row_classification(p, user)
+        cs_lead = _serialize_person(p.cs_lead)
+
+        if c['is_blocked']:
+            tags = []
+            if c['blocked_2days']:
+                tags.append({'label': 'Waiting on CS 2+ Days', 'variant': 'red'})
+            if c['missing_info']:
+                tags.append({'label': 'Missing Brief Info', 'variant': 'red'})
+            buckets['blocked'].append({
+                'project_id': p.id,
+                'project_name': p.name,
+                'client_name': p.client or '',
+                'deadline': c['deadline'].isoformat() if c['deadline'] else None,
+                'cs_lead': cs_lead,
+                'tags': tags,
+                'next_action': 'Flag project to CS Lead' if c['missing_info'] else 'Ping CS Owner',
+                'show_flag_button': c['missing_info'],
+            })
+            continue
+
+        deadline = c['deadline']
+        if deadline is None or not (today <= deadline <= week_end):
+            continue
+
+        if c['is_my_turn']:
+            revision_count = p.revision_count or 0
+            if revision_count > 0:
+                tags = [{'label': f'REVISION {revision_count}', 'variant': 'amber'}]
+                next_action = f'Submit Revision {revision_count}'
+            else:
+                tags = [{'label': 'INITIAL', 'variant': 'initial'}]
+                next_action = 'Submit Initial Submission'
+        else:
+            tags = [{'label': 'Waiting on CS', 'variant': 'amber'}]
+            next_action = 'Ping CS Owner'
+
+        row = {
+            'project_id': p.id,
+            'project_name': p.name,
+            'client_name': p.client or '',
+            'deadline': deadline.isoformat(),
+            'cs_lead': cs_lead,
+            'tags': tags,
+            'next_action': next_action,
+            'show_flag_button': False,
+        }
+
+        if deadline == today:
+            buckets['due_today'].append(row)
+        buckets['this_week'].append(row)
+
+    for key in buckets:
+        buckets[key].sort(key=lambda r: r['deadline'] or '9999-12-31')
+
+    return buckets
+
+
+def _compute_designer_week_load(user):
+    """
+    "This Week Load" — Mon-Fri counts of deadlines landing on each day,
+    colour-coded per Ezekiel: "0-1 green, 2-3 yellow, 4+ red." Uses the
+    CURRENT calendar week (Monday through Friday), not a rolling 5-day
+    window starting from today — a JUDGMENT CALL, matching the mockup's
+    fixed Mon-Fri layout over a "today + next 4 workdays" reading.
+    """
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    days = [monday + timedelta(days=i) for i in range(5)]
+    counts = {d: 0 for d in days}
+
+    for p in _scoped_projects(user, active_only=True).all():
+        deadline = nearest_deadline(p)
+        if deadline in counts:
+            counts[deadline] += 1
+
+    def color_for(n):
+        if n <= 1:
+            return 'green'
+        if n <= 3:
+            return 'amber'
+        return 'red'
+
+    return [{
+        'label': d.strftime('%a'),
+        'date': d.strftime('%d %b'),
+        'is_today': d == today,
+        'count': counts[d],
+        'color': color_for(counts[d]),
+    } for d in days]
+
+
+def _compute_designer_metrics(user):
+    """
+    "Metrics Summary" — Assigned / Submitted / Blocked / Revisions
+    counters, each with an expandable row list (per Ezekiel: "counters
+    that can be clicked to expand below and show the relevant details to
+    click on those projects"). Reuses _stat_project_rows() (the same
+    plain project-list serializer Your Active/Pending Approval already
+    use) for Assigned/Submitted/Revisions; Blocked reuses
+    _compute_designer_work_queue()'s own 'blocked' bucket directly rather
+    than re-deriving the same classification a second time (see
+    _designer_row_classification()'s docstring on why that would risk
+    drift) — rendered via dash_designer_queue_row(), not
+    dash_stat_project_row(), since those rows already carry the richer
+    tag/CS-lead/next-action detail and there's no reason to throw that
+    away just because this panel is reached via a different counter.
+
+    'submitted' JUDGMENT CALL: project_status in ('submitted',
+    'internal_review', 'submitted_to_client') — "work has been handed off
+    and is awaiting someone else," the closest reading of "submitted
+    projects" this app's status vocabulary supports.
+    'revisions' JUDGMENT CALL: Project.revision_count > 0, regardless of
+    whose turn it currently is (a project that's ever been through a
+    revision cycle, not just ones currently awaiting a resubmit).
+    """
+    assigned = _scoped_projects(user, active_only=True).all()
+    submitted = [p for p in assigned if p.project_status in ('submitted', 'internal_review', 'submitted_to_client')]
+    revisions = [p for p in assigned if (p.revision_count or 0) > 0]
+    blocked_rows = _compute_designer_work_queue(user)['blocked']
+
+    return {
+        'assigned': {'count': len(assigned), 'rows': _stat_project_rows(assigned)},
+        'submitted': {'count': len(submitted), 'rows': _stat_project_rows(submitted)},
+        'blocked': {'count': len(blocked_rows), 'rows': blocked_rows},
+        'revisions': {'count': len(revisions), 'rows': _stat_project_rows(revisions)},
+    }
+
+
+def _compute_designer_focus(work_queue, metrics):
+    """
+    Designer Focus bar's pills — derived from already-computed work_queue/
+    metrics dicts (same "reuse what index() already fetched, don't
+    re-query" rule _compute_leadership_focus() follows) rather than a
+    fixed field set copied verbatim from the CS/management bars — this
+    role's most relevant at-a-glance numbers are different from either of
+    those (no "decisions"/"clashes" concept for an individual designer's
+    own queue). JUDGMENT CALL: the exact pill set wasn't specified beyond
+    "similar to the CS and management versions" (i.e. reuse
+    .dash-focus-bar's styling, not necessarily its exact field set).
+    """
+    return {
+        'due_today': len(work_queue['due_today']),
+        'this_week': len(work_queue['this_week']),
+        'blocked': len(work_queue['blocked']),
+        'submitted': metrics['submitted']['count'],
+        'revisions': metrics['revisions']['count'],
+    }

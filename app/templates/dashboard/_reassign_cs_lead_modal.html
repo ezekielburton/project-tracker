@@ -1,0 +1,34 @@
+{#
+   Reassign CS Lead modal — added 16 Jul 2026 for the leadership dashboard's
+   Risk/Overdue card ("Reassign CS Lead" button, see dash_leadership_risk_row
+   in _dashboard_macros.html). Same .modal-overlay/.modal-box/.modal-actions
+   shape as _flag_management_modal.html ("our style" — Ezekiel: "Both use
+   pop up window in our style"). Opened via
+   data-action="open-reassign-cs-lead-modal" on a project row's button
+   (data-project-id/data-project-name), which dashboard.js reads to
+   populate the read-only project name and reset the CS lead <select>.
+   Submits to POST /projects/<id>/reassign-cs-lead (projects_detail.py).
+#}
+<div id="reassign-cs-lead-modal" class="modal-overlay hidden" data-action="close-reassign-cs-lead-overlay">
+    <div class="modal-box">
+        <h3 class="modal-title">Reassign CS Lead</h3>
+        <p id="reassign-cs-lead-project-name" style="margin:-0.5rem 0 1rem; color:var(--grey-dark); font-size:0.9rem;"></p>
+
+        <div class="form-group">
+            <label>New CS Lead</label>
+            <select id="reassign-cs-lead-select" class="form-input">
+                <option value="">Select a CS lead…</option>
+                {% for cs in cs_leads %}
+                <option value="{{ cs.id }}">{{ cs.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <p id="reassign-cs-lead-error" class="hidden" style="color:var(--rose); font-size:0.85rem; margin:-0.75rem 0 1rem;"></p>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-action="close-reassign-cs-lead-modal">Cancel</button>
+            <button type="button" class="btn-primary" data-action="submit-reassign-cs-lead">Reassign</button>
+        </div>
+    </div>
+</div>

@@ -1235,9 +1235,18 @@ def assign_lead(project_id):
     previous_designer = current_assignment.designer if current_assignment else None
 
     if new_designer_id:
-        # Current lead is transferring to a specific person — only the current lead can do this
-        if not current_assignment or current_assignment.user_id != actor.id:
-            return jsonify({'success': False, 'error': 'Only the current lead can transfer ownership.'}), 403
+        # Current lead is transferring to a specific person — only the
+        # current lead can do this UNLESS the actor is admin/management
+        # (added 16 Jul 2026, for the leadership dashboard's "Assign
+        # Designer" action — see the big comment on
+        # _compute_risk_overdue() in dashboard.py). Gives leadership
+        # direct reassignment agency regardless of whether a current lead
+        # even exists — an UNSTAFFED team has no "current lead" to
+        # authorize a transfer at all, so before this nobody but the
+        # missing lead themselves could ever fill it via this route.
+        if actor.role not in ('admin', 'management'):
+            if not current_assignment or current_assignment.user_id != actor.id:
+                return jsonify({'success': False, 'error': 'Only the current lead can transfer ownership.'}), 403
         new_designer = User.query.get(int(new_designer_id))
         if not new_designer:
             return jsonify({'success': False, 'error': 'Designer not found.'}), 404
@@ -1268,6 +1277,69 @@ def assign_lead(project_id):
                      entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})
+
+
+@detail_bp.route('/projects/<int:project_id>/reassign-cs-lead', methods=['POST'])
+@login_required
+def reassign_cs_lead(project_id):
+    """
+    Leadership dashboard's "Reassign CS Lead" action (added 16 Jul 2026 —
+    see the big comment on _compute_risk_overdue() in dashboard.py). No
+    equivalent route existed before this — every other place cs_lead_id
+    gets set is part of a bigger brief-creation/submission form, not a
+    standalone reassignment action, so this is new rather than reused.
+    Admin/management only, matching the leadership dashboard's own
+    audience — this is a real ownership change, not a self-service action
+    a CS/designer/team_lead should be able to trigger on someone else's
+    behalf.
+    """
+    project = Project.query.get_or_404(project_id)
+    data = request.get_json() or {}
+    new_cs_lead_id = data.get('new_cs_lead_id')
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    if actor.role not in ('admin', 'management'):
+        return jsonify({'success': False, 'error': 'Only admin/management can reassign a CS lead.'}), 403
+
+    if not new_cs_lead_id:
+        return jsonify({'success': False, 'error': 'A new CS lead is required.'}), 400
+
+    new_cs_lead = User.query.get(int(new_cs_lead_id))
+    if not new_cs_lead or new_cs_lead.role != 'cs':
+        return jsonify({'success': False, 'error': 'CS lead not found.'}), 404
+
+    previous_cs_lead = project.cs_lead
+    project.cs_lead_id = new_cs_lead.id
+    db.session.commit()
+
+    from app.notifications import create_notification
+    create_notification(
+        recipient=new_cs_lead,
+        message=f'You have been assigned as CS lead on "{project.name}" by {actor.name}.',
+        notification_type='cs_lead_reassigned',
+        project=project,
+        triggered_by=actor,
+    )
+    if previous_cs_lead and previous_cs_lead.id != new_cs_lead.id:
+        create_notification(
+            recipient=previous_cs_lead,
+            message=f'{new_cs_lead.name} has taken over as CS lead on "{project.name}" (reassigned by {actor.name}).',
+            notification_type='cs_lead_reassigned',
+            project=project,
+            triggered_by=actor,
+        )
+
+    log_activity(
+        'cs_lead_reassigned',
+        f'{actor.name} reassigned CS lead on "{project.name}" to {new_cs_lead.name}'
+        + (f' (previously {previous_cs_lead.name})' if previous_cs_lead else ''),
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
+    )
+
+    return jsonify({'success': True})
+
 
 # _____________ Auto-generate FOC Job Number __________
 # Returns the next available FOC-NNN job number.
@@ -1811,6 +1883,156 @@ def delete_project_file(file_id):
 
     db.session.delete(project_file)
     db.session.commit()
+
+    return jsonify({'success': True})
+
+
+@detail_bp.route('/projects/<int:project_id>/reset-pill', methods=['POST'])
+@login_required
+@role_required('admin')
+def reset_pill(project_id):
+    """Admin-only: reset a C&KV or POSM channel pill to a specific revision number.
+
+    Wipes all ProjectSubmission records (and their NAS files) for the pill,
+    wipes all ProjectRevision records for the pill, resets the pill status
+    fields back to 'in_queue', and sets the revision counter to the requested
+    target number (0 = start fresh).
+
+    JSON body:
+      pill_type        - 'ckv' or 'posm'
+      target_revision  - int, the revision counter to set (0 for a full reset)
+      posm_country     - str, e.g. 'kuwait' (posm only)
+      posm_customer_id - int or null (posm UAE only)
+    """
+    from app.models import (ProjectSubmission, ProjectSubmissionFile,
+                            ProjectSubmissionDeliverable,
+                            ProjectRevision, ProjectRevisionDeliverable,
+                            ProjectPosmChannel, ProjectCustomer)
+    from app.nas import build_file_path, delete_app_file
+
+    project = Project.query.get_or_404(project_id)
+    data = request.get_json() or {}
+
+    pill_type        = data.get('pill_type')
+    target_revision  = int(data.get('target_revision', 0))
+    posm_country     = (data.get('posm_country') or '').strip().lower() or None
+    posm_customer_id = data.get('posm_customer_id')
+    if posm_customer_id is not None:
+        posm_customer_id = int(posm_customer_id)
+
+    if pill_type not in ('ckv', 'posm'):
+        return jsonify({'success': False, 'error': 'Invalid pill_type'}), 400
+
+    def _wipe_submissions(submissions):
+        for sub in submissions:
+            nas_path = build_file_path(project, 'Submissions', sub.original_filename)
+            delete_app_file(nas_path)
+            extra_files = ProjectSubmissionFile.query.filter_by(submission_id=sub.id).all()
+            for ef in extra_files:
+                extra_path = build_file_path(project, 'Submissions', ef.original_filename)
+                delete_app_file(extra_path)
+            ProjectSubmissionDeliverable.query.filter_by(
+                submission_id=sub.id).delete(synchronize_session=False)
+            ProjectSubmissionFile.query.filter_by(
+                submission_id=sub.id).delete(synchronize_session=False)
+            db.session.delete(sub)
+
+    def _wipe_revisions(revisions):
+        for rev in revisions:
+            ProjectRevisionDeliverable.query.filter_by(
+                revision_id=rev.id).delete(synchronize_session=False)
+            db.session.delete(rev)
+
+    if pill_type == 'ckv':
+        submissions = ProjectSubmission.query.filter_by(
+            project_id=project_id,
+            posm_country=None,
+            posm_customer_id=None
+        ).all()
+        _wipe_submissions(submissions)
+
+        revisions = ProjectRevision.query.filter_by(
+            project_id=project_id,
+            posm_country=None,
+            posm_customer_id=None
+        ).filter(
+            db.or_(ProjectRevision.includes_concept == True,   # noqa: E712
+                   ProjectRevision.includes_kv == True)
+        ).all()
+        _wipe_revisions(revisions)
+
+        project.concept_status        = 'in_queue'
+        if project.has_kv:
+            project.kv_status         = 'in_queue'
+        project.ckv_revision_count    = target_revision
+        project.concept_approved_at   = None
+        project.concept_approved_by_id = None
+
+        db.session.commit()
+
+        log_activity(
+            'pill_reset',
+            f'C&KV pill reset to revision {target_revision} on "{project.name}" by {current_user.name}',
+            user=current_user, entity_type='project',
+            entity_name=project.name, entity_id=project.id
+        )
+
+    elif pill_type == 'posm':
+        if not posm_country:
+            return jsonify({'success': False, 'error': 'posm_country required'}), 400
+
+        channel_q = ProjectPosmChannel.query.filter_by(
+            project_id=project_id,
+            posm_country=posm_country
+        )
+        if posm_customer_id is not None:
+            channel_q = channel_q.filter_by(posm_customer_id=posm_customer_id)
+        else:
+            channel_q = channel_q.filter(ProjectPosmChannel.posm_customer_id == None)  # noqa: E711
+        channel = channel_q.first_or_404()
+
+        sub_q = ProjectSubmission.query.filter_by(
+            project_id=project_id,
+            posm_country=posm_country
+        )
+        if posm_customer_id is not None:
+            sub_q = sub_q.filter(ProjectSubmission.posm_customer_id == posm_customer_id)
+        else:
+            sub_q = sub_q.filter(ProjectSubmission.posm_customer_id == None)  # noqa: E711
+        _wipe_submissions(sub_q.all())
+
+        rev_q = ProjectRevision.query.filter_by(
+            project_id=project_id,
+            posm_country=posm_country
+        )
+        if posm_customer_id is not None:
+            rev_q = rev_q.filter(ProjectRevision.posm_customer_id == posm_customer_id)
+        else:
+            rev_q = rev_q.filter(ProjectRevision.posm_customer_id == None)  # noqa: E711
+        _wipe_revisions(rev_q.all())
+
+        channel.status         = 'in_queue'
+        channel.approved_at    = None
+        channel.approved_by_id = None
+
+        if posm_customer_id is not None:
+            pc = ProjectCustomer.query.get(posm_customer_id)
+            if pc:
+                pc.posm_revision_count = target_revision
+        else:
+            counts = dict(project.posm_country_revision_counts or {})
+            counts[posm_country] = target_revision
+            project.posm_country_revision_counts = counts
+
+        db.session.commit()
+
+        label = f'{posm_country.upper()} (customer {posm_customer_id})' if posm_customer_id else posm_country.upper()
+        log_activity(
+            'pill_reset',
+            f'POSM channel {label} reset to revision {target_revision} on "{project.name}" by {current_user.name}',
+            user=current_user, entity_type='project',
+            entity_name=project.name, entity_id=project.id
+        )
 
     return jsonify({'success': True})
 

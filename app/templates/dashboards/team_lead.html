@@ -309,7 +309,6 @@
                         <th>Deadline Time</th>
                         <th>Status</th>
                         <th>CS Lead</th>
-                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -317,7 +316,8 @@
                 {% set _dl_date = d.design_deadline or (d.project_customer.design_deadline if d.project_customer else None) %}
                 {% set _dl_time = d.design_deadline_time or (d.project_customer.design_deadline_time if d.project_customer else None) %}
                 {% set _is_overdue = _dl_date and _dl_date < today %}
-                <tr class="{% if _is_overdue %}overdue{% endif %}">
+                <tr class="clickable {% if _is_overdue %}overdue{% endif %}"
+                    data-href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=deliverables">
                     <td>
                         <strong>{{ d.name }}</strong>
                         <div style="font-size:0.78rem;color:var(--grey-dark);margin-top:0.15rem;">{{ d.project.name }}</div>
@@ -326,7 +326,6 @@
                     <td class="mono">{{ _dl_time.strftime('%H:%M') if _dl_time else '—' }}</td>
                     <td><span class="status-badge s-{{ d.status }}">{{ d.status | replace('_', ' ') | title }}</span></td>
                     <td><div class="cs-lead-stack">{% if d.project.cs_lead %}{{ user_avatar(d.project.cs_lead, 'sm') }} {{ d.project.cs_lead.name }}{% else %}—{% endif %}</div></td>
-                    <td><a href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=deliverables" class="btn btn--secondary sidebar-item--nav">Go to Project</a></td>
                 </tr>
                 {% endfor %}
                 </tbody>

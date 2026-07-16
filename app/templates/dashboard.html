@@ -10,84 +10,13 @@
         <h1 class="dashboard-greeting">Welcome, <span>{{ effective_user.name.split()[0] }}</span></h1>
     </div>
 
-    {# ── Management/admin view-switcher — MOVED TO THE VERY TOP OF THE PAGE
-       (15 Jul 2026, later still, second reorder pass) ─────────────────────
-       Per Ezekiel: "Put the my view, all projects, cs, designer for
-       admin and management views at the very top - above the buttons
-       (decision needed etc)." Used to sit between the content area and the
-       toggle row (see git history around 15 Jul 2026, earlier the same
-       day, for that version); now it's the very first interactive element
-       on the page, right after the welcome header, above the tab strip
-       entirely. Management and admin only — see the big comment above
-       _resolve_dashboard_scope() in dashboard.py for the full reasoning
-       and why this is NOT the emulation system. The actual scope switch
-       is still real <a> links, not client-side: switching scope changes
-       almost every card's data, so a full page reload is simpler and more
-       honest here than threading scope-awareness through every card's
-       individual JS re-render function on top of the filter/tab state
-       each of them already juggles.
-
-       CS/Designer picker is a toggle (per Ezekiel: "Next to All Projects
-       put CS button and Designer button. When they click those buttons,
-       the below expands to show each name as a button as it is now...
-       toggle - so when they click CS, then designer, it replaces the CS
-       buttons with designer ones and vice versa"). CS and Designer are
-       plain <button>s living in the SAME top .dash-view-tabs row as My
-       View/All Projects — they don't switch scope themselves, they just
-       show/hide their .dash-group-tabs row of real scope-switching <a>
-       links underneath. Only one group row is ever visible at a time;
-       dashboard.js's toggle-group click handler owns the show/hide +
-       active-state swap. Whichever group the CURRENTLY PREVIEWED scope
-       belongs to (if any) starts expanded on page load (via the `.hidden`
-       class conditions below), so reloading mid-preview doesn't hide the
-       picker for the person already being viewed. #}
-    {% if effective_role in ('management', 'admin') %}
-    <div class="dash-view-tabs">
-        <a href="{{ url_for('projects.index', scope='my') }}"
-           class="dash-tab-btn{% if scope_mode == 'my' %} active{% endif %}">My View</a>
-        <a href="{{ url_for('projects.index', scope='all') }}"
-           class="dash-tab-btn{% if scope_mode == 'all' %} active{% endif %}">All Projects</a>
-        {% if cs_leads %}
-        <button type="button" data-action="toggle-group" data-group="cs"
-            class="dash-tab-btn dash-group-toggle-btn{% if scope_mode and scope_mode.startswith('cs_') %} active{% endif %}">CS</button>
-        {% endif %}
-        {% if designers %}
-        <button type="button" data-action="toggle-group" data-group="designer"
-            class="dash-tab-btn dash-group-toggle-btn{% if scope_mode and scope_mode.startswith('designer_') %} active{% endif %}">Designer</button>
-        {% endif %}
-    </div>
-    {% if cs_leads %}
-    <div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('cs_')) %} hidden{% endif %}" data-group="cs">
-        <div class="dash-view-tabs">
-            {% for cs in cs_leads %}
-            <a href="{{ url_for('projects.index', scope='cs_' ~ cs.id) }}"
-               class="dash-tab-btn{% if scope_mode == ('cs_' ~ cs.id|string) %} active{% endif %}">{{ cs.name }}</a>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-    {% if designers %}
-    <div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('designer_')) %} hidden{% endif %}" data-group="designer">
-        <div class="dash-view-tabs">
-            {% for designer in designers %}
-            <a href="{{ url_for('projects.index', scope='designer_' ~ designer.id) }}"
-               class="dash-tab-btn{% if scope_mode == ('designer_' ~ designer.id|string) %} active{% endif %}">{{ designer.name }}</a>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-    {% if scope_mode and scope_mode.startswith('cs_') %}
-        {% set previewed_cs = cs_leads | selectattr('id', 'equalto', scope_mode[3:] | int) | first %}
-        {% if previewed_cs %}
-        <div class="dash-previewing-as">Previewing {{ previewed_cs.name }}'s view — data and "my actions" below are theirs, not yours.</div>
-        {% endif %}
-    {% elif scope_mode and scope_mode.startswith('designer_') %}
-        {% set previewed_designer = designers | selectattr('id', 'equalto', scope_mode[9:] | int) | first %}
-        {% if previewed_designer %}
-        <div class="dash-previewing-as">Previewing {{ previewed_designer.name }}'s view — data and "my actions" below are theirs, not yours.</div>
-        {% endif %}
-    {% endif %}
-    {% endif %}
+    {# Management/admin view-switcher — extracted 16 Jul 2026 into its own
+       partial so the CS-only redesigned dashboard (dashboard_cs.html) can
+       include the identical block — see _view_switcher.html for the full
+       history/reasoning, unchanged by this extraction. Still sits at the
+       very top of the page (15 Jul 2026 reorder pass), right after the
+       welcome header, above the tab strip entirely. #}
+    {% include 'dashboard/_view_switcher.html' %}
 
     {# ── Tab strip (added 15 Jul 2026, sits directly below the
        view-switcher as of the second reorder pass later the same day)
@@ -184,70 +113,10 @@
 
 </div>
 
-{#
-   Flag to Management modal — CS/Designer/Team Lead only (the "Flag a
-   Project" button in decisions.html that opens this is itself
-   role-gated, so this markup only ever gets a real trigger for those
-   roles, but there's no harm rendering the (invisible) modal shell
-   regardless — it stays hidden unless something calls the open action).
-
-   Structure mirrors the existing "Flag an Issue" modal on the project
-   detail page (app/templates/projects/detail.html, ~line 2160) — same
-   .modal-overlay / .modal-box / .modal-title / .modal-actions classes,
-   same close-on-overlay-click pattern via data-action="close-*-overlay"
-   checked against e.target === overlay in the click handler (dashboard.js)
-   so clicks INSIDE the modal box don't bubble up and close it.
-
-   Project field: this modal supports TWO ways of knowing which project is
-   being flagged, because there are two different launch points per the
-   spec ("triggered from the Decisions Needed card... or from the project
-   detail page") and only one of those actually has a project already in
-   hand when the modal opens:
-     - From the Decisions Needed card's "Flag a Project" button, no
-       project is implied — dashboard.js shows the <select> below,
-       populated from flaggable_projects (this user's own active,
-       not-already-flagged projects — see _compute_flaggable_projects in
-       dashboard.py) so the user picks one.
-     - A future per-project "Flag to Management" trigger (e.g. from the
-       detail page) can instead call openFlagManagementModal(id, name)
-       with both arguments — dashboard.js then hides the <select> and
-       shows projectId/name as plain read-only text, matching the spec's
-       "read-only project name field" description exactly. That trigger
-       isn't built in this chunk (out of scope — the detail page isn't
-       being touched here), but the modal is ready for it.
-#}
-<div id="flag-management-modal" class="modal-overlay hidden" data-action="close-flag-management-overlay">
-    <div class="modal-box">
-        <h3 class="modal-title">Flag to Management</h3>
-
-        <div class="form-group">
-            <label>Project</label>
-            {# Read-only display — shown instead of the <select> below when
-               the modal is opened already knowing its project (see the
-               big comment above). Hidden by default; dashboard.js toggles
-               which of these two the user sees. #}
-            <p id="flag-management-project-readonly" class="hidden" style="margin:0; padding:0.65rem 0.85rem; border:1.5px solid var(--grey-light); border-radius: var(--radius); background: var(--sandstone);"></p>
-            <select id="flag-management-project-select" class="form-input">
-                <option value="">Select a project…</option>
-                {% for p in flaggable_projects %}
-                <option value="{{ p.id }}">{{ p.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label>Decision Note</label>
-            <textarea id="flag-management-note" rows="4" placeholder="What decision or information is needed?"></textarea>
-        </div>
-
-        <p id="flag-management-error" class="hidden" style="color: var(--rose); font-size: 0.85rem; margin: -0.75rem 0 1rem;"></p>
-
-        <div class="modal-actions">
-            <button type="button" class="btn-secondary" data-action="close-flag-management-modal">Cancel</button>
-            <button type="button" class="btn-primary" data-action="submit-flag-management">Submit</button>
-        </div>
-    </div>
-</div>
+{# Flag to Management modal — extracted 16 Jul 2026 into its own partial so
+   the CS-only redesigned dashboard (dashboard_cs.html) can reuse it
+   unchanged — see _flag_management_modal.html for the full history. #}
+{% include 'dashboard/_flag_management_modal.html' %}
 
 {# Script-block constant, not an HTML attribute (CLAUDE.md's "JS in
    templates — JSON data" rule: tojson doesn't HTML-escape quotes, so
