@@ -65,7 +65,7 @@
 {% block title %}Dashboard — Vitamin-E{% endblock %}
 
 {% block content %}
-{% from 'dashboard/_dashboard_macros.html' import dash_priority_action_row, dash_waiting_row, dash_person_chip %}
+{% from 'dashboard/_dashboard_macros.html' import dash_priority_action_row, dash_waiting_row, dash_person_chip, dash_due_today_row %}
 
 <div class="page-container">
 
@@ -89,7 +89,16 @@
     {# ── Today's Focus bar — plain, non-clickable pills (per Ezekiel: "the
        tags do not need to be clickable"). IDs are read/updated by
        refreshDashboardFromSSE() in dashboard.js, same live-refresh summary
-       fetch every other card's badge on this page already uses. #}
+       fetch every other card's badge on this page already uses.
+
+       EXCEPTION (16 Jul 2026, per Ezekiel: "Due today should open a new
+       section when clicked which shows what is due today and who is the
+       owner of what is due") — the "due today" pill specifically is now
+       clickable, toggling the Due Today card just below via the same
+       expand/collapse mechanic Waiting on Others already uses
+       (data-action="toggle-due-today-list", handled in dashboard.js right
+       next to that card's identical handler). Every other pill on this
+       bar stays inert, per the original spec. #}
     <div class="dash-focus-bar">
         <span class="dash-focus-title">Today's Focus</span>
         <span class="dash-focus-pills">
@@ -97,7 +106,7 @@
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-my-actions">{{ summary.my_actions }}</span> needed from me
             </span>
-            <span class="dash-focus-pill dash-focus-pill--red">
+            <span class="dash-focus-pill dash-focus-pill--red dash-focus-pill--clickable" data-action="toggle-due-today-list" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-due-today">{{ summary.due_today }}</span> due today
             </span>
@@ -114,6 +123,37 @@
                 <span id="dash-focus-decisions">{{ summary.decisions_needed }}</span> decision{{ 's' if summary.decisions_needed != 1 else '' }} needed
             </span>
         </span>
+    </div>
+
+    {# ── Due Today — collapsed by default, opened by clicking the Focus
+       bar's "due today" pill above. Deliberately NOT wrapped in
+       .dash-priority-card (unlike Waiting on Others below) — that class
+       has unconditional padding/background/shadow, which would leave a
+       small empty white box visibly showing on every page load even
+       before the section is ever opened, contradicting "opens a new
+       section when clicked" (implies nothing shows until then). Instead
+       this is a bare .dash-card-body-content/.dash-card-body-visual/
+       .dash-card-body-inner stack — the exact same zero-footprint-until-
+       expanded mechanic every tab-strip card body on this app already
+       uses (see Secondary Metrics further down this page) — so the card
+       look (white/shadow/rounded) only appears once expandBody() runs.
+       Triggered from the pill itself, not its own header, so there's no
+       redundant second click target for the same action.
+       dash_due_today_row() shows a single current-owner chip per row (CS
+       lead or designer, whichever it currently is) — see that macro's
+       own comment in _dashboard_macros.html for why this is NOT
+       dash_due_row() reused as-is. #}
+    <div class="dash-card-body-content dash-due-today-card" data-due-today-body>
+        <div class="dash-card-body-visual">
+            <div class="dash-card-body-inner">
+                <h2 class="dash-priority-card-title dash-due-today-title">Due Today</h2>
+                {% if due_today %}
+                    {% for item in due_today %}{{ dash_due_today_row(item) }}{% endfor %}
+                {% else %}
+                    <p class="dash-empty-state">Nothing due today.</p>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <div class="dash-cs-grid">

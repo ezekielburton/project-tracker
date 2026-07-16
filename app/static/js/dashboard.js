@@ -1235,7 +1235,7 @@
                 var nextActionsSummaryEl = document.querySelector('.dash-content-tab[data-card="next_actions"] .dash-content-tab-badge');
                 if (nextActionsSummaryEl) {
                     nextActionsSummaryEl.innerHTML =
-                        miniStat('red', summary.my_actions, 'Needed From Me') +
+                        miniStat('red', summary.my_actions, 'Actions Needed') +
                         miniStat(summary.others_actions === 0 ? 'green' : 'orange', summary.others_actions, 'Waiting on Others');
                 }
 
@@ -1566,6 +1566,28 @@
                 return;
             }
 
+            // CS-only redesigned dashboard: Due Today expand/collapse
+            // (added 16 Jul 2026, per Ezekiel: "Due today should open a
+            // new section when clicked which shows what is due today and
+            // who is the owner of what is due"). Same shape as the
+            // Waiting on Others toggle directly above — one collapsible
+            // body, no toggle-box view-switching — except the ONLY
+            // trigger is the Focus bar's "due today" pill itself (every
+            // other Focus pill stays inert per the original spec), so
+            // there's no second header/button to keep a chevron or label
+            // in sync with here. No-op on any page without a
+            // [data-due-today-body] element (every dashboard except
+            // dashboard_cs.html).
+            var dueTodayToggle = e.target.closest('[data-action="toggle-due-today-list"]');
+            if (dueTodayToggle) {
+                var dueTodayBody = document.querySelector('[data-due-today-body]');
+                if (!dueTodayBody) return;
+                var dueTodayNowExpanded = !dueTodayBody.classList.contains('expanded');
+                if (dueTodayNowExpanded) { expandBody(dueTodayBody); } else { collapseBody(dueTodayBody); }
+                dueTodayToggle.classList.toggle('dash-focus-pill--active', dueTodayNowExpanded);
+                return;
+            }
+
             // CS/Designer picker toggle (added 15 Jul 2026, per Ezekiel:
             // "Next to All Projects put CS button and Designer button. When
             // they click those buttons, the below expands to show each name
@@ -1732,6 +1754,24 @@
             // toggle) was removed entirely 13 Jul 2026 — see CLAUDE.md and
             // git history around that date if any of this needs
             // resurrecting.
+        });
+
+        // Keyboard support for the "due today" Focus pill (16 Jul 2026) —
+        // it's a <span role="button" tabindex="0">, not a real <button>,
+        // to stay visually identical to every other (inert) Focus pill on
+        // the same row, so it doesn't get a native click-on-Enter/Space
+        // for free the way a real button would. This dispatches a real
+        // 'click' event at the element on Enter/Space, which the click
+        // listener above picks up via its normal data-action matching —
+        // no separate toggle logic duplicated here. Space is also
+        // preventDefault()'d so the page doesn't scroll while the pill is
+        // focused, matching standard button behaviour.
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var pill = e.target.closest('[data-action="toggle-due-today-list"]');
+            if (!pill) return;
+            e.preventDefault();
+            pill.click();
         });
 
         // Average Project Time card's embedded .tt-deliverables <details>

@@ -136,6 +136,45 @@
 }
 .dash-focus-pill--green .dash-focus-pill-dot { background: #3F8F3F; }
 
+/* "Due today" pill exception (16 Jul 2026, per Ezekiel: "Due today should
+   open a new section when clicked") — every other Focus pill stays
+   .dash-focus-pill's base `cursor: default`; this modifier overrides just
+   that one pill to read as clickable (pointer cursor + a subtle hover/
+   focus lift) without touching the shared base rule every other pill
+   still relies on. */
+.dash-focus-pill--clickable {
+    cursor: pointer;
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+.dash-focus-pill--clickable:hover,
+.dash-focus-pill--clickable:focus-visible {
+    filter: brightness(0.96);
+}
+.dash-focus-pill--clickable:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+/* Active (section open) state — a small ring in the pill's own colour, so
+   it's clear at a glance which pill's section is currently expanded,
+   without needing a second visual language. */
+.dash-focus-pill--active {
+    box-shadow: 0 0 0 2px currentColor;
+}
+
+/* Due Today section (16 Jul 2026) — the card-look (white/shadow/rounded)
+   lives entirely on .dash-card-body-content's existing expanded-state
+   mechanic (see the big comment on that class further down this file);
+   .dash-due-today-card is just a spacing hook so the section doesn't sit
+   flush against the Focus bar above or the two-column grid below once
+   opened. Zero-height (and therefore invisible, margin included) while
+   collapsed, same as every other .dash-card-body-content on this page. */
+.dash-due-today-card {
+    margin-bottom: 1.5rem;
+}
+.dash-due-today-title {
+    margin-bottom: 1rem;
+}
+
 /* Two-column layout: My Priority Actions (wide, left) + What Changed/
    Waiting on Others stacked (narrower, right) — matches the mockup's
    roughly 2:1 split. Collapses to one column on narrower screens, same
@@ -2026,6 +2065,16 @@ a.dash-row:hover {
    flush against each other. .dash-focus-bar already has its own
    margin-bottom (unaffected here). */
 .dash-designer-work-queue-box {
+    margin-bottom: 1.5rem;
+}
+
+/* This Week Load's own margin-bottom (16 Jul 2026, later follow-up, per
+   Ezekiel: "move this week load to below the focus bar") — it now sits
+   standalone between the Focus bar and My Work Queue, same "not inside a
+   .dash-toggle-row anymore, needs its own gap" situation
+   .dash-designer-work-queue-box was added for above; previously this card
+   needed no margin of its own since it was the last element on the page. */
+.dash-week-load-card {
     margin-bottom: 1.5rem;
 }
 

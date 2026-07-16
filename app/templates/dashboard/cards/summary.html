@@ -61,7 +61,7 @@
    pill. due_today is red when there's anything due, green as an "all
    clear" signal at zero (same convention Decisions/Due below use).
    my_actions stays flat red regardless of count — "on you" reads as the
-   same category signal Next Actions' "Needed From Me" mini-stat uses, not
+   same category signal Next Actions' "Actions Needed" mini-stat uses, not
    an urgency count. #}
 {% set summary_pills %}
 <span class="dash-mini-stat dash-mini-stat--{{ 'red' if summary.due_today > 0 else 'green' }}">

@@ -515,6 +515,49 @@
 
 
 {#
+   dash_due_today_row(item) — added 16 Jul 2026 for the CS dashboard's
+   newly-clickable "X due today" Focus pill (dashboard_cs.html), which
+   opens a section listing everything due today. `item` comes from
+   _compute_due(scope_user, 'today') — same data source Overdue/Summary's
+   Today column already use, so this row list can never disagree with the
+   pill's own count (both trace back to len(_compute_due(user, 'today'))
+   — see _compute_summary()'s docstring).
+
+   Deliberately NOT dash_due_row() reused as-is — that macro renders
+   dash_row_people(item.cs_lead, item.designers), which shows BOTH the CS
+   lead and every assigned designer regardless of whose turn it currently
+   is ("who's involved"). This section is specifically about "who is the
+   owner of what is due (designer or CS)" — a single current-owner
+   concept, same as Waiting on Others' own dash_waiting_row() above, just
+   with a deadline/title shell matching dash_due_row()'s title-inversion
+   (deliverable/customer name bold, project name grey) instead of
+   dash_waiting_row()'s plain project-only title. item.owner_chips is
+   built by _compute_due() via _serialize_owners_list(owner['user']) —
+   the same normalizer Waiting on Others already uses, so a 0/1/several-
+   person owner list renders identically in both places.
+#}
+{% macro dash_due_today_row(item) %}
+<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <span class="dash-row-date">{{ item.deadline }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">
+            {%- if item.type == 'deliverable' %}{{ item.deliverable_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- elif item.type == 'customer' and item.customer_name %}{{ item.customer_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- else %}{{ item.project_name }}
+            {%- endif %}
+        </span>
+        <span class="dash-row-tags">
+            <span class="dash-action-tag">{{ item.guidance }}</span>
+        </span>
+        <span class="dash-row-people">
+            {% for person in item.owner_chips %}{{ dash_person_chip(person) }}{% endfor %}
+        </span>
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
    dash_designer_queue_row(item) — added 16 Jul 2026 for the designer/
    team_lead dashboard's "My Work Queue" card (dashboard_designer.html,
    _compute_designer_work_queue() in dashboard.py). Effectively

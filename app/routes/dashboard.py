@@ -359,6 +359,15 @@ def index():
             summary=_compute_summary(scope_user),
             priority_actions=_compute_priority_actions(scope_user),
             waiting_on_others=_compute_waiting_on_others(scope_user),
+            # due_today (16 Jul 2026) — feeds the newly-clickable "X due
+            # today" Focus pill's expandable section (see dash_due_today_
+            # row() in _dashboard_macros.html). Reuses _compute_due()'s
+            # existing 'today' filter_type AS-IS — same data
+            # summary.due_today's count is already derived from
+            # (_compute_summary() computes that count as
+            # len(_compute_due(user, 'today')), see its own docstring), so
+            # the pill's number and the list it opens can never disagree.
+            due_today=_compute_due(scope_user, 'today'),
             what_changed=_compute_what_changed(scope_user),
             secondary_metrics_order=_CS_SECONDARY_METRICS,
             initial_expanded_card=None,
@@ -1215,6 +1224,17 @@ def _compute_due(user, filter_type):
             'rag': rag, 'owner': owner_json, 'owner_role': owner['role'],
             'guidance': guidance_for_viewer(owner, user),
             'cs_lead': cs_lead_json,
+            # owner_chips (16 Jul 2026, for the CS dashboard's clickable
+            # "due today" Focus pill — see dash_due_today_row() in
+            # _dashboard_macros.html) — reuses _serialize_owners_list()
+            # AS-IS (already built for Waiting on Others' identical "who's
+            # turn is it right now, could be 0/1/several people" need), so
+            # this row carries BOTH the existing cs_lead+designers pair
+            # (still used by dash_due_row() elsewhere) and this single
+            # current-owner chip list, without the two ever needing to
+            # agree — "who's assigned" and "whose turn it currently is"
+            # are different questions.
+            'owner_chips': _serialize_owners_list(owner['user']),
         }
 
         if p.brief_type == 'ccm':
