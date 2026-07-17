@@ -5104,9 +5104,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 .activity-description {
     font-size: 0.8rem;
     color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-word;
 }
 
 .activity-meta {

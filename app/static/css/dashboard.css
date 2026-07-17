@@ -212,12 +212,29 @@
     padding: 1.4rem;
 }
 
+/* Divider added 16 Jul 2026 — per Ezekiel, with a screenshot of the
+   Decision Needed Queue's column-header divider: "On all headings across
+   all dashboard cards, add a horizontal divider, like you have here."
+   .dash-priority-card-header is the ONE shared header class every card
+   heading on all three role dashboards (dashboard_cs.html/_leadership.html/
+   _designer.html) renders through — My Priority Actions, What Changed,
+   Waiting on Others (all three dashboards), This Week Load, Decision
+   Needed Queue — so this single rule covers every one of them at once, no
+   per-template changes needed. Same 2px/var(--border-subtle) weight as the
+   Decision Needed Queue reference and .dash-toggle-box-header above (also
+   thickened to 2px in this same pass for consistency). The old dashboard's
+   tab-strip cards (dashboard.html) render their titles only on the tab
+   button itself (.dash-content-tab-title) — there's no in-body heading
+   element there to add a divider under, so nothing changed for that
+   layout. */
 .dash-priority-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+    padding-bottom: 0.75rem;
     margin-bottom: 1rem;
+    border-bottom: 2px solid var(--border-subtle);
 }
 
 /* text-transform/letter-spacing reset — h1-h6 are globally uppercased
@@ -597,11 +614,49 @@
     grid-template-columns: 1fr;
 }
 
+/* Restyled 16 Jul 2026, later still — per Ezekiel: "make the tiles for
+   client servicing and designers nicer... U can change the base color,
+   maybe have them white but with a border, then the same grey overlay and
+   orange when selected." Same three-state recipe .dash-content-tab uses
+   just below on this page (the Secondary Metrics tiles — "the row below
+   with active projects etc" Ezekiel pointed at): white base + subtle
+   border, var(--surface-hover) grey overlay on hover, solid tangerine
+   fill + white text when selected — reused here rather than invented
+   fresh, so every clickable tile-like element on this page shares one
+   visual language. Was sandstone-background + tangerine-border-only. */
 .dash-role-tile {
-    background: var(--sandstone);
-    border: 1px solid var(--border-subtle);
+    background: var(--white);
+    border: 1.5px solid var(--border-subtle);
     border-radius: var(--radius-sm);
     padding: 0.9rem 1rem;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-role-tile:hover {
+    background: var(--surface-hover);
+}
+
+/* Highlights whichever tile's row-by-row detail is currently showing in
+   #dash-role-snapshot-expand below (added 16 Jul 2026, later still — see
+   dash_role_tile()'s doc comment in _dashboard_macros.html). Solid
+   tangerine fill, same "selected" recipe as .dash-content-tab.active. */
+.dash-role-tile--active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+}
+
+.dash-role-tile--active .dash-role-tile-name,
+.dash-role-tile--active .dash-role-tile-stat {
+    color: var(--white);
+}
+
+/* Same contrast fix .dash-content-tab.active uses on its mini-stat dot —
+   a status dot's own red/amber/green can lose contrast against a solid
+   tangerine fill, so ring it in white instead of changing its colour
+   (the colour itself still needs to read correctly). */
+.dash-role-tile--active .dash-role-tile-dot {
+    box-shadow: 0 0 0 1.5px var(--white);
 }
 
 .dash-role-tile-header {
@@ -627,12 +682,46 @@
     font-weight: 700;
     font-size: 0.95rem;
     color: var(--black);
+    transition: color 0.15s ease;
 }
 
 .dash-role-tile-stat {
     font-family: var(--font-mono);
     font-size: 0.8rem;
     color: var(--grey-dark);
+    transition: color 0.15s ease;
+}
+
+/* Shared row-by-row detail area for Role Snapshot's clickable tiles (added
+   16 Jul 2026, later still) — one instance shared by every tile in both
+   the CS and Designers panels (see dashboard_leadership.html for why: a
+   per-tile expansion would stretch its whole CSS Grid row/column). Rows
+   inside are built by dashboard.js reusing the exact .dash-row/.dash-row-
+   date/.dash-row-title/.dash-action-tag shell dash_stat_project_row()
+   already renders server-side elsewhere on this page (Your Active/Pending
+   Approval/Total Active) — no new row CSS needed, only this wrapper.
+
+   Wrapped in its own rounded-rectangle border (16 Jul 2026, same follow-up
+   — per Ezekiel: "wrap the hidden div with an actual border like rounded
+   rectangle") — was a bare top divider only; now a full card shell
+   (white background, border, radius, padding) so the detail area reads as
+   its own distinct box rather than just more content bleeding into the
+   panel above it. margin-top (not the old padding-top) keeps the same
+   breathing room between the tile grid and this box's own top edge. */
+.dash-role-snapshot-expand {
+    margin-top: 1.1rem;
+    padding: 1rem 1.1rem;
+    background: var(--white);
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius);
+}
+
+.dash-role-snapshot-expand-title {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--black);
+    margin-bottom: 0.6rem;
 }
 
 /* ═══════════════════ end leadership redesigned dashboard ═══════════════ */
@@ -915,7 +1004,14 @@
     justify-content: space-between;
     gap: 0.75rem;
     padding: 1.1rem 1.25rem;
-    border-bottom: 1px solid var(--border-subtle);
+    /* Thickened 1px -> 2px (16 Jul 2026) to match the divider weight every
+       other card heading on the page now uses — see .dash-priority-card-
+       header below, added the same pass per Ezekiel: "On all headings
+       across all dashboard cards, add a horizontal divider, like you have
+       here" (referencing the Decision Needed Queue's 2px column-header
+       divider, .dash-decision-queue-card .dash-decision-row.dash-col-
+       headers further down this file). */
+    border-bottom: 2px solid var(--border-subtle);
     flex-wrap: wrap;
     cursor: pointer;
 }
@@ -1279,6 +1375,31 @@
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
+}
+
+/* Real bug, found by Ezekiel ("shadow bug" on Overdue/Team Overview on the
+   leadership dashboard, and Design Metrics - Secondary/My Work Queue on
+   the designer dashboard — all four are .dash-toggle-box instances).
+   .dash-toggle-box already supplies its OWN white/radius/shadow card look
+   at the outer level (see .dash-toggle-box above — background/border-
+   radius/box-shadow, the same recipe every card on this page uses). The
+   rule directly above gives .dash-card-body-visual that exact same recipe
+   a second time — correct for a TAB-STRIP card, where the ancestor
+   (.dash-content-area) has no card styling of its own, so the visual
+   layer is the only thing providing the white/shadow look — but inside a
+   toggle box it produces a REDUNDANT nested card: a second white/shadow/
+   radius box floating inside the first, whose own box-shadow renders as a
+   faint grey seam partway down the card instead of a single clean
+   shadowed edge. Neutralized here, scoped to .dash-toggle-box specifically,
+   rather than touching the base rule above (still correct everywhere else
+   it's used — Secondary Metrics tab cards, Waiting on Others, etc., all of
+   which sit inside an unstyled ancestor). margin-top is kept (still needed
+   to separate the header from the first row) — only the card-look
+   properties are zeroed out. */
+.dash-toggle-box .dash-card-body-content.expanded .dash-card-body-visual {
+    background: none;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 /* .dash-card-body-inner's border-top (further down this file) exists to

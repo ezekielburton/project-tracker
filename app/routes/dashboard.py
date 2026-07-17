@@ -236,7 +236,19 @@ def _resolve_dashboard_scope(user):
     if user.role not in _SCOPE_SWITCHER_ROLES:
         return None, user, cs_leads, designers
 
-    requested = request.args.get('scope', 'my')
+    # Default changed 'my' -> 'all' on 16 Jul 2026, per Ezekiel: "Right now
+    # management and admin it only shows their overdue products, and their
+    # project clashes. I need it to show ALL of them across all projects."
+    # Root cause: dashboard_leadership.html no longer includes
+    # _view_switcher.html (removed earlier the same day), so there is no UI
+    # left that can ever send ?scope=all — every management/admin page load
+    # was silently falling through to 'my' (their own CS-lead slice, almost
+    # always near-empty for these roles) instead of the company-wide view
+    # this dashboard is meant to show them. The 'my'/'cs_<id>'/'designer_<id>'
+    # branches below are all still fully intact for any future UI (e.g. a
+    # resurrected view-switcher) that wants to request them explicitly via
+    # ?scope=... — only the no-param default changed.
+    requested = request.args.get('scope', 'all')
 
     if requested == 'all':
         return 'all', user, cs_leads, designers
@@ -2133,6 +2145,18 @@ def _compute_role_snapshot():
             'stat_count': stat_count,
             'stat_label': stat_labels[stat_key],
             'dot_color': dot_color,
+            # Added 16 Jul 2026, per Ezekiel: the CS/Designer toggle tiles
+            # "need to be clickable, that shows a hidden div below that
+            # shows the details of the info card row by row." Reuses the
+            # same plain project-list row shape (name/deadline/status) the
+            # Your Active / Pending Approval / Total Active stat cards
+            # already show via _stat_project_rows() — `scoped` here is that
+            # exact same _scoped_projects(u, active_only=True) list, just
+            # not yet serialized. Embedded into the page as a JSON blob
+            # (see dashboard_leadership.html) rather than fetched via a new
+            # API route, since this data is already fully computed on page
+            # load for the count above — no reason to round-trip for it.
+            'rows': _stat_project_rows(scoped),
         }
 
         if u.role == 'cs':

@@ -1,6 +1,29 @@
 import re as _re
 from html import unescape as _unescape
 
+def file_type_label(ext):
+    """Return a human-readable label for a file extension.
+
+    Used in activity log entries so they read like
+    "Rehan added an image as a reference file to 'Project X'"
+    instead of exposing raw filenames.
+    """
+    ext = (ext or '').lower()
+    if ext in {'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'}:
+        return 'an image'
+    if ext == 'pdf':
+        return 'a PDF'
+    if ext in {'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'txt', 'csv'}:
+        return 'a document'
+    if ext in {'mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v'}:
+        return 'a video'
+    if ext == 'zip':
+        return 'a ZIP file'
+    if ext == 'dwg':
+        return 'a DWG file'
+    return 'a file'
+
+
 def strip_html(html_text):
     """Strip HTML tags and decode entities for use in plain-text contexts
     (notifications, activity logs). Rich-text fields may contain <img> tags

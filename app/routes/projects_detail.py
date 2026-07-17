@@ -13,7 +13,7 @@ from app.models import (Project, ProjectDesigner, Scope, User, Client,
                         DeliverableAssignment, ProjectSubmission, ProjectRevision,
                         ProjectFile, BriefFlag, BriefFlagMessage,
                         ProjectSecondaryCS, ProjectSecondaryCsRegion,
-                        DesignType, DesignDirection)
+                        DesignType, DesignDirection, User as UserModel, DecisionFlag)
 from app.decorators import role_required
 from app.notifications import (
     notify_designers_of_revision_flag, notify_cs_of_brief_flag,
@@ -22,7 +22,7 @@ from app.notifications import (
     create_notification, notify_cs_of_project_started,
     notify_lead_designers_of_project_started
 )
-from app.utils import log_activity
+from app.utils import log_activity, file_type_label
 # Import fingerprint helper so the initial page load stores the same value
 # that the poll endpoint will return — ensures JS can compare apples to apples
 from app.routes.api import _detail_fingerprint
@@ -1004,7 +1004,8 @@ def _decision_flag_recipients(project):
 @login_required
 @role_required('admin', 'cs', 'designer', 'team_lead', 'management')  # anyone can escalate a blocker to management
 def flag_management(project_id):
-    project = Project.query.get_or_404(project_id)
+    
+    project = Project.query.get_or_404(project_id)     
 
 
     data = request.get_json(silent=True) or {}
@@ -1016,9 +1017,11 @@ def flag_management(project_id):
     actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
 
     project.decision_needed = True
-    project.decision_raised_by_id = actor.id
-    project.decision_raised_at = datetime.utcnow()
-    project.decision_note = decision_note
+    db.session.add(DecisionFlag(
+        project_id=project.id,
+        created_by_id=actor.id,
+        note=decision_note
+    ))
     db.session.commit()
 
     # create_notification() handles both the in-app notification (always
@@ -1729,7 +1732,7 @@ def upload_project_file(project_id):
     # long/messy filenames like 'WhatsApp Image 2026-07-10 at
     # 4.13.40 PM (1).jpeg', which read as noise): was
     # f'Reference file "{original_filename}" uploaded to "{project.name}"'.
-    log_activity('file_uploaded', f'Reference file was uploaded to "{project.name}"',
+    log_activity('file_uploaded', f'{current_user.name} added {file_type_label(ext)} as a reference file to "{project.name}"',
                  user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({
@@ -1878,7 +1881,7 @@ def delete_project_file(file_id):
     nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
     delete_app_file(nas_path)
 
-    log_activity('file_deleted', f'Reference file "{project_file.original_filename}" deleted from "{project.name}"',
+    log_activity('file_deleted', f'{current_user.name} removed a reference file from "{project.name}"',
                  user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     db.session.delete(project_file)

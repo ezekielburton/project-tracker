@@ -377,9 +377,24 @@
    for the segregation itself (dashboard.py groups tiles into
    role_snapshot.cs / role_snapshot.designers_by_team / .designers_unassigned;
    this macro only renders ONE tile, unchanged from before the split).
+
+   Made clickable 16 Jul 2026, later still — per Ezekiel: "the client
+   servicing and designers toggle that shows their cards, these need to be
+   clickable, that shows a hidden div below that shows the details of the
+   info card row by row." `data-action="toggle-role-tile"` +
+   `data-user-id`/`data-name` are read by dashboard.js's click handler,
+   which looks up this person's `rows` (now attached to `tile` by
+   _compute_role_snapshot(), see dashboard.py) in the page-level
+   ROLE_SNAPSHOT_TILES JSON blob (dashboard_leadership.html) and renders
+   them into the ONE shared `#dash-role-snapshot-expand` div that sits
+   below both the CS and Designers panels — so clicking a tile in either
+   panel reveals the same detail area, same "one shared expand area"
+   convention this page already uses elsewhere (e.g. #dash-content-area).
+   `.dash-role-tile--active` (dashboard.css) highlights whichever tile's
+   detail is currently showing; toggling the SAME tile again closes it.
 #}
 {% macro dash_role_tile(tile) %}
-<div class="dash-role-tile">
+<div class="dash-role-tile" data-action="toggle-role-tile" data-user-id="{{ tile.user_id }}" data-name="{{ tile.name }}" role="button" tabindex="0">
     <div class="dash-role-tile-header">
         <span class="dash-role-tile-dot dash-role-tile-dot--{{ tile.dot_color }}"></span>
         <span class="dash-role-tile-name">{{ tile.name }}</span>

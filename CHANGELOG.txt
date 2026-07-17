@@ -7,10 +7,13 @@ v2.3 - Dashboard Launch & Instant Updates!
 ================================================================================
 New Features:
 
+- Dashboard is live! Tailored view for your role, this will be your new home page.
 - Instant updates. The app now auto refreshes when there are updates. 
   True live updating is in the works, but will take a while on the backend. This is a temporary solution.
 - Client directory has been added. Links to the clients. Contacts now optional additional to a project. 
   The directory stores each clients address - typical install locations. Contacts for each client include their name, number, email and location.
+- Option to apply POSM to another customer (duplicate for that customer). If any POSM is missing, add the matches and notify trhem what was missing)
+- Overhauled submission flow completely to be on a deliverable level.
 
 
 Adjustments:
@@ -20,7 +23,9 @@ Adjustments:
 - Deliverables can be edited in the brief page.
 - You can now drag and drop images into feedback and flagging boxes, they embed just like in outlook and are resizable
 - Designers can now select multiple deliverable assignments and then assign with one "Assign All button", rather than having to assign each deliverable seperately
- 
+- Designers can now still submit outstanding deliverables, even if they have submitted already.
+- Admin and CS can revert a project or C&CM customer to an earlier revision count or to 0, incase of accidental submission.
+
 
 Bug Fixes:
 
@@ -47,8 +52,8 @@ New Features:
 - Added download all for reference files and submisson file history.
 - TIme tracking has been added to all projects. It works on a 9:30am - 6:30 pm system and tracks the hours of every stage. Weekends only count if a status is changed.
 - Browser now automatically pulls latest project version without needing to refresh.
-- Overhauled submission flow completely to be on a deliverable level + internal flow for technical or emeergency production aw/3d.
-- Option to apply POSM to another customer (duplicate for that customer). If any POSM is missing, add the matches and notify trhem what was missing)
+ 
+
 
 Adjustments:
 

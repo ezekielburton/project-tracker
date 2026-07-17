@@ -1104,6 +1104,67 @@
         btn.classList.toggle('expanded', nowExpanded);
     }
 
+    // ── Role Snapshot clickable tiles (added 16 Jul 2026, later still) ──
+    //
+    // Per Ezekiel: "the client servicing and designers toggle that shows
+    // their cards, these need to be clickable, that shows a hidden div
+    // below that shows the details of the info card row by row." One
+    // shared #dash-role-snapshot-expand div (see dashboard_leadership.html)
+    // serves every tile in both the CS and Designers panels — clicking a
+    // tile looks its rows up in the page-level ROLE_SNAPSHOT_TILES blob
+    // (no fetch needed, this data is already fully computed on page load)
+    // and renders them using the exact same .dash-row/.dash-row-date/
+    // .dash-row-title/.dash-action-tag shell dash_stat_project_row()
+    // renders server-side for Your Active/Pending Approval/Total Active —
+    // reused here as a JS mirror rather than inventing a new row shape.
+    function roleSnapshotProjectRow(item) {
+        return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+            '<span class="dash-row-date">' + (item.deadline ? item.deadline : 'No deadline') + '</span>' +
+            '<span class="dash-row-main">' +
+                '<span class="dash-row-title">' + escapeHtml(item.name) + '</span>' +
+                '<span class="dash-row-tags"><span class="dash-action-tag">' + escapeHtml(item.status_label) + '</span></span>' +
+            '</span>' +
+        '</a>';
+    }
+
+    function toggleRoleTile(tileEl) {
+        var userId = parseInt(tileEl.dataset.userId, 10);
+        var expandArea = document.getElementById('dash-role-snapshot-expand');
+        if (!expandArea) return;
+
+        var alreadyActive = tileEl.classList.contains('dash-role-tile--active');
+
+        // Single-open, same accordion idea as every other toggle on this
+        // page — clear every tile's active state first regardless of what
+        // happens next.
+        document.querySelectorAll('.dash-role-tile--active').forEach(function (el) {
+            el.classList.remove('dash-role-tile--active');
+        });
+
+        if (alreadyActive) {
+            // Clicking the same tile again closes the detail area.
+            expandArea.classList.add('hidden');
+            expandArea.querySelector('.dash-role-snapshot-expand-title').textContent = '';
+            expandArea.querySelector('.dash-role-snapshot-expand-rows').innerHTML = '';
+        } else {
+            var data = (window.ROLE_SNAPSHOT_TILES || []).find(function (t) { return t.user_id === userId; });
+            tileEl.classList.add('dash-role-tile--active');
+            expandArea.classList.remove('hidden');
+            expandArea.querySelector('.dash-role-snapshot-expand-title').textContent =
+                tileEl.dataset.name + '’s Active Projects';
+            var rowsHtml = data && data.rows.length
+                ? data.rows.map(roleSnapshotProjectRow).join('')
+                : '<p class="dash-empty-state">No active projects.</p>';
+            expandArea.querySelector('.dash-role-snapshot-expand-rows').innerHTML = rowsHtml;
+        }
+
+        // Same "content height changed, re-measure the ancestor's inline
+        // max-height" fix every other AJAX/DOM-swapped case on this page
+        // needs — see switchToggleBoxView()'s comment just above for the
+        // full root-cause writeup. No-ops if the box is collapsed.
+        remeasureExpandedBody(document.querySelector('[data-toggle-box-body="role_snapshot"]'));
+    }
+
     // ── SSE integration: refresh hook called by polling.js ───────────────
     //
     // polling.js (UI Chunk 9) opens an EventSource on /sse/dashboard for
@@ -1724,6 +1785,17 @@
                 toggleBoxCollapse(toggleBoxCollapseBtn.dataset.box, toggleBoxCollapseBtn);
                 return;
             }
+            // Role Snapshot clickable tiles (added 16 Jul 2026, later
+            // still) — checked here, ahead of nothing in particular, same
+            // reasoning as the toggle-box checks just above: tiles live
+            // inside .dash-card-body-inner, never nested inside a header
+            // or another clickable element, so there's no bubbling
+            // conflict to guard against.
+            var roleTileEl = e.target.closest('[data-action="toggle-role-tile"]');
+            if (roleTileEl) {
+                toggleRoleTile(roleTileEl);
+                return;
+            }
             // Click-anywhere-in-header-to-collapse (added 16 Jul 2026) — per
             // Ezekiel: "improve the UX so when you select anywhere in the
             // header that isn't the toggle button - it collapses the
@@ -1768,10 +1840,14 @@
         // focused, matching standard button behaviour.
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Enter' && e.key !== ' ') return;
-            var pill = e.target.closest('[data-action="toggle-due-today-list"]');
-            if (!pill) return;
+            // Widened 16 Jul 2026 to also cover Role Snapshot's clickable
+            // tiles (role="button" tabindex="0", same accessibility
+            // pattern as the Due Today pill above) — same synthetic-click
+            // approach, no separate toggle logic duplicated here.
+            var target = e.target.closest('[data-action="toggle-due-today-list"], [data-action="toggle-role-tile"]');
+            if (!target) return;
             e.preventDefault();
-            pill.click();
+            target.click();
         });
 
         // Average Project Time card's embedded .tt-deliverables <details>

@@ -391,10 +391,56 @@
                             {% endif %}
                         </div>
                     </div>
+
+                    {# ── Shared click-to-expand detail area, added 16 Jul
+                       2026, later still — per Ezekiel: "the client
+                       servicing and designers toggle ... these need to be
+                       clickable, that shows a hidden div below that shows
+                       the details of the info card row by row." ONE div
+                       shared by every tile in BOTH panels (not one per
+                       tile — CSS Grid would make individual in-place tile
+                       expansion visually awkward, since a taller expanded
+                       tile would stretch its whole grid row/column). Empty
+                       and `.hidden` until a tile is clicked; dashboard.js
+                       fills it in from ROLE_SNAPSHOT_TILES (below) and
+                       toggles `.hidden` + the clicked tile's
+                       `.dash-role-tile--active` class. Sits inside
+                       .dash-card-body-inner (after both panels) so it's
+                       still covered by this box's own max-height/scroll
+                       mechanic — dashboard.js calls
+                       remeasureExpandedBody() on open/close, same as every
+                       other AJAX-swapped-content case on this page (see
+                       CLAUDE.md's "SSR and JS mirror must stay in sync"
+                       history). #}
+                    <div id="dash-role-snapshot-expand" class="dash-role-snapshot-expand hidden">
+                        <div class="dash-role-snapshot-expand-title"></div>
+                        <div class="dash-role-snapshot-expand-rows"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    {# ROLE_SNAPSHOT_TILES — page-level data blob feeding the click-to-
+       expand detail area above. `var`, not `const`/`let` — this page is
+       reachable via the SPA sidebar nav (sidebar.js re-executes <script>
+       tags on renav without a full reload), and a const/let redeclaration
+       in the same scope throws on a second visit, same reasoning as
+       HELIX_DASH_SCOPE/HELIX_EFFECTIVE_ROLE below. Flattened to one plain
+       list keyed by user_id (not nested under cs/designers_by_team/
+       designers_unassigned) since the click handler only ever needs "look
+       up this one person's rows by the id on the clicked tile" — the
+       grouping that matters for LAYOUT (dashboard.py's _compute_role_
+       snapshot()) is irrelevant once we're just building a lookup table. #}
+    <script>
+        var ROLE_SNAPSHOT_TILES = {{
+            (role_snapshot.cs
+                + role_snapshot.designers_by_team['3D']
+                + role_snapshot.designers_by_team['2D']
+                + role_snapshot.designers_by_team['Technical']
+                + role_snapshot.designers_unassigned) | tojson
+        }};
+    </script>
 
     {# ── Secondary Metrics — added 16 Jul 2026, later still. Per Ezekiel,
        sharing a screenshot of these exact 5 tiles from the CS dashboard:

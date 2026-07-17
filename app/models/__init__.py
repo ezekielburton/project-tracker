@@ -239,14 +239,12 @@ class Project(db.Model):
     concept_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     kv_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    # Decision escalation — CS/designer/team-lead can flag a project as
-    # needing a Management decision. decision_needed is the sentinel the
-    # dashboard queries on; the other three are just context for whoever
-    # picks it up.
+    # Decision escalation — CS/designer/team-lead can flag a project as needing a management decision. decision_needed is stil lthe sentinel the dashboard queries on
+    # (cheap bolean filter, used all over dashboard.p). The other three columns below are DEPRECATED as of the DecisionFlag/DecisionFlagMessage system.
     decision_needed = db.Column(db.Boolean, default=False, nullable=True)
-    decision_raised_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    decision_raised_at = db.Column(db.DateTime, nullable=True)
-    decision_note = db.Column(db.Text, nullable=True)
+    decision_raised_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) # DEPRECATED — see above
+    decision_raised_at = db.Column(db.DateTime, nullable=True) # DEPRECATED — see above
+    decision_note = db.Column(db.Text, nullable=True) # DEPRECATED — see above
 
 
     # Auto-populated on creation
@@ -300,6 +298,21 @@ class Project(db.Model):
     design_direction = db.relationship('DesignDirection', backref='projects')
     brief_flags = db.relationship('BriefFlag', back_populates='project', cascade='all, delete-orphan')
     decision_raised_by = db.relationship('User', foreign_keys=[decision_raised_by_id])
+    decision_flags = db.relationship('DecisionFlag', back_populates='project', cascade='all, delete-orphan')
+    
+    @property
+    def active_decision_flag(self):
+        """
+        The current unresolved DecisionFlag on this project, or None. A
+        project can accumulate a history of past (resolved) flags over
+        time — this is always the one still open, if any. Queried
+        directly rather than filtered out of the `decision_flags`
+        relationship in Python, so it stays correct even when that
+        relationship hasn't been eagerly loaded.
+        """
+        return DecisionFlag.query.filter_by(
+            project_id=self.id, is_resolved=False
+        ).order_by(DecisionFlag.created_at.desc()).first()
 
     def __repr__(self):
         return f'<Project {self.name}>'
@@ -531,6 +544,40 @@ class BriefFlag(db.Model):
     def __repr__(self):
         return f'<BriefFlag project={self.project_id} type={self.flag_type} resolved={self.is_resolved}>'
 
+class DecisionFlag(db.Model):
+    __tablename__ = 'decision_flags'
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow )
+    note = db.Column(db.Text, nullable=False)
+    is_resolved = db.Column(db.Boolean, default=False, nullable=False)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    resolution_note = db.Column(db.Text, nullable=True)
+
+    project = db.relationship('Project', back_populates='decision_flags')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+    messages = db.relationship('DecisionFlagMessage', backref='flag', cascade='all, delete-orphan', order_by='DecisionFlagMessage.created_at')
+
+    def __repr__(self):
+        return f'<DecisionFlag project={self.project_id} resolved={self.is_resolved}>'
+
+class DecisionFlagMessage(db.Model):
+    __tablename__ = 'decision_flag_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    flag_id = db.Column(db.Integer, db.ForeignKey('decision_flags.id'), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<DecisionFlagMessage flag={self.flag_id} author={self.author_id}>'
 
 class BriefFlagMessage(db.Model):
     __tablename__ = 'brief_flag_messages'

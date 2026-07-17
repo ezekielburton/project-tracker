@@ -102,26 +102,25 @@ def login():
         if next_page and next_page.startswith('/'):
             return redirect(next_page)
 
-        # Role-based default landing page — replaces the old blanket
-        # redirect to main.index (which just forwarded to the placeholder
-        # main.projects router). Admin falls through to plain /dashboard.
+        # Default landing page after login — new role-based dashboard (16
+        # Jul 2026), per Ezekiel: "dashboard is good to go. Make the
+        # default page of the app the dashboard." Was main.projects (the
+        # old legacy per-role dashboard), matching main.index's own switch
+        # right below in __init__.py — see that route's comment for the
+        # endpoint-naming explanation (projects.index is the NEW dashboard).
         #
-        # TEMPORARILY DISABLED (9 Jul 2026) — new dashboard is feature-complete
-        # (all 9 UI chunks + verification pass done) but Ezekiel wants it held
-        # back until after showing it to management. Login goes to the OLD
-        # dashboard (main.projects) for now. To re-enable: delete the
-        # `return redirect(url_for('main.projects'))` line right below and
-        # un-comment the two lines under it — nothing else needs to change.
-        return redirect(url_for('main.projects'))
-        # role_views = {
-        #     'management': 'decisions',
-        #     'cs': 'due',
-        #     'designer': 'my-week',
-        #     'team_lead': 'my-week',
-        # }
-        # if user.role in role_views:
-        #     return redirect(url_for('projects.index', view=role_views[user.role]))
-        # return redirect(url_for('projects.index'))
+        # Superseded here: the old `role_views` -> `?view=<card_key>` deep-
+        # link mapping from 9 Jul 2026 (back when this was TEMPORARILY
+        # DISABLED pending a management demo) is gone, not just re-enabled
+        # as-is — it targeted card keys ('decisions'/'due'/'my-week') from
+        # the single-dashboard.html tab-strip system that existed at the
+        # time. Since then the dashboard split into three fully separate,
+        # self-contained role templates (dashboard_cs.html/_leadership.html/
+        # _designer.html) that dashboard.py's index() already selects via
+        # layout_role internally — a `?view=` deep link has nothing left to
+        # select between for those three roles, so passing one would be
+        # dead weight, not a bug fix.
+        return redirect(url_for('projects.index'))
 
     return render_template('auth/login.html', next=request.args.get('next', ''))
 

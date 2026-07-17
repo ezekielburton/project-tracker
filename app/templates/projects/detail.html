@@ -895,7 +895,7 @@
             {% if project.reference_files %}
             <button type="button" class="btn-secondary btn-sm" data-action="download-all-zip"
                 data-zip-build-url="{{ url_for('project_detail.download_all_reference_files', project_id=project.id) }}">
-                Download All
+                Download All──
             </button>
             {% endif %}
         </div>
@@ -997,11 +997,11 @@
                     <span class="posm-pill-approved-at">{{ project.concept_approved_at | dubai_time }} GST</span>
                     {% endif %}
                 </button>
-                {% if effective_user.role == 'admin' %}
+                {% if effective_user.role in ['admin', 'cs'] %}
                 <button class="pill-reset-btn" type="button" title="Reset C&amp;KV pill"
                     data-action="open-pill-reset-modal"
                     data-pill-type="ckv"
-                    data-pill-label="Concept &amp; KV">↺</button>
+                    data-pill-label="Concept &amp; KV">Revert ↺</button>
                 {% endif %}
             </div>
             {% endif %}
@@ -1019,13 +1019,13 @@
                     <span class="posm-pill-approved-at">{{ cd.channel.approved_at | dubai_time }} GST</span>
                     {% endif %}
                 </button>
-                {% if effective_user.role == 'admin' %}
+                {% if effective_user.role in ['admin', 'cs'] %}
                 <button class="pill-reset-btn" type="button" title="Reset {{ cd.label }} pill"
                     data-action="open-pill-reset-modal"
                     data-pill-type="posm"
                     data-pill-label="{{ cd.label }}"
                     data-posm-country="{{ cd.channel.posm_country }}"
-                    data-posm-customer-id="{{ cd.channel.posm_customer_id or '' }}">↺</button>
+                    data-posm-customer-id="{{ cd.channel.posm_customer_id or '' }}">Revert ↺</button>
                 {% endif %}
             </div>
             {% endfor %}
@@ -1047,7 +1047,7 @@
             {% if effective_user.role in ['admin', 'cs'] %}
             <button type="button" class="btn-danger btn-sm" data-action="unapprove-ckv" data-project-id="{{ project.id }}" style="margin-top:0.5rem;">↩ Unapprove C&amp;KV</button>
             {% endif %}
-            {% elif project.concept_status == 'submitted_to_client' %}
+            {% elif project.concept_status == 'submitted_to_client' and ckv_submission and ckv_submission.submitted_to_client_at %}
             {# State: Submitted to Client — CS can approve or send a revision request #}
             {% if ckv_submission %}
             <div class="reference-file-item">
@@ -1059,6 +1059,19 @@
                         class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
+            {% endif %}
+            {# Extra supporting files — view-only once deck has been sent to client #}
+            {% if ckv_submission %}
+            {% for ef in ckv_submission.extra_files %}
+            <div class="reference-file-item submission-extra-file">
+                <span class="reference-file-icon">📎</span>
+                <span class="reference-file-name">{{ ef.original_filename }}</span>
+                <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+                <div class="reference-file-actions">
+                    <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                </div>
+            </div>
+            {% endfor %}
             {% endif %}
             <div class="submission-status" style="margin-top:0.5rem;">📤 Deck sent to client. Awaiting feedback.</div>
             {% if effective_user.role in ['admin', 'cs'] %}
@@ -1084,6 +1097,17 @@
             {% else %}
             <p style="margin-top:0.75rem;color:var(--text-muted);font-size:0.85rem;">Deck submitted to client. Awaiting feedback.
             </p>
+            {% endif %}
+            {# Designer can upload a revised deck while the client reviews — revision count does NOT increment #}
+            {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
+            <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+                <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">Upload an updated deck while awaiting client feedback. The revision count won't change.</p>
+                <div style="display:flex;gap:0.75rem;align-items:center;">
+                    <input type="file" id="submissionFileInput" class="hidden" accept=".pdf,.pptx">
+                    <button type="button" class="btn-secondary btn-sm" id="submissionUploadBtn" data-project-id="{{ project.id }}">Upload Updated Deck</button>
+                    <span class="reference-file-upload-status" id="submissionUploadStatus"></span>
+                </div>
+            </div>
             {% endif %}
             {% elif project.concept_status in ('revision_in_queue', 'revision_in_progress') %}
             {# State: Client sent a revision — designer needs to work then reupload #}
@@ -1130,6 +1154,27 @@
                     <a href="{{ url_for('submission.download_submission', submission_id=ckv_submission.id) }}" class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
+            {# Extra supporting files #}
+            {% for ef in ckv_submission.extra_files %}
+            <div class="reference-file-item submission-extra-file" data-file-id="{{ ef.id }}">
+                <span class="reference-file-icon">📎</span>
+                <span class="reference-file-name">{{ ef.original_filename }}</span>
+                <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+                <div class="reference-file-actions">
+                    <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                    {% if effective_user.role == 'admin' or ef.uploaded_by_id == effective_user.id %}
+                    <button type="button" class="btn-danger btn-sm" data-action="delete-extra-file" data-file-id="{{ ef.id }}">✕</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
+            <div class="attach-file-upload">
+                <input type="file" id="extraFileInputCkv" class="hidden">
+                <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ ckv_submission.id }}" data-input-id="extraFileInputCkv">+ Attach Supporting File</button>
+                <span class="reference-file-upload-status"></span>
+            </div>
+            {% endif %}
             <div class="submission-status submission-status--review" style="margin-top:0.5rem;">🔍 In Internal Review. Awaiting Client Servicing approval</div>
             {% if ckv_submission.includes_concept or ckv_submission.includes_kv %}
             <div style="margin-top:0.75rem;">
@@ -1190,6 +1235,27 @@
                     <a href="{{ url_for('submission.download_submission', submission_id=ckv_submission.id) }}" class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
+            {# Extra supporting files with delete + attach #}
+            {% for ef in ckv_submission.extra_files %}
+            <div class="reference-file-item submission-extra-file" data-file-id="{{ ef.id }}">
+                <span class="reference-file-icon">📎</span>
+                <span class="reference-file-name">{{ ef.original_filename }}</span>
+                <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+                <div class="reference-file-actions">
+                    <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                    {% if effective_user.role == 'admin' or ef.uploaded_by_id == effective_user.id %}
+                    <button type="button" class="btn-danger btn-sm" data-action="delete-extra-file" data-file-id="{{ ef.id }}">✕</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
+            <div class="attach-file-upload">
+                <input type="file" id="extraFileInputCkv" class="hidden">
+                <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ ckv_submission.id }}" data-input-id="extraFileInputCkv">Drop a file or click to attach...</button>
+                <span class="reference-file-upload-status"></span>
+            </div>
+            {% endif %}
             {% if effective_user.role in ['admin', 'designer', 'team_lead'] %}
             <div class="submission-picker" id="submissionPicker" style="margin-top:1rem;">
                 <p class="detail-label" style="margin-bottom:0.5rem;">Which deliverables are included in this deck?</p>
@@ -1266,6 +1332,27 @@
                         class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
+            {# Extra supporting files #}
+            {% for ef in ch_sub.extra_files %}
+            <div class="reference-file-item submission-extra-file" data-file-id="{{ ef.id }}">
+                <span class="reference-file-icon">📎</span>
+                <span class="reference-file-name">{{ ef.original_filename }}</span>
+                <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+                <div class="reference-file-actions">
+                    <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                    {% if effective_user.role == 'admin' or ef.uploaded_by_id == effective_user.id %}
+                    <button type="button" class="btn-danger btn-sm" data-action="delete-extra-file" data-file-id="{{ ef.id }}">✕</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if effective_user.role in ['admin', 'designer', 'team_lead'] and not ch_readonly %}
+            <div class="attach-file-upload">
+                <input type="file" id="extraFileInputCh{{ ch.id }}" class="hidden">
+                <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ ch_sub.id }}" data-input-id="extraFileInputCh{{ ch.id }}">+ Attach Supporting File</button>
+                <span class="reference-file-upload-status"></span>
+            </div>
+            {% endif %}
             <div class="submission-status submission-status--review" style="margin-top:0.5rem;">🔍 In Internal Review. Awaiting Client Servicing approval</div>
             {% if effective_user.role in ['admin', 'cs', 'management'] and not ch_readonly %}
             <div style="margin-top:1rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
@@ -1317,7 +1404,7 @@
             {% endif %}
 
             {# State 5: Submitted to client — CS can send revision #}
-            {% elif ch.status == 'submitted_to_client' and ch_sub %}
+            {% elif ch.status == 'submitted_to_client' and ch_sub and ch_sub.submitted_to_client_at %}
             <div class="reference-file-item">
                 <span class="reference-file-icon">{% if ch_sub.file_type == 'pdf' %}📄{% else %}📊{% endif %}</span>
                 <span class="reference-file-name">{{ ch_sub.original_filename }}</span>
@@ -1327,6 +1414,17 @@
                         class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
+            {# Extra supporting files — view-only once sent to client #}
+            {% for ef in ch_sub.extra_files %}
+            <div class="reference-file-item submission-extra-file">
+                <span class="reference-file-icon">📎</span>
+                <span class="reference-file-name">{{ ef.original_filename }}</span>
+                <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+                <div class="reference-file-actions">
+                    <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                </div>
+            </div>
+            {% endfor %}
             <div class="submission-status submission-status--sent" style="margin-top:0.5rem;">
                 ✓ Submitted to client on {{ ch_sub.submitted_to_client_at | dubai_time }} GST
                 by {{ ch_sub.submitted_by.name if ch_sub.submitted_by else '—' }}
@@ -1365,6 +1463,17 @@
                         data-channel-id="{{ ch.id }}" data-project-id="{{ project.id }}">Send Revision</button>
                     <button type="button" class="btn-secondary btn-sm ch-send-revision-cancel"
                         data-channel-id="{{ ch.id }}">Cancel</button>
+                </div>
+            </div>
+            {% endif %}
+            {# Designer can upload a revised deck while the client reviews — revision count does NOT increment #}
+            {% if effective_user.role in ['admin', 'designer', 'team_lead'] and not ch_readonly %}
+            <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+                <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">Upload an updated deck while awaiting client feedback. The revision count won't change.</p>
+                <div style="display:flex;gap:0.75rem;align-items:center;">
+                    <input type="file" class="hidden ch-file-input" id="ch-file-{{ ch.id }}" data-channel-id="{{ ch.id }}" accept=".pdf,.pptx">
+                    <button type="button" class="btn-secondary btn-sm ch-upload-btn" data-channel-id="{{ ch.id }}" data-project-id="{{ project.id }}">Upload Updated Deck</button>
+                    <span class="ch-upload-status" id="ch-upload-status-{{ ch.id }}"></span>
                 </div>
             </div>
             {% endif %}
@@ -1421,6 +1530,27 @@
                         class="btn-secondary btn-sm">Download</a>
                 </div>
             </div>
+            {# Extra supporting files with delete + attach #}
+            {% for ef in ch_sub.extra_files %}
+            <div class="reference-file-item submission-extra-file" data-file-id="{{ ef.id }}">
+                <span class="reference-file-icon">📎</span>
+                <span class="reference-file-name">{{ ef.original_filename }}</span>
+                <span class="reference-file-meta">{{ ef.uploaded_by.name }}</span>
+                <div class="reference-file-actions">
+                    <a href="{{ url_for('submission.download_submission_file', file_id=ef.id) }}" class="btn-secondary btn-sm">Download</a>
+                    {% if effective_user.role == 'admin' or ef.uploaded_by_id == effective_user.id %}
+                    <button type="button" class="btn-danger btn-sm" data-action="delete-extra-file" data-file-id="{{ ef.id }}">✕</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if effective_user.role in ['admin', 'designer', 'team_lead'] and not ch_readonly %}
+            <div class="attach-file-upload">
+                <input type="file" id="extraFileInputCh{{ ch.id }}" class="hidden">
+                <button type="button" class="btn-secondary btn-sm" data-action="attach-extra-file" data-submission-id="{{ ch_sub.id }}" data-input-id="extraFileInputCh{{ ch.id }}">Drop a file or click to attach...</button>
+                <span class="reference-file-upload-status"></span>
+            </div>
+            {% endif %}
             {% if effective_user.role in ['admin', 'designer', 'team_lead'] and not ch_readonly %}
             <div class="submission-picker" style="margin-top:1rem;">
                 <p class="detail-label" style="margin-bottom:0.5rem;">Which deliverables are included in this deck?</p>

@@ -16,7 +16,7 @@ from app.notifications import (
     notify_cs_of_revision_submitted, create_notification,
     notify_of_submission_to_client, notify_team_leads_of_new_project
 )
-from app.utils import log_activity
+from app.utils import log_activity, file_type_label
 from app.achievements import check_achievements
 from app.status_tracking import record_project_status, record_customer_status, record_deliverable_status
 
@@ -1015,7 +1015,7 @@ def add_submission_file(project_id, submission_id):
     _run_in_background(_bg_app, _upload_extra_file)
 
     log_activity('file_attached',
-                 f'Extra file "{file.filename}" attached to submission for "{project.name}" by {current_user.name}',
+                 f'{current_user.name} added {file_type_label(ext)} as a supporting file to "{project.name}"',
                  user=current_user, entity_type='project',
                  entity_name=project.name, entity_id=project.id)
 
