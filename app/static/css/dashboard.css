@@ -161,6 +161,44 @@
     box-shadow: 0 0 0 2px currentColor;
 }
 
+/* All/Focused toggle (added 17 Jul 2026, leadership dashboard only) — per
+   Ezekiel: "there's a toggle. 'All' and 'Focused'... on the right side."
+   margin-left: auto pushes this to the far right of .dash-focus-bar's
+   existing flex row (the pills stay left-aligned, unaffected) — no new
+   layout structure needed on the parent, .dash-focus-bar was already
+   display:flex/flex-wrap:wrap. Same white/border -> grey-hover ->
+   tangerine-active recipe as .dash-content-tab/.dash-role-tile elsewhere
+   on this page, reused rather than invented fresh. */
+.dash-focus-toggle {
+    display: inline-flex;
+    gap: 0.4rem;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.dash-focus-toggle-btn {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 0.45rem 0.9rem;
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--grey-dark);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dash-focus-toggle-btn:hover {
+    background: var(--surface-hover);
+}
+
+.dash-focus-toggle-btn.active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
+
 /* Due Today section (16 Jul 2026) — the card-look (white/shadow/rounded)
    lives entirely on .dash-card-body-content's existing expanded-state
    mechanic (see the big comment on that class further down this file);
@@ -197,6 +235,65 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+}
+
+/* Left column mirror of .dash-cs-side-col above (17 Jul 2026 restructure)
+   — stacks My Priority Actions on top of the My Escalated Projects/My
+   Escalation History row beneath it, same gap recipe as the right
+   column's own top/bottom stacking. */
+.dash-cs-left-col {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* My Priority Actions' own capped-height + internal scroll (17 Jul 2026),
+   per Ezekiel: "Make the priority actions div the same size as the what's
+   changed div... Make the priority actions div have an internal scroll, so
+   it never changes size." Same 320px value as .dash-what-changed-scroll
+   opposite it — kept as its own class rather than reusing that literal
+   name, since the two wrap conceptually different content (urgency-
+   grouped action rows vs. a flat activity log), but the value is
+   deliberately identical so both cards (which already share the same
+   .dash-priority-card/.dash-priority-card-header shell) come out the same
+   total height. */
+.dash-priority-actions-scroll {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+/* My Escalated Projects + My Escalation History, side by side underneath
+   My Priority Actions (17 Jul 2026 restructure). Both cards were converted
+   to the same collapsed-teaser shell Waiting on Others already uses (see
+   .dash-escalated-card/.dash-escalation-history-card above), so this row's
+   COLLAPSED height matches Waiting on Others' own collapsed height by
+   construction — same component structure, not a guessed pixel value.
+
+   align-items: start, NOT grid's own default of stretch (17 Jul 2026,
+   same-day fix — per Ezekiel: "make them independent, expanding one
+   shouldn't expand the other"). With stretch, CSS Grid forces every item
+   in a row to match the row's tallest member — so opening either card's
+   collapsible body (which grows that ONE card taller) was silently
+   stretching its still-collapsed sibling's outer box to match, making it
+   look like expanding one expanded the other even though their toggle
+   state/chevron were already fully independent (see toggle-escalated-list/
+   toggle-escalation-history in dashboard.js — always two separate
+   handlers, never shared). Same root cause and same fix as .dash-toggle-
+   row's own align-items: start elsewhere on this page (15 Jul 2026,
+   "Overdue + At Risk pinned cards — fixed height, internal scroll" /
+   "independent collapse" section) — each card now sizes to its own
+   content only. */
+.dash-cs-escalations-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .dash-cs-escalations-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Generic white card shell shared by My Priority Actions/What Changed/
@@ -525,6 +622,23 @@
 .dash-leadership-row {
     margin-top: 1.5rem;
     margin-bottom: 1.5rem;
+}
+
+/* Right column of .dash-leadership-row: Waiting on Others (top) +
+   Escalation History (bottom), stacked (17 Jul 2026 — per Ezekiel: "Bring
+   it below waiting on others and follow the same collapsible structure you
+   just applied to the client servicing dashboard"). Byte-for-byte the same
+   recipe as .dash-cs-left-col/.dash-cs-side-col on the CS dashboard — a
+   plain flex column whose own `gap` supplies the space between the two
+   cards, so neither card needs a margin of its own (see the updated
+   .dash-escalation-history-card comment above). This is what makes
+   Risk/Overdue (left) and this column (right) sit as .dash-toggle-row's
+   two grid cells, same as before — only what's INSIDE the right cell
+   changed, from a single card to a two-card stack. */
+.dash-leadership-side-col {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
 }
 
 /* Risk/Overdue's header is no longer collapsible (16 Jul 2026 follow-up —
@@ -1705,6 +1819,226 @@ a.dash-row:hover {
 .dash-resolve-btn:disabled {
     opacity: 0.6;
     cursor: default;
+}
+
+/* ── Shared Decision Flag modal (17 Jul 2026, Decision Flag reply/resolve
+   feature) ────────────────────────────────────────────────────────────────
+   .modal-overlay/.modal-box/.modal-title/.modal-actions/.form-group are all
+   reused as-is from main.css ("our style", same recipe every other
+   dashboard modal already uses) — only a wider variant and the thread/
+   message pieces below are genuinely new. See _decision_flag_modal.html
+   for the markup these rules target. */
+.modal-box--wide {
+    max-width: 620px;
+    width: 100%;
+}
+
+/* The original flag (who raised it, when, the note) — a tinted box so it
+   reads as "the thing being discussed", visually distinct from the
+   .decision-flag-thread replies below it. Its one .decision-flag-message
+   child has its own padding/border stripped (see further down) since the
+   tint box already provides the visual separation a border-bottom would
+   otherwise add between thread entries. */
+.decision-flag-original {
+    background: var(--sandstone);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.decision-flag-thread {
+    max-height: 280px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+
+/* No border/margin at all when there are zero replies yet — an empty
+   scroll box with a visible top edge and no content looks like a rendering
+   glitch, not "nothing here yet". */
+.decision-flag-thread:empty {
+    margin-bottom: 0;
+}
+
+.decision-flag-message {
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.decision-flag-message:last-child {
+    border-bottom: none;
+}
+
+/* The original flag's own message bubble (inside .decision-flag-original)
+   already sits inside a tinted box — strip the row-divider styling every
+   OTHER .decision-flag-message gets, so it doesn't look like a truncated
+   list item. */
+.decision-flag-original .decision-flag-message {
+    padding: 0;
+    border-bottom: none;
+}
+
+.decision-flag-message-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.4rem;
+}
+
+.decision-flag-message-time {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--grey-dark);
+}
+
+.decision-flag-message-text {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--black);
+    white-space: pre-wrap;
+}
+
+.decision-flag-divider {
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    margin: 1rem 0;
+}
+
+/* SUPERSEDED same-day (17 Jul 2026) — Send Reply and Close originally sat
+   in two stacked .modal-actions rows (this rule added a margin-top to fix
+   the missing gap between them), but Ezekiel found the vertical stack
+   itself confusing ("Put them side by side, vertical is not making
+   sense"). Both buttons now live in ONE shared .modal-actions row in
+   _decision_flag_modal.html (Close first/secondary, Send Reply
+   second/primary — same convention _reassign_cs_lead_modal.html etc.
+   already use), so .modal-actions's own gap: 0.75rem (main.css) handles
+   the spacing on its own and this rule/class has no remaining consumer.
+   Kept as a comment, not silently deleted, per this file's own
+   "explain superseded history" convention. */
+
+/* Closing "Resolved by X on Y[: note]" line (added 17 Jul 2026, Escalation
+   History feature) — appended to the end of .decision-flag-thread when a
+   History row opens an already-resolved flag (see renderDecisionFlagModal()
+   in dashboard.js). Deliberately NOT styled as another .decision-flag-
+   message bubble — it's a system fact about the thread closing out, not
+   something someone said inside it, so a plain tinted line (same
+   .sandstone/--radius-sm recipe .decision-flag-original already uses)
+   reads as a distinct "end of thread" marker instead of one more entry in
+   the conversation. */
+.decision-flag-resolved-note {
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.8rem;
+    background: var(--sandstone);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--grey-dark);
+}
+
+.decision-flag-resolved-note .dash-person-chip {
+    margin: 0 0.3rem;
+}
+
+/* .dash-resolve-btn (above) is deliberately small/inline for its usual
+   home — a compact sibling next to a dashboard row. Inside this modal it's
+   the section's own primary action, sitting in a normal .modal-actions
+   row next to Close, so it's sized up to match .btn-primary/.btn-secondary
+   here — same green language, just not squeezed down to fit a row. */
+.decision-flag-resolve-section .dash-resolve-btn {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.1rem;
+}
+
+/* ── My Escalated Projects (17 Jul 2026, same feature) — CS dashboard only.
+   .dash-priority-card/.dash-decision-row/.dash-row/.dash-resolve-btn are
+   all reused as-is (see dashboard_cs.html). Converted from an always-
+   expanded standalone block to a collapsed-teaser card living side by side
+   with My Escalation History inside .dash-cs-escalations-row (17 Jul 2026,
+   same-day restructure — see that class below) — no margin of its own
+   needed anymore, .dash-cs-escalations-row's own gap handles the space
+   between the two cards, and .dash-cs-left-col's gap handles the space
+   above this whole row. */
+.dash-escalated-card {
+    margin-bottom: 0;
+}
+
+.dash-escalated-view-btn {
+    flex-shrink: 0;
+}
+
+.dash-escalated-open-btn {
+    margin-bottom: 0.5rem;
+}
+
+/* ── Escalation History (17 Jul 2026, same feature) — "My Escalation
+   History" (CS dashboard) / "Escalation History" (leadership dashboard),
+   both rendered through these SAME class names (see dash_escalation_
+   history_row() in _dashboard_macros.html and the toggle-escalation-
+   history click handler in dashboard.js) since only one of the two
+   sections ever exists on a given page. Collapsed by default, same
+   teaser-line + "Open history" button + JS-measured max-height body shape
+   as Waiting on Others above (.dash-waiting-teaser is reused as-is for
+   the teaser text — a generic class, not scoped to .dash-waiting-card —
+   only the card wrapper and open-button needed their own rules here). */
+.dash-priority-card-header[data-action="toggle-escalation-history"] {
+    cursor: pointer;
+}
+
+/* No margin of its own (17 Jul 2026, same-day restructure — updated again
+   17 Jul 2026 when the leadership copy also moved off being a standalone
+   block, see below) — this card no longer sits as a bare full-width block
+   on EITHER dashboard it appears on, so a base-rule margin is dead weight
+   either way:
+   - CS dashboard: lives side by side with My Escalated Projects inside
+     .dash-cs-escalations-row (a grid) — that row's own `gap` handles the
+     space between the two cards, and .dash-cs-left-col's `gap` handles the
+     space above/below the row itself.
+   - Leadership dashboard: lives stacked below Waiting on Others inside
+     .dash-leadership-side-col (a flex column, added below) — per Ezekiel:
+     "the escalation history [is] taking up way too much space. Bring it
+     below waiting on others" (moved off being its own full-width block
+     under the Decision Needed Queue). That column's own `gap` handles the
+     space between Waiting on Others and this card. */
+.dash-escalation-history-card {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.dash-escalation-history-open-btn {
+    margin-bottom: 0.5rem;
+}
+
+/* Breathing room between the Resolved/reply tags and the person chip below
+   them (17 Jul 2026, same-day follow-up, per Ezekiel with a screenshot:
+   "Give all of these breathing room"). The person chip previously sat as a
+   bare child of .dash-row-main with no margin of its own — now wrapped in
+   .dash-row-people (see dash_escalation_history_row() in _dashboard_
+   macros.html), which already carries a gap/margin-top for exactly this
+   "one row of chips, spaced from whatever's above" shape elsewhere on this
+   page. Scoped bump on top of that: this card's rows read cramped even
+   with .dash-row-tags' base 0.4rem gap, so both the tag-to-tag gap and the
+   tags-row's own top margin are widened here specifically, rather than
+   changing the shared .dash-row-tags rule every other card (Due/At Risk/
+   Next Actions/Clashes) also uses unscoped. */
+.dash-escalation-history-card .dash-row-tags {
+    gap: 0.6rem;
+    margin-top: 0.65rem;
+}
+
+.dash-escalation-history-card .dash-row-people {
+    margin-top: 0.7rem;
+}
+
+/* Rounded "Resolved" tag (17 Jul 2026, same-day follow-up, per Ezekiel:
+   "make the resolved tag rounded"). .rag-green/.rag-badge's base shape
+   (min-width: 4.5rem + --radius-sm, sized for a short deadline string) is
+   shared by Next Actions/Decisions/Clashes/the deep-dive row macros —
+   none of which asked for this, so it's overridden here via a scoped
+   modifier rather than widening the shared rule. Full pill (999px) plus a
+   touch more horizontal padding, since a pill reads odd with the boxier
+   padding a small-radius tag was sized for. */
+.dash-escalation-resolved-tag {
+    min-width: 0;
+    border-radius: 999px;
+    padding: 0.2rem 0.75rem;
 }
 
 /* ── Due row redesign (13 Jul 2026) ───────────────────────────────────────

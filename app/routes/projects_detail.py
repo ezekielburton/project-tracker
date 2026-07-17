@@ -13,7 +13,8 @@ from app.models import (Project, ProjectDesigner, Scope, User, Client,
                         DeliverableAssignment, ProjectSubmission, ProjectRevision,
                         ProjectFile, BriefFlag, BriefFlagMessage,
                         ProjectSecondaryCS, ProjectSecondaryCsRegion,
-                        DesignType, DesignDirection, User as UserModel, DecisionFlag)
+                        DesignType, DesignDirection, User as UserModel, DecisionFlag,
+                        DecisionFlagMessage)
 from app.decorators import role_required
 from app.notifications import (
     notify_designers_of_revision_flag, notify_cs_of_brief_flag,
@@ -1093,24 +1094,32 @@ def resolve_decision(project_id):
 
     if not project.decision_needed:
         return jsonify({'success': False, 'error': 'No decision is currently pending on this project'}), 400
+    
+    data = request.get_json(silent=True) or {}
+    resolution_note = (data.get('resolution_note') or '').strip() or None
 
     emulating_id = session.get('emulating_user_id')
     actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
 
-    raised_by = project.decision_raised_by  # captured before clearing, for the notification below
+    flag = project.active_decision_flag
+    raised_by = flag.created_by if flag else None  # captured before clearing, for the notification below
 
     project.decision_needed = False
-    project.decision_raised_by_id = None
-    project.decision_raised_at = None
-    project.decision_note = None
+    if flag:
+        flag.is_resolved = True
+        flag.resolved_at = datetime.utcnow()
+        flag.resolved_by_id = actor.id
+        flag.resolution_note = resolution_note
     db.session.commit()
+
+    note_suffix = f': "{resolution_note}"' if resolution_note else ''
 
     notified_ids = set()
     if raised_by:
         notified_ids.add(raised_by.id)
         create_notification(
             recipient=raised_by,
-            message=f'{actor.name} resolved the Management decision you flagged on "{project.name}".',
+            message=f'{actor.name} resolved the Management decision you flagged on "{project.name}"{note_suffix}.',
             notification_type='decision_resolved',
             project=project,
             triggered_by=actor,
@@ -1127,7 +1136,7 @@ def resolve_decision(project_id):
         notified_ids.add(recipient.id)
         create_notification(
             recipient=recipient,
-            message=f'{actor.name} resolved the Management decision on "{project.name}".',
+            message=f'{actor.name} resolved the Management decision on "{project.name}"{note_suffix}.',
             notification_type='decision_resolved',
             project=project,
             triggered_by=actor,
@@ -1136,11 +1145,185 @@ def resolve_decision(project_id):
 
     log_activity(
         'decision_resolved',
-        f'{actor.name} resolved the Management decision on "{project.name}"',
+        f'{actor.name} resolved the Management decision on "{project.name}"{note_suffix}',
         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
     )
 
     return jsonify({'success': True})
+
+
+@detail_bp.route('/projects/<int:project_id>/decision-flag', methods=['GET'])
+@login_required
+@role_required('admin', 'cs', 'designer', 'team_lead', 'management')
+def get_decision_flag(project_id):
+    """
+    Returns the project's active DecisionFlag plus its full reply thread,
+    as JSON — the shared Decision Flag modal (both dashboard_cs.html and
+    dashboard_leadership.html) fetches this on open. Deliberately not
+    restricted any further than role — this codebase scopes visibility via
+    each dashboard's own queries (_scoped_projects(),
+    _decision_flag_recipients()), not per-object ACLs on read routes,
+    matching flag_management()/resolve_decision() just above.
+
+    can_resolve is keyed on current_user.role (the REAL logged-in user),
+    NOT get_actor() — same thing role_required() itself checks on
+    resolve_decision() below, so the modal's own Resolve section visibility
+    can never disagree with whether that POST would actually succeed.
+
+    flag_id (optional query param, added 17 Jul 2026 for the Escalation
+    History feature) — when given, looks up that SPECIFIC DecisionFlag by
+    id (any resolution state), scoped to this project, instead of
+    project.active_decision_flag. This is what lets the shared modal open a
+    RESOLVED flag from a History row — active_decision_flag would return
+    None for anything already resolved (or worse, a different, newer flag
+    if the project has since been re-escalated), neither of which is what a
+    History row means to open. Omitted entirely (the original behavior)
+    means "whatever's currently open on this project" — every existing
+    call site (My Escalated Projects, Decision Needed Queue) is unaffected.
+    """
+    project = Project.query.get_or_404(project_id)
+
+    flag_id = request.args.get('flag_id', type=int)
+    if flag_id:
+        flag = DecisionFlag.query.filter_by(id=flag_id, project_id=project.id).first()
+        if not flag:
+            return jsonify({'success': False, 'error': 'Decision flag not found'}), 404
+    else:
+        flag = project.active_decision_flag
+
+    from app.routes.dashboard import _serialize_person  # inside the function — avoids a circular import at module load
+
+    can_resolve = current_user.role in ('admin', 'management')
+
+    if not flag:
+        return jsonify({
+            'success': True,
+            'project_id': project.id,
+            'project_name': project.name,
+            'flag': None,
+            'messages': [],
+            'can_resolve': can_resolve,
+        })
+
+    # A resolved flag has nothing left to resolve — force this false
+    # regardless of role, so the modal's Resolve section can never show for
+    # a History row even though the viewer might otherwise qualify. Mirrors
+    # resolve_decision()'s own guard (400s if project.decision_needed is
+    # already False) — can_resolve should never claim something that route
+    # would reject.
+    if flag.is_resolved:
+        can_resolve = False
+
+    return jsonify({
+        'success': True,
+        'project_id': project.id,
+        'project_name': project.name,
+        'flag': {
+            'id': flag.id,
+            'note': flag.note,
+            'created_at': flag.created_at.isoformat() if flag.created_at else None,
+            'created_by': _serialize_person(flag.created_by),
+            # Resolution fields (added 17 Jul 2026) — always present, None/
+            # False on an active flag, populated on a resolved one. Lets
+            # the JS render a single "Resolved by X on Y: note" closing
+            # line on a History-row open without a second response shape.
+            'is_resolved': flag.is_resolved,
+            'resolved_at': flag.resolved_at.isoformat() if flag.resolved_at else None,
+            'resolved_by': _serialize_person(flag.resolved_by),
+            'resolution_note': flag.resolution_note,
+        },
+        'messages': [
+            {
+                'id': m.id,
+                'message': m.message,
+                'created_at': m.created_at.isoformat() if m.created_at else None,
+                'author': _serialize_person(m.author),
+            }
+            for m in flag.messages
+        ],
+        'can_resolve': can_resolve,
+    })
+
+
+@detail_bp.route('/projects/<int:project_id>/decision-flag/reply', methods=['POST'])
+@login_required
+@role_required('admin', 'cs', 'designer', 'team_lead', 'management')
+def reply_decision_flag(project_id):
+    """
+    Posts a reply onto the project's active DecisionFlag thread. Either
+    side of the escalation can use this — the CS/designer who raised it,
+    or management responding — without leaving the dashboard modal.
+
+    Notifies the same combined audience flag_management() notifies when a
+    flag is first raised (every management/admin account, plus everyone
+    _decision_flag_recipients() returns — CS lead, secondary CS, assigned
+    designers), minus the actor. Reusing that exact recipient set means a
+    reply always reaches whoever could see the original flag, regardless
+    of which side of the conversation sent it — no separate "who's on the
+    other side" branching needed.
+    """
+    project = Project.query.get_or_404(project_id)
+    flag = project.active_decision_flag
+
+    if not flag:
+        return jsonify({'success': False, 'error': 'No decision is currently open on this project'}), 400
+
+    data = request.get_json(silent=True) or {}
+    message_text = (data.get('message') or '').strip()
+    if not message_text:
+        return jsonify({'success': False, 'error': 'message is required'}), 400
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    from app.routes.dashboard import _serialize_person  # inside the function — avoids a circular import at module load
+
+    msg = DecisionFlagMessage(flag_id=flag.id, author_id=actor.id, message=message_text)
+    db.session.add(msg)
+    db.session.commit()
+
+    notified_ids = {actor.id}
+    for recipient in User.query.filter(User.role.in_(['management', 'admin'])).all():
+        if recipient.id in notified_ids:
+            continue
+        notified_ids.add(recipient.id)
+        create_notification(
+            recipient=recipient,
+            message=f'{actor.name} replied on the "{project.name}" decision flag: "{message_text}"',
+            notification_type='decision_flag_reply',
+            project=project,
+            triggered_by=actor,
+            pref_key='email_decision_flag'
+        )
+
+    for recipient in _decision_flag_recipients(project):
+        if recipient.id in notified_ids:
+            continue
+        notified_ids.add(recipient.id)
+        create_notification(
+            recipient=recipient,
+            message=f'{actor.name} replied on the "{project.name}" decision flag: "{message_text}"',
+            notification_type='decision_flag_reply',
+            project=project,
+            triggered_by=actor,
+            pref_key='email_decision_flag'
+        )
+
+    log_activity(
+        'decision_flag_reply',
+        f'{actor.name} replied on the "{project.name}" decision flag',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
+    )
+
+    return jsonify({
+        'success': True,
+        'message': {
+            'id': msg.id,
+            'message': msg.message,
+            'created_at': msg.created_at.isoformat() if msg.created_at else None,
+            'author': _serialize_person(actor),
+        }
+    })
 
 
 # ── Designer / Team assignment ───────────────────────────────────────────────
@@ -1894,16 +2077,24 @@ def delete_project_file(file_id):
 @login_required
 @role_required('admin')
 def reset_pill(project_id):
-    """Admin-only: reset a C&KV or POSM channel pill to a specific revision number.
+    """Admin-only: revert or reset a C&KV or POSM channel pill.
 
-    Wipes all ProjectSubmission records (and their NAS files) for the pill,
-    wipes all ProjectRevision records for the pill, resets the pill status
-    fields back to 'in_queue', and sets the revision counter to the requested
-    target number (0 = start fresh).
+    action='revert' (Revert ↩)
+        Keeps the initial (oldest) submission file only.  Deletes all
+        subsequent submissions and all revisions.  Sets pill status back to
+        'internal_review' (the state right after first designer submission)
+        and resets revision counter to 0.
+
+    action='reset' (Reset ↺, default for backwards compat)
+        Wipes *all* submissions and revisions and sets the pill back to
+        'in_queue' as if no work has ever been done.  target_revision lets
+        callers set the revision counter to a specific value (0 = start fresh).
 
     JSON body:
+      action           - 'revert' or 'reset' (default 'reset')
       pill_type        - 'ckv' or 'posm'
-      target_revision  - int, the revision counter to set (0 for a full reset)
+      target_revision  - int, the revision counter to set (reset only; ignored
+                         for revert, which always sets it to 0)
       posm_country     - str, e.g. 'kuwait' (posm only)
       posm_customer_id - int or null (posm UAE only)
     """
@@ -1916,6 +2107,7 @@ def reset_pill(project_id):
     project = Project.query.get_or_404(project_id)
     data = request.get_json() or {}
 
+    action           = data.get('action', 'reset')
     pill_type        = data.get('pill_type')
     target_revision  = int(data.get('target_revision', 0))
     posm_country     = (data.get('posm_country') or '').strip().lower() or None
@@ -1925,8 +2117,11 @@ def reset_pill(project_id):
 
     if pill_type not in ('ckv', 'posm'):
         return jsonify({'success': False, 'error': 'Invalid pill_type'}), 400
+    if action not in ('revert', 'reset'):
+        return jsonify({'success': False, 'error': 'Invalid action'}), 400
 
     def _wipe_submissions(submissions):
+        """Delete every submission in the list, including NAS files."""
         for sub in submissions:
             nas_path = build_file_path(project, 'Submissions', sub.original_filename)
             delete_app_file(nas_path)
@@ -1941,6 +2136,7 @@ def reset_pill(project_id):
             db.session.delete(sub)
 
     def _wipe_revisions(revisions):
+        """Delete every revision in the list."""
         for rev in revisions:
             ProjectRevisionDeliverable.query.filter_by(
                 revision_id=rev.id).delete(synchronize_session=False)
@@ -1951,34 +2147,65 @@ def reset_pill(project_id):
             project_id=project_id,
             posm_country=None,
             posm_customer_id=None
-        ).all()
-        _wipe_submissions(submissions)
+        ).order_by(ProjectSubmission.uploaded_at.asc()).all()
 
-        revisions = ProjectRevision.query.filter_by(
-            project_id=project_id,
-            posm_country=None,
-            posm_customer_id=None
-        ).filter(
-            db.or_(ProjectRevision.includes_concept == True,   # noqa: E712
-                   ProjectRevision.includes_kv == True)
-        ).all()
-        _wipe_revisions(revisions)
+        if action == 'revert':
+            # Keep the oldest (initial) submission, wipe everything else.
+            if len(submissions) > 1:
+                _wipe_submissions(submissions[1:])
+            # Wipe all revisions — revert means no client rounds have happened.
+            revisions = ProjectRevision.query.filter_by(
+                project_id=project_id,
+                posm_country=None,
+                posm_customer_id=None
+            ).filter(
+                db.or_(ProjectRevision.includes_concept == True,   # noqa: E712
+                       ProjectRevision.includes_kv == True)
+            ).all()
+            _wipe_revisions(revisions)
 
-        project.concept_status        = 'in_queue'
-        if project.has_kv:
-            project.kv_status         = 'in_queue'
-        project.ckv_revision_count    = target_revision
-        project.concept_approved_at   = None
-        project.concept_approved_by_id = None
+            project.concept_status        = 'internal_review'
+            if project.has_kv:
+                project.kv_status         = 'internal_review'
+            project.ckv_revision_count    = 0
+            project.concept_approved_at   = None
+            project.concept_approved_by_id = None
 
-        db.session.commit()
+            db.session.commit()
+            log_activity(
+                'pill_reset',
+                f'C&KV pill reverted to initial submission on "{project.name}" by {current_user.name}',
+                user=current_user, entity_type='project',
+                entity_name=project.name, entity_id=project.id
+            )
 
-        log_activity(
-            'pill_reset',
-            f'C&KV pill reset to revision {target_revision} on "{project.name}" by {current_user.name}',
-            user=current_user, entity_type='project',
-            entity_name=project.name, entity_id=project.id
-        )
+        else:  # action == 'reset'
+            _wipe_submissions(submissions)
+
+            revisions = ProjectRevision.query.filter_by(
+                project_id=project_id,
+                posm_country=None,
+                posm_customer_id=None
+            ).filter(
+                db.or_(ProjectRevision.includes_concept == True,   # noqa: E712
+                       ProjectRevision.includes_kv == True)
+            ).all()
+            _wipe_revisions(revisions)
+
+            project.concept_status        = 'in_queue'
+            if project.has_kv:
+                project.kv_status         = 'in_queue'
+            project.ckv_revision_count    = target_revision
+            project.concept_approved_at   = None
+            project.concept_approved_by_id = None
+
+            db.session.commit()
+            log_activity(
+                'pill_reset',
+                f'C&KV pill reset to revision {target_revision} on "{project.name}" by {current_user.name}',
+                user=current_user, entity_type='project',
+                entity_name=project.name, entity_id=project.id
+            )
 
     elif pill_type == 'posm':
         if not posm_country:
@@ -2002,7 +2229,7 @@ def reset_pill(project_id):
             sub_q = sub_q.filter(ProjectSubmission.posm_customer_id == posm_customer_id)
         else:
             sub_q = sub_q.filter(ProjectSubmission.posm_customer_id == None)  # noqa: E711
-        _wipe_submissions(sub_q.all())
+        submissions = sub_q.order_by(ProjectSubmission.uploaded_at.asc()).all()
 
         rev_q = ProjectRevision.query.filter_by(
             project_id=project_id,
@@ -2012,30 +2239,61 @@ def reset_pill(project_id):
             rev_q = rev_q.filter(ProjectRevision.posm_customer_id == posm_customer_id)
         else:
             rev_q = rev_q.filter(ProjectRevision.posm_customer_id == None)  # noqa: E711
-        _wipe_revisions(rev_q.all())
-
-        channel.status         = 'in_queue'
-        channel.approved_at    = None
-        channel.approved_by_id = None
-
-        if posm_customer_id is not None:
-            pc = ProjectCustomer.query.get(posm_customer_id)
-            if pc:
-                pc.posm_revision_count = target_revision
-        else:
-            counts = dict(project.posm_country_revision_counts or {})
-            counts[posm_country] = target_revision
-            project.posm_country_revision_counts = counts
-
-        db.session.commit()
+        revisions = rev_q.all()
 
         label = f'{posm_country.upper()} (customer {posm_customer_id})' if posm_customer_id else posm_country.upper()
-        log_activity(
-            'pill_reset',
-            f'POSM channel {label} reset to revision {target_revision} on "{project.name}" by {current_user.name}',
-            user=current_user, entity_type='project',
-            entity_name=project.name, entity_id=project.id
-        )
+
+        if action == 'revert':
+            # Keep the oldest (initial) submission, wipe everything else.
+            if len(submissions) > 1:
+                _wipe_submissions(submissions[1:])
+            _wipe_revisions(revisions)
+
+            channel.status         = 'internal_review'
+            channel.approved_at    = None
+            channel.approved_by_id = None
+
+            if posm_customer_id is not None:
+                pc = ProjectCustomer.query.get(posm_customer_id)
+                if pc:
+                    pc.posm_revision_count = 0
+            else:
+                counts = dict(project.posm_country_revision_counts or {})
+                counts[posm_country] = 0
+                project.posm_country_revision_counts = counts
+
+            db.session.commit()
+            log_activity(
+                'pill_reset',
+                f'POSM channel {label} reverted to initial submission on "{project.name}" by {current_user.name}',
+                user=current_user, entity_type='project',
+                entity_name=project.name, entity_id=project.id
+            )
+
+        else:  # action == 'reset'
+            _wipe_submissions(submissions)
+            _wipe_revisions(revisions)
+
+            channel.status         = 'in_queue'
+            channel.approved_at    = None
+            channel.approved_by_id = None
+
+            if posm_customer_id is not None:
+                pc = ProjectCustomer.query.get(posm_customer_id)
+                if pc:
+                    pc.posm_revision_count = target_revision
+            else:
+                counts = dict(project.posm_country_revision_counts or {})
+                counts[posm_country] = target_revision
+                project.posm_country_revision_counts = counts
+
+            db.session.commit()
+            log_activity(
+                'pill_reset',
+                f'POSM channel {label} reset to revision {target_revision} on "{project.name}" by {current_user.name}',
+                user=current_user, entity_type='project',
+                entity_name=project.name, entity_id=project.id
+            )
 
     return jsonify({'success': True})
 

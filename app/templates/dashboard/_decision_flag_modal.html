@@ -1,0 +1,83 @@
+{#
+   Decision Flag modal — added 17 Jul 2026 (Decision Flag reply/resolve
+   feature). Shared between dashboard_cs.html ("My Escalated Projects" rows)
+   and dashboard_leadership.html (Decision Needed Queue rows) — both just
+   {% include 'dashboard/_decision_flag_modal.html' %} in the same spot the
+   other dashboard modals live. Same .modal-overlay/.modal-box/.modal-actions
+   shape as _flag_management_modal.html/_reassign_cs_lead_modal.html ("our
+   style").
+
+   Unlike those two modals, this one's BODY content is entirely fetched and
+   rendered by JS (openDecisionFlagModal() -> GET /projects/<id>/decision-
+   flag, dashboard.js) rather than server-rendered from a Jinja context var
+   — the thread can look completely different between one open and the next
+   (new replies, resolved vs. not), and this modal is triggered from rows on
+   two different dashboards, so there's no single page-load context to
+   render it from ahead of time. Everything below is just the static shell
+   (title, empty containers, buttons) — renderDecisionFlagModal() in
+   dashboard.js rebuilds #decision-flag-original/#decision-flag-thread on
+   every open.
+
+   Resolve section visibility is driven by the GET response's can_resolve
+   flag (current_user.role in ('admin','management') — see get_decision_
+   flag() in projects_detail.py), NOT a server-side Jinja gate, since this
+   same shell renders on both dashboards regardless of viewer role —
+   dashboard.js shows/hides #decision-flag-resolve-section after fetching.
+#}
+<div id="decision-flag-modal" class="modal-overlay hidden" data-action="close-decision-flag-overlay">
+    <div class="modal-box modal-box--wide">
+        <h3 class="modal-title" id="decision-flag-project-name">Decision Flag</h3>
+
+        {# Rebuilt on every open by renderDecisionFlagModal() — the original
+           flag (who raised it, when, the note) plus the reply thread below
+           it. Kept as two separate containers rather than one, even though
+           JS rebuilds both together, so the CSS can treat "the thing being
+           discussed" and "the discussion so far" as visually distinct
+           blocks (see .decision-flag-original vs. .decision-flag-message
+           in dashboard.css). #}
+        <div id="decision-flag-original" class="decision-flag-original"></div>
+        <div id="decision-flag-thread" class="decision-flag-thread"></div>
+
+        <p id="decision-flag-error" class="hidden" style="color: var(--rose); font-size: 0.85rem; margin: 0 0 0.75rem;"></p>
+
+        {# Wrapped in its own toggleable section so renderDecisionFlagModal()
+           has exactly one thing to hide when data.flag comes back null —
+           i.e. the flag was resolved by someone else while this modal was
+           closed, so there's nothing left to reply to. Only wraps the
+           TEXTAREA now (17 Jul 2026, same-day follow-up — see below): the
+           Send Reply button itself moved into the shared action row below
+           so it sits side by side with Close, same left-secondary/
+           right-primary convention every other modal on this page uses
+           (_reassign_cs_lead_modal.html, etc.) — it's hidden/shown
+           independently via its own id (#decision-flag-send-reply-btn),
+           in lockstep with this section, so Close still always works
+           regardless of state. #}
+        <div id="decision-flag-reply-section">
+            <div class="form-group">
+                <label>Reply</label>
+                <textarea id="decision-flag-reply-text" rows="3" placeholder="Write a reply…"></textarea>
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" data-action="close-decision-flag-modal">Close</button>
+            <button type="button" class="btn-primary" id="decision-flag-send-reply-btn" data-action="submit-decision-flag-reply">Send Reply</button>
+        </div>
+
+        {# admin/management only (see can_resolve above) — a genuine two-way
+           thread first, with the ability to close it out from the same
+           place, instead of the old single instant-fire "✓ Resolve" button
+           this modal replaces on the leadership dashboard's Decision Needed
+           Queue. Optional resolution note, per the original spec. #}
+        <div id="decision-flag-resolve-section" class="decision-flag-resolve-section hidden">
+            <hr class="decision-flag-divider">
+            <div class="form-group">
+                <label>Resolution Note (optional)</label>
+                <textarea id="decision-flag-resolution-note" rows="2" placeholder="Anything to note when resolving?"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="dash-resolve-btn" data-action="submit-decision-flag-resolve">✓ Resolve Decision</button>
+            </div>
+        </div>
+    </div>
+</div>

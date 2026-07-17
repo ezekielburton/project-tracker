@@ -1302,35 +1302,63 @@ document.addEventListener('submit', function (e) {
         .catch(function () { btnDone(btn); showToast('Could not assign designer.', 'error'); });
 });
 
-// ── Pill reset modal (admin only) ─────────────────────────────────────────────
+// ── Pill revert / reset modal (admin / cs) ────────────────────────────────────
 
 var _pillResetContext = null;
 
 function openPillResetModal(btn) {
+    var action = btn.dataset.pillAction || 'reset';  // 'revert' or 'reset'
     _pillResetContext = {
+        action:         action,
         pillType:       btn.dataset.pillType,
         pillLabel:      btn.dataset.pillLabel || 'this pill',
         posmCountry:    btn.dataset.posmCountry  || null,
         posmCustomerId: btn.dataset.posmCustomerId || null,
         projectId:      parseInt(window.location.pathname.split('/')[2])
     };
+
+    var isRevert = action === 'revert';
+
+    // Title
+    var title = document.getElementById('pillResetModalTitle');
+    if (title) title.textContent = isRevert ? 'Revert Pill' : 'Reset Pill';
+
+    // Description
     var desc = document.getElementById('pillResetModalDesc');
     if (desc) {
-        desc.textContent = 'Reset "' + _pillResetContext.pillLabel + '" — this will permanently delete all submission files and revision history for this pill.';
+        desc.textContent = isRevert
+            ? 'Revert "' + _pillResetContext.pillLabel + '" — keeps the initial submission file and sets the pill back to internal review (revision 0). All later submissions and client revision rounds will be deleted.'
+            : 'Reset "' + _pillResetContext.pillLabel + '" — permanently deletes all submission files and revision history, resetting the pill to the "not started" state.';
     }
+
+    // Revision input is only relevant for a full reset
+    var revRow = document.getElementById('pillResetRevRow');
+    if (revRow) revRow.style.display = isRevert ? 'none' : '';
     var revInput = document.getElementById('pillResetRevInput');
     if (revInput) revInput.value = 0;
+
+    // Warning
+    var warning = document.getElementById('pillResetWarning');
+    if (warning) {
+        warning.textContent = isRevert
+            ? '⚠ This permanently deletes all submissions after the first one, and all revision records. It cannot be undone.'
+            : '⚠ This permanently deletes all submission files and revision history for this pill. It cannot be undone.';
+    }
+
+    // Confirm button label
+    var oldBtn = document.getElementById('pillResetConfirmBtn');
+    if (oldBtn) {
+        oldBtn.textContent = isRevert ? '↩ Revert Pill' : '↺ Reset Pill';
+        // Replace the button node to strip any stale listeners
+        var newBtn = oldBtn.cloneNode(true);
+        oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+        newBtn.addEventListener('click', submitPillReset);
+    }
+
     var modal = document.getElementById('pillResetModal');
     if (modal) {
         modal.classList.remove('hidden');
         if (window.helixPolling) window.helixPolling.pause();
-    }
-    // Replace the confirm button to strip any stale listeners
-    var oldBtn = document.getElementById('pillResetConfirmBtn');
-    if (oldBtn) {
-        var newBtn = oldBtn.cloneNode(true);
-        oldBtn.parentNode.replaceChild(newBtn, oldBtn);
-        newBtn.addEventListener('click', submitPillReset);
     }
 }
 
@@ -1343,12 +1371,17 @@ function closePillResetModal() {
 
 function submitPillReset() {
     if (!_pillResetContext) return;
+    var isRevert = _pillResetContext.action === 'revert';
     var revInput = document.getElementById('pillResetRevInput');
-    var targetRevision = revInput ? Math.max(0, parseInt(revInput.value, 10) || 0) : 0;
+    var targetRevision = (revInput && !isRevert) ? Math.max(0, parseInt(revInput.value, 10) || 0) : 0;
     var confirmBtn = document.getElementById('pillResetConfirmBtn');
-    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Resetting…'; }
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = isRevert ? 'Reverting…' : 'Resetting…';
+    }
 
     var body = {
+        action:          _pillResetContext.action,
         pill_type:       _pillResetContext.pillType,
         target_revision: targetRevision
     };
@@ -1364,16 +1397,22 @@ function submitPillReset() {
     .then(function (data) {
         if (data.success) {
             closePillResetModal();
-            showToast('Pill reset to revision ' + targetRevision, 'warning');
+            showToast(isRevert ? 'Pill reverted to initial submission' : ('Pill reset to revision ' + targetRevision), 'warning');
             setTimeout(function () { location.reload(); }, 800);
         } else {
-            showToast(data.error || 'Reset failed', 'error');
-            if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '↺ Reset Pill'; }
+            showToast(data.error || (isRevert ? 'Revert failed' : 'Reset failed'), 'error');
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = isRevert ? '↩ Revert Pill' : '↺ Reset Pill';
+            }
         }
     })
     .catch(function () {
         showToast('Something went wrong', 'error');
-        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '↺ Reset Pill'; }
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = isRevert ? '↩ Revert Pill' : '↺ Reset Pill';
+        }
     });
 }
 

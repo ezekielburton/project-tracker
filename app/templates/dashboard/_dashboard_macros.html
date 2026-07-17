@@ -312,7 +312,11 @@
     <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
         <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
         <span class="dash-row-main">
-            <span class="dash-row-title">{{ item.name }}</span>
+            <span class="dash-row-title">
+                {%- if item.customer_name %}{{ item.customer_name }} <span class="dash-row-title-detail">&mdash; {{ item.name }}</span>
+                {%- else %}{{ item.name }}
+                {%- endif %}
+            </span>
             {% if item.tags %}
             <span class="dash-row-tags">
                 {% for tag in item.tags %}
@@ -362,6 +366,76 @@
             data-missing-teams="{{ item.missing_teams | join(',') }}">Assign</button>
         {% endif %}
     </span>
+</div>
+{% endmacro %}
+
+
+{#
+   dash_escalation_history_row(item, show_raised_by=False) — one row in the
+   "My Escalation History" (CS dashboard) / "Escalation History" (Leadership
+   dashboard) collapsible sections, added 17 Jul 2026 per Ezekiel: "we need
+   to keep that escalation history and give it a spot on the dashboard to
+   open a hidden div with those escalations and their message history."
+
+   Shared by both dashboards rather than two near-duplicate macros — the
+   only real difference is show_raised_by (Leadership's list spans every
+   CS/designer/team lead company-wide, so each row needs to say WHO
+   escalated it; a CS's own history is implicitly "raised by me", so that
+   chip would be redundant there and is omitted).
+
+   Same .dash-decision-row wrapper (row <a> + sibling trigger <button>) as
+   dash_leadership_risk_row()/dash_leadership_waiting_row() above and My
+   Escalated Projects' row in dashboard_cs.html — the button opens the SAME
+   shared Decision Flag modal every other escalation-related row on this
+   page uses, just passing this row's own flag_id (not the project's
+   CURRENT active flag, which for a resolved row is None, or could be a
+   different, newer escalation if the project's been flagged again since)
+   — see get_decision_flag()'s flag_id query param in projects_detail.py.
+   The modal renders read-only for a resolved flag (no reply box, no
+   resolve controls — see renderDecisionFlagModal() in dashboard.js), so
+   "View" rather than "View / Reply" is deliberately the button's label
+   here, distinct from My Escalated Projects' still-open rows.
+
+   Date shown is resolved_display (when this closed out), not raised_at —
+   the list itself is sorted newest-resolved-first, so the date column
+   should agree with that ordering. .rag-green is reused as-is for the
+   "Resolved" tag's colour (the existing solid pine-green class, already
+   used elsewhere on this page for the same "this is done, no action
+   needed" signal) — paired with a new .dash-escalation-resolved-tag
+   modifier (added 17 Jul 2026, same-day follow-up, per Ezekiel: "make the
+   resolved tag rounded") that overrides .rag-badge's boxy min-width/
+   small-radius shape with a full pill, scoped to just this one usage
+   rather than reshaping .rag-badge itself (that base class is shared by
+   Next Actions/Decisions/Clashes/the deep-dive row macros, none of which
+   asked for this).
+
+   The person chip (show_raised_by) is wrapped in .dash-row-people (added
+   same follow-up) rather than sitting bare — it was previously a direct
+   child of .dash-row-main with no margin of its own, so it sat flush
+   against .dash-row-tags above it with zero gap; .dash-row-people is the
+   same "one row of chips, spaced from whatever's above" class Due/At
+   Risk/Next Actions/Clashing Projects already use for their own person-
+   chip rows, reused here for the identical reason.
+#}
+{% macro dash_escalation_history_row(item, show_raised_by=False) %}
+<div class="dash-decision-row">
+    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+        <span class="dash-row-date">{{ item.resolved_display or '—' }}</span>
+        <span class="dash-row-main">
+            <span class="dash-row-title">{{ item.project_name }}</span>
+            <span class="dash-row-tags">
+                <span class="rag-green dash-escalation-resolved-tag">Resolved</span>
+                {% if item.reply_count %}
+                <span class="dash-action-tag">{{ item.reply_count }} repl{{ 'y' if item.reply_count == 1 else 'ies' }}</span>
+                {% endif %}
+            </span>
+            {% if show_raised_by %}
+            <span class="dash-row-people">{{ dash_person_chip(item.raised_by) }}</span>
+            {% endif %}
+        </span>
+    </a>
+    <button type="button" class="btn-secondary dash-escalated-view-btn" data-action="open-decision-flag-modal"
+        data-project-id="{{ item.project_id }}" data-project-name="{{ item.project_name }}" data-flag-id="{{ item.flag_id }}">View</button>
 </div>
 {% endmacro %}
 
@@ -600,13 +674,25 @@
    as yellow "No Deadline" text (.dash-row-date--warning) either way, per
    Ezekiel: "If there is no deadline highlight that by making that row's
    deadline text yellow 'No Deadline' instead of a date."
+
+   17 Jul 2026: title inverts to item.entry_name (bold, the specific
+   deliverable/customer this designer is assigned to) + item.project_name
+   (grey, .dash-row-title-detail) — same title-inversion pattern
+   dash_due_row() already uses — per the deliverable/customer-based
+   rework of _compute_designer_work_queue() (see its docstring). Every
+   row now carries entry_name; the plain item.project_name fallback
+   branch is defensive only.
 #}
 {% macro dash_designer_queue_row(item) %}
 <div class="dash-decision-row dash-designer-queue-row">
     <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
         <span class="dash-row-date{{ ' dash-row-date--warning' if not item.deadline else '' }}">{{ item.deadline if item.deadline else 'No Deadline' }}</span>
         <span class="dash-row-main">
-            <span class="dash-row-title">{{ item.project_name }}</span>
+            <span class="dash-row-title">
+                {%- if item.entry_name %}{{ item.entry_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+                {%- else %}{{ item.project_name }}
+                {%- endif %}
+            </span>
             {% if item.client_name %}
             <span class="dash-row-sub">{{ item.client_name }}</span>
             {% endif %}

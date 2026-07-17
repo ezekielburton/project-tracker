@@ -3,7 +3,7 @@ from flask_login import login_required
 from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import nullslast
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable, DecisionFlag, DeliverableAssignment
 from app.utils import get_actor
 from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer
 
@@ -371,6 +371,8 @@ def index():
             summary=_compute_summary(scope_user),
             priority_actions=_compute_priority_actions(scope_user),
             waiting_on_others=_compute_waiting_on_others(scope_user),
+            my_escalated_projects=_compute_my_escalated_projects(scope_user),
+            my_escalation_history=_compute_my_escalation_history(scope_user),
             # due_today (16 Jul 2026) — feeds the newly-clickable "X due
             # today" Focus pill's expandable section (see dash_due_today_
             # row() in _dashboard_macros.html). Reuses _compute_due()'s
@@ -422,6 +424,13 @@ def index():
             designers=designers,
             decisions=decisions,
             risk_overdue=risk_overdue,
+            # Escalation History (17 Jul 2026) — joins decisions/role_
+            # snapshot's "always company-wide, not part of the All/Focused
+            # toggle" group (risk_overdue/waiting_on_others below ARE
+            # scope_user-aware — see _compute_escalation_history()'s own
+            # docstring for why this one isn't). Takes no scope argument at
+            # all.
+            escalation_history=_compute_escalation_history(),
             waiting_on_others=_compute_leadership_waiting_on_others(scope_user),
             role_snapshot=_compute_role_snapshot(),
             leadership_focus=_compute_leadership_focus(scope_user, len(decisions), risk_overdue),
@@ -754,6 +763,43 @@ def _missing_designer_teams(project):
         return []
     assigned_teams = {d.team for d in project.assigned_designers}
     return [t for t in requested_teams if t not in assigned_teams]
+
+
+# Statuses meaning "this work has left the design team's hands and is
+# sitting with CS/client for review or a response" — 17 Jul 2026, per
+# Ezekiel: "the dashboard overdue sections needs to ignore deadlines if
+# the project is in submitted stage... these are just visible in waiting
+# on others only." Shared by Project.project_status AND Deliverable.status
+# (both use the same status vocabulary — see the status_map rebuild note
+# in CLAUDE.md). Deliberately does NOT include 'approved'/'internal_revision'
+# /'revision_in_queue'/'revision_in_progress' — a revision means the ball
+# is back in the design team's court, so a revision deadline slipping is a
+# real, actionable Overdue, not something waiting on someone else.
+_SUBMITTED_STAGE_STATUSES = {'submitted', 'internal_review', 'submitted_to_client'}
+
+
+def _customer_is_submitted_stage(pc):
+    """
+    True if a C&CM customer's design work is at/past submitted stage —
+    i.e. it should never be flagged Overdue, only ever surface via
+    Waiting on Others. ProjectCustomer.status itself is NOT a reliable
+    signal for this (see CLAUDE.md's status-tracking notes — it's only
+    ever written at customer creation and via the manual admin override
+    route in projects_detail.py, never auto-advanced by the real
+    submission/POSM flow). The customer's own Deliverable rows
+    (Deliverable.project_customer_id == pc.id), however, ARE reliably
+    advanced by record_deliverable_status() throughout the POSM/channel
+    submission flow — so this checks those instead. A customer with no
+    deliverables of its own yet is never "submitted" (nothing to submit).
+    JUDGMENT CALL: requires EVERY one of the customer's deliverables to be
+    at submitted-stage-or-beyond (not just any one), since a customer
+    whose deliverables are only partially submitted still has real,
+    actionable outstanding design work.
+    """
+    deliverables = pc.deliverables
+    if not deliverables:
+        return False
+    return all(d.status in _SUBMITTED_STAGE_STATUSES or d.status == 'approved' for d in deliverables)
 
 
 _DUBAI_TZ = timezone(timedelta(hours=4))
@@ -1196,6 +1242,16 @@ def _compute_due(user, filter_type):
     individual pending customers (their POSM channel deadlines); a Standard
     project with no deliverable deadlines yet falls back to one project-level
     entry using execution_date, same fallback nearest_deadline() uses.
+
+    17 Jul 2026, per Ezekiel: an 'overdue'/'overdue_today' row is SKIPPED
+    (never appended) when the underlying deliverable/customer/project is
+    already at submitted stage (see _SUBMITTED_STAGE_STATUSES) — that work
+    has left the design team's hands, so a late DESIGN deadline no longer
+    means anything is actually overdue; it should only ever surface via
+    Waiting on Others (_compute_waiting_on_others() /
+    _compute_leadership_waiting_on_others()), never an Overdue tag/bucket.
+    'today'/'week' filters are unaffected — a submitted item is still
+    correctly informational there.
     """
     today = date.today()
     week_end = today + timedelta(days=7)
@@ -1213,6 +1269,14 @@ def _compute_due(user, filter_type):
         if filter_type == 'overdue_today':
             return overdue_start <= d <= today
         return False
+
+    # 17 Jul 2026, per Ezekiel: "the dashboard overdue sections needs to
+    # ignore deadlines if the project is in submitted stage... these are
+    # just visible in waiting on others only." Only applied for the two
+    # OVERDUE filter values — 'today'/'week' are untouched, since a
+    # not-yet-submitted deliverable due today should still show as due
+    # today regardless of another row's submission stage.
+    is_overdue_filter = filter_type in ('overdue', 'overdue_today')
 
     results = []
     for p in _scoped_projects(user, active_only=True).all():
@@ -1253,6 +1317,8 @@ def _compute_due(user, filter_type):
             for pc in p.project_customers:
                 if pc.cancelled or pc.status == 'approved':
                     continue
+                if is_overdue_filter and _customer_is_submitted_stage(pc):
+                    continue
                 if matches(pc.design_deadline):
                     results.append({
                         **common,
@@ -1268,6 +1334,15 @@ def _compute_due(user, filter_type):
             for d in p.project_deliverables:
                 if matches(d.design_deadline):
                     matched_any_deliverable = True
+                    # Submitted-stage exclusion is checked AFTER
+                    # matched_any_deliverable is set — a project-level
+                    # fallback row still shouldn't fire just because its
+                    # only matching deliverable happened to be excluded
+                    # here; that deliverable-level deadline still "counts"
+                    # for the purposes of deciding granularity, it's just
+                    # not itself flagged Overdue while submitted.
+                    if is_overdue_filter and d.status in _SUBMITTED_STAGE_STATUSES:
+                        continue
                     # Deliverable-scoped teams, NOT project_teams — "designer
                     # assigned to THAT deliverable", per Ezekiel, same
                     # d.teams field standard_designers_by_deliverable
@@ -1283,7 +1358,8 @@ def _compute_due(user, filter_type):
                         'deadline': d.design_deadline.isoformat(),
                         'designers': _due_row_people(p, d_teams),
                     })
-            if not matched_any_deliverable and matches(p.execution_date):
+            if (not matched_any_deliverable and matches(p.execution_date)
+                    and not (is_overdue_filter and p.project_status in _SUBMITTED_STAGE_STATUSES)):
                 results.append({
                     **common,
                     'type': 'project',
@@ -1352,11 +1428,26 @@ def _compute_decisions(user, all_flags=False):
     else:
         base = _scoped_projects(user, active_only=True)
 
-    projects = base.filter(
-        Project.decision_needed.is_(True)
-    ).order_by(nullslast(Project.decision_raised_at.asc())).all()
+    projects = base.filter(Project.decision_needed.is_(True)).all()
 
     now = datetime.utcnow()
+
+    # Switched from ordering by the deprecated Project.decision_raised_at
+    # column to sorting on each project's active DecisionFlag.created_at
+    # instead (17 Jul 2026, Decision Flag reply/resolve feature) — that
+    # column stopped being written to once flag_management() started
+    # creating DecisionFlag rows instead (see that route), so ordering by
+    # it would now be sorting on a value that's always NULL for every new
+    # flag. Paired up once per project (the active_decision_flag property
+    # itself queries, so this avoids doing it twice — once to sort, once
+    # to build the row below). A decision_needed=True project with no
+    # matching flag row is defensively skipped rather than crashing on
+    # flag.note — the two are separate signals (fast boolean sentinel vs.
+    # rich row) that could in theory drift, per active_decision_flag's own
+    # docstring in app/models/__init__.py.
+    pairs = [(p, p.active_decision_flag) for p in projects]
+    pairs = [(p, f) for p, f in pairs if f is not None]
+    pairs.sort(key=lambda pf: pf[1].created_at or datetime.max)
 
     return [
         {
@@ -1370,15 +1461,21 @@ def _compute_decisions(user, all_flags=False):
             # a plain text .dash-owner-tag pill. Harmless superset for
             # decisions.html's own still-unchanged raised_by usage (that
             # template only ever read .name).
-            'raised_by': _serialize_person(p.decision_raised_by),
-            'raised_at': p.decision_raised_at.isoformat() if p.decision_raised_at else None,
-            'note': p.decision_note,
-            'days_waiting': (now - p.decision_raised_at).days if p.decision_raised_at else None,
-            'waiting_since_display': _format_waiting_date(p.decision_raised_at),
+            'raised_by': _serialize_person(flag.created_by),
+            'raised_at': flag.created_at.isoformat() if flag.created_at else None,
+            'note': flag.note,
+            'days_waiting': (now - flag.created_at).days if flag.created_at else None,
+            'waiting_since_display': _format_waiting_date(flag.created_at),
             'waiting_reason': 'Designer assignment' if _missing_designer_tags(p) else None,
             'waiting_color': 'red',
+            # Surfaced 17 Jul 2026 so decisions.html/dashboard_leadership.html
+            # can show a reply-count badge and open the shared Decision Flag
+            # modal directly from this row instead of only offering an
+            # instant-fire Resolve button.
+            'flag_id': flag.id,
+            'reply_count': len(flag.messages),
         }
-        for p in projects
+        for p, flag in pairs
     ]
 
 
@@ -1631,7 +1728,17 @@ def _compute_priority_actions(user):
         requested_teams = [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()]
         designers = _due_row_people(p, requested_teams)
         has_missing_designer = any(not team['users'] for team in designers)
-        is_overdue = bool(deadline) and deadline < today
+        # 17 Jul 2026, per Ezekiel — a project already at submitted stage
+        # (see _SUBMITTED_STAGE_STATUSES) has its design deadline behind
+        # it for a reason that isn't "late": the work already left the
+        # design team's hands. Its real next action here is correctly
+        # still "Follow up with client" (this row exists at all because
+        # _is_owner() said it's the CS's own turn) — it just shouldn't
+        # ALSO wear a stale Overdue tag / land in the urgent bucket on
+        # that basis. has_no_cs_lead/has_missing_designer are unaffected
+        # — those are staffing gaps, not deadline pressure, and stay
+        # urgent regardless of submission stage.
+        is_overdue = bool(deadline) and deadline < today and p.project_status not in _SUBMITTED_STAGE_STATUSES
         has_no_cs_lead = not p.cs_lead_id
         is_urgent = is_overdue or has_no_cs_lead or has_missing_designer
 
@@ -1746,6 +1853,159 @@ def _compute_waiting_on_others(user):
 
     results.sort(key=lambda r: r['deadline'] or '9999-12-31')
     return results
+
+
+def _compute_my_escalated_projects(user):
+    """
+    "My Escalated Projects" — CS dashboard only (added 17 Jul 2026, Decision
+    Flag reply/resolve feature). Every project where THIS specific CS
+    personally raised the currently-active DecisionFlag — not just any
+    project in their scope that happens to be flagged (a designer or team
+    lead on the same project could have raised it instead). Gives a CS a
+    place to track their own escalations and reply to whatever management
+    has said back, without hunting through project detail pages.
+
+    Deliberately narrower than _compute_decisions() (management's queue,
+    every flag in scope regardless of who raised it) — this is "flags I
+    personally sent up", so a CS only sees rows they'd actually recognize
+    raising. Completely absent from the page (not just empty-stated) when
+    this list is empty — see dashboard_cs.html's {% if my_escalated_
+    projects %} guard, same "hide entirely, no empty state" treatment
+    _compute_priority_actions()'s groups already get for an empty bucket.
+
+    reply_count lets the row show a small "N replies" badge without the
+    template needing to know anything about DecisionFlagMessage directly.
+    """
+    projects = _scoped_projects(user, active_only=True).filter(
+        Project.decision_needed.is_(True)
+    ).all()
+
+    rows = []
+    for p in projects:
+        flag = p.active_decision_flag
+        if not flag or flag.created_by_id != user.id:
+            continue
+        rows.append({
+            'project_id': p.id,
+            'project_name': p.name,
+            'note': flag.note,
+            'raised_at': flag.created_at.isoformat() if flag.created_at else None,
+            'waiting_since_display': _format_waiting_date(flag.created_at),
+            'reply_count': len(flag.messages),
+        })
+
+    rows.sort(key=lambda r: r['raised_at'] or '')
+    return rows
+
+
+def _compute_my_escalation_history(user):
+    """
+    "My Escalation History" — CS dashboard only (added 17 Jul 2026). Every
+    RESOLVED DecisionFlag this specific CS personally raised, most recently
+    resolved first — the closed-out counterpart to My Escalated Projects
+    above (which only ever shows the currently OPEN ones). Per Ezekiel:
+    "we need to keep that escalation history and give it a spot on the
+    dashboard to open a hidden div with those escalations and their
+    message history."
+
+    Deliberately queried directly off DecisionFlag rather than through
+    _scoped_projects() the way every other row list on this page is built
+    — a resolved flag's project may since have moved out of the CS's
+    active scope entirely (approved, put on hold, reassigned to a
+    different CS), and none of that should make this CS's own record of
+    what they once escalated disappear. This is a personal log, not a
+    live "what needs my attention" view, so it deliberately doesn't follow
+    the same active-scope rule every other card on this page does.
+
+    Rows open the SAME shared Decision Flag modal every other row on this
+    page uses (openDecisionFlagModal(), dashboard.js), but pass this
+    flag's own id — get_decision_flag()'s flag_id query param (added
+    alongside this feature, projects_detail.py) is what makes the modal
+    open THIS specific resolved flag instead of whatever's currently
+    active on the project (which would be None, or a different, newer
+    flag, if the project's been re-escalated since this one closed).
+
+    Capped at the 100 most recently resolved flags — see
+    _compute_escalation_history()'s docstring for the same judgment call,
+    made in both places for the same reason.
+    """
+    flags = (
+        DecisionFlag.query
+        .filter_by(created_by_id=user.id, is_resolved=True)
+        .order_by(DecisionFlag.resolved_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    rows = []
+    for flag in flags:
+        p = flag.project
+        if not p:
+            continue
+        rows.append({
+            'project_id': p.id,
+            'project_name': p.name,
+            'flag_id': flag.id,
+            'note': flag.note,
+            'raised_at': flag.created_at.isoformat() if flag.created_at else None,
+            'resolved_at': flag.resolved_at.isoformat() if flag.resolved_at else None,
+            'resolved_display': _format_waiting_date(flag.resolved_at),
+            'resolved_by': _serialize_person(flag.resolved_by),
+            'resolution_note': flag.resolution_note,
+            'reply_count': len(flag.messages),
+        })
+    return rows
+
+
+def _compute_escalation_history():
+    """
+    "Escalation History" — leadership dashboard only (added 17 Jul 2026).
+    EVERY resolved DecisionFlag company-wide, most recently resolved
+    first — the closed-out counterpart to the Decision Needed Queue above
+    (_compute_decisions(scope_user, all_flags=True), which only ever shows
+    the currently OPEN ones). Same request as My Escalation History above
+    drove this one too; see that function's docstring for the full quote.
+
+    Deliberately takes no `user`/scope argument at all — same "always
+    company-wide, not part of the All/Focused toggle" rule Decisions
+    Needed/Deadline Clashes/Role Snapshot already follow on this page (see
+    the big comment on _compute_risk_overdue() further down for that
+    convention) — an escalation's resolution is a company-wide oversight
+    record, not something that should shrink to "just my own projects"
+    when a manager flips to Focused.
+
+    Capped at the 100 most recently resolved flags — this list only ever
+    grows over time, and nothing else on this page shows an unbounded row
+    count. A judgment call, not explicit spec — worth revisiting with real
+    pagination if 100 ever turns out to be too few in practice.
+    """
+    flags = (
+        DecisionFlag.query
+        .filter_by(is_resolved=True)
+        .order_by(DecisionFlag.resolved_at.desc())
+        .limit(100)
+        .all()
+    )
+
+    rows = []
+    for flag in flags:
+        p = flag.project
+        if not p:
+            continue
+        rows.append({
+            'project_id': p.id,
+            'project_name': p.name,
+            'flag_id': flag.id,
+            'note': flag.note,
+            'raised_by': _serialize_person(flag.created_by),
+            'raised_at': flag.created_at.isoformat() if flag.created_at else None,
+            'resolved_at': flag.resolved_at.isoformat() if flag.resolved_at else None,
+            'resolved_display': _format_waiting_date(flag.resolved_at),
+            'resolved_by': _serialize_person(flag.resolved_by),
+            'resolution_note': flag.resolution_note,
+            'reply_count': len(flag.messages),
+        })
+    return rows
 
 
 def _compute_flaggable_projects(user):
@@ -1929,23 +2189,80 @@ def _compute_risk_overdue(user):
     CS lead or reassign a designer so they have that agency" — Assign
     Designer scoped to missing_teams specifically ("based on the active
     teams requested for that project").
+
+    17 Jul 2026, per Ezekiel: "If a customer is overdue for a C&CM
+    project, show that, because right now it shows the project but not
+    the customers. Each customer can be it's own entry." — the 'overdue'
+    bucket is now CUSTOMER-granular for C&CM projects: one row per
+    overdue ProjectCustomer (carrying a customer_name), not one row for
+    the whole project. A C&CM project can therefore contribute MULTIPLE
+    'overdue' rows (or none). Every customer-level row still also applies
+    the submitted-stage exclusion (_customer_is_submitted_stage()) —
+    same "waiting on others, not overdue" rule _compute_due() now
+    follows. Standard (non-C&CM) projects are unaffected in granularity
+    (still one project-level row via nearest_deadline()), just gained the
+    equivalent project_status-based submitted-stage exclusion. A C&CM
+    project with zero currently-overdue (non-submitted-stage) customers
+    NEVER falls back to a project-level 'overdue' row — the customer loop
+    is now the ONLY source of 'overdue' bucket membership for C&CM, so
+    the bucket can't disagree with itself between two different
+    deadline-resolution strategies for the same project.
     """
     today = date.today()
     buckets = {'overdue': [], 'at_risk': [], 'no_deadline': []}
 
     for p in _scoped_projects(user, active_only=True).all():
-        deadline = nearest_deadline(p)
         has_no_cs_lead = not p.cs_lead_id
         missing_teams = _missing_designer_teams(p)
+        requested_teams = _requested_teams_list(p)
+        is_ccm = p.brief_type == 'ccm'
 
-        if deadline and deadline < today:
-            bucket_key = 'overdue'
-        elif has_no_cs_lead or missing_teams:
-            bucket_key = 'at_risk'
-        elif deadline is None:
-            bucket_key = 'no_deadline'
+        if is_ccm:
+            any_overdue_customer = False
+            for pc in p.project_customers:
+                if pc.cancelled or pc.status == 'approved':
+                    continue
+                if _customer_is_submitted_stage(pc):
+                    continue
+                if pc.design_deadline and pc.design_deadline < today:
+                    any_overdue_customer = True
+                    tags = [{'label': 'Overdue', 'variant': 'overdue'}]
+                    if has_no_cs_lead:
+                        tags.append({'label': 'CS Missing', 'variant': 'plain'})
+                    buckets['overdue'].append({
+                        'project_id': p.id,
+                        'name': p.name,
+                        'customer_name': pc.customer.name if pc.customer else None,
+                        'tags': tags,
+                        'deadline': pc.design_deadline.isoformat(),
+                        'cs_lead': _serialize_person(p.cs_lead),
+                        'designers': _due_row_people(p, requested_teams),
+                        'has_no_cs_lead': has_no_cs_lead,
+                        'missing_teams': missing_teams,
+                    })
+            if any_overdue_customer:
+                continue
+            # No overdue (non-submitted-stage) customer — fall through to
+            # at_risk/no_deadline only; 'overdue' is deliberately
+            # unreachable here (see docstring above).
+            deadline = nearest_deadline(p)
+            if has_no_cs_lead or missing_teams:
+                bucket_key = 'at_risk'
+            elif deadline is None:
+                bucket_key = 'no_deadline'
+            else:
+                continue
         else:
-            continue
+            deadline = nearest_deadline(p)
+            is_submitted = p.project_status in _SUBMITTED_STAGE_STATUSES
+            if deadline and deadline < today and not is_submitted:
+                bucket_key = 'overdue'
+            elif has_no_cs_lead or missing_teams:
+                bucket_key = 'at_risk'
+            elif deadline is None:
+                bucket_key = 'no_deadline'
+            else:
+                continue
 
         tags = []
         if bucket_key == 'overdue':
@@ -1953,10 +2270,10 @@ def _compute_risk_overdue(user):
         if has_no_cs_lead:
             tags.append({'label': 'CS Missing', 'variant': 'plain'})
 
-        requested_teams = _requested_teams_list(p)
         buckets[bucket_key].append({
             'project_id': p.id,
             'name': p.name,
+            'customer_name': None,
             'tags': tags,
             'deadline': deadline.isoformat() if deadline else None,
             'cs_lead': _serialize_person(p.cs_lead),
@@ -2201,6 +2518,89 @@ def api_risk_overdue():
     return jsonify(_compute_risk_overdue(scope_user))
 
 
+# ── Leadership dashboard: All/Focused toggle (added 17 Jul 2026) ─────────
+#
+# Per Ezekiel: management/admin can flip between "All" (company-wide) and
+# "Focused" (only projects they're personally CS lead/secondary CS on).
+# This is a no-reload AJAX toggle (Ezekiel's explicit choice) — the client
+# re-fetches each affected card with an explicit ?scope=all|my param. All
+# three of these thin routes reuse _resolve_dashboard_scope() exactly like
+# /api/risk-overdue and /api/due already do — 'all'/'my' were both already
+# fully working scope_mode values (the old view-switcher's 'my' mode never
+# went away, just lost its UI when that switcher was removed 16 Jul 2026),
+# so no changes were needed to _resolve_dashboard_scope() itself, only new
+# thin JSON wrappers around compute functions that already accept a user
+# param. Decisions Needed / Deadline Clashes / Role Snapshot deliberately
+# have NO equivalent route here — per Ezekiel's explicit answer, those
+# three stay company-wide regardless of this toggle, so the client-side
+# code driving this toggle (dashboard.js) never touches their existing
+# fetch paths at all. See dashboard.js's applyLeadershipFocusScope() for
+# the full client-side writeup.
+@dashboard_bp.route('/api/active-projects')
+@login_required
+def api_active_projects():
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_your_active_projects(scope_user))
+
+
+@dashboard_bp.route('/api/pending-approval-projects')
+@login_required
+def api_pending_approval_projects():
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_pending_approval_projects(scope_user))
+
+
+@dashboard_bp.route('/api/waiting-on-others')
+@login_required
+def api_waiting_on_others():
+    # Leadership-only, same as /api/risk-overdue just above (the CS
+    # dashboard's OWN Waiting on Others card, _compute_waiting_on_others(),
+    # has no AJAX route at all — it's never needed live re-fetching before
+    # now). Flat name despite being leadership-specific matches the
+    # existing /api/risk-overdue convention.
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_leadership_waiting_on_others(scope_user))
+
+
+# Added 17 Jul 2026 — per Ezekiel: "Resolved escalations dont auto populate
+# into the resolved escalations section, it requires a refresh. Make sure
+# everything across all dashboard types is live." Root cause turned out to
+# be TWO layers: (1) DecisionFlag/DecisionFlagMessage were never in
+# live_events.py's _PROJECT_ID_GETTERS, so no NOTIFY fired at all for any
+# decision-flag action (fixed there, same day); (2) even once the doorbell
+# rings, nothing in dashboard.js's refreshDashboardFromSSE() actually
+# re-fetched these three lists — they were server-rendered once and never
+# touched again. These three routes are what that refresh now calls.
+@dashboard_bp.route('/api/escalated-projects')
+@login_required
+def api_escalated_projects():
+    # CS dashboard's "My Escalated Projects" card. Same shape as every
+    # other /api/* route above.
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_my_escalated_projects(scope_user))
+
+
+@dashboard_bp.route('/api/my-escalation-history')
+@login_required
+def api_my_escalation_history():
+    # CS dashboard only — "My Escalation History" (this CS's own resolved
+    # flags). Company-wide equivalent is /api/escalation-history below, a
+    # DIFFERENT underlying compute function, not just a scope difference.
+    _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
+    return jsonify(_compute_my_escalation_history(scope_user))
+
+
+@dashboard_bp.route('/api/escalation-history')
+@login_required
+def api_escalation_history():
+    # Leadership dashboard only. _compute_escalation_history() takes no
+    # user/scope argument at all — always company-wide, same "not part of
+    # the All/Focused toggle" rule Decisions/Clashes/Role Snapshot already
+    # follow (see the big comment on _compute_risk_overdue()) — so there's
+    # no scope to resolve here.
+    return jsonify(_compute_escalation_history())
+
+
 # The deep-dive zone (Projects/Deliverables tabs at the bottom of the
 # dashboard — _is_at_risk(), _compute_deep_dive_projects(),
 # _compute_deep_dive_deliverables(), and their /api/deep-dive/* routes)
@@ -2268,39 +2668,121 @@ def _designer_row_classification(p, user):
     }
 
 
+def _designer_relevant_entries(user):
+    """
+    17 Jul 2026, per Ezekiel: "the designer dashboard should be
+    deliverable based, not project based. So if a customer or deliverable
+    is due that day, all assigned people within that customer or
+    deliverable should have that on their dashboard as due today. same
+    applies to this week, overdue etc." Replaces the old project-level
+    ProjectDesigner scope (_scoped_projects()) as My Work Queue's
+    scoping unit — querying DeliverableAssignment.designer_id == user.id
+    directly (the FINE-GRAINED per-deliverable assignment table, distinct
+    from ProjectDesigner's project-level "lead designer for team X") is
+    what makes "all assigned people within that deliverable see it, and
+    ONLY them" true automatically: two designers assigned to DIFFERENT
+    deliverables on the SAME project each independently get their own
+    query result, so neither sees the other's deliverable/customer.
+
+    Returns one dict per relevant deliverable/customer (non-draft,
+    non-approved project only, mirroring _scoped_projects()'s own
+    draft/approved exclusion):
+      {'project': Project, 'type': 'deliverable'|'customer',
+       'entry_name': str, 'deadline': date|None,
+       'is_submitted_stage': bool}
+    entry_name is JUST the deliverable/customer's own name (e.g. "Hero
+    Banner" or "Mars KSA") — the row macro pairs it with the parent
+    project's name itself, same title-inversion pattern dash_due_row()
+    already uses ("Hero Banner — Acme Rebrand").
+
+    A C&CM deliverable (Deliverable.project_customer_id is set) collapses
+    to ONE row per CUSTOMER, not per deliverable underneath it — same
+    "one row per pending customer" granularity _compute_due() already
+    uses for C&CM — so a designer assigned to 2+ deliverables under the
+    same customer sees that customer once, not twice. deadline for a
+    customer row is the CUSTOMER's own design_deadline (the POSM
+    submission deadline), not any individual deliverable's.
+    """
+    assignments = (DeliverableAssignment.query
+                   .join(Deliverable, DeliverableAssignment.deliverable_id == Deliverable.id)
+                   .join(Project, Deliverable.project_id == Project.id)
+                   .filter(DeliverableAssignment.designer_id == user.id)
+                   .filter(Project.project_status.notin_(['draft', 'approved']))
+                   .all())
+
+    entries = {}  # dedupe key -> entry dict
+    for a in assignments:
+        d = a.deliverable
+        p = d.project
+        if d.project_customer_id:
+            pc = d.project_customer
+            if pc is None or pc.cancelled or pc.status == 'approved':
+                continue
+            key = ('customer', pc.id)
+            if key in entries:
+                continue
+            entries[key] = {
+                'project': p,
+                'type': 'customer',
+                'entry_name': pc.customer.name if pc.customer else p.name,
+                'deadline': pc.design_deadline,
+                'is_submitted_stage': _customer_is_submitted_stage(pc),
+            }
+        else:
+            key = ('deliverable', d.id)
+            if key in entries:
+                continue
+            entries[key] = {
+                'project': p,
+                'type': 'deliverable',
+                'entry_name': d.name,
+                'deadline': d.design_deadline,
+                'is_submitted_stage': d.status in _SUBMITTED_STAGE_STATUSES,
+            }
+
+    return list(entries.values())
+
+
 def _compute_designer_work_queue(user):
     """
     "My Work Queue" — Due Today / This Week / Blocked, per Ezekiel's full
-    spec (see CLAUDE.md for the verbatim message). One row per PROJECT
-    (not per-deliverable, unlike _compute_due()) — this card is about
-    "what should I be doing", and Project.revision_count/Project.client
-    are both project-level fields, so a project-level row is the natural
-    grain here, matching how My Priority Actions/Waiting on Others are
-    also project rows elsewhere on this codebase.
+    spec (see CLAUDE.md for the verbatim message). 17 Jul 2026: reworked
+    from one row per PROJECT to one row per DELIVERABLE/CUSTOMER — see
+    _designer_relevant_entries() — per Ezekiel's follow-up: "the designer
+    dashboard should be deliverable based, not project based."
 
-    Bucketing (mutually exclusive — a blocked project never ALSO appears
-    in Due Today/This Week, same "no double-counting" rule the leadership
-    dashboard's Risk/Overdue buckets already follow — see
-    _compute_risk_overdue()):
-      'blocked'   — _designer_row_classification()'s is_blocked.
-      'due_today' — deadline == today.
-      'this_week' — deadline within today..+7 days, INCLUSIVE of today
-                    (JUDGMENT CALL: "This week follows the same rules but
-                    for the entire week" is read as a rolling window that
-                    CONTAINS today, not a separate non-overlapping band —
-                    so every Due Today row also appears in This Week).
+    Two things stay PROJECT-level by necessity, flagged as a deliberate
+    scoping decision rather than an oversight: is_my_turn/blocked_2days
+    (get_next_action_owner() answers "whose turn for the WHOLE project",
+    not per-deliverable — this codebase has no per-deliverable ownership
+    concept to draw on) and Project.revision_count (there is no
+    per-deliverable revision counter). Every deliverable/customer entry
+    under the same project therefore shares that project's single
+    is_my_turn/blocked_2days/revision_count answer, while its OWN
+    deadline and submitted-stage status are fully entry-specific.
 
-    Every no-deadline project is classified missing_info=True by
-    _designer_row_classification() above and therefore always lands in
-    Blocked, never Due Today/This Week — so the "No Deadline" yellow-text
-    treatment Ezekiel described for a due-today/this-week row is currently
-    unreachable in practice (there's no code path that puts a null-
-    deadline row in those two buckets). Kept in dash_designer_queue_row()
-    (see _dashboard_macros.html) and its CSS anyway, both because it's
-    cheap to support and in case this classification is ever loosened
-    later (e.g. missing_info narrowed to only fire when is_my_turn, which
-    would let a CS-owned no-deadline project surface in the queue with the
-    yellow "No Deadline" text instead of the Blocked bucket).
+    Bucketing (mutually exclusive, same "no double-counting" rule the
+    leadership dashboard's Risk/Overdue buckets follow):
+      'blocked'   — waiting on CS 2+ days for this entry's project, OR
+                    this SPECIFIC entry has no deadline set
+                    (missing_info, JUDGMENT CALL — see
+                    _designer_row_classification()'s docstring for the
+                    same reasoning, now applied per-entry instead of
+                    per-project) — but NEVER an entry already at
+                    submitted stage (that's Waiting on Others' job, not
+                    Blocked's — matches _compute_due()'s own submitted-
+                    stage exclusion, 17 Jul 2026).
+      'due_today' — deadline == today, not blocked, not submitted stage.
+      'this_week' — deadline <= week_end (JUDGMENT CALL, widened 17 Jul
+                    2026 to ALSO include anything already overdue —
+                    "same applies to this week, overdue etc" — an
+                    overdue-but-still-my-turn entry no longer silently
+                    vanishes; it lands in This Week tagged Overdue
+                    instead of a dedicated Overdue bucket, since there's
+                    no separate Overdue toggle button on this card),
+                    not blocked, not submitted stage.
+    An entry at submitted stage never lands in ANY of the three buckets —
+    per Ezekiel: "these are just visible in waiting on others only."
 
     Each row carries a 'tags' list ({'label':,'variant':} — same shape
     every other card's tags use) and a 'next_action' string:
@@ -2309,8 +2791,9 @@ def _compute_designer_work_queue(user):
         CS Lead' when missing_info (opens the inline flag modal — see
         dashboard_designer.html) else 'Ping CS Owner'.
       - Due Today/This Week, my turn: 'INITIAL' or 'REVISION <n>'
-        (Project.revision_count), next_action = 'Submit Initial
-        Submission' / 'Submit Revision <n>'.
+        (Project.revision_count) plus an additional red 'Overdue' tag
+        when this entry's own deadline has passed, next_action = 'Submit
+        Initial Submission' / 'Submit Revision <n>'.
       - Due Today/This Week, CS's turn: 'Waiting on CS' (amber),
         next_action = 'Ping CS Owner' — per Ezekiel: "If something is
         waiting on CS action, then add that as a yellow tag."
@@ -2319,32 +2802,59 @@ def _compute_designer_work_queue(user):
     week_end = today + timedelta(days=7)
     buckets = {'due_today': [], 'this_week': [], 'blocked': []}
 
-    for p in _scoped_projects(user, active_only=True).all():
-        c = _designer_row_classification(p, user)
-        cs_lead = _serialize_person(p.cs_lead)
+    # Cache project-level classification per project id — several
+    # deliverables/customers can belong to the same project, and
+    # is_my_turn/blocked_2days/revision_count are identical for all of
+    # them (see docstring above), so there's no reason to recompute
+    # get_next_action_owner() once per entry.
+    project_classification = {}
 
-        if c['is_blocked']:
+    for entry in _designer_relevant_entries(user):
+        p = entry['project']
+        if p.id not in project_classification:
+            project_classification[p.id] = _designer_row_classification(p, user)
+        c = project_classification[p.id]
+        cs_lead = _serialize_person(p.cs_lead)
+        deadline = entry['deadline']
+
+        if entry['is_submitted_stage']:
+            continue
+
+        entry_missing_info = deadline is None
+        is_blocked = c['blocked_2days'] or entry_missing_info
+        if is_blocked:
             tags = []
             if c['blocked_2days']:
                 tags.append({'label': 'Waiting on CS 2+ Days', 'variant': 'red'})
-            if c['missing_info']:
+            if entry_missing_info:
                 tags.append({'label': 'Missing Brief Info', 'variant': 'red'})
             buckets['blocked'].append({
                 'project_id': p.id,
+                'entry_type': entry['type'],
+                'entry_name': entry['entry_name'],
                 'project_name': p.name,
                 'client_name': p.client or '',
-                'deadline': c['deadline'].isoformat() if c['deadline'] else None,
+                # Only actually None when THIS entry has no deadline set
+                # (entry_missing_info) — a row blocked purely on
+                # blocked_2days (waiting on CS) still has a real deadline
+                # and should keep showing it, not fall back to "No
+                # Deadline" text. Fixed same-pass — the first version of
+                # this rework hardcoded None for every blocked row
+                # regardless of reason, a real regression from the old
+                # project-level behaviour (which only nulled it when
+                # missing_info was the actual reason).
+                'deadline': deadline.isoformat() if deadline else None,
                 'cs_lead': cs_lead,
                 'tags': tags,
-                'next_action': 'Flag project to CS Lead' if c['missing_info'] else 'Ping CS Owner',
-                'show_flag_button': c['missing_info'],
+                'next_action': 'Flag project to CS Lead' if entry_missing_info else 'Ping CS Owner',
+                'show_flag_button': entry_missing_info,
             })
             continue
 
-        deadline = c['deadline']
-        if deadline is None or not (today <= deadline <= week_end):
+        if deadline > week_end:
             continue
 
+        is_overdue = deadline < today
         if c['is_my_turn']:
             revision_count = p.revision_count or 0
             if revision_count > 0:
@@ -2356,9 +2866,13 @@ def _compute_designer_work_queue(user):
         else:
             tags = [{'label': 'Waiting on CS', 'variant': 'amber'}]
             next_action = 'Ping CS Owner'
+        if is_overdue:
+            tags.append({'label': 'Overdue', 'variant': 'overdue'})
 
         row = {
             'project_id': p.id,
+            'entry_type': entry['type'],
+            'entry_name': entry['entry_name'],
             'project_name': p.name,
             'client_name': p.client or '',
             'deadline': deadline.isoformat(),
@@ -2385,14 +2899,27 @@ def _compute_designer_week_load(user):
     CURRENT calendar week (Monday through Friday), not a rolling 5-day
     window starting from today — a JUDGMENT CALL, matching the mockup's
     fixed Mon-Fri layout over a "today + next 4 workdays" reading.
+
+    17 Jul 2026: reworked from one count per PROJECT (nearest_deadline())
+    to one count per DELIVERABLE/CUSTOMER this designer is personally
+    assigned to (_designer_relevant_entries()) — same "deliverable based,
+    not project based" rework as _compute_designer_work_queue(), applied
+    here too for consistency: a designer with 3 deliverables due Tuesday
+    across 2 different projects should see "3" on Tuesday, not have that
+    collapse to fewer project-level counts. Submitted-stage entries are
+    excluded here too, same reasoning as everywhere else on this page —
+    a deadline that's already out of the design team's hands shouldn't
+    inflate this workload count.
     """
     today = date.today()
     monday = today - timedelta(days=today.weekday())
     days = [monday + timedelta(days=i) for i in range(5)]
     counts = {d: 0 for d in days}
 
-    for p in _scoped_projects(user, active_only=True).all():
-        deadline = nearest_deadline(p)
+    for entry in _designer_relevant_entries(user):
+        if entry['is_submitted_stage']:
+            continue
+        deadline = entry['deadline']
         if deadline in counts:
             counts[deadline] += 1
 
@@ -2435,6 +2962,20 @@ def _compute_designer_metrics(user):
     'revisions' JUDGMENT CALL: Project.revision_count > 0, regardless of
     whose turn it currently is (a project that's ever been through a
     revision cycle, not just ones currently awaiting a resubmit).
+
+    17 Jul 2026: Assigned/Submitted/Revisions are DELIBERATELY still
+    project-level (_scoped_projects(), via the project-level ProjectDesigner
+    assignment) even though My Work Queue itself moved to deliverable/
+    customer granularity (_designer_relevant_entries(), via
+    DeliverableAssignment) — Ezekiel's "deliverable based, not project
+    based" request was specifically about the due-today/this-week/overdue
+    concept, and "how many projects am I the lead designer on" is a
+    different, still-legitimately-project-level question. Blocked is the
+    one exception: it's inherited AS-IS from
+    _compute_designer_work_queue()['blocked'], which IS now
+    deliverable/customer-granular, same as always (avoiding re-deriving
+    the same classification a second time — see this function's own
+    intro comment above).
     """
     assigned = _scoped_projects(user, active_only=True).all()
     submitted = [p for p in assigned if p.project_status in ('submitted', 'internal_review', 'submitted_to_client')]

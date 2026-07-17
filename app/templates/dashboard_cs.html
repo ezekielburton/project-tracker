@@ -27,22 +27,55 @@
         ("Action first · Risk second · Metrics third") is a design
         rationale note, not real UI copy, so it's not rendered here (per
         the earlier AskUserQuestion round).
-     4. My Priority Actions (left, wide) — chronological, urgency-grouped
-        list of the viewer's OWN next actions (_compute_priority_actions())
-        — no My/Others toggle (Others' Actions moved to Waiting on Others
-        below), and At Risk's old staffing/overdue signal now shows as a
-        per-row tag here instead of its own card. "Escalate" button in the
-        header reuses the existing Flag to Management modal unchanged.
-     5. What Changed (right, top) — the SAME activity log
+     4. Two-column grid (.dash-cs-grid) — LEFT column (.dash-cs-left-col):
+        My Priority Actions on top, then My Escalated Projects / My
+        Escalation History side by side underneath. RIGHT column
+        (.dash-cs-side-col): What Changed since Yesterday on top, then
+        Waiting on Others underneath. Restructured 17 Jul 2026 (same-day
+        follow-up, see below) from an earlier layout where the escalation
+        cards sat full-width below the whole grid.
+        4a. My Priority Actions — chronological, urgency-grouped list of
+            the viewer's OWN next actions (_compute_priority_actions()) —
+            no My/Others toggle (Others' Actions moved to Waiting on
+            Others), and At Risk's old staffing/overdue signal now shows
+            as a per-row tag here instead of its own card. "Escalate"
+            button in the header reuses the existing Flag to Management
+            modal unchanged. Capped height + internal scroll
+            (.dash-priority-actions-scroll, 320px, added 17 Jul 2026) so
+            it matches What Changed's own height and never grows.
+        4b. My Escalated Projects (17 Jul 2026, Decision Flag reply/
+            resolve feature — closed the FORMER KNOWN GAP that there was
+            previously no way to VIEW or resolve an already-raised
+            decision flag from this page) — every project where THIS CS
+            personally raised the active flag
+            (_compute_my_escalated_projects()), each opening the same
+            shared Decision Flag modal (_decision_flag_modal.html)
+            management uses on their own dashboard, where either side can
+            reply and management can resolve. Completely hidden (no card,
+            no empty state) when the list is empty. Converted to a
+            collapsed-teaser card (same-day follow-up, 17 Jul 2026) so it
+            matches Waiting on Others' collapsed height by construction —
+            see the {% if my_escalated_projects or my_escalation_history %}
+            guard below.
+        4c. My Escalation History (17 Jul 2026) — collapsible (closed by
+            default), every RESOLVED escalation this CS personally raised
+            — see _compute_my_escalation_history() in dashboard.py and
+            dash_escalation_history_row() in _dashboard_macros.html for
+            the full design history.
+     5. What Changed since Yesterday — the SAME activity log
         _compute_what_changed() already produces elsewhere on this page,
         just always-visible with an internal scroll instead of a
         collapsible tab — per Ezekiel: "What changed remains the same log
-        we have (make it scrollable within its div)."
-     6. Waiting on Others (right, bottom) — projects where it's someone
-        else's turn (_compute_waiting_on_others()), single owner chip +
-        "Waiting since" per row, collapsed by default with a teaser count
-        + "Open waiting list" button (reuses the same JS-measured
-        max-height expand mechanic as everything else on this page).
+        we have (make it scrollable within its div)." Renamed from "What
+        Changed" 17 Jul 2026.
+     6. Waiting on Others — projects where it's someone else's turn
+        (_compute_waiting_on_others()), single owner chip + "Waiting
+        since" per row, collapsed by default with a teaser count + "Open
+        waiting list" button (reuses the same JS-measured max-height
+        expand mechanic as everything else on this page). This same
+        collapsed-teaser shell is what My Escalated Projects/My Escalation
+        History were matched to (17 Jul 2026) so all three read at a
+        consistent collapsed height.
      7. Secondary Metrics — Your Active Projects / Pending Approval /
         Overdue / Deadline Clashes / Average Project Time, reusing the
         EXACT SAME dash_card() tab+body mechanic (and, for Overdue/
@@ -50,22 +83,13 @@
         other card on the OLD dashboard already uses — per Ezekiel: "keep
         the same way the expanded data is shown, just have it below this
         section." See _CS_SECONDARY_METRICS in dashboard.py.
-
-   KNOWN GAP, flagged rather than silently guessed at: there is currently
-   no way to VIEW or resolve an already-raised decision flag from this
-   page (the old Decisions Needed card/list is retired here — see the big
-   comment on the CS-only branch in dashboard.py). The Today's Focus pill
-   and the Escalate button only cover "how many are flagged" and "raise a
-   new one" — management/admin still resolve flags from their own
-   (unchanged) dashboard. Revisit if Ezekiel wants a way to see raised
-   flags from this page too.
 #}
 {% extends "base.html" %}
 
 {% block title %}Dashboard — Vitamin-E{% endblock %}
 
 {% block content %}
-{% from 'dashboard/_dashboard_macros.html' import dash_priority_action_row, dash_waiting_row, dash_person_chip, dash_due_today_row %}
+{% from 'dashboard/_dashboard_macros.html' import dash_priority_action_row, dash_waiting_row, dash_person_chip, dash_due_today_row, dash_escalation_history_row %}
 
 <div class="page-container">
 
@@ -158,36 +182,186 @@
 
     <div class="dash-cs-grid">
 
-        {# ── My Priority Actions (left, wide) ─────────────────────────── #}
-        <div class="dash-priority-card">
-            <div class="dash-priority-card-header">
-                <h2 class="dash-priority-card-title">My Priority Actions</h2>
-                {% if effective_role in ('cs', 'designer', 'team_lead') %}
-                <button type="button" class="btn-secondary" data-action="open-flag-management-modal">Escalate</button>
-                {% endif %}
-            </div>
-            {% if priority_actions %}
-                {% for group in priority_actions %}
-                <div class="dash-priority-group">
-                    <div class="dash-priority-group-heading dash-priority-group-heading--{{ group.key }}">
-                        <span class="dash-priority-group-dot"></span>{{ group.label | upper }}
-                    </div>
-                    {% for item in group.rows %}
-                        {{ dash_priority_action_row(item) }}
-                    {% endfor %}
+        {# ── Left column: My Priority Actions (top) + Escalations row (bottom)
+           Restructured 17 Jul 2026 per Ezekiel: "Make the priority actions
+           div the same size as the what's changed div... Underneath the
+           priority actions div, is where my escalations and My escalation
+           history should go side by side, the same height as waiting on
+           others when it's collapsed." My Escalated Projects/History used
+           to sit full-width below the whole .dash-cs-grid — now they're a
+           second row inside THIS column, directly under Priority Actions,
+           mirroring .dash-cs-side-col's own top/bottom stacking pattern on
+           the right. #}
+        <div class="dash-cs-left-col">
+
+            <div class="dash-priority-card">
+                <div class="dash-priority-card-header">
+                    <h2 class="dash-priority-card-title">My Priority Actions</h2>
+                    {% if effective_role in ('cs', 'designer', 'team_lead') %}
+                    <button type="button" class="btn-secondary" data-action="open-flag-management-modal">Escalate</button>
+                    {% endif %}
                 </div>
-                {% endfor %}
-            {% else %}
-                <p class="dash-empty-state">Nothing needs your action right now.</p>
+                {# Capped height + internal scroll, same 320px recipe as
+                   .dash-what-changed-scroll opposite it — the two cards
+                   share the same header/padding shell, so matching this
+                   one value makes both cards the same total height and
+                   Priority Actions never grows past it regardless of how
+                   many urgency groups/rows it has. #}
+                <div class="dash-priority-actions-scroll">
+                    {% if priority_actions %}
+                        {% for group in priority_actions %}
+                        <div class="dash-priority-group">
+                            <div class="dash-priority-group-heading dash-priority-group-heading--{{ group.key }}">
+                                <span class="dash-priority-group-dot"></span>{{ group.label | upper }}
+                            </div>
+                            {% for item in group.rows %}
+                                {{ dash_priority_action_row(item) }}
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="dash-empty-state">Nothing needs your action right now.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# ── My Escalated Projects + My Escalation History, side by side.
+               Wrapped in a single {% if %} so an empty pair (a CS who has
+               never escalated anything) renders no wrapper div at all —
+               same "not present at all costs nothing" rule these two cards
+               have always followed individually. If only one of the two
+               has data, it simply occupies the first grid cell and the row
+               takes that single card's height; no extra logic needed. #}
+            {% if my_escalated_projects or my_escalation_history %}
+            <div class="dash-cs-escalations-row">
+
+                {# My Escalated Projects (17 Jul 2026, Decision Flag reply/
+                   resolve feature) — every project where THIS CS personally
+                   raised the currently-active DecisionFlag
+                   (_compute_my_escalated_projects()). Converted from
+                   always-expanded to the SAME collapsed-teaser shell as
+                   Waiting on Others (17 Jul 2026, same-day follow-up) so it
+                   matches Waiting on Others' collapsed height by having an
+                   identical component structure, not by guessed CSS.
+
+                   Row shell (inside the collapsible body) still mirrors
+                   decisions.html's .dash-decision-row pattern (a <div>
+                   wrapping the row's own <a> plus a sibling trigger button)
+                   — same "don't nest interactive content inside interactive
+                   content" rule dash_person_chip()/the Resolve button
+                   already follow elsewhere on this page. The button opens
+                   the SAME shared Decision Flag modal (_decision_flag_
+                   modal.html, included below) the leadership dashboard's
+                   Decision Needed Queue uses — one modal, two dashboards,
+                   fetched fresh via GET /projects/<id>/decision-flag on
+                   every open (see openDecisionFlagModal() in dashboard.js),
+                   so there's no row-list refresh to keep in sync here:
+                   replying updates the modal's own thread in place, and
+                   only a Resolve (which a CS can't do — can_resolve is
+                   false for this role) would change this list's
+                   membership. #}
+                {% if my_escalated_projects %}
+                <div class="dash-priority-card dash-escalated-card">
+                    <div class="dash-priority-card-header" data-action="toggle-escalated-list">
+                        <h2 class="dash-priority-card-title">My Escalated Projects</h2>
+                        <button type="button" class="dash-toggle-box-collapse-btn" data-action="toggle-escalated-list" aria-label="Toggle My Escalated Projects">
+                            <span class="dash-toggle-box-chevron">&#9660;</span>
+                        </button>
+                    </div>
+                    <p class="dash-waiting-teaser">
+                        {{ my_escalated_projects | length }} active escalation{{ 's' if my_escalated_projects | length != 1 else '' }}
+                    </p>
+                    <button type="button" class="btn-secondary dash-escalated-open-btn" data-action="toggle-escalated-list">Open list</button>
+                    <div class="dash-card-body-content" data-escalated-list-body>
+                        <div class="dash-card-body-visual">
+                            <div class="dash-card-body-inner">
+                                {% for item in my_escalated_projects %}
+                                <div class="dash-decision-row">
+                                    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+                                        <span class="dash-row-main">
+                                            <span class="dash-row-title">{{ item.project_name }}</span>
+                                            <span class="dash-row-tags">
+                                                {% if item.waiting_since_display %}
+                                                <span class="dash-waiting-tag dash-waiting-tag--red">Waiting since: {{ item.waiting_since_display }}</span>
+                                                {% endif %}
+                                                {% if item.reply_count %}
+                                                <span class="dash-action-tag">{{ item.reply_count }} repl{{ 'y' if item.reply_count == 1 else 'ies' }}</span>
+                                                {% endif %}
+                                            </span>
+                                        </span>
+                                    </a>
+                                    <button type="button" class="btn-secondary dash-escalated-view-btn" data-action="open-decision-flag-modal" data-project-id="{{ item.project_id }}" data-project-name="{{ item.project_name }}">View / Reply</button>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {# My Escalation History (17 Jul 2026) — every RESOLVED
+                   escalation THIS CS personally raised
+                   (_compute_my_escalation_history()), most recently resolved
+                   first. The closed-out counterpart to My Escalated Projects
+                   beside it. Per Ezekiel: "we need to keep that escalation
+                   history and give it a spot on the dashboard to open a
+                   hidden div with those escalations and their message
+                   history."
+
+                   Collapsed by default (a teaser count + "Open history"
+                   button, same JS-measured max-height expand mechanic as
+                   Waiting on Others) — history only grows over time and
+                   isn't something that needs day-to-day attention, so it
+                   stays out of the way until deliberately opened. Reuses the
+                   SAME class names/data attributes Escalation History on the
+                   leadership dashboard uses (.dash-escalation-history-card,
+                   [data-escalation-history-body], .dash-escalation-history-
+                   open-btn, data-action="toggle-escalation-history") — only
+                   one of the two ever renders on a given page, so
+                   dashboard.js's single toggle handler serves both without
+                   needing to know which dashboard it's on.
+
+                   show_raised_by is omitted (defaults False) — every row
+                   here was, by definition, raised by the viewer themselves,
+                   so a "raised by" chip would be redundant. Contrast with
+                   the leadership version, which spans every CS/designer/
+                   team lead company-wide and does show it. #}
+                {% if my_escalation_history %}
+                <div class="dash-priority-card dash-escalation-history-card">
+                    <div class="dash-priority-card-header" data-action="toggle-escalation-history">
+                        <h2 class="dash-priority-card-title">My Escalation History</h2>
+                        <button type="button" class="dash-toggle-box-collapse-btn" data-action="toggle-escalation-history" aria-label="Toggle My Escalation History">
+                            <span class="dash-toggle-box-chevron">&#9660;</span>
+                        </button>
+                    </div>
+                    <p class="dash-waiting-teaser">
+                        {{ my_escalation_history | length }} resolved escalation{{ 's' if my_escalation_history | length != 1 else '' }}
+                    </p>
+                    <button type="button" class="btn-secondary dash-escalation-history-open-btn" data-action="toggle-escalation-history">Open history</button>
+                    <div class="dash-card-body-content" data-escalation-history-body>
+                        <div class="dash-card-body-visual">
+                            <div class="dash-card-body-inner">
+                                {% for item in my_escalation_history %}
+                                    {{ dash_escalation_history_row(item) }}
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
             {% endif %}
+
         </div>
 
-        {# ── Right column: What Changed (top) + Waiting on Others (bottom) #}
+        {# ── Right column: What Changed since Yesterday (top) + Waiting on
+           Others (bottom) #}
         <div class="dash-cs-side-col">
 
             <div class="dash-priority-card dash-what-changed-card">
                 <div class="dash-priority-card-header">
-                    <h2 class="dash-priority-card-title">What Changed</h2>
+                    <h2 class="dash-priority-card-title">What Changed since Yesterday</h2>
                 </div>
                 {# Scrollable within its own div, per Ezekiel: "What changed
                    remains the same log we have (make it scrollable within
@@ -266,6 +440,7 @@
 </div>
 
 {% include 'dashboard/_flag_management_modal.html' %}
+{% include 'dashboard/_decision_flag_modal.html' %}
 
 {# Same var-not-const/let SPA-renav reasoning as dashboard.html — see that
    file's own comment on HELIX_DASH_SCOPE/HELIX_EFFECTIVE_ROLE. #}

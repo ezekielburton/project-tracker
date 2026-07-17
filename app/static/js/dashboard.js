@@ -461,6 +461,16 @@
             ? '<span class="dash-action-tag">' + item.days_waiting + ' day' + (item.days_waiting !== 1 ? 's' : '') + ' waiting</span>'
             : '';
 
+        // Leadership queue's trigger opens the shared Decision Flag modal
+        // (17 Jul 2026, Decision Flag reply/resolve feature — see
+        // dashboard_leadership.html's matching SSR button) instead of
+        // instant-firing resolve-decision. decisions.html's own trigger
+        // (old dashboard fallback, further down) is unchanged — that page
+        // wasn't part of this upgrade, so it keeps the original single
+        // "✓ Resolve" button/action.
+        var viewResolveBtn = isManagementOrAdmin()
+            ? '<button type="button" class="dash-resolve-btn" data-action="open-decision-flag-modal" data-project-id="' + item.project_id + '" data-project-name="' + escapeHtml(item.project_name) + '">View / Resolve</button>'
+            : '';
         var resolveBtn = isManagementOrAdmin()
             ? '<button type="button" class="dash-resolve-btn" data-action="resolve-decision" data-project-id="' + item.project_id + '">✓ Resolve</button>'
             : '';
@@ -501,7 +511,7 @@
                 '<span class="dash-decision-cell">' + waitingCountTag + '</span>' +
                 '<span class="dash-decision-date">' + escapeHtml(formatDubaiTime(item.raised_at)) + '</span>' +
                 '</a>';
-            return '<div class="dash-decision-row" style="' + gridRowStyle + '">' + gridRow + resolveBtn + '</div>';
+            return '<div class="dash-decision-row" style="' + gridRowStyle + '">' + gridRow + viewResolveBtn + '</div>';
         }
 
         // decisions.html / old dashboard.html — still the plain text
@@ -942,6 +952,244 @@
             });
     }
 
+    // ── Shared Decision Flag modal (17 Jul 2026, Decision Flag reply/
+    // resolve feature) ───────────────────────────────────────────────────
+    // Shared by dashboard_cs.html ("My Escalated Projects" rows) and
+    // dashboard_leadership.html (Decision Needed Queue rows) — both
+    // include the same _decision_flag_modal.html shell and open it via
+    // data-action="open-decision-flag-modal". Unlike every other modal on
+    // this page, the body is entirely fetched (GET /projects/<id>/
+    // decision-flag) and rebuilt on every open, rather than reset from a
+    // page-load context var — the same project can be reopened many times
+    // in one session with a different thread each time, and this modal is
+    // reachable from row sources on two different pages, so there's no
+    // single Jinja context to reset it from the way e.g. Reassign CS
+    // Lead's <select> is. Harmless no-op on any page without the modal
+    // shell (getElementById returns null, guarded by `if (!overlay)
+    // return`, same as every other modal here).
+    var _decisionFlagProjectId = null;
+
+    // flagId (added 17 Jul 2026, Escalation History feature) — optional 3rd
+    // arg. When given (a History row — see dash_escalation_history_row()),
+    // the fetch asks for that SPECIFIC flag by id, resolved or not, instead
+    // of "whatever's currently active on this project" (the original,
+    // still-default behavior for My Escalated Projects/Decision Needed
+    // Queue rows, which never pass this). See get_decision_flag()'s own
+    // flag_id query-param docstring in projects_detail.py for why those two
+    // cases genuinely need different lookups, not just different labels.
+    function openDecisionFlagModal(projectId, projectName, flagId) {
+        var overlay = document.getElementById('decision-flag-modal');
+        if (!overlay) return;
+
+        _decisionFlagProjectId = projectId;
+        document.getElementById('decision-flag-project-name').textContent = projectName || 'Decision Flag';
+        document.getElementById('decision-flag-original').innerHTML = '<p class="dash-empty-state">Loading…</p>';
+        document.getElementById('decision-flag-thread').innerHTML = '';
+        document.getElementById('decision-flag-reply-text').value = '';
+        document.getElementById('decision-flag-reply-section').classList.remove('hidden');
+        document.getElementById('decision-flag-send-reply-btn').classList.remove('hidden');
+        document.getElementById('decision-flag-resolution-note').value = '';
+        document.getElementById('decision-flag-resolve-section').classList.add('hidden');
+        var errorEl = document.getElementById('decision-flag-error');
+        errorEl.classList.add('hidden');
+        errorEl.textContent = '';
+
+        overlay.classList.remove('hidden');
+        if (window.helixPolling) window.helixPolling.pause();
+
+        var url = '/projects/' + projectId + '/decision-flag';
+        if (flagId) url += '?flag_id=' + encodeURIComponent(flagId);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    document.getElementById('decision-flag-original').innerHTML = '<p class="dash-empty-state">Could not load this decision flag.</p>';
+                    return;
+                }
+                renderDecisionFlagModal(data);
+            })
+            .catch(function () {
+                document.getElementById('decision-flag-original').innerHTML = '<p class="dash-empty-state">Could not load this decision flag.</p>';
+            });
+    }
+
+    function closeDecisionFlagModal() {
+        var overlay = document.getElementById('decision-flag-modal');
+        if (overlay) overlay.classList.add('hidden');
+        if (window.helixPolling) window.helixPolling.resume();
+    }
+
+    // One message "bubble" — reused for the original flag note (rendered
+    // as the thread's first entry, via #decision-flag-original) and every
+    // reply after it (#decision-flag-thread). Reuses the existing
+    // personChip() helper (already used by renderDueRow()/renderDecision
+    // Row() above) for the avatar+name, same "our style" as every other
+    // person reference on this page.
+    function decisionFlagMessageEl(author, timestamp, text) {
+        return '<div class="decision-flag-message">' +
+            '<div class="decision-flag-message-head">' +
+            personChip(author) +
+            '<span class="decision-flag-message-time">' + escapeHtml(formatDubaiTime(timestamp)) + '</span>' +
+            '</div>' +
+            '<p class="decision-flag-message-text">' + escapeHtml(text) + '</p>' +
+            '</div>';
+    }
+
+    // Rebuilds the modal body from a GET /projects/<id>/decision-flag
+    // response (called on open) — submitDecisionFlagReply() below updates
+    // the thread directly instead of calling this again, since a reply
+    // doesn't change data.flag or can_resolve, only adds one message.
+    function renderDecisionFlagModal(data) {
+        var originalEl = document.getElementById('decision-flag-original');
+        var threadEl = document.getElementById('decision-flag-thread');
+        var replySection = document.getElementById('decision-flag-reply-section');
+        var sendReplyBtn = document.getElementById('decision-flag-send-reply-btn');
+        var resolveSection = document.getElementById('decision-flag-resolve-section');
+
+        if (!data.flag) {
+            // No flag_id was requested AND the project has nothing
+            // currently active — resolved (or somehow cleared) by someone
+            // else while this modal was closed, nothing left to reply to
+            // or resolve. Only reachable via the original "whatever's
+            // active on this project" open path — a History row always
+            // passes a real flag_id, which 404s instead of landing here
+            // (see openDecisionFlagModal()'s .catch()) if that specific
+            // flag has somehow vanished.
+            originalEl.innerHTML = '<p class="dash-empty-state">This decision has already been resolved.</p>';
+            threadEl.innerHTML = '';
+            replySection.classList.add('hidden');
+            sendReplyBtn.classList.add('hidden');
+            resolveSection.classList.add('hidden');
+            return;
+        }
+
+        originalEl.innerHTML = decisionFlagMessageEl(data.flag.created_by, data.flag.created_at, data.flag.note);
+        threadEl.innerHTML = (data.messages || []).map(function (m) {
+            return decisionFlagMessageEl(m.author, m.created_at, m.message);
+        }).join('');
+
+        // Escalation History rows (17 Jul 2026) open an ALREADY-resolved
+        // flag by id — read-only per Ezekiel's own scoping answer ("no
+        // reply/resolve controls, just the thread + resolution note").
+        // can_resolve is already forced false server-side for a resolved
+        // flag (see get_decision_flag()), but that flag doesn't cover the
+        // reply box at all, so it needs its own check here. The closing
+        // "Resolved by X on Y[: note]" line is appended to the end of the
+        // thread rather than styled as another message bubble — it's a
+        // system fact about the thread, not something someone said in it.
+        if (data.flag.is_resolved) {
+            threadEl.insertAdjacentHTML('beforeend',
+                '<div class="decision-flag-resolved-note">Resolved by ' +
+                personChip(data.flag.resolved_by) +
+                ' on ' + escapeHtml(formatDubaiTime(data.flag.resolved_at)) +
+                (data.flag.resolution_note ? ': "' + escapeHtml(data.flag.resolution_note) + '"' : '') +
+                '</div>');
+            replySection.classList.add('hidden');
+            sendReplyBtn.classList.add('hidden');
+        } else {
+            replySection.classList.remove('hidden');
+            sendReplyBtn.classList.remove('hidden');
+        }
+        resolveSection.classList.toggle('hidden', !data.can_resolve);
+    }
+
+    // Posts a reply and appends it straight into the thread in place —
+    // deliberately NOT a full re-fetch/re-render (contrast with Reassign
+    // CS Lead/Assign Designer's "reload the page" pattern above): a reply
+    // never changes data.flag or can_resolve, only adds one message, so
+    // there's nothing else in the modal that could have gone stale.
+    function submitDecisionFlagReply() {
+        var textEl = document.getElementById('decision-flag-reply-text');
+        var errorEl = document.getElementById('decision-flag-error');
+        var messageText = textEl.value.trim();
+
+        if (!messageText) {
+            errorEl.textContent = 'Please write a reply first.';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+
+        fetch('/projects/' + _decisionFlagProjectId + '/decision-flag/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: messageText })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    errorEl.textContent = data.error || 'Something went wrong.';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                var threadEl = document.getElementById('decision-flag-thread');
+                threadEl.insertAdjacentHTML('beforeend',
+                    decisionFlagMessageEl(data.message.author, data.message.created_at, data.message.message));
+                textEl.value = '';
+                errorEl.classList.add('hidden');
+                // Added 17 Jul 2026 — a reply doesn't change this flag's
+                // membership in either list, but it DOES change the
+                // reply-count tag shown on its row in My Escalated
+                // Projects/Escalation History; without this, that count
+                // sat stale until the next full page load or an SSE push
+                // from someone else's action. Both are safe no-ops if
+                // their card isn't on the current page.
+                refreshMyEscalatedProjects();
+                refreshEscalationHistory();
+            })
+            .catch(function () {
+                errorEl.textContent = 'Something went wrong. Please try again.';
+                errorEl.classList.remove('hidden');
+            });
+    }
+
+    // Resolves the decision from inside the modal (replaces the leadership
+    // dashboard's old instant-fire "✓ Resolve" button — see
+    // dashboard_leadership.html's matching SSR button comment). Reuses the
+    // SAME /projects/<id>/resolve-decision route resolveDecision() above
+    // already POSTs to — only the trigger changed, not the backend.
+    function submitDecisionFlagResolve() {
+        var noteEl = document.getElementById('decision-flag-resolution-note');
+        var errorEl = document.getElementById('decision-flag-error');
+
+        fetch('/projects/' + _decisionFlagProjectId + '/resolve-decision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolution_note: noteEl.value.trim() })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    errorEl.textContent = data.error || 'Could not resolve this decision.';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                closeDecisionFlagModal();
+                showToast('Decision resolved', 'success');
+                // Reload fallback REMOVED 17 Jul 2026 — per Ezekiel:
+                // "make sure everything across all dashboard types is
+                // live, nothing requires a refresh." Leadership dashboard:
+                // the Decision Needed Queue this row lives in already has
+                // a live refresh path (refreshDecisionsCard(), same one
+                // the old instant-fire Resolve button used) — reuse it so
+                // the resolved row disappears without a full reload. Every
+                // page this modal might be reachable from also gets its
+                // Escalation History/My Escalated Projects lists patched
+                // in place now (both are safe no-ops if their card isn't
+                // on the current page — see their own doc comments), so
+                // there's no longer a page this action needs a reload for.
+                if (document.querySelector('.dash-decision-queue-card')) {
+                    refreshDecisionsCard();
+                }
+                refreshMyEscalatedProjects();
+                refreshEscalationHistory();
+            })
+            .catch(function () {
+                errorEl.textContent = 'Something went wrong. Please try again.';
+                errorEl.classList.remove('hidden');
+            });
+    }
+
     // ── Next Actions card: My Actions / Others' Actions toggle ──────────
     //
     // Two-way toggle (not a multi-select filter set like the Due card's
@@ -1117,7 +1365,13 @@
     // .dash-row-title/.dash-action-tag shell dash_stat_project_row()
     // renders server-side for Your Active/Pending Approval/Total Active —
     // reused here as a JS mirror rather than inventing a new row shape.
-    function roleSnapshotProjectRow(item) {
+    //
+    // Renamed from roleSnapshotProjectRow() 17 Jul 2026 — the All/Focused
+    // toggle (see applyLeadershipFocusScope() further down) reuses this
+    // exact same function for the Active Projects/Pending Approval stat
+    // tiles' bodies, a second, unrelated consumer of the same row shape —
+    // the old name would have been misleading for that call site.
+    function dashStatProjectRow(item) {
         return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
             '<span class="dash-row-date">' + (item.deadline ? item.deadline : 'No deadline') + '</span>' +
             '<span class="dash-row-main">' +
@@ -1153,7 +1407,7 @@
             expandArea.querySelector('.dash-role-snapshot-expand-title').textContent =
                 tileEl.dataset.name + '’s Active Projects';
             var rowsHtml = data && data.rows.length
-                ? data.rows.map(roleSnapshotProjectRow).join('')
+                ? data.rows.map(dashStatProjectRow).join('')
                 : '<p class="dash-empty-state">No active projects.</p>';
             expandArea.querySelector('.dash-role-snapshot-expand-rows').innerHTML = rowsHtml;
         }
@@ -1163,6 +1417,326 @@
         // needs — see switchToggleBoxView()'s comment just above for the
         // full root-cause writeup. No-ops if the box is collapsed.
         remeasureExpandedBody(document.querySelector('[data-toggle-box-body="role_snapshot"]'));
+    }
+
+    // ── Leadership dashboard: All/Focused toggle (added 17 Jul 2026) ─────
+    //
+    // Per Ezekiel: "Let's have it so there's a toggle. 'All' and
+    // 'Focused'... All will remain as it is... Focused will only show:
+    // Overdue, At Risk, Waiting on Others, Active Projects, Pending
+    // Approval, Project time of just the jobs that specific management
+    // account is involved in." Confirmed via follow-up questions:
+    // Decisions Needed / Deadline Clashes / Role Snapshot stay
+    // company-wide regardless of this toggle; it's a no-reload AJAX
+    // toggle (not a page navigation); the choice persists as the
+    // manager's own default going forward.
+    //
+    // DELIBERATELY NOT built on withDashScope()/HELIX_DASH_SCOPE — that
+    // pair drives the OLD view-switcher machinery (still used by
+    // refreshDecisionsCard() etc. elsewhere in this file), and reusing it
+    // here would leak this toggle's scope into Decisions/Clashes/Role
+    // Snapshot's own refresh paths, which must stay company-wide. Every
+    // fetch below builds its own explicit ?scope=all|my instead. This is
+    // otherwise the exact same 'all'/'my' scope_mode _resolve_dashboard_
+    // scope() (dashboard.py) has always supported — 'my' never stopped
+    // working when the old view-switcher UI was removed 16 Jul 2026, it
+    // just lost every way to be reached; this toggle reopens exactly that
+    // one path, for exactly these six cards.
+    var LEADERSHIP_FOCUS_SCOPE_KEY = 'helixLeadershipFocusScope';
+
+    function renderRowsOrEmpty(items, renderFn, emptyText) {
+        if (!items || !items.length) return '<p class="dash-empty-state">' + emptyText + '</p>';
+        return items.map(renderFn).join('');
+    }
+
+    // Mirrors dash_leadership_risk_row() in _dashboard_macros.html exactly
+    // — reuses personPeopleRow() (already shared with renderDueRow()) for
+    // the CS-lead/designer chip row, so this needed no new chip-rendering
+    // logic of its own.
+    function leadershipRiskRow(item) {
+        var tags = '';
+        if (item.tags && item.tags.length) {
+            tags = '<span class="dash-row-tags">' + item.tags.map(function (tag) {
+                var cls = 'dash-risk-tag' + (tag.variant !== 'plain' ? ' dash-risk-tag--' + tag.variant : '');
+                return '<span class="' + cls + '">' + escapeHtml(tag.label) + '</span>';
+            }).join('') + '</span>';
+        }
+        var actions = '';
+        if (item.has_no_cs_lead) {
+            actions += '<button type="button" class="btn-secondary dash-leadership-action-btn" ' +
+                'data-action="open-reassign-cs-lead-modal" data-project-id="' + item.project_id + '" ' +
+                'data-project-name="' + escapeHtml(item.name) + '">Reassign CS Lead</button>';
+        }
+        if (item.missing_teams && item.missing_teams.length) {
+            actions += '<button type="button" class="btn-secondary dash-leadership-action-btn" ' +
+                'data-action="open-assign-designer-modal" data-project-id="' + item.project_id + '" ' +
+                'data-project-name="' + escapeHtml(item.name) + '" ' +
+                'data-missing-teams="' + escapeHtml(item.missing_teams.join(',')) + '">Assign Designer</button>';
+        }
+        // 17 Jul 2026: title inverts to customer_name (bold) + item.name
+        // (grey, .dash-row-title-detail) when item.customer_name is set —
+        // a C&CM customer-level overdue row — mirroring
+        // dash_leadership_risk_row()'s own inversion exactly.
+        var titleHtml = item.customer_name
+            ? escapeHtml(item.customer_name) + ' <span class="dash-row-title-detail">&mdash; ' + escapeHtml(item.name) + '</span>'
+            : escapeHtml(item.name);
+        return '<div class="dash-decision-row dash-leadership-risk-row">' +
+            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+                '<span class="dash-row-date">' + (item.deadline ? item.deadline : 'No deadline') + '</span>' +
+                '<span class="dash-row-main">' +
+                    '<span class="dash-row-title">' + titleHtml + '</span>' +
+                    tags +
+                    personPeopleRow(item.cs_lead, item.designers) +
+                '</span>' +
+            '</a>' +
+            '<span class="dash-leadership-risk-actions">' + actions + '</span>' +
+        '</div>';
+    }
+
+    // Mirrors dash_leadership_waiting_row() in _dashboard_macros.html.
+    function leadershipWaitingRow(item) {
+        var actions;
+        if (item.row_type === 'follow_up') {
+            actions = '<button type="button" class="btn-secondary dash-leadership-action-btn" disabled ' +
+                'title="Coming soon — in-app chat not built yet">Follow up</button>';
+        } else {
+            actions = '<button type="button" class="btn-secondary dash-leadership-action-btn" ' +
+                'data-action="open-assign-designer-modal" data-project-id="' + item.project_id + '" ' +
+                'data-project-name="' + escapeHtml(item.project_name) + '" ' +
+                'data-missing-teams="' + escapeHtml((item.missing_teams || []).join(',')) + '">Assign</button>';
+        }
+        return '<div class="dash-decision-row dash-leadership-waiting-row">' +
+            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+                '<span class="dash-row-main">' +
+                    '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
+                    '<span class="dash-row-tags"><span class="dash-action-tag">Waiting for: ' + escapeHtml(item.waiting_for) + '</span></span>' +
+                '</span>' +
+                '<span class="dash-row-waiting-since">Age: ' + escapeHtml(item.age_display) + '</span>' +
+            '</a>' +
+            '<span class="dash-leadership-risk-actions">' + actions + '</span>' +
+        '</div>';
+    }
+
+    // Mirrors "My Escalated Projects" row markup (dashboard_cs.html) — no
+    // data-flag-id on the trigger button (unlike escalationHistoryRow
+    // below), since every row here is still-OPEN: openDecisionFlagModal()
+    // with no flag_id already resolves to "whatever's currently active on
+    // this project", which is exactly this row's flag. Added 17 Jul 2026
+    // (SSE-completeness fix) — this card had no JS mirror at all before.
+    function escalatedProjectRow(item) {
+        var tags = '';
+        if (item.waiting_since_display) {
+            tags += '<span class="dash-waiting-tag dash-waiting-tag--red">Waiting since: ' + escapeHtml(item.waiting_since_display) + '</span>';
+        }
+        if (item.reply_count) {
+            tags += '<span class="dash-action-tag">' + item.reply_count + ' repl' + (item.reply_count === 1 ? 'y' : 'ies') + '</span>';
+        }
+        return '<div class="dash-decision-row">' +
+            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+                '<span class="dash-row-main">' +
+                    '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
+                    '<span class="dash-row-tags">' + tags + '</span>' +
+                '</span>' +
+            '</a>' +
+            '<button type="button" class="btn-secondary dash-escalated-view-btn" data-action="open-decision-flag-modal" ' +
+                'data-project-id="' + item.project_id + '" data-project-name="' + escapeHtml(item.project_name) + '">View / Reply</button>' +
+        '</div>';
+    }
+
+    // Mirrors dash_escalation_history_row() in _dashboard_macros.html
+    // exactly — both CS's "My Escalation History" and leadership's
+    // company-wide "Escalation History" share that ONE Jinja macro, so
+    // this one JS function serves both, parameterized the same way
+    // (showRaisedBy). Added 17 Jul 2026 (SSE-completeness fix) — same as
+    // escalatedProjectRow above, this card had no JS mirror at all before,
+    // which was the direct cause of "resolved escalations don't auto-
+    // populate, requires a refresh."
+    function escalationHistoryRow(item, showRaisedBy) {
+        var tags = '<span class="rag-green dash-escalation-resolved-tag">Resolved</span>';
+        if (item.reply_count) {
+            tags += '<span class="dash-action-tag">' + item.reply_count + ' repl' + (item.reply_count === 1 ? 'y' : 'ies') + '</span>';
+        }
+        var peopleRow = showRaisedBy ? '<span class="dash-row-people">' + personChip(item.raised_by) + '</span>' : '';
+        return '<div class="dash-decision-row">' +
+            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+                '<span class="dash-row-date">' + escapeHtml(item.resolved_display || '—') + '</span>' +
+                '<span class="dash-row-main">' +
+                    '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
+                    '<span class="dash-row-tags">' + tags + '</span>' +
+                    peopleRow +
+                '</span>' +
+            '</a>' +
+            '<button type="button" class="btn-secondary dash-escalated-view-btn" data-action="open-decision-flag-modal" ' +
+                'data-project-id="' + item.project_id + '" data-project-name="' + escapeHtml(item.project_name) + '" data-flag-id="' + item.flag_id + '">View</button>' +
+        '</div>';
+    }
+
+    // Fetches and in-place patches "My Escalated Projects" (CS dashboard)
+    // — row list, teaser count, and remeasures the toggle body's max-
+    // height. A no-op if the card isn't in the DOM: either this isn't the
+    // CS dashboard, OR (a real, documented edge case) this CS has never
+    // had ANY active escalation since page load, so the whole
+    // .dash-cs-escalations-row wrapper was never server-rendered in the
+    // first place (see dashboard_cs.html's own comment on that {% if %}).
+    // Building the full collapsible-card shell from scratch in JS just for
+    // that first-ever-escalation moment was judged not worth it — same
+    // "acceptable staleness until next full page load" call this file
+    // already makes for a few other rare edge cases (see e.g. the Clashes
+    // 0-to-1+ note further up). If the list becomes empty, the card is
+    // hidden outright (display: none) rather than inventing new empty-
+    // state copy that was never part of this card's design.
+    function refreshMyEscalatedProjects() {
+        var card = document.querySelector('.dash-escalated-card');
+        if (!card) return;
+        fetch('/dashboard/api/escalated-projects')
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                var body = card.querySelector('[data-escalated-list-body] .dash-card-body-inner');
+                if (body) body.innerHTML = renderRowsOrEmpty(items, escalatedProjectRow, 'No active escalations.');
+                var teaser = card.querySelector('.dash-waiting-teaser');
+                if (teaser) teaser.textContent = items.length + ' active escalation' + (items.length !== 1 ? 's' : '');
+                card.style.display = items.length ? '' : 'none';
+                remeasureExpandedBody(card.querySelector('[data-escalated-list-body]'));
+            })
+            .catch(function () { });
+    }
+
+    // Fetches and in-place patches whichever Escalation History card is on
+    // the current page — CS's "My Escalation History" (own resolved flags
+    // only) or leadership's company-wide "Escalation History" — same
+    // ".dash-decision-queue-card exists -> leadership page" marker
+    // renderDecisionRow() already uses to tell the two apart. Same "no-op
+    // if the card was never server-rendered" edge case as
+    // refreshMyEscalatedProjects() above (first-ever resolution on the CS
+    // page specifically — leadership's card always renders, empty state
+    // included, so this never applies there).
+    function refreshEscalationHistory() {
+        var card = document.querySelector('.dash-escalation-history-card');
+        if (!card) return;
+        var isLeadership = !!document.querySelector('.dash-decision-queue-card');
+        var url = isLeadership ? '/dashboard/api/escalation-history' : '/dashboard/api/my-escalation-history';
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                var body = card.querySelector('[data-escalation-history-body] .dash-card-body-inner');
+                if (body) body.innerHTML = renderRowsOrEmpty(items, function (item) { return escalationHistoryRow(item, isLeadership); }, 'No resolved escalations yet.');
+                var teaser = card.querySelector('.dash-waiting-teaser');
+                if (teaser) teaser.textContent = items.length + ' resolved escalation' + (items.length !== 1 ? 's' : '');
+                remeasureExpandedBody(card.querySelector('[data-escalation-history-body]'));
+            })
+            .catch(function () { });
+    }
+
+    function setFocusPill(id, count, colorWhenPositive, label) {
+        var pill = document.getElementById(id);
+        if (!pill) return;
+        pill.className = 'dash-focus-pill dash-focus-pill--' + (count > 0 ? colorWhenPositive : 'green');
+        pill.innerHTML = '<span class="dash-focus-pill-dot"></span>' + count + ' ' + label;
+    }
+
+    function applyLeadershipFocusScope(scope) {
+        var toggle = document.querySelector('.dash-focus-toggle');
+        if (!toggle) return; // not the leadership page — harmless no-op everywhere else
+
+        toggle.querySelectorAll('.dash-focus-toggle-btn').forEach(function (btn) {
+            btn.classList.toggle('active', btn.dataset.scope === scope);
+        });
+        try { localStorage.setItem(LEADERSHIP_FOCUS_SCOPE_KEY, scope); } catch (e) { /* private-mode storage denial, ignore */ }
+
+        var qs = 'scope=' + encodeURIComponent(scope);
+
+        // Risk/Overdue toggle box — 3 panels, 3 badges, and the Overdue/At
+        // Risk Focus-bar pills (derived from these same buckets' lengths,
+        // no separate summary fetch needed).
+        fetch('/dashboard/api/risk-overdue?' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var overdueList = document.getElementById('dash-risk-overdue-list');
+                if (overdueList) overdueList.innerHTML = renderRowsOrEmpty(data.overdue, leadershipRiskRow, 'Nothing overdue.');
+                var atRiskList = document.getElementById('dash-risk-at-risk-list');
+                if (atRiskList) atRiskList.innerHTML = renderRowsOrEmpty(data.at_risk, leadershipRiskRow, 'No projects currently at risk.');
+                var noDeadlineList = document.getElementById('dash-risk-no-deadline-list');
+                if (noDeadlineList) noDeadlineList.innerHTML = renderRowsOrEmpty(data.no_deadline, leadershipRiskRow, 'Every active project has a deadline set.');
+
+                toggleBoxBadge('risk_overdue', 'overdue', data.overdue.length === 0 ? 'green' : 'red', data.overdue.length);
+                toggleBoxBadge('risk_overdue', 'at_risk', data.at_risk.length === 0 ? 'green' : 'red', data.at_risk.length);
+                toggleBoxBadge('risk_overdue', 'no_deadline', data.no_deadline.length === 0 ? 'green' : 'amber', data.no_deadline.length);
+
+                setFocusPill('dash-focus-pill-overdue', data.overdue.length, 'red', 'overdue');
+                setFocusPill('dash-focus-pill-at-risk', data.at_risk.length, 'amber', 'at risk');
+
+                remeasureExpandedBody(document.querySelector('[data-toggle-box-body="risk_overdue"]'));
+            })
+            .catch(function () { /* leave stale on a network blip, same convention as every other fetch in this file */ });
+
+        // Waiting on Others.
+        fetch('/dashboard/api/waiting-on-others?' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                var list = document.getElementById('dash-leadership-waiting-list');
+                if (list) list.innerHTML = renderRowsOrEmpty(items, leadershipWaitingRow, 'Nothing waiting on a client or a designer right now.');
+                setFocusPill('dash-focus-pill-waiting', items.length, 'amber', 'waiting on others');
+            })
+            .catch(function () { });
+
+        // Active / Pending Approval / Average Time badges — one shared
+        // endpoint, same as refreshDashboardFromSSE()'s own stat-tile
+        // block above, just with an explicit scope instead of
+        // withDashScope()'s HELIX_DASH_SCOPE.
+        fetch('/dashboard/api/project-stats?' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (stats) {
+                var statActiveEl = document.querySelector('.dash-content-tab[data-card="stat_active"] .dash-content-tab-badge');
+                if (statActiveEl) statActiveEl.innerHTML = miniStat('green', stats.your_active, '');
+                var statPendingEl = document.querySelector('.dash-content-tab[data-card="stat_pending"] .dash-content-tab-badge');
+                if (statPendingEl) statPendingEl.innerHTML = miniStat('blue', stats.pending_approval, '');
+                // Badge only — the Avg Time tile's drill-down TABLE stays
+                // the full company-wide breakdown regardless of this
+                // toggle, by design (see stat_avg_time.html's own doc
+                // comment) — only the number itself follows scope.
+                var statAvgTimeEl = document.querySelector('.dash-content-tab[data-card="stat_avg_time"] .dash-content-tab-badge');
+                if (statAvgTimeEl) statAvgTimeEl.innerHTML = miniStat('oak', stats.average_time, 'HRS');
+            })
+            .catch(function () { });
+
+        // Active Projects body.
+        fetch('/dashboard/api/active-projects?' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                var body = document.querySelector('.dash-card-body-content[data-card="stat_active"] .dash-card-body-inner');
+                if (!body) return;
+                body.innerHTML = renderRowsOrEmpty(items, dashStatProjectRow, 'No active projects.');
+                remeasureExpandedBody(body.closest('.dash-card-body-content'));
+            })
+            .catch(function () { });
+
+        // Pending Approval body.
+        fetch('/dashboard/api/pending-approval-projects?' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                var body = document.querySelector('.dash-card-body-content[data-card="stat_pending"] .dash-card-body-inner');
+                if (!body) return;
+                body.innerHTML = renderRowsOrEmpty(items, dashStatProjectRow, 'No pending approvals.');
+                remeasureExpandedBody(body.closest('.dash-card-body-content'));
+            })
+            .catch(function () { });
+
+        // Overdue Secondary Metrics tile (badge + #dash-due-list body) —
+        // deliberately NOT fetchAndRenderDue() (that helper reads
+        // HELIX_DASH_SCOPE via withDashScope(), which this toggle must
+        // never touch — see the big comment at the top of this section).
+        // Same target element/render function, independent scope source.
+        fetch('/dashboard/api/due?filter=overdue&' + qs)
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                var dueBadge = document.querySelector('.dash-content-tab[data-card="due"] .dash-content-tab-badge');
+                if (dueBadge) dueBadge.innerHTML = miniStat(items.length === 0 ? 'green' : 'red', items.length, 'This Week');
+                var list = document.getElementById('dash-due-list');
+                if (!list) return;
+                list.innerHTML = renderRowsOrEmpty(items, function (item) { return renderDueRow(item); }, 'Nothing overdue this week.');
+                remeasureExpandedBody(list.closest('.dash-card-body-content'));
+            })
+            .catch(function () { });
     }
 
     // ── SSE integration: refresh hook called by polling.js ───────────────
@@ -1448,6 +2022,33 @@
             var activeNextActionsBtn = nextActionsBodyEl.querySelector('[data-action="next-actions-tab"].active');
             if (activeNextActionsBtn) fetchAndRenderNextActions(activeNextActionsBtn.dataset.filter);
         }
+
+        // Escalation system (added 17 Jul 2026 — "resolved escalations
+        // don't auto-populate... make sure everything across all
+        // dashboard types is live"). Both functions are safe no-ops on
+        // any page/state where their card isn't in the DOM — see their
+        // own doc comments above for the one deliberate edge case
+        // (first-ever escalation/resolution on the CS page) that's left
+        // stale until the next full page load.
+        refreshMyEscalatedProjects();
+        refreshEscalationHistory();
+
+        // Leadership dashboard: Risk/Overdue box, Waiting on Others,
+        // and the Active/Pending/Avg-Time/Overdue Secondary Metrics
+        // bodies were server-rendered once with NO live refresh at all
+        // until now (see applyLeadershipFocusScope()'s own doc comment,
+        // written for the All/Focused toggle — "never needed live re-
+        // fetching before now"). Rather than duplicate that fetch+render
+        // work, just re-run it here with whichever scope (All/Focused)
+        // is CURRENTLY active, so an SSE push can't silently revert a
+        // manager's Focused selection back to All. No-op everywhere else
+        // (the function itself bails out if .dash-focus-toggle isn't on
+        // the page).
+        var focusToggle = document.querySelector('.dash-focus-toggle');
+        if (focusToggle) {
+            var activeScopeBtn = focusToggle.querySelector('.dash-focus-toggle-btn.active');
+            applyLeadershipFocusScope(activeScopeBtn ? activeScopeBtn.dataset.scope : 'all');
+        }
     }
 
     // ── Runs every time this script executes (initial load or SPA renav) ──
@@ -1479,6 +2080,22 @@
     _dashLastUpdatedAt = Date.now();
     tickLastUpdated();
     window._dashLastUpdatedInterval = setInterval(tickLastUpdated, 1000);
+
+    // Leadership dashboard's All/Focused toggle — restore the manager's
+    // saved preference on EVERY execution (initial load or SPA renav), not
+    // just once, same reasoning as the ticker interval just above: an SPA
+    // renav back to this page re-renders it server-side with the default
+    // 'all' scope every time (there's no client-side router keeping state
+    // across navigations), so this has to re-apply on each fresh load, not
+    // only the very first one. applyLeadershipFocusScope() itself no-ops
+    // instantly via its `.dash-focus-toggle` guard on every OTHER
+    // dashboard page. Only fires a refetch when the saved choice actually
+    // differs from what the page already rendered (the default, 'all') —
+    // no point re-fetching data the page already has.
+    try {
+        var savedLeadershipScope = localStorage.getItem('helixLeadershipFocusScope');
+        if (savedLeadershipScope === 'my') applyLeadershipFocusScope('my');
+    } catch (e) { /* private-mode storage denial, ignore — just stays on 'all' */ }
 
     // ── Runs exactly once per page session — see file header ─────────────
 
@@ -1598,6 +2215,47 @@
                 return;
             }
 
+            // Shared Decision Flag modal (17 Jul 2026, Decision Flag reply/
+            // resolve feature) — dashboard_cs.html's "My Escalated
+            // Projects" rows and dashboard_leadership.html's Decision
+            // Needed Queue rows both trigger this. Same defensively-
+            // ordered spot as every other modal-open trigger above.
+            //
+            // data-flag-id (added 17 Jul 2026, Escalation History feature)
+            // — present on History rows (dash_escalation_history_row()),
+            // absent on every other trigger (My Escalated Projects,
+            // Decision Needed Queue) — those still mean "whatever's
+            // currently active on this project". getAttribute() returns
+            // null when the attribute isn't there at all, which
+            // openDecisionFlagModal()'s own flagId check below treats the
+            // same as "not provided" — no special-casing needed here.
+            var openDecisionFlagBtn = e.target.closest('[data-action="open-decision-flag-modal"]');
+            if (openDecisionFlagBtn) {
+                openDecisionFlagModal(
+                    openDecisionFlagBtn.getAttribute('data-project-id'),
+                    openDecisionFlagBtn.getAttribute('data-project-name'),
+                    openDecisionFlagBtn.getAttribute('data-flag-id')
+                );
+                return;
+            }
+            if (e.target.closest('[data-action="close-decision-flag-modal"]')) {
+                closeDecisionFlagModal();
+                return;
+            }
+            var decisionFlagOverlay = e.target.closest('[data-action="close-decision-flag-overlay"]');
+            if (decisionFlagOverlay && e.target === decisionFlagOverlay) {
+                closeDecisionFlagModal();
+                return;
+            }
+            if (e.target.closest('[data-action="submit-decision-flag-reply"]')) {
+                submitDecisionFlagReply();
+                return;
+            }
+            if (e.target.closest('[data-action="submit-decision-flag-resolve"]')) {
+                submitDecisionFlagResolve();
+                return;
+            }
+
             // CS-only redesigned dashboard: Waiting on Others expand/
             // collapse (added 16 Jul 2026, dashboard_cs.html only). THREE
             // different elements carry this same data-action (the whole
@@ -1624,6 +2282,53 @@
                 if (waitingChevronBtn) waitingChevronBtn.classList.toggle('expanded', waitingNowExpanded);
                 var waitingOpenBtn = document.querySelector('.dash-waiting-open-btn');
                 if (waitingOpenBtn) waitingOpenBtn.textContent = waitingNowExpanded ? 'Close waiting list' : 'Open waiting list';
+                return;
+            }
+
+            // Escalation History expand/collapse (added 17 Jul 2026) —
+            // "My Escalation History" (dashboard_cs.html) and "Escalation
+            // History" (dashboard_leadership.html) both render through the
+            // SAME class names/data attributes (.dash-escalation-history-
+            // card, [data-escalation-history-body], .dash-escalation-
+            // history-open-btn) rather than two near-duplicate blocks —
+            // only one of the two sections ever exists on a given page, so
+            // one generic handler serves both without needing to know
+            // which dashboard it's on. Same three-elements-one-action shape
+            // and same expandBody()/collapseBody() direct-call reasoning as
+            // the Waiting on Others toggle immediately above. No-op on any
+            // page without a [data-escalation-history-body] element.
+            var escHistoryToggle = e.target.closest('[data-action="toggle-escalation-history"]');
+            if (escHistoryToggle) {
+                var escHistoryBody = document.querySelector('[data-escalation-history-body]');
+                if (!escHistoryBody) return;
+                var escHistoryNowExpanded = !escHistoryBody.classList.contains('expanded');
+                if (escHistoryNowExpanded) { expandBody(escHistoryBody); } else { collapseBody(escHistoryBody); }
+                var escHistoryChevronBtn = document.querySelector('.dash-escalation-history-card [data-action="toggle-escalation-history"].dash-toggle-box-collapse-btn');
+                if (escHistoryChevronBtn) escHistoryChevronBtn.classList.toggle('expanded', escHistoryNowExpanded);
+                var escHistoryOpenBtn = document.querySelector('.dash-escalation-history-open-btn');
+                if (escHistoryOpenBtn) escHistoryOpenBtn.textContent = escHistoryNowExpanded ? 'Close history' : 'Open history';
+                return;
+            }
+
+            // My Escalated Projects expand/collapse (added 17 Jul 2026,
+            // same-day restructure — dashboard_cs.html only). Converted
+            // from an always-expanded card to the same collapsed-teaser
+            // shape as Waiting on Others/Escalation History immediately
+            // above, so it sits side by side with My Escalation History at
+            // a matching collapsed height. Identical three-elements-one-
+            // action shape and direct expandBody()/collapseBody() call as
+            // both toggles above. No-op on any page without a
+            // [data-escalated-list-body] element.
+            var escalatedToggle = e.target.closest('[data-action="toggle-escalated-list"]');
+            if (escalatedToggle) {
+                var escalatedBody = document.querySelector('[data-escalated-list-body]');
+                if (!escalatedBody) return;
+                var escalatedNowExpanded = !escalatedBody.classList.contains('expanded');
+                if (escalatedNowExpanded) { expandBody(escalatedBody); } else { collapseBody(escalatedBody); }
+                var escalatedChevronBtn = document.querySelector('.dash-escalated-card [data-action="toggle-escalated-list"].dash-toggle-box-collapse-btn');
+                if (escalatedChevronBtn) escalatedChevronBtn.classList.toggle('expanded', escalatedNowExpanded);
+                var escalatedOpenBtn = document.querySelector('.dash-escalated-open-btn');
+                if (escalatedOpenBtn) escalatedOpenBtn.textContent = escalatedNowExpanded ? 'Close list' : 'Open list';
                 return;
             }
 
@@ -1794,6 +2499,13 @@
             var roleTileEl = e.target.closest('[data-action="toggle-role-tile"]');
             if (roleTileEl) {
                 toggleRoleTile(roleTileEl);
+                return;
+            }
+            // Leadership dashboard's All/Focused toggle (added 17 Jul 2026)
+            // — see the big comment on applyLeadershipFocusScope() above.
+            var focusScopeBtn = e.target.closest('[data-action="toggle-leadership-focus-scope"]');
+            if (focusScopeBtn) {
+                applyLeadershipFocusScope(focusScopeBtn.dataset.scope);
                 return;
             }
             // Click-anywhere-in-header-to-collapse (added 16 Jul 2026) — per

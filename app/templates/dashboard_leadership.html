@@ -30,18 +30,28 @@
         get a separate field — per Ezekiel: "Merge them together, so
         owner and requested by are the same thing" — raised_by already
         was the only "who does this belong to" signal this data ever had.
-     4. Risk/Overdue (left) + Waiting on Others (right), side by side.
+     4. Risk/Overdue (left) + right column, stacked: Waiting on Others
+        (top) + Escalation History (bottom).
         Risk/Overdue is a 3-way toggle box (Overdue/At Risk/No Deadline —
         see _compute_risk_overdue()) — NOT collapsible (see 16 Jul 2026
         follow-up below), just the three view-switch buttons. Waiting on
         Others is a plain always-visible list
         (_compute_leadership_waiting_on_others()) — no collapse, small
-        enough not to need one.
-        Both rows carry real management ACTIONS (not static labels) per
-        Ezekiel: "let management reassign a CS lead or reassign a
-        designer so they have that agency" — Reassign CS Lead / Assign
-        Designer / (placeholder) Follow up buttons, each POSTing through
-        the two new modals below.
+        enough not to need one. Waiting on Others carries real management
+        ACTIONS (not static labels) per Ezekiel: "let management reassign
+        a CS lead or reassign a designer so they have that agency" —
+        Reassign CS Lead / Assign Designer / (placeholder) Follow up
+        buttons, each POSTing through the two new modals below.
+        Escalation History (17 Jul 2026, moved under Waiting on Others
+        same-day 17 Jul 2026 follow-up — per Ezekiel: "the escalation
+        history [is] taking up way too much space. Bring it below waiting
+        on others") — collapsible (closed by default, same shell as
+        dashboard_cs.html's "My Escalation History"), every RESOLVED
+        decision flag company-wide — see _compute_escalation_history() in
+        dashboard.py and dash_escalation_history_row() in
+        _dashboard_macros.html for the full design history. Originally
+        shipped as its own full-width block between the Decision Needed
+        Queue and this toggle row; moved here to save vertical space.
      5. Role Snapshot — one tile per CS/designer/team_lead
         (_compute_role_snapshot()), active count + one priority-ordered
         secondary stat + status dot. See the big comment on
@@ -69,7 +79,7 @@
 {% block title %}Dashboard — Vitamin-E{% endblock %}
 
 {% block content %}
-{% from 'dashboard/_dashboard_macros.html' import dash_leadership_risk_row, dash_leadership_waiting_row, dash_role_tile, dash_person_chip %}
+{% from 'dashboard/_dashboard_macros.html' import dash_leadership_risk_row, dash_leadership_waiting_row, dash_role_tile, dash_person_chip, dash_escalation_history_row %}
 
 <div class="page-container">
 
@@ -88,15 +98,26 @@
     <div class="dash-focus-bar">
         <span class="dash-focus-title">Leadership Focus</span>
         <span class="dash-focus-pills">
+            {# decisions_open + clashes are NOT part of the All/Focused
+               toggle below (17 Jul 2026) — per Ezekiel's explicit answer,
+               Decisions Needed and Deadline Clashes stay company-wide
+               always, so these two pills have no id and dashboard.js
+               never touches them. #}
             <span class="dash-focus-pill dash-focus-pill--{{ 'green' if leadership_focus.decisions_open == 0 else 'red' }}">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.decisions_open }} decision{{ 's' if leadership_focus.decisions_open != 1 else '' }} open
             </span>
-            <span class="dash-focus-pill dash-focus-pill--{{ 'red' if leadership_focus.overdue > 0 else 'green' }}">
+            {# The next three pills DO respond to the All/Focused toggle —
+               each gets a stable id so applyLeadershipFocusScope()
+               (dashboard.js) can rebuild its class + text after a
+               scope-change fetch, derived from the same risk_overdue/
+               waiting_on_others payloads already being fetched for the
+               cards below (no separate summary re-fetch needed). #}
+            <span id="dash-focus-pill-overdue" class="dash-focus-pill dash-focus-pill--{{ 'red' if leadership_focus.overdue > 0 else 'green' }}">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.overdue }} overdue
             </span>
-            <span class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.at_risk > 0 else 'green' }}">
+            <span id="dash-focus-pill-at-risk" class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.at_risk > 0 else 'green' }}">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.at_risk }} at risk
             </span>
@@ -104,10 +125,37 @@
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.clashes }} deadline clash{{ 'es' if leadership_focus.clashes != 1 else '' }}
             </span>
-            <span class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.waiting_on_others > 0 else 'green' }}">
+            <span id="dash-focus-pill-waiting" class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.waiting_on_others > 0 else 'green' }}">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.waiting_on_others }} waiting on others
             </span>
+        </span>
+        {# ── All/Focused toggle (added 17 Jul 2026) ────────────────────
+           Per Ezekiel: "Let's have it so there's a toggle. 'All' and
+           'Focused'... on the right side [of the Leadership Focus bar]."
+           No-reload AJAX toggle (Ezekiel's explicit choice) — clicking
+           either button re-fetches Risk/Overdue, Waiting on Others, and
+           three of the five Secondary Metrics tiles (Active/Pending/
+           Overdue/Avg Time — NOT Deadline Clashes) with an explicit
+           ?scope=all|my, entirely independent of HELIX_DASH_SCOPE/
+           withDashScope() below (see applyLeadershipFocusScope() in
+           dashboard.js for why: that pair drives the OLD view-switcher
+           machinery and must never leak into this toggle, or vice versa —
+           Decisions Needed/Deadline Clashes/Role Snapshot would otherwise
+           accidentally start narrowing too, which Ezekiel explicitly said
+           should NOT happen).
+
+           "All" starts active — matches _resolve_dashboard_scope()'s
+           current default (defaulting to 'all' since the 16 Jul 2026 fix
+           earlier this session) and this page's actual server-rendered
+           data on first paint. If a manager has a saved localStorage
+           preference for "Focused" (per Ezekiel: "let the user set their
+           default view"), dashboard.js flips this toggle and re-fetches
+           everything immediately on load — see the "runs every time this
+           script executes" section there. #}
+        <span class="dash-focus-toggle">
+            <button type="button" class="dash-focus-toggle-btn active" data-action="toggle-leadership-focus-scope" data-scope="all">All</button>
+            <button type="button" class="dash-focus-toggle-btn" data-action="toggle-leadership-focus-scope" data-scope="my">Focused</button>
         </span>
     </div>
 
@@ -201,7 +249,21 @@
                         </span>
                         <span class="dash-decision-date">{{ d.raised_at | dubai_time }}</span>
                     </a>
-                    <button type="button" class="dash-resolve-btn" data-action="resolve-decision" data-project-id="{{ d.project_id }}">✓ Resolve</button>
+                    {# Resolve upgraded 17 Jul 2026 (Decision Flag reply/
+                       resolve feature) from an instant-fire POST + confirm()
+                       to opening the shared Decision Flag modal instead —
+                       same trigger shape (a sibling button, not nested
+                       inside the row's own <a>), just a different action:
+                       the modal shows the full reply thread plus, for
+                       admin/management, a Resolve section with an optional
+                       note (see _decision_flag_modal.html, included at the
+                       bottom of this file). The old resolveDecision()/
+                       data-action="resolve-decision" JS path still exists
+                       and still works — decisions.html (the old dashboard's
+                       fallback for any unmatched layout_role) still uses it
+                       unchanged, since only THIS page's queue was in scope
+                       for this upgrade. #}
+                    <button type="button" class="dash-resolve-btn" data-action="open-decision-flag-modal" data-project-id="{{ d.project_id }}" data-project-name="{{ d.project_name }}">View / Resolve</button>
                 </div>
                 {% endfor %}
             {% else %}
@@ -210,7 +272,8 @@
         </div>
     </div>
 
-    {# ── Risk/Overdue (left, 3-way toggle) + Waiting on Others (right) ──
+    {# ── Risk/Overdue (left, 3-way toggle) + Waiting on Others/Escalation
+       History (right column, stacked) ──────────────────────────────────
        Risk/Overdue is NOT collapsible (16 Jul 2026 follow-up — per
        Ezekiel: "the overdue at risk etc doesnt need to be collapsible")
        — no collapse chevron button, just the three view-switch buttons.
@@ -260,44 +323,126 @@
             <div class="dash-card-body-content expanded" data-toggle-box-body="risk_overdue">
                 <div class="dash-card-body-visual">
                     <div class="dash-card-body-inner">
+                        {# The three id="dash-risk-*-list" wrappers below (added
+                           17 Jul 2026) are what applyLeadershipFocusScope()
+                           (dashboard.js) replaces wholesale after a scope-
+                           change fetch — same "swap just the rows, leave the
+                           .dash-toggle-box-view-title above untouched" idea
+                           as #dash-due-list elsewhere on this page. #}
                         <div data-toggle-view-panel="overdue">
                             <div class="dash-toggle-box-view-title">Overdue</div>
+                            <div id="dash-risk-overdue-list">
                             {% if risk_overdue.overdue %}
                                 {% for item in risk_overdue.overdue %}{{ dash_leadership_risk_row(item) }}{% endfor %}
                             {% else %}
                                 <p class="dash-empty-state">Nothing overdue.</p>
                             {% endif %}
+                            </div>
                         </div>
                         <div data-toggle-view-panel="at_risk" class="hidden">
                             <div class="dash-toggle-box-view-title">At Risk</div>
+                            <div id="dash-risk-at-risk-list">
                             {% if risk_overdue.at_risk %}
                                 {% for item in risk_overdue.at_risk %}{{ dash_leadership_risk_row(item) }}{% endfor %}
                             {% else %}
                                 <p class="dash-empty-state">No projects currently at risk.</p>
                             {% endif %}
+                            </div>
                         </div>
                         <div data-toggle-view-panel="no_deadline" class="hidden">
                             <div class="dash-toggle-box-view-title">No Deadline</div>
+                            <div id="dash-risk-no-deadline-list">
                             {% if risk_overdue.no_deadline %}
                                 {% for item in risk_overdue.no_deadline %}{{ dash_leadership_risk_row(item) }}{% endfor %}
                             {% else %}
                                 <p class="dash-empty-state">Every active project has a deadline set.</p>
                             {% endif %}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="dash-priority-card dash-waiting-card">
-            <div class="dash-priority-card-header">
-                <h2 class="dash-priority-card-title">Waiting on Others</h2>
+        {# Right column: Waiting on Others (top) + Escalation History
+           (bottom), stacked (17 Jul 2026 — per Ezekiel: "the escalation
+           history [is] taking up way too much space. Bring it below
+           waiting on others and follow the same collapsible structure you
+           just applied to the client servicing dashboard"). Escalation
+           History used to sit full-width, standalone, between the
+           Decision Needed Queue and this toggle row — moved here to save
+           vertical space, mirroring dashboard_cs.html's own
+           .dash-cs-side-col (What Changed top + Waiting on Others bottom).
+           It was already collapsible (teaser + "Open history" button, same
+           JS-measured max-height mechanic) before this move — that part
+           didn't need to change, only its position. #}
+        <div class="dash-leadership-side-col">
+
+            <div class="dash-priority-card dash-waiting-card">
+                <div class="dash-priority-card-header">
+                    <h2 class="dash-priority-card-title">Waiting on Others</h2>
+                </div>
+                {# id (added 17 Jul 2026) — applyLeadershipFocusScope()
+                   (dashboard.js) replaces this wholesale after fetching
+                   /dashboard/api/waiting-on-others?scope=X. #}
+                <div id="dash-leadership-waiting-list">
+                {% if waiting_on_others %}
+                    {% for item in waiting_on_others %}{{ dash_leadership_waiting_row(item) }}{% endfor %}
+                {% else %}
+                    <p class="dash-empty-state">Nothing waiting on a client or a designer right now.</p>
+                {% endif %}
+                </div>
             </div>
-            {% if waiting_on_others %}
-                {% for item in waiting_on_others %}{{ dash_leadership_waiting_row(item) }}{% endfor %}
-            {% else %}
-                <p class="dash-empty-state">Nothing waiting on a client or a designer right now.</p>
-            {% endif %}
+
+            {# ── Escalation History (17 Jul 2026) — every RESOLVED decision
+               flag company-wide (_compute_escalation_history()), most
+               recently resolved first — the closed-out counterpart to the
+               Decision Needed Queue above. Per Ezekiel: "we need to keep
+               that escalation history and give it a spot on the dashboard
+               to open a hidden div with those escalations and their
+               message history."
+
+               Collapsed by default (teaser count + "Open history" button,
+               same JS-measured max-height expand mechanic as every other
+               collapsible section on this page). Reuses the SAME class
+               names/data attributes dashboard_cs.html's "My Escalation
+               History" uses (.dash-escalation-history-card,
+               [data-escalation-history-body], .dash-escalation-history-
+               open-btn, data-action="toggle-escalation-history") — only
+               one of the two ever renders on a given page, so
+               dashboard.js's single toggle handler serves both without
+               needing to know which dashboard it's on.
+
+               show_raised_by=True (unlike the CS dashboard's call to the
+               same macro) — this list spans every CS/designer/team lead
+               company-wide, so each row needs its own "raised by" chip to
+               say who escalated it. #}
+            <div class="dash-priority-card dash-escalation-history-card">
+                <div class="dash-priority-card-header" data-action="toggle-escalation-history">
+                    <h2 class="dash-priority-card-title">Escalation History</h2>
+                    <button type="button" class="dash-toggle-box-collapse-btn" data-action="toggle-escalation-history" aria-label="Toggle Escalation History">
+                        <span class="dash-toggle-box-chevron">&#9660;</span>
+                    </button>
+                </div>
+                <p class="dash-waiting-teaser">
+                    {{ escalation_history | length }} resolved escalation{{ 's' if escalation_history | length != 1 else '' }}
+                </p>
+                <button type="button" class="btn-secondary dash-escalation-history-open-btn" data-action="toggle-escalation-history">Open history</button>
+                <div class="dash-card-body-content" data-escalation-history-body>
+                    <div class="dash-card-body-visual">
+                        <div class="dash-card-body-inner">
+                            {% if escalation_history %}
+                                {% for item in escalation_history %}
+                                    {{ dash_escalation_history_row(item, show_raised_by=True) }}
+                                {% endfor %}
+                            {% else %}
+                                <p class="dash-empty-state">No resolved escalations yet.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
     </div>
@@ -480,6 +625,7 @@
    on this page ever calls openFlagManagementModal(). #}
 {% include 'dashboard/_reassign_cs_lead_modal.html' %}
 {% include 'dashboard/_assign_designer_modal.html' %}
+{% include 'dashboard/_decision_flag_modal.html' %}
 
 <script>
     var HELIX_DASH_SCOPE = {{ scope_mode | tojson }};

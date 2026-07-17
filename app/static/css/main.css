@@ -3694,7 +3694,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     gap: 0.25rem;
 }
 
-/* Admin-only reset button shown beneath each pill */
+/* Revert ↩ / Reset ↺ buttons shown beneath each C&CM pill (admin/CS only) */
 .pill-reset-btn {
     align-self: center;
     padding: 0.1rem 0.4rem;
@@ -3712,6 +3712,19 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 .pill-reset-btn:hover {
     background: var(--rose);
     border-color: var(--rose);
+    color: #fff;
+}
+
+/* Danger variant (Reset ↺) — always rose, not just on hover */
+.pill-reset-btn--danger {
+    background: var(--rose);
+    border-color: var(--rose);
+    color: #fff;
+}
+
+.pill-reset-btn--danger:hover {
+    background: #c2838a;
+    border-color: #c2838a;
     color: #fff;
 }
 
