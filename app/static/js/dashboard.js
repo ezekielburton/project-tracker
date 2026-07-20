@@ -1352,6 +1352,97 @@
         btn.classList.toggle('expanded', nowExpanded);
     }
 
+    // ── Focus bar: clickable pills jump to + open their section (added 18
+    // Jul 2026). Per Ezekiel: "The focus bar at the top make the pills
+    // clickable, take the user to that relevant div and auto expand it" —
+    // across all three dashboards (CS, Leadership, Designer/Team Lead).
+    //
+    // Deliberately data-driven (one lookup table, one handler) rather than
+    // baking a CSS selector into each pill's HTML attributes — keeps the
+    // wiring in one place instead of duplicated logic spread across three
+    // templates, and every entry REUSES an existing mechanic
+    // (switchToggleBoxView() for toggle boxes, a simulated click on an
+    // existing toggle trigger for collapsible cards, or just a scroll for
+    // sections that are already always-visible) rather than reimplementing
+    // expand/collapse from scratch.
+    //
+    // CS dashboard's "due today" pill (added 16 Jul 2026, before this
+    // table existed) keeps its own dedicated data-action="toggle-due-
+    // today-list" handler, unchanged — already fully working, no reason to
+    // fold it into this table too.
+    var FOCUS_PILL_TARGETS = {
+        // CS dashboard (dashboard_cs.html)
+        'cs-my-actions': { scroll: '#dash-priority-actions-card' },
+        'cs-overdue':    { trigger: '.dash-content-tab[data-card="due"]', scroll: '#dash-content-area' },
+        'cs-clashes':    { trigger: '.dash-content-tab[data-card="clashes"]', scroll: '#dash-content-area' },
+        // "decisions needed" counts every flagged project in this CS's
+        // scope (_compute_summary()'s decisions_needed), which can be a
+        // slightly wider set than "My Escalated Projects" (only ones THIS
+        // CS personally raised) — there's no other card on this dashboard
+        // showing the broader set, so this is the closest match. Judgment
+        // call, not a guaranteed 1:1 count match.
+        'cs-decisions':  { toggleAction: 'toggle-escalated-list', bodySelector: '[data-escalated-list-body]', scroll: '.dash-escalated-card' },
+
+        // Leadership dashboard (dashboard_leadership.html)
+        'leadership-decisions': { scroll: '.dash-decision-queue-card' },
+        'leadership-overdue':   { box: 'risk_overdue', view: 'overdue',  scroll: '[data-toggle-box="risk_overdue"]' },
+        'leadership-at-risk':   { box: 'risk_overdue', view: 'at_risk',  scroll: '[data-toggle-box="risk_overdue"]' },
+        'leadership-clashes':   { trigger: '.dash-content-tab[data-card="clashes"]', scroll: '#dash-content-area' },
+        'leadership-waiting':   { scroll: '.dash-leadership-side-col .dash-waiting-card' },
+
+        // Designer / Team Lead dashboard (dashboard_designer.html)
+        'designer-due-today': { box: 'work_queue', view: 'due_today', scroll: '[data-toggle-box="work_queue"]' },
+        'designer-this-week': { box: 'work_queue', view: 'this_week', scroll: '[data-toggle-box="work_queue"]' },
+        'designer-blocked':   { box: 'work_queue', view: 'blocked',   scroll: '[data-toggle-box="work_queue"]' },
+        'designer-submitted': { box: 'metrics', view: 'submitted', scroll: '[data-toggle-box="metrics"]' },
+        'designer-revisions': { box: 'metrics', view: 'revisions', scroll: '[data-toggle-box="metrics"]' }
+    };
+
+    function jumpToFocusTarget(key) {
+        var cfg = FOCUS_PILL_TARGETS[key];
+        if (!cfg) return;
+
+        if (cfg.box && cfg.view) {
+            // Toggle box (Risk/Overdue, My Work Queue, Metrics Summary) —
+            // these are all --static (non-collapsible, always expanded),
+            // so switching the view is the whole story, no expand needed.
+            switchToggleBoxView(cfg.box, cfg.view);
+        } else if (cfg.toggleAction) {
+            // Collapsible card (My Escalated Projects) — only click its
+            // existing toggle trigger if it's currently CLOSED; the
+            // handler that trigger fires is a toggle, so clicking an
+            // already-open one would close it instead.
+            var body = cfg.bodySelector ? document.querySelector(cfg.bodySelector) : null;
+            if (body && !body.classList.contains('expanded')) {
+                var toggleTrigger = document.querySelector('[data-action="' + cfg.toggleAction + '"]');
+                if (toggleTrigger) toggleTrigger.click();
+            }
+        } else if (cfg.trigger) {
+            // Secondary Metrics tab-strip card (Due/Clashes) — simulate a
+            // real click on the tab so every bit of existing toggle-card
+            // logic (single-open accordion, expand animation, muted
+            // guard) runs exactly as if the user clicked it themselves.
+            var tabTrigger = document.querySelector(cfg.trigger);
+            if (tabTrigger && !tabTrigger.classList.contains('dash-content-tab--muted')) {
+                tabTrigger.click();
+            }
+        }
+        // Sections with none of the above (My Priority Actions, Decision
+        // Needed Queue, Waiting on Others) are already always-visible —
+        // nothing to expand, just scroll.
+
+        var scrollEl = cfg.scroll ? document.querySelector(cfg.scroll) : null;
+        if (scrollEl) {
+            // Small delay so the expand animation (if any) has started —
+            // scrollIntoView measures the target's height at call time,
+            // and a body mid-expand-transition still lands close enough
+            // for a smooth scroll to feel right rather than jumping twice.
+            setTimeout(function () {
+                scrollEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 60);
+        }
+    }
+
     // ── Role Snapshot clickable tiles (added 16 Jul 2026, later still) ──
     //
     // Per Ezekiel: "the client servicing and designers toggle that shows
@@ -1630,7 +1721,18 @@
     function setFocusPill(id, count, colorWhenPositive, label) {
         var pill = document.getElementById(id);
         if (!pill) return;
-        pill.className = 'dash-focus-pill dash-focus-pill--' + (count > 0 ? colorWhenPositive : 'green');
+        // dash-focus-pill--clickable included unconditionally (added 18
+        // Jul 2026, real bug fix) — all three pills this rebuilds
+        // (overdue/at-risk/waiting) are clickable now (see
+        // FOCUS_PILL_TARGETS above), and this className reassignment
+        // wholesale-replaces the pill's class list on every scope-toggle
+        // refresh. Without this, clicking All/Focused would silently
+        // strip the clickable styling (and, via applyLeadershipFocusScope
+        // now also being called from refreshDashboardFromSSE(), so would
+        // every SSE push) even though the pill's data-action/data-target
+        // attributes — untouched by className — kept it functionally
+        // clickable underneath, just with no visual affordance left.
+        pill.className = 'dash-focus-pill dash-focus-pill--' + (count > 0 ? colorWhenPositive : 'green') + ' dash-focus-pill--clickable';
         pill.innerHTML = '<span class="dash-focus-pill-dot"></span>' + count + ' ' + label;
     }
 
@@ -2508,6 +2610,16 @@
                 applyLeadershipFocusScope(focusScopeBtn.dataset.scope);
                 return;
             }
+            // Focus bar clickable pills (added 18 Jul 2026) — see the big
+            // comment on jumpToFocusTarget()/FOCUS_PILL_TARGETS above.
+            // Checked ahead of nothing in particular — pills are plain
+            // <span role="button">s, never nested inside another
+            // clickable element.
+            var focusPillEl = e.target.closest('[data-action="focus-pill-jump"]');
+            if (focusPillEl) {
+                jumpToFocusTarget(focusPillEl.dataset.target);
+                return;
+            }
             // Click-anywhere-in-header-to-collapse (added 16 Jul 2026) — per
             // Ezekiel: "improve the UX so when you select anywhere in the
             // header that isn't the toggle button - it collapses the
@@ -2555,8 +2667,10 @@
             // Widened 16 Jul 2026 to also cover Role Snapshot's clickable
             // tiles (role="button" tabindex="0", same accessibility
             // pattern as the Due Today pill above) — same synthetic-click
-            // approach, no separate toggle logic duplicated here.
-            var target = e.target.closest('[data-action="toggle-due-today-list"], [data-action="toggle-role-tile"]');
+            // approach, no separate toggle logic duplicated here. Widened
+            // again 18 Jul 2026 for the new Focus bar clickable pills,
+            // same reasoning.
+            var target = e.target.closest('[data-action="toggle-due-today-list"], [data-action="toggle-role-tile"], [data-action="focus-pill-jump"]');
             if (!target) return;
             e.preventDefault();
             target.click();

@@ -242,10 +242,7 @@ class Project(db.Model):
     # Decision escalation — CS/designer/team-lead can flag a project as needing a management decision. decision_needed is stil lthe sentinel the dashboard queries on
     # (cheap bolean filter, used all over dashboard.p). The other three columns below are DEPRECATED as of the DecisionFlag/DecisionFlagMessage system.
     decision_needed = db.Column(db.Boolean, default=False, nullable=True)
-    decision_raised_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) # DEPRECATED — see above
-    decision_raised_at = db.Column(db.DateTime, nullable=True) # DEPRECATED — see above
-    decision_note = db.Column(db.Text, nullable=True) # DEPRECATED — see above
-
+ 
 
     # Auto-populated on creation
 
@@ -255,7 +252,6 @@ class Project(db.Model):
 
     # Set by Designers
     lead_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    design_start_date = db.Column(db.Date, nullable=True)
 
     # Hours counter
     hours_accumulated = db.Column(db.Float, default=0.0)
@@ -297,7 +293,6 @@ class Project(db.Model):
     design_type = db.relationship('DesignType', backref='projects')
     design_direction = db.relationship('DesignDirection', backref='projects')
     brief_flags = db.relationship('BriefFlag', back_populates='project', cascade='all, delete-orphan')
-    decision_raised_by = db.relationship('User', foreign_keys=[decision_raised_by_id])
     decision_flags = db.relationship('DecisionFlag', back_populates='project', cascade='all, delete-orphan')
     
     @property

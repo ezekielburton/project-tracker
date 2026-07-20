@@ -5,6 +5,14 @@ import urllib3
 from flask import current_app
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Module-level session with trust_env=False — prevents requests from reading
+# Windows system proxy / HTTPS_PROXY env vars, which cause HTTP 407 errors when
+# trying to reach the local NAS over LAN. verify=False handles the self-signed cert.
+_NAS_SESSION = requests.Session()
+_NAS_SESSION.trust_env = False
+_NAS_SESSION.verify = False
+
 from app.models import ProjectRegion, ProjectCustomer, Customer, Deliverable
 
 # Canonical display names for region slugs stored in the DB
@@ -23,9 +31,8 @@ def _get_session():
     """Login to Synology File Station API, return (sid, host, port)."""
     host = current_app.config['NAS_HOST']
     port = current_app.config['NAS_PORT']
-    resp = requests.get(
+    resp = _NAS_SESSION.get(
         f'https://{host}:{port}/webapi/auth.cgi',
-        verify=False,
         params={
             'api':     'SYNO.API.Auth',
             'version': '3',
@@ -44,9 +51,8 @@ def _get_session():
 
 def _logout(host, port, sid):
     """Logout and invalidate the session token."""
-    requests.get(
+    _NAS_SESSION.get(
         f'https://{host}:{port}/webapi/auth.cgi',
-        verify=False,
         params={
             'api':     'SYNO.API.Auth',
             'version': '1',
@@ -66,9 +72,8 @@ def _rename_folder(host, port, sid, folder_path, new_name):
     new_name is just the new folder name (not a full path).
     Logs a warning on failure — never raises.
     """
-    resp = requests.get(
+    resp = _NAS_SESSION.get(
         f'https://{host}:{port}/webapi/entry.cgi',
-        verify=False,
         params={
             'api':     'SYNO.FileStation.Rename',
             'version': '2',
@@ -90,9 +95,8 @@ def _create_folder(host, port, sid, parent_path, folder_name):
     Create a single folder inside parent_path.
     Silently succeeds if folder already exists (force_parent=true).
     """
-    requests.get(
+    _NAS_SESSION.get(
         f'https://{host}:{port}/webapi/entry.cgi',
-        verify=False,
         params={
             'api':          'SYNO.FileStation.CreateFolder',
             'version':      '2',
@@ -216,9 +220,8 @@ def upload_file_to_nas(project, subfolder, local_file_path, nas_filename):
             dest_path   = f'{root}/{year}/{client_name}/{project.name}/{subfolder}'
 
             with open(local_file_path, 'rb') as f:
-                resp = requests.post(
+                resp = _NAS_SESSION.post(
                     f'https://{host}:{port}/webapi/entry.cgi',
-                    verify=False,
                     params={
                         'api':     'SYNO.FileStation.Upload',
                         'version': '2',
@@ -330,9 +333,8 @@ def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
         try:
             sid, host, port = _get_session()
             try:
-                resp = requests.post(
+                resp = _NAS_SESSION.post(
                     f'https://{host}:{port}/webapi/entry.cgi',
-                    verify=False,
                     params={
                         'api':     'SYNO.FileStation.Upload',
                         'version': '2',
@@ -382,9 +384,8 @@ def download_app_file(nas_file_path):
     """
     sid, host, port = _get_session()
     try:
-        resp = requests.get(
+        resp = _NAS_SESSION.get(
             f'https://{host}:{port}/webapi/entry.cgi',
-            verify=False,
             params={
                 'api':     'SYNO.FileStation.Download',
                 'version': '2',
@@ -444,9 +445,8 @@ def delete_app_file(nas_file_path):
     try:
         sid, host, port = _get_session()
         try:
-            requests.get(
+            _NAS_SESSION.get(
                 f'https://{host}:{port}/webapi/entry.cgi',
-                verify=False,
                 params={
                     'api':     'SYNO.FileStation.Delete',
                     'version': '2',

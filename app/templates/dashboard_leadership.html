@@ -94,7 +94,18 @@
        the "0 is good" convention every other RAG signal on this page
        uses); red-otherwise for overdue; amber-otherwise for at_risk/
        clashes/waiting_on_others (caution, not alarm — JUDGMENT CALL, no
-       explicit color spec was given for this bar beyond the CS one's). #}
+       explicit color spec was given for this bar beyond the CS one's).
+
+       Clickable (18 Jul 2026, per Ezekiel: "make the pills clickable,
+       take the user to that relevant div and auto expand it") — every
+       pill uses the same generic data-action="focus-pill-jump" +
+       data-target="<key>" handler the CS/Designer dashboards use
+       (jumpToFocusTarget()/FOCUS_PILL_TARGETS in dashboard.js). This is
+       independent of, and doesn't touch, the id/class rebuilding
+       applyLeadershipFocusScope() already does on these same pills for
+       the All/Focused toggle — data-action/data-target are static
+       attributes that survive that rebuild untouched (only className/
+       innerHTML are replaced there). #}
     <div class="dash-focus-bar">
         <span class="dash-focus-title">Leadership Focus</span>
         <span class="dash-focus-pills">
@@ -103,7 +114,7 @@
                Decisions Needed and Deadline Clashes stay company-wide
                always, so these two pills have no id and dashboard.js
                never touches them. #}
-            <span class="dash-focus-pill dash-focus-pill--{{ 'green' if leadership_focus.decisions_open == 0 else 'red' }}">
+            <span class="dash-focus-pill dash-focus-pill--{{ 'green' if leadership_focus.decisions_open == 0 else 'red' }} dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="leadership-decisions" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.decisions_open }} decision{{ 's' if leadership_focus.decisions_open != 1 else '' }} open
             </span>
@@ -113,19 +124,19 @@
                scope-change fetch, derived from the same risk_overdue/
                waiting_on_others payloads already being fetched for the
                cards below (no separate summary re-fetch needed). #}
-            <span id="dash-focus-pill-overdue" class="dash-focus-pill dash-focus-pill--{{ 'red' if leadership_focus.overdue > 0 else 'green' }}">
+            <span id="dash-focus-pill-overdue" class="dash-focus-pill dash-focus-pill--{{ 'red' if leadership_focus.overdue > 0 else 'green' }} dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="leadership-overdue" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.overdue }} overdue
             </span>
-            <span id="dash-focus-pill-at-risk" class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.at_risk > 0 else 'green' }}">
+            <span id="dash-focus-pill-at-risk" class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.at_risk > 0 else 'green' }} dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="leadership-at-risk" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.at_risk }} at risk
             </span>
-            <span class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.clashes > 0 else 'green' }}">
+            <span class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.clashes > 0 else 'green' }} dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="leadership-clashes" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.clashes }} deadline clash{{ 'es' if leadership_focus.clashes != 1 else '' }}
             </span>
-            <span id="dash-focus-pill-waiting" class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.waiting_on_others > 0 else 'green' }}">
+            <span id="dash-focus-pill-waiting" class="dash-focus-pill dash-focus-pill--{{ 'amber' if leadership_focus.waiting_on_others > 0 else 'green' }} dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="leadership-waiting" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 {{ leadership_focus.waiting_on_others }} waiting on others
             </span>

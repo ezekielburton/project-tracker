@@ -110,23 +110,26 @@
 
     {% include 'dashboard/_view_switcher.html' %}
 
-    {# ── Today's Focus bar — plain, non-clickable pills (per Ezekiel: "the
-       tags do not need to be clickable"). IDs are read/updated by
+    {# ── Today's Focus bar. IDs are read/updated by
        refreshDashboardFromSSE() in dashboard.js, same live-refresh summary
        fetch every other card's badge on this page already uses.
 
-       EXCEPTION (16 Jul 2026, per Ezekiel: "Due today should open a new
-       section when clicked which shows what is due today and who is the
-       owner of what is due") — the "due today" pill specifically is now
-       clickable, toggling the Due Today card just below via the same
-       expand/collapse mechanic Waiting on Others already uses
-       (data-action="toggle-due-today-list", handled in dashboard.js right
-       next to that card's identical handler). Every other pill on this
-       bar stays inert, per the original spec. #}
+       Originally spec'd as plain/non-clickable (per Ezekiel: "the tags do
+       not need to be clickable"), with a single EXCEPTION carved out for
+       "due today" (16 Jul 2026, per Ezekiel: "Due today should open a new
+       section when clicked...") — that pill keeps its own dedicated
+       data-action="toggle-due-today-list" handler, unchanged.
+
+       WIDENED 18 Jul 2026 — per Ezekiel: "make the pills clickable, take
+       the user to that relevant div and auto expand it," applied to every
+       remaining pill on all three dashboards. Each uses the generic
+       data-action="focus-pill-jump" + data-target="<key>" handler
+       (jumpToFocusTarget()/FOCUS_PILL_TARGETS in dashboard.js) rather than
+       a bespoke handler per pill. #}
     <div class="dash-focus-bar">
         <span class="dash-focus-title">Today's Focus</span>
         <span class="dash-focus-pills">
-            <span class="dash-focus-pill dash-focus-pill--red">
+            <span class="dash-focus-pill dash-focus-pill--red dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="cs-my-actions" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-my-actions">{{ summary.my_actions }}</span> needed from me
             </span>
@@ -134,15 +137,15 @@
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-due-today">{{ summary.due_today }}</span> due today
             </span>
-            <span class="dash-focus-pill dash-focus-pill--red">
+            <span class="dash-focus-pill dash-focus-pill--red dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="cs-overdue" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-overdue">{{ summary.overdue }}</span> overdue
             </span>
-            <span class="dash-focus-pill dash-focus-pill--amber">
+            <span class="dash-focus-pill dash-focus-pill--amber dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="cs-clashes" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-clashes">{{ summary.clashes }}</span> deadline clash{{ 'es' if summary.clashes != 1 else '' }}
             </span>
-            <span class="dash-focus-pill dash-focus-pill--green">
+            <span class="dash-focus-pill dash-focus-pill--green dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="cs-decisions" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-decisions">{{ summary.decisions_needed }}</span> decision{{ 's' if summary.decisions_needed != 1 else '' }} needed
             </span>
@@ -194,7 +197,7 @@
            the right. #}
         <div class="dash-cs-left-col">
 
-            <div class="dash-priority-card">
+            <div class="dash-priority-card" id="dash-priority-actions-card">
                 <div class="dash-priority-card-header">
                     <h2 class="dash-priority-card-title">My Priority Actions</h2>
                     {% if effective_role in ('cs', 'designer', 'team_lead') %}

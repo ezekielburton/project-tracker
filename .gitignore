@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .vscode/
 uploads/
+*.dump
 Helix_Documentation.docx
 Vitamin_Helix_Infrastructure.pdf
 SERVER_ACCESS.md

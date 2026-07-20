@@ -71,28 +71,35 @@
 
     {% include 'dashboard/_view_switcher.html' %}
 
-    {# ── Designer Focus bar — plain, non-clickable pills, same component
-       dashboard_cs.html/dashboard_leadership.html already use. #}
+    {# ── Designer Focus bar — reuses the same .dash-focus-pill component
+       dashboard_cs.html/dashboard_leadership.html use.
+
+       Clickable (18 Jul 2026, per Ezekiel: "make the pills clickable,
+       take the user to that relevant div and auto expand it") — each pill
+       uses the generic data-action="focus-pill-jump" + data-target="<key>"
+       handler (jumpToFocusTarget()/FOCUS_PILL_TARGETS in dashboard.js).
+       Due Today/This Week/Blocked switch My Work Queue's toggle box to
+       the matching view; Submitted/Revisions switch Metrics Summary's. #}
     <div class="dash-focus-bar">
         <span class="dash-focus-title">Designer Focus</span>
         <span class="dash-focus-pills">
-            <span class="dash-focus-pill dash-focus-pill--red">
+            <span class="dash-focus-pill dash-focus-pill--red dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="designer-due-today" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-due-today">{{ focus.due_today }}</span> due today
             </span>
-            <span class="dash-focus-pill dash-focus-pill--amber">
+            <span class="dash-focus-pill dash-focus-pill--amber dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="designer-this-week" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-this-week">{{ focus.this_week }}</span> due this week
             </span>
-            <span class="dash-focus-pill dash-focus-pill--red">
+            <span class="dash-focus-pill dash-focus-pill--red dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="designer-blocked" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-blocked">{{ focus.blocked }}</span> blocked
             </span>
-            <span class="dash-focus-pill dash-focus-pill--amber">
+            <span class="dash-focus-pill dash-focus-pill--amber dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="designer-submitted" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-submitted">{{ focus.submitted }}</span> submitted
             </span>
-            <span class="dash-focus-pill dash-focus-pill--green">
+            <span class="dash-focus-pill dash-focus-pill--green dash-focus-pill--clickable" data-action="focus-pill-jump" data-target="designer-revisions" role="button" tabindex="0">
                 <span class="dash-focus-pill-dot"></span>
                 <span id="dash-focus-revisions">{{ focus.revisions }}</span> revision{{ 's' if focus.revisions != 1 else '' }}
             </span>
