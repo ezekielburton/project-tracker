@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}?v={{ config.STATIC_VERSION }}">
+    {% block extra_css %}{% endblock %}
     
 </head>
 
@@ -1134,8 +1135,9 @@
     <script src="{{ url_for('static', filename='js/drag-drop.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/rich-editor.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-    <script src="{{ url_for('static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>     
     {% endif %}
+    {% block extra_js %}{% endblock %}
     <script src="{{ url_for('static', filename='js/sidebar.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}

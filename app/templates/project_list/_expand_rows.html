@@ -1,0 +1,15 @@
+{% for row in rows %}
+<div class="project-expand-row">
+    <span class="project-expand-label">{{ row.label }}</span>
+    <span class="project-expand-deadline{% if row.next_deadline and row.next_deadline.date < today %} project-deadline--overdue{% endif %}">
+        {% if row.next_deadline %}
+            {{ row.next_deadline.date.strftime('%d %b %Y') }}
+            <span class="project-expand-deliverable-name">{{ row.next_deadline.deliverable_name }}</span>
+        {% else %}
+            —
+        {% endif %}
+    </span>
+</div>
+{% else %}
+<p class="project-list-empty">Nothing to show.</p>
+{% endfor %}
