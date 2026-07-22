@@ -12,7 +12,8 @@ from app.models import (Project, ProjectDesigner, Scope, User, Client,
                         Customer, DeliverableType, DeliverableTypeDiscipline,
                         ProjectRegion, ProjectCustomer, Deliverable,
                         DeliverableAssignment, DeliverableStatusLog,
-                        ProjectSubmissionDeliverable,
+                        ProjectSubmissionDeliverable, ProjectRevisionDeliverable,
+                        BriefFlag, TechnicalSubmission,
                         DesignType, DesignDirection, ProjectSubmission)
 from app.decorators import role_required
 from app.notifications import (
@@ -401,46 +402,75 @@ def update_project(project_id):
                     is_new_pc = False
                 customer_map[customer_id] = pc.id
             
-            # --- Stage 3: rebuild deliverables for surviving customers ---
-            # Bulk SQL DELETE bypasses ORM cascade, so any table with a FK →
-            # deliverables.id must be cleared manually first or Postgres will
-            # raise a ForeignKeyViolation.  Three tables reference deliverables:
-            #   • deliverable_assignments          (DeliverableAssignment)
-            #   • deliverable_status_logs          (DeliverableStatusLog)  ← added 2026-07-09
-            #   • project_submission_deliverables  (ProjectSubmissionDeliverable) ← added 2026-07-10
-            for pc_id in customer_map.values():
-                deliverable_ids = [
-                    row.id for row in
-                    Deliverable.query.filter_by(project_customer_id=pc_id).with_entities(Deliverable.id)
-                ]
-                if deliverable_ids:
-                    # Delete child rows in FK-dependency order before the parent.
+            # --- Stage 3: upsert deliverables for surviving customers ---
+            # Mirrors the standard-deliverables upsert above (lines ~282-339): match
+            # existing deliverables to submitted ones by (project_customer_id, name)
+            # and update in place, so their id — and every child row hanging off it
+            # (DeliverableAssignment, DeliverableStatusLog, ProjectSubmissionDeliverable,
+            # ProjectRevisionDeliverable, BriefFlag, TechnicalSubmission) — survives an
+            # edit that doesn't actually touch that specific deliverable. Only
+            # deliverables genuinely absent from the resubmitted list get deleted, and
+            # only then do we clear their child rows first (bulk SQL DELETE bypasses
+            # ORM cascade, so anything with a FK -> deliverables.id must be cleared
+            # manually or Postgres raises a ForeignKeyViolation).
+            submitted_by_customer = {}
+            for item in data.get('deliverables', []):
+                submitted_by_customer.setdefault(int(item['customer_id']), []).append(item)
+
+            for customer_id, pc_id in customer_map.items():
+                existing_ccm = {
+                    d.name: d
+                    for d in Deliverable.query.filter_by(project_customer_id=pc_id).all()
+                }
+                submitted_items = submitted_by_customer.get(customer_id, [])
+                submitted_names = {item['name'] for item in submitted_items}
+
+                # Delete deliverables removed from the form
+                removed_ids = [d.id for name, d in existing_ccm.items() if name not in submitted_names]
+                if removed_ids:
                     DeliverableAssignment.query.filter(
-                        DeliverableAssignment.deliverable_id.in_(deliverable_ids)
+                        DeliverableAssignment.deliverable_id.in_(removed_ids)
                     ).delete(synchronize_session=False)
                     DeliverableStatusLog.query.filter(
-                        DeliverableStatusLog.deliverable_id.in_(deliverable_ids)
+                        DeliverableStatusLog.deliverable_id.in_(removed_ids)
                     ).delete(synchronize_session=False)
                     ProjectSubmissionDeliverable.query.filter(
-                        ProjectSubmissionDeliverable.deliverable_id.in_(deliverable_ids)
+                        ProjectSubmissionDeliverable.deliverable_id.in_(removed_ids)
                     ).delete(synchronize_session=False)
-                Deliverable.query.filter_by(
-                    project_customer_id=pc_id
-                ).delete(synchronize_session=False)
-            db.session.flush()
+                    ProjectRevisionDeliverable.query.filter(
+                        ProjectRevisionDeliverable.deliverable_id.in_(removed_ids)
+                    ).delete(synchronize_session=False)
+                    BriefFlag.query.filter(
+                        BriefFlag.deliverable_id.in_(removed_ids)
+                    ).delete(synchronize_session=False)
+                    TechnicalSubmission.query.filter(
+                        TechnicalSubmission.deliverable_id.in_(removed_ids)
+                    ).delete(synchronize_session=False)
+                    Deliverable.query.filter(
+                        Deliverable.id.in_(removed_ids)
+                    ).delete(synchronize_session=False)
 
-            for item in data.get('deliverables', []):
-                customer_id = int(item['customer_id'])
-                new_ccm_deliverable = Deliverable(
-                    project_id=project.id,
-                    project_customer_id=customer_map[customer_id],
-                    deliverable_type_id=int(item['type_id']) if item.get('type_id') and item['type_id'] != 'custom' else None,
-                    name=item['name'],
-                    created_by=current_user
-                )
-                db.session.add(new_ccm_deliverable)
-                db.session.flush()  # need its id for the status log row
-                record_deliverable_status(new_ccm_deliverable, new_ccm_deliverable.status, actor)
+                # Update existing / insert new
+                seen_this_submission = set()
+                for item in submitted_items:
+                    if item['name'] in seen_this_submission:
+                        continue  # defensive: skip an accidental duplicate within this one submission
+                    seen_this_submission.add(item['name'])
+
+                    if item['name'] in existing_ccm:
+                        pass  # nothing editable on a C&CM deliverable comes from this form today — explicit no-op, not an oversight
+                    else:
+                        new_ccm_deliverable = Deliverable(
+                            project_id=project.id,
+                            project_customer_id=pc_id,
+                            deliverable_type_id=int(item['type_id']) if item.get('type_id') and item['type_id'] != 'custom' else None,
+                            name=item['name'],
+                            created_by=current_user
+                        )
+                        db.session.add(new_ccm_deliverable)
+                        db.session.flush()  # need its id for the status log row
+                        record_deliverable_status(new_ccm_deliverable, new_ccm_deliverable.status, actor)
+            db.session.flush()
 
         db.session.commit()
 
