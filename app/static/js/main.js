@@ -1822,7 +1822,12 @@ function syncTableScrollers(viewEl) {
             defaultOpt.textContent = '— Select deliverable —';
             select.appendChild(defaultOpt);
 
+            var alreadyAddedIds = Array.from(
+                rowsContainer.querySelectorAll('.deliverable-row')
+            ).map(function (row) { return row.dataset.typeId; });
+
             types.forEach(function (type) {
+                if (alreadyAddedIds.indexOf(String(type.id)) !== -1) return;  // already added to this customer — don't offer it twice
                 var opt = document.createElement('option');
                 opt.value = type.id;
                 opt.textContent = type.is_custom ? type.name + ' (Custom)' : type.name;
@@ -2020,6 +2025,17 @@ function syncTableScrollers(viewEl) {
                 if (disciplines.length === 0) {
                     warningMsg.textContent = 'Please select at least one discipline.';
                     warningMsg.style.display = 'block';
+                    return;
+                }
+
+                var alreadyOnThisBrief = Array.from(
+                    rowsContainer.querySelectorAll('.deliverable-row')
+                ).some(function (row) { return row.dataset.name.toLowerCase() === name.toLowerCase(); });
+
+                if (alreadyOnThisBrief) {
+                    warningMsg.textContent = 'A deliverable called "' + name + '" is already added to this customer.';
+                    warningMsg.style.display = 'block';
+                    nameInput.style.borderColor = 'var(--rose)';
                     return;
                 }
 
