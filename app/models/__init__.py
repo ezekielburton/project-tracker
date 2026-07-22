@@ -141,6 +141,37 @@ class RoleTitle(db.Model):
 
     def __repr__(self):
         return f'<RoleTitle {self.role}: {self.title}>'
+    
+class UserTableLayout(db.Model):
+    """
+    One user's personal column widths + order for one table/view combination
+    (e.g. the Projects page's 'my' tab). Silent, ambient preference — auto-saved
+    as the user drags, never shared with other users, no explicit save action
+    needed from them.
+
+    `layout` is a JSON array of {'key': <column-key>, 'width': <px>} objects,
+    in display order — the array's order IS the column order, and each
+    entry's width is that column's current width. One row per (user, table_key)
+    pair; table_key looks like 'project_list:my', 'project_list:all', etc.,
+    so this same table can be reused by other pages later without needing a
+    new table per page.
+    """
+    __tablename__ = 'user_table_layouts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    table_key = db.Column(db.String(100), nullable=False)
+    layout = db.Column(db.JSON, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref='table_layouts')
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'table_key', name='uq_user_table_layout'),
+    )
+
+    def __repr__(self):
+        return f'<UserTableLayout user={self.user_id} table_key={self.table_key}>'
 
 
 # Fallback titles — used whenever no RoleTitle row exists yet for a given role.

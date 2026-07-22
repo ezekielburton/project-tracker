@@ -41,6 +41,7 @@
     --oak: #A07C5A;
     --pine: #63775B;
     --rose: #D9A2A8;
+    --background: #F5F0E8;
 
     --white: #FFFFFF;
     --black: #1A1A1A;
@@ -197,7 +198,7 @@ html {
 
 body {
     font-family: var(--font-body);
-    background-color: var(--sandstone);
+    background-color: var(--background);
     color: var(--black);
     min-height: 100vh;
     display: flex;

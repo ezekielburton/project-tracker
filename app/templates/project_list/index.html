@@ -12,34 +12,195 @@
 <div class="project-list-page">
     <h1 class="project-list-heading">Projects</h1>
 
-    <div class="project-list-tabs">
-        <a href="{{ url_for('project_list.index', view='my') }}"
-            class="project-list-tab{% if view == 'my' %} active{% endif %}">My Projects</a>
-        <a href="{{ url_for('project_list.index', view='all') }}"
-            class="project-list-tab{% if view == 'all' %} active{% endif %}">
-            {% if effective_role in ('cs', 'admin', 'management') %}All Projects{% else %}Team Projects{% endif %}
-        </a>
-        <a href="{{ url_for('project_list.index', view='approved') }}"
-            class="project-list-tab{% if view == 'approved' %} active{% endif %}">Approved</a>
+    <div class="project-list-header">
+        <div class="project-list-tabs">
+            <a href="{{ url_for('project_list.index', view='my') }}"
+                class="project-list-tab{% if view == 'my' %} active{% endif %}">My Projects</a>
+            <a href="{{ url_for('project_list.index', view='all') }}"
+                class="project-list-tab{% if view == 'all' %} active{% endif %}">
+                {% if effective_role in ('cs', 'admin', 'management') %}All Projects{% else %}Team Projects{% endif %}
+            </a>
+            <a href="{{ url_for('project_list.index', view='approved') }}"
+                class="project-list-tab{% if view == 'approved' %} active{% endif %}">Approved</a>
+        </div>
+
+        <div class="project-list-toolbar">
+            <button type="button" class="project-toolbar-new-item" id="new-project-btn">+ New Project</button>
+
+            <div class="project-toolbar-search-wrap">
+                <button type="button" id="search-toggle" class="project-toolbar-icon-btn"
+                    aria-label="Search">🔍</button>
+                <input type="text" name="search" id="toolbar-search" class="project-toolbar-search-input"
+                    placeholder="Search..." value="{{ active_filters.search }}" hidden>
+            </div>
+
+            <div class="project-filter-wrap">
+                <button type="button" id="filter-toggle" class="project-filter-toggle">Filter</button>
+                <div id="filter-panel" class="project-filter-panel" hidden>
+                    <div class="filter-panel-header">
+                        <span class="filter-panel-title">Filters</span>
+                        <span class="filter-panel-count">Showing {{ rows|length }} of {{ view_total }} items</span>
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">
+                            CS Lead{% if active_filters.cs_lead %} <span class="filter-group-count">/ {{
+                                active_filters.cs_lead|length }}</span>{% endif %}
+                        </div>
+                        {% for person in filter_options.cs_leads %}
+                        <label class="filter-checkbox-row">
+                            <input type="checkbox" name="cs_lead" value="{{ person.id }}" {% if person.id in
+                                active_filters.cs_lead %}checked{% endif %}>
+                            <span class="filter-checkbox-text">{{ person.name }}</span>
+                            <span class="filter-checkbox-count">{{ filter_counts.cs_lead.get(person.id, 0) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">
+                            Designers{% if active_filters.designers %} <span class="filter-group-count">/ {{
+                                active_filters.designers|length }}</span>{% endif %}
+                        </div>
+                        {% for person in filter_options.designers %}
+                        <label class="filter-checkbox-row">
+                            <input type="checkbox" name="designers" value="{{ person.id }}" {% if person.id in
+                                active_filters.designers %}checked{% endif %}>
+                            <span class="filter-checkbox-text">{{ person.name }}</span>
+                            <span class="filter-checkbox-count">{{ filter_counts.designers.get(person.id, 0) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">
+                            Client{% if active_filters.client %} <span class="filter-group-count">/ {{
+                                active_filters.client|length }}</span>{% endif %}
+                        </div>
+                        {% for client in filter_options.clients %}
+                        <label class="filter-checkbox-row">
+                            <input type="checkbox" name="client" value="{{ client.id }}" {% if client.id in
+                                active_filters.client %}checked{% endif %}>
+                            <span class="filter-checkbox-text">{{ client.name }}</span>
+                            <span class="filter-checkbox-count">{{ filter_counts.client.get(client.id, 0) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">
+                            Brief Type{% if active_filters.brief_type %} <span class="filter-group-count">/ {{
+                                active_filters.brief_type|length }}</span>{% endif %}
+                        </div>
+                        {% for value, label in filter_options.brief_types %}
+                        <label class="filter-checkbox-row">
+                            <input type="checkbox" name="brief_type" value="{{ value }}" {% if value in
+                                active_filters.brief_type %}checked{% endif %}>
+                            <span class="filter-checkbox-text">{{ label }}</span>
+                            <span class="filter-checkbox-count">{{ filter_counts.brief_type.get(value, 0) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">
+                            Status{% if active_filters.status %} <span class="filter-group-count">/ {{
+                                active_filters.status|length }}</span>{% endif %}
+                        </div>
+                        {% for status in filter_options.statuses %}
+                        <label class="filter-checkbox-row">
+                            <input type="checkbox" name="status" value="{{ status }}" {% if status in
+                                active_filters.status %}checked{% endif %}>
+                            <span class="filter-checkbox-text">{{ status }}</span>
+                            <span class="filter-checkbox-count">{{ filter_counts.status.get(status, 0) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">
+                            Urgency{% if active_filters.urgency %} <span class="filter-group-count">/ {{
+                                active_filters.urgency|length }}</span>{% endif %}
+                        </div>
+                        {% for value, label in filter_options.urgencies %}
+                        <label class="filter-checkbox-row">
+                            <input type="checkbox" name="urgency" value="{{ value }}" {% if value in
+                                active_filters.urgency %}checked{% endif %}>
+                            <span class="filter-checkbox-text">{{ label }}</span>
+                            <span class="filter-checkbox-count">{{ filter_counts.urgency.get(value, 0) }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">Initial Deadline</div>
+                        <div class="filter-date-range">
+                            <input type="date" name="initial_deadline_from" class="filter-date-input"
+                                value="{{ active_filters.initial_deadline_from }}">
+                            <span class="filter-date-sep">to</span>
+                            <input type="date" name="initial_deadline_to" class="filter-date-input"
+                                value="{{ active_filters.initial_deadline_to }}">
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="filter-group-label">Next Deadline</div>
+                        <div class="filter-date-range">
+                            <input type="date" name="next_deadline_from" class="filter-date-input"
+                                value="{{ active_filters.next_deadline_from }}">
+                            <span class="filter-date-sep">to</span>
+                            <input type="date" name="next_deadline_to" class="filter-date-input"
+                                value="{{ active_filters.next_deadline_to }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="project-toolbar-sort-btn" id="sort-btn">Sort</button>
+
+            {% set any_filters_active = active_filters.cs_lead or active_filters.client or active_filters.designers
+            or active_filters.brief_type or active_filters.status or active_filters.urgency or active_filters.search
+            or active_filters.initial_deadline_from or active_filters.initial_deadline_to
+            or active_filters.next_deadline_from or active_filters.next_deadline_to %}
+            {% if any_filters_active %}
+            <div class="filter-floating-bar">
+                <span class="filter-floating-count">{{ rows|length }} of {{ view_total }} filtered</span>
+                <a href="{{ url_for('project_list.index', view=view) }}" class="filter-floating-clear">Clear</a>
+                <button type="button" class="filter-floating-save" id="save-view-btn">Save this view</button>
+            </div>
+            {% endif %}
+        </div>
     </div>
 
     {% call card() %}
-    <div class="project-table-header project-row">
-        <span class="project-col-expand"></span>
-        <span class="project-col-name">Name</span>
-        <span class="project-col-client">Client</span>
-        <span class="project-col-cs">CS Lead</span>
-        <span class="project-col-designers">Designers</span>
-        <span class="project-col-deadline">Initial Deadline</span>
-        <span class="project-col-next-deadline">Next Deadline</span>
-        <span class="project-col-urgency">Urgency</span>
-        <span class="project-col-next-deliverable">Next Deliverable</span>
-        <span class="project-col-status">Status</span>
-        <span class="project-col-job">Job Number</span>
-    </div>
+    <div class="project-table-scroll-region">
+    <div class="project-table-rounded-clip">
+    <div class="project-table" id="project-table" data-table-key="{{ table_key }}"
+        data-save-layout-url="{{ url_for('project_list.save_layout') }}">
+        <div class="project-table-header project-row" style="--row-num: 1;">
+            <span class="project-col-expand"></span>
+            <span class="project-col-name" data-col-key="name">Name<span class="project-col-resize-handle"></span></span>
+            <span class="project-col-client" data-col-key="client">Client<span class="project-col-resize-handle"></span></span>
+            <span class="project-col-cs" data-col-key="cs">CS Lead<span class="project-col-resize-handle"></span></span>
+            <span class="project-col-designers" data-col-key="designers">Designers<span
+                    class="project-col-resize-handle"></span></span>
+            <span class="project-col-deadline" data-col-key="deadline">Initial Deadline<span
+                    class="project-col-resize-handle"></span></span>
+            <span class="project-col-next-deadline" data-col-key="next-deadline">Next Deadline<span
+                    class="project-col-resize-handle"></span></span>
+            <span class="project-col-urgency" data-col-key="urgency">Urgency<span
+                    class="project-col-resize-handle"></span></span>
+            <span class="project-col-next-deliverable" data-col-key="next-deliverable">Next Deliverable<span
+                    class="project-col-resize-handle"></span></span>
+            <span class="project-col-status" data-col-key="status">Status<span class="project-col-resize-handle"></span></span>
+            <span class="project-col-summary" data-col-key="summary">Summary<span
+                    class="project-col-resize-handle"></span></span>
+            <span class="project-col-job" data-col-key="job">Job Number<span class="project-col-resize-handle"></span></span>
+        </div>
     
     {% for row in rows %}
-    <a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link">
+    <a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link"
+        style="--row-num: {{ loop.index * 2 }};">
         <span class="project-col-expand">
             <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
                 data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
@@ -73,26 +234,30 @@
         </span>
         <span class="project-col-status">
             {{ tag(row.blanket_status, 'action') }}
-            <span class="project-status-detail">
-                {% if row.brief_type == 'ccm' %}
-                {% if row.customer_count %}{{ row.customer_count }} customer{{ 's' if row.customer_count != 1 else '' }}{%
-                else %}—{% endif %}
-                {% else %}
-                {{ row.rollup or '—' }}
-                {% endif %}
-            </span>
         </span>
+        <span class="project-col-summary">
+            {{ row.rollup or '—' }} </span>
         <span class="project-col-job">{{ row.job_number or '—' }}</span>
     </a>
-    <div class="project-expand-container" hidden></div>
+    <div class="project-expand-container" hidden style="grid-row: {{ loop.index * 2 + 1 }};"></div>
     {% else %}
     <p class="project-list-empty">No projects to show.</p>
     {% endfor %}
     </div>
+    </div>
+    <div class="project-table-sticky-scrollbar" id="sticky-scrollbar">
+        <div class="project-table-sticky-scrollbar-inner" id="sticky-scrollbar-inner"></div>
+    </div>
+    </div>
     {% endcall %}
 </div>
+<div class="project-resize-drag-indicator" id="resize-drag-indicator" hidden></div>
 {% endblock %}
 
 {% block extra_js %}
+<script>
+    window.__savedTableLayout = {{ saved_layout | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/project_list_layout.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_list.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}
