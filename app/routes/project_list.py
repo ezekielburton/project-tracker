@@ -50,9 +50,26 @@ def _next_deadline_for(deliverable_query):
         return None
     return {'date': d.design_deadline, 'deliverable_name': d.name}
 
+def _urgency_for(next_deadline, today):
+    """
+    Computed Urgency - a RAG bucket from how many days away the same next_deadline value actually is.
+    Not stored anywhere, it's a pure presentation-layer computation on data we already have.
+
+    Same-day and overdue both bucket into urgent. Overdue pulses, while same day is static.
+    """
+    if next_deadline is None:
+        return None
+    days_away = (next_deadline['date'] - today).days
+    if days_away <= 0:
+        return 'urgent'
+    if days_away <= 2:
+        return 'prioritize'
+    return 'normal'
+
 def _serialize_row(p):
     """Turns one Project into the flat dict the template needs. Pulled out of index(), now that there are three different queries feeding
-    in the same row shape."""
+    in the same row shape.""" 
+    next_deadline = _next_deadline_for(Deliverable.query.filter_by(project_id=p.id))
     return {
         'id': p.id,
         'name': p.name,
@@ -62,7 +79,12 @@ def _serialize_row(p):
         'designers': [_serialize_person(pd.designer) for pd in p.assigned_designers],
         'initial_deadline': p.first_output_deadline,
         'status': p.project_status,
-        'next_deadline': _next_deadline_for(Deliverable.query.filter_by(project_id=p.id)),
+        'blanket_status': _blanket_status(p.project_status),
+        'brief_type': p.brief_type,
+        'rollup': _rollup_for(Deliverable.query.filter_by(project_id=p.id)) if p.brief_type != 'ccm' else None,
+        'customer_count': sum(1 for pc in p.project_customers if not pc.cancelled) if p.brief_type == 'ccm' else None,
+        'next_deadline': next_deadline,
+        'urgency': _urgency_for(next_deadline, date.today()),
     }
 
 @project_list_bp.route('/')
@@ -146,6 +168,8 @@ def expand(project_id):
                 continue
             rows.append({
                 'label': pc.customer.name,
+                'blanket_status': _blanket_status(pc.status),
+                'rollup': _rollup_for(Deliverable.query.filter_by(project_customer_id=pc.id)),
                 'next_deadline': _next_deadline_for(
                     Deliverable.query.filter_by(project_customer_id=pc.id)
                 ),
@@ -155,9 +179,37 @@ def expand(project_id):
         for d in project.project_deliverables:
             rows.append({
                 'label': d.name,
+                'blanket_status': _blanket_status(d.status),
+                'rollup': None,         # a single deliverable has nothing further to roll up
                 'next_deadline': _next_deadline_for(
                     Deliverable.query.filter_by(id=d.id)
                 ),
             })
 
     return render_template('project_list/_expand_rows.html', rows=rows, today=date.today())
+
+def _blanket_status(granular_status):
+    """ Maps the granular workflow states down to the following:
+        Not Started / Active / On Hold / Completed / Archived.
+    """
+
+    if granular_status == 'draft':
+        return 'Not Started'
+    if granular_status == 'on_hold':
+        return 'On Hold'
+    if granular_status == 'approved':
+        return 'Completed'
+    return 'Active'
+
+def _rollup_for(deliverable_query):
+    """ The computed rollup: Shows how many of this projects deliverables are Approved out of the total."""
+
+    deliverables = deliverable_query.all()
+    total = len(deliverables)
+    if total == 0:
+        return None
+    approved = sum(1 for d in deliverables if d.status == 'approved')
+    return f'{approved} of {total} Approved'
+
+
+

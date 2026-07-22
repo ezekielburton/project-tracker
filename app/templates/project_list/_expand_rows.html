@@ -1,6 +1,11 @@
+{% from '_shared_macros.html' import tag %}
 {% for row in rows %}
 <div class="project-expand-row">
     <span class="project-expand-label">{{ row.label }}</span>
+    <span class="project-expand-status">
+        {{ tag(row.blanket_status, 'action') }}
+        {% if row.rollup %}<span class="project-expand-rollup">{{ row.rollup }}</span>{% endif %}
+    </span>
     <span class="project-expand-deadline{% if row.next_deadline and row.next_deadline.date < today %} project-deadline--overdue{% endif %}">
         {% if row.next_deadline %}
             {{ row.next_deadline.date.strftime('%d %b %Y') }}

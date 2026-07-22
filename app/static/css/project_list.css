@@ -93,6 +93,27 @@
         font-weight: 400;
     }
 
+    .project-col-next-deadline {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    @keyframes project-urgency-pulse {
+        0%, 100% { opacity:1; }
+        50% { opacity: 0.5; }
+    }
+
+    .project-urgency--overdue .tag {
+        animation: project-urgency-pulse 1.4s ease-in-out infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce){
+        .project-urgency--overdue .tag{
+            animation: none;
+        }
+    }
+
     .project-expand-container {
         padding: var(--space-3) var(--space-3) var(--space-3) calc(1.75rem + var(--space-3));
         background: var(--surface-hover);
@@ -149,4 +170,23 @@
         padding: var(--space-5);
         color: var(--grey-dark);
         text-align: center;
+    }
+
+    .project-status-detail {
+        display: block;
+        font-size: var(--text-xs);
+        color: var(--grey-mid);
+        margin-top: 2px;
+        }
+    
+    .project-expand-status {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .project-expand-rollup {
+        font-size: var(--text-xs);
+        color: var(--grey-dark);
+        font-family: var(--font-mono);
     }

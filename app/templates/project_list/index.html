@@ -26,6 +26,7 @@
     {% call card() %}
     <div class="project-table">
         <div class="project-table-header project-row">
+            <span class="project-col-expand"></span>
             <span class="project-col-name">Name</span>
             <span class="project-col-client">Client</span>
             <span class="project-col-job">Job Number</span>
@@ -54,16 +55,27 @@
             <span class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
                 {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
             </span>
-            <span class="project-col-next-deadline{% if row.next_deadline and row.next_deadline.date < today %} project-deadline--overdue{% endif %}">
+            <span class="project-col-next-deadline">
                 {% if row.next_deadline %}
-                {{ row.next_deadline.date.strftime('%d %b %Y') }}
+                <span
+                    class="project-urgency-wrap{% if row.urgency == 'urgent' and row.next_deadline.date < today %} project-urgency--overdue{% endif %}">
+                    {{ tag(row.urgency|capitalize, row.urgency) }}
+                </span>
+                <span class="project-next-deadline-date">{{ row.next_deadline.date.strftime('%d %b %Y') }}</span>
                 <span class="project-next-deadline-name">{{ row.next_deadline.deliverable_name }}</span>
                 {% else %}
                 —
                 {% endif %}
             </span>
             <span class="project-col-status">
-                {{ tag(row.status or 'Unknown', 'action') }}
+                {{ tag(row.blanket_status, 'action') }}
+                <span class="project-status-detail">
+                    {% if row.brief_type == 'ccm' %}
+                        {% if row.customer_count  %}{{ row.customer_count }} customer{{ 's' if row.customer_count != 1 else '' }}{% else %}-{% endif %}
+                    {% else %}
+                        {{ row.rollup or '-' }}
+                    {% endif %}
+                </span>
             </span>
         </a>
         <div class="project-expand-container" hidden></div>

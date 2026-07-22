@@ -159,4 +159,19 @@
     text-transform: uppercase;
 }
 
+.tag--urgent {
+    background: rgba(230, 0, 0, 0.12);
+    color: #E60000;
+}
+
+.tag--prioritize {
+    background: rgba(229, 210, 89, 0.25);
+    color: #8A7A1E;
+}
+
+.tag--normal {
+    background: rgba(0, 196, 0, 0.12);
+    color: #00c400;
+
+}
 
