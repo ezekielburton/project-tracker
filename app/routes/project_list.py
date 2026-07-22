@@ -8,7 +8,7 @@ from flask import Blueprint, render_template, session, request
 from flask_login import login_required, current_user
 from sqlalchemy import nullslast
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User, Client as UserModel
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
 
@@ -60,11 +60,80 @@ def _urgency_for(next_deadline, today):
     if next_deadline is None:
         return None
     days_away = (next_deadline['date'] - today).days
+    if days_away < 0:
+        return 'overdue'
     if days_away <= 0:
         return 'urgent'
     if days_away <= 2:
         return 'prioritize'
     return 'normal'
+
+def _parse_ids(param_name):
+    """
+    Reads a comma-seperated query param of integer IDs (e.g. ?cs_lead=3,7)
+    and then returns a list of ints, or an empty list if the param isn't set.
+    """
+
+    raw = request.args.get(param_name, '')
+    if not raw:
+        return []
+    return [int(v) for v in raw.split(',') if v.strip().isdigit()]
+
+def _parse_values(param_name):
+    """
+    Same idea, but for comma-separated string values rather than IDs
+    (e.g ?urgency=overdue, urgent or ?status=Active,On Hold).
+    """
+    raw = request.args.get(param_name, '')
+    if not raw:
+        return []
+    return [v for v in raw.split(',') if v]
+
+def _apply_sql_filters(query):
+    """
+    Filters that map onto the real Project columns. Cheap to push into SQL,
+    rather than fetching every row.
+    """
+    cs_lead_ids = _parse_ids('cs_lead')
+    if cs_lead_ids:
+        query = query.filter(Project.cs_lead_id.in_(cs_lead_ids))
+    
+    client_ids = _parse_ids('client')
+    if client_ids:
+        query = query.filter(Project.client_id.in_(client_ids))
+    
+    brief_types = _parse_values('brief_type')
+    if brief_types:
+        query = query.filter(Project.brief_type.in_(brief_types))
+    
+    search = request.args.get('search', '').strip()
+    if search:
+        like = f'%{search}%'
+        query = query.filter(db.or_(
+            Project.name.ilike(like),
+            Project.job_number.ilike(like)
+        ))
+
+    return query
+
+def _apply_row_filters(rows):
+    """
+    Filters that depend on computed values rather than a single column. This is run against the already serialized row dicts,
+    instead of being translated into SQL, so the bucketing logic lives in one place
+    """
+    designer_ids = _parse_ids('designers')
+    if designer_ids:
+        row = [r for r in rows if any(d and d['id'] in designer_ids for d in r ['designers'])]
+    
+    statuses = _parse_values('status')
+    if statuses:
+        rows = [r for r in rows if r['blanket_status'] in statuses]
+    
+    urgencies = _parse_values('urgency')
+    if urgencies:
+        rows = [r for r in rows if r['urgency'] in urgencies]
+    
+    return rows
 
 def _serialize_row(p):
     """Turns one Project into the flat dict the template needs. Pulled out of index(), now that there are three different queries feeding
@@ -93,6 +162,7 @@ def index():
     """ Three fixes presets. Set now as we build it out"""
     user = _effective_user()
     view = request.args.get('view', 'my')
+    order_by = Project.first_output_deadline.asc()
 
     if view == 'all':
         if user.role in ('cs', 'admin', 'management'):
@@ -100,53 +170,44 @@ def index():
                 Project.project_status != 'draft',
                 Project.project_status != 'approved'
             ).order_by(Project.first_output_deadline.asc()).all()
+        elif user.team:
+            query = Project.query.filter(
+                Project.design_teams_request.contains(user.team),
+                Project.project_status != 'draft',
+                Project.project_status != 'approved'
+            )
         else:
-            # Designer / Team lead - Scoped to their own team's work, not the entire company.
-            if user.team:
-                projects = Project.query.filter(
-                    Project.design_teams_requested.contains(user.team),
-                    Project.project_status != 'draft',
-                    Project.project_status != 'approved'
-                ).order_by(Project.first_output_deadline.asc()).all()
-            else: 
-                projects = []
-    elif view == 'approved':
-        projects = Project.query.filter_by(
-            project_status='approved'
-        ).order_by(Project.approved_at.desc()).all()
+            query = None
     
-    else:  # 'my' - Default
+    elif view == 'approved':
+        query = Project.query.filter_by(project_status='approved')
+        order_by = Project.approved_at.desc()
+    
+    else: # 'my' - default
         if user.role in ('cs', 'admin', 'management'):
             if user.role == 'admin':
-                projects = Project.query.filter(
+                query = Project.query.filter(
                     Project.project_status != 'draft',
                     Project.project_status != 'approved'
-                ).order_by(Project.first_output_deadline.asc()).all()
+                )
             else:
                 secondary_project_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(
                     user_id=user.id
                 ).subquery()
-                projects = Project.query.filter(
+                query = Project.query.filter(
                     db.or_(
                         Project.cs_lead_id == user.id,
                         Project.id.in_(secondary_project_ids)
                     ),
                     Project.project_status != 'draft',
                     Project.project_status != 'approved'
-                ).order_by(Project.first_output_deadline.asc()).all()
+
+                )
         else:
-            assigned_project_ids = db.session.query(ProjectDesigner.project_id).filter_by(
-                user_id=user.id
-            ).subquery()
-            projects = Project.query.filter(
-                Project.id.in_(assigned_project_ids),
-                Project.project_status != 'draft',
-                Project.project_status != 'approved'
-            ).order_by(Project.first_output_deadline.asc()).all()
+            assigned_project_ids = db.sessioon.query(Project)
+        
 
-    rows = [_serialize_row(p) for p in projects]
-
-    return render_template('project_list/index.html', rows=rows, view=view, effective_role=user.role, today=date.today())
+    return render_template('project_list/index.html', rows=rows, view=view, effective_role=user.role, today=date.today(), filter_options=filter_options)
 
 
 @project_list_bp.route('/<int:project_id>/expand')

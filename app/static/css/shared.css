@@ -172,6 +172,11 @@
 .tag--normal {
     background: rgba(0, 196, 0, 0.12);
     color: #00c400;
+}
 
+.tag--urgent,
+.tag--overdue {
+    background: rgba(230, 0, 0, 0.12);
+    color: #E60000;
 }
 

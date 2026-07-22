@@ -48,7 +48,7 @@
 
     .project-row {
         display: grid;
-        grid-template-columns: 1.75rem 2fr 1.2fr 1fr 1.4fr 1.6fr 1fr 1fr 1fr;
+        grid-template-columns: 1.75rem 2fr 1.2fr 1.4fr 1.6fr 1fr 1fr 1fr 1.4fr 1fr 1fr;
         align-items: center;
         gap: var(--space-3);
         padding: var(--space-3) 0;
@@ -95,7 +95,6 @@
 
     .project-col-next-deadline {
         display: flex;
-        flex-direction: column;
         gap: 2px;
     }
 
@@ -113,6 +112,7 @@
             animation: none;
         }
     }
+    
 
     .project-expand-container {
         padding: var(--space-3) var(--space-3) var(--space-3) calc(1.75rem + var(--space-3));

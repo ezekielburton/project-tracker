@@ -24,64 +24,70 @@
     </div>
 
     {% call card() %}
-    <div class="project-table">
-        <div class="project-table-header project-row">
-            <span class="project-col-expand"></span>
-            <span class="project-col-name">Name</span>
-            <span class="project-col-client">Client</span>
-            <span class="project-col-job">Job Number</span>
-            <span class="project-col-cs">CS Lead</span>
-            <span class="project-col-designers">Designers</span>
-            <span class="project-col-deadline">Initial Deadline</span>
-            <span class="project-col-next-deadline">Next Deadline</span>
-            <span class="project-col-status">Status</span>
-        </div>
-
-        {% for row in rows %}
-        <a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link">
-            <span class="project-col-expand">
-                <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
-                    data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
+    <div class="project-table-header project-row">
+        <span class="project-col-expand"></span>
+        <span class="project-col-name">Name</span>
+        <span class="project-col-client">Client</span>
+        <span class="project-col-cs">CS Lead</span>
+        <span class="project-col-designers">Designers</span>
+        <span class="project-col-deadline">Initial Deadline</span>
+        <span class="project-col-next-deadline">Next Deadline</span>
+        <span class="project-col-urgency">Urgency</span>
+        <span class="project-col-next-deliverable">Next Deliverable</span>
+        <span class="project-col-status">Status</span>
+        <span class="project-col-job">Job Number</span>
+    </div>
+    
+    {% for row in rows %}
+    <a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link">
+        <span class="project-col-expand">
+            <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
+                data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
+        </span>
+        <span class="project-col-name">{{ row.name }}</span>
+        <span class="project-col-client">{{ row.client or '—' }}</span>
+        <span class="project-col-cs">
+            {{ person_chip(row.cs_lead, 'CS Missing') }}
+        </span>
+        <span class="project-col-designers">
+            {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
+        </span>
+        <span
+            class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
+            {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
+        </span>
+        <span class="project-col-next-deadline">
+            {{ row.next_deadline.date.strftime('%d %b %Y') if row.next_deadline else '—' }}
+        </span>
+        <span class="project-col-urgency">
+            {% if row.urgency %}
+            <span class="project-urgency-wrap{% if row.urgency == 'overdue' %} project-urgency--overdue{% endif %}">
+                {{ tag(row.urgency|capitalize, row.urgency) }}
             </span>
-            <span class="project-col-name">{{ row.name }}</span>
-            <span class="project-col-client">{{ row.client or '—' }}</span>
-            <span class="project-col-job">{{ row.job_number or '—' }}</span>
-            <span class="project-col-cs">
-                {{ person_chip(row.cs_lead, 'CS Missing') }}
-            </span>
-            <span class="project-col-designers">
-                {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
-            </span>
-            <span class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
-                {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
-            </span>
-            <span class="project-col-next-deadline">
-                {% if row.next_deadline %}
-                <span
-                    class="project-urgency-wrap{% if row.urgency == 'urgent' and row.next_deadline.date < today %} project-urgency--overdue{% endif %}">
-                    {{ tag(row.urgency|capitalize, row.urgency) }}
-                </span>
-                <span class="project-next-deadline-date">{{ row.next_deadline.date.strftime('%d %b %Y') }}</span>
-                <span class="project-next-deadline-name">{{ row.next_deadline.deliverable_name }}</span>
+            {% else %}
+            —
+            {% endif %}
+        </span>
+        <span class="project-col-next-deliverable">
+            {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
+        </span>
+        <span class="project-col-status">
+            {{ tag(row.blanket_status, 'action') }}
+            <span class="project-status-detail">
+                {% if row.brief_type == 'ccm' %}
+                {% if row.customer_count %}{{ row.customer_count }} customer{{ 's' if row.customer_count != 1 else '' }}{%
+                else %}—{% endif %}
                 {% else %}
-                —
+                {{ row.rollup or '—' }}
                 {% endif %}
             </span>
-            <span class="project-col-status">
-                {{ tag(row.blanket_status, 'action') }}
-                <span class="project-status-detail">
-                    {% if row.brief_type == 'ccm' %}
-                        {% if row.customer_count  %}{{ row.customer_count }} customer{{ 's' if row.customer_count != 1 else '' }}{% else %}-{% endif %}
-                    {% else %}
-                        {{ row.rollup or '-' }}
-                    {% endif %}
-                </span>
-            </span>
-        </a>
-        <div class="project-expand-container" hidden></div>
-        {% else %}
-        <p class="project-list-empty">No projects to show.</p>
-        {% endfor %}
+        </span>
+        <span class="project-col-job">{{ row.job_number or '—' }}</span>
+    </a>
+    <div class="project-expand-container" hidden></div>
+    {% else %}
+    <p class="project-list-empty">No projects to show.</p>
+    {% endfor %}
     </div>
     {% endcall %}
 </div>
