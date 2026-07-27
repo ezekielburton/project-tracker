@@ -41,7 +41,7 @@
     --oak: #A07C5A;
     --pine: #63775B;
     --rose: #D9A2A8;
-    --background: #F5F0E8;
+    --background: #fcf9f5;
 
     --white: #FFFFFF;
     --black: #1A1A1A;
@@ -71,6 +71,7 @@
     --space-5: 1.5rem;
     --space-6: 2rem;
 
+    --text-xxs: 0.4rem;
     --text-xs: 0.7rem;
     --text-sm: 0.78rem;
     --text-base: 1rem;

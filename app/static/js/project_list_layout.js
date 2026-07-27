@@ -112,7 +112,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const headerCell = handle.closest('[data-col-key]');
             const key = headerCell.dataset.colKey;
             const entry = layout.find((c) => c.key === key);
-            const minWidth = MIN_WIDTHS[key] || 80;
+
+            // Never let a column shrink past what its own current content
+            // actually needs — measured fresh at the start of each drag, so
+            // it reflects whatever's really on screen right now rather than
+            // a fixed guess that goes stale as the data changes.
+            let contentMinWidth = 0;
+            table.querySelectorAll(`.project-col-${key}`).forEach((cell) => {
+                contentMinWidth = Math.max(contentMinWidth, cell.scrollWidth);
+            });
+            const minWidth = Math.max(MIN_WIDTHS[key] || 80, contentMinWidth);
 
             let currentWidth = headerCell.getBoundingClientRect().width;
             let prevClientX = e.clientX;
@@ -256,4 +265,113 @@ document.addEventListener('DOMContentLoaded', () => {
             syncingScroll = false;
         });
     }
+    // ---- Deliverable sub-table resize (shared across every open instance) ----
+    // Every .expand-deliverable-table on the page — Standard's or C&CM's,
+    // already open or fetched five minutes from now — shares ONE set of
+    // column widths, written as CSS variables on .project-list-page rather
+    // than on each table individually. Since custom properties inherit
+    // down the page, a resize updates every currently-open sub-table at
+    // once, and any sub-table fetched afterwards just inherits whatever
+    // the current widths are — no re-initialization needed when new ones
+    // show up later.
+    const pageEl = document.querySelector('.project-list-page');
+
+    // ---- Customer sub-table resize (shared across every open instance) ----
+    // Same architecture as the deliverable sub-table above: one set of
+    // column widths, written as --ctrack-* variables on .project-list-page,
+    // shared by every .expand-customer-table on the page, present or future.
+    const CUSTOMER_MIN_WIDTHS = {
+        name: 150,
+        'design-deadline': 110,
+        'installation-date': 120,
+        'deliverable-count': 90,
+        'revision-count': 90,
+        status: 90,
+    };
+
+    const CUSTOMER_DEFAULT_LAYOUT = [
+        { key: 'name', width: '2fr' },
+        { key: 'design-deadline', width: '1fr' },
+        { key: 'installation-date', width: '1fr' },
+        { key: 'deliverable-count', width: '1fr' },
+        { key: 'revision-count', width: '1fr' },
+        { key: 'status', width: '1fr' },
+    ];
+
+    let customerLayout = (window.__savedCustomerTableLayout && window.__savedCustomerTableLayout.length)
+        ? window.__savedCustomerTableLayout
+        : CUSTOMER_DEFAULT_LAYOUT.map((c) => ({ ...c }));
+
+    CUSTOMER_DEFAULT_LAYOUT.forEach((def) => {
+        if (!customerLayout.find((c) => c.key === def.key)) {
+            customerLayout.push({ ...def });
+        }
+    });
+
+    function applyCustomerLayout() {
+        customerLayout.forEach((col) => {
+            pageEl.style.setProperty(`--ctrack-${col.key}`, col.width);
+        });
+    }
+
+    applyCustomerLayout();
+
+    let customerSaveTimeout;
+    function scheduleCustomerSave() {
+        clearTimeout(customerSaveTimeout);
+        customerSaveTimeout = setTimeout(() => {
+            fetch('/projects-new/layout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table_key: 'project_list:customer_table', layout: customerLayout }),
+            });
+        }, 500);
+    }
+
+    document.addEventListener('mousedown', (e) => {
+        const handle = e.target.closest('.expand-customer-col-resize-handle');
+        if (!handle) return;
+
+        e.preventDefault();
+        const headerCell = handle.closest('[data-col-key]');
+        const key = headerCell.dataset.colKey;
+        const entry = customerLayout.find((c) => c.key === key);
+
+        // Same .closest() scoping as the deliverable table's own handler —
+        // "name" and "status" are key names shared with other tables on
+        // this page, so a plain [data-col-key] lookup would also catch
+        // cells that aren't part of a customer sub-table at all.
+        let contentMinWidth = 0;
+        document.querySelectorAll(`[data-col-key="${key}"]`).forEach((cell) => {
+            if (cell.closest('.expand-customer-table')) {
+                contentMinWidth = Math.max(contentMinWidth, cell.scrollWidth);
+            }
+        });
+        const minWidth = Math.max(CUSTOMER_MIN_WIDTHS[key] || 80, contentMinWidth);
+
+        let currentWidth = headerCell.getBoundingClientRect().width;
+        let prevClientX = e.clientX;
+
+        handle.classList.add('is-resizing');
+        document.body.classList.add('is-resizing-column');
+
+        function onMouseMove(moveEvent) {
+            currentWidth += moveEvent.clientX - prevClientX;
+            prevClientX = moveEvent.clientX;
+            currentWidth = Math.max(minWidth, currentWidth);
+            entry.width = `${currentWidth}px`;
+            applyCustomerLayout();
+        }
+
+        function onMouseUp() {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            handle.classList.remove('is-resizing');
+            document.body.classList.remove('is-resizing-column');
+            scheduleCustomerSave();
+        }
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
 });

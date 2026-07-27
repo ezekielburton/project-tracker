@@ -4,11 +4,11 @@
 #   All now within one template that adapts to the viewing user's role, per app architecture
 
 from datetime import date
-from flask import Blueprint, render_template, session, request, jsonify
+from flask import Blueprint, render_template, session, request, jsonify, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import nullslast
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
 
@@ -67,6 +67,57 @@ def _urgency_for(next_deadline, today):
     if days_away <= 2:
         return 'prioritize'
     return 'normal'
+
+# The three possible design disciplines a deliverable can call for — same
+# canonical strings used everywhere else in the app (User.team,
+# DeliverableAssignment.team, Deliverable.teams). Confirmed against
+# projects_detail.py's own team lookups before relying on them here, rather
+# than guessing at casing.
+TEAM_KEYS = ['2D', '3D', 'Technical']
+
+def _team_columns_for(deliverable):
+    """
+    Per-deliverable, per-team breakdown for the sublevel table's three team
+    columns. For each of 2D/3D/Technical, tells the template one of three
+    states:
+      - required=False               -> never requested for this deliverable
+                                         (template shows "Not Required")
+      - required=True, designer=None  -> requested, nobody assigned yet
+                                         (template shows "Not Assigned")
+      - required=True, designer={...} -> requested and assigned; the chip
+                                         itself renders via person_chip()
+
+    Deliverable.teams is just a comma-separated string of what was asked
+    for ("3D,Technical") — DeliverableAssignment is the separate record of
+    who's actually doing it, so a deliverable can be "requested" for a
+    team long before anyone's assigned to it.
+    """
+    requested = {t.strip() for t in (deliverable.teams or '').split(',') if t.strip()}
+    assigned_by_team = {da.team: da.designer for da in deliverable.disciplines}
+
+    columns = {}
+    for team in TEAM_KEYS:
+        if team not in requested:
+            columns[team] = {'required': False, 'designer': None}
+        else:
+            columns[team] = {'required': True, 'designer': _serialize_person(assigned_by_team.get(team))}
+    return columns
+
+def _serialize_deliverable_row(d):
+    """
+    One row of the fixed-shape deliverable sub-table. Shared by Standard's
+    direct project-level expansion and C&CM's per-customer expansion — a
+    deliverable looks the same either way once you're this deep, so this
+    is the one function both paths call.
+    """
+    return {
+        'id': d.id,
+        'name': d.name,
+        'deadline': d.design_deadline,
+        'deadline_time': d.design_deadline_time,
+        'blanket_status': _blanket_status(d.status),
+        'teams': _team_columns_for(d),
+    }
 
 def _parse_ids(param_name):
     """
@@ -290,6 +341,40 @@ def _count_by_value(rows, key):
             counts[value] = counts.get(value, 0) + 1
     return counts
 
+def _has_undefined(param_name):
+    """
+    True if the admin-only 'undefined' sentinel is among a filter param's
+    comma-separated values (e.g. ?client=3,undefined). Checked separately
+    from _parse_ids/_parse_values, which only ever pull out real ids/values
+    - a non-digit, non-matching string like "undefined" just gets silently
+    dropped by those. This reads the same raw param a second time, looking
+    only for that one sentinel.
+    """
+    raw = request.args.get(param_name, '')
+    return 'undefined' in [v.strip() for v in raw.split(',') if v.strip()]
+
+def _count_undefined(rows, key):
+    """
+    Counts rows where this field is missing entirely - None for a
+    single-value field (Client, Type of Design), or an empty list for a
+    multi-value one (Designers, Team). Powers the Undefined chip's live
+    count - callers merge this into a normal counts dict under a None key,
+    so the template reads it with the exact same .get(None, 0) every
+    other option already uses.
+    """
+    return sum(1 for r in rows if not r[key])
+
+def _count_by_list_membership(rows, key):
+    """Counts rows by membership in a list-of-strings field (e.g. row['design_teams']
+    contains '2D') - same idea as _count_by_id_list, but for plain string
+    values rather than person dicts."""
+    counts = {}
+    for r in rows:
+        for value in r[key]:
+            counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
 def _build_filter_counts(view, user):
     """
     Computes every filter option's live count, each scoped to "this view
@@ -336,6 +421,11 @@ def index():
     table_key = f'project_list:{view}'
     layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key=table_key).first()
     saved_layout = layout_row.layout if layout_row else None
+
+    deliverable_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:deliverable_table').first()
+    saved_deliverable_layout = deliverable_layout_row.layout if deliverable_layout_row else None
+    customer_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:customer_table').first()
+    saved_customer_layout = customer_layout_row.layout if customer_layout_row else None
     
     query, order_by = _base_query_for_view(view, user)
 
@@ -375,10 +465,27 @@ def index():
         'next_deadline_from': request.args.get('next_deadline_from', ''),
         'next_deadline_to': request.args.get('next_deadline_to', ''),
     }
+
+    # Count of DISTINCT filter dimensions with an active selection — not the
+    # total number of individually selected values. Matches Monday.com's own
+    # "Filter / 2" badge: two dimensions active (say, one CS Lead + one
+    # Status), regardless of how many values are picked within either one.
+    # Search has its own separate icon/input, so it's deliberately excluded.
+    active_filter_count = sum([
+        bool(active_filters['cs_lead']),
+        bool(active_filters['client']),
+        bool(active_filters['designers']),
+        bool(active_filters['brief_type']),
+        bool(active_filters['status']),
+        bool(active_filters['urgency']),
+        bool(active_filters['initial_deadline_from'] or active_filters['initial_deadline_to']),
+        bool(active_filters['next_deadline_from'] or active_filters['next_deadline_to']),
+    ])
         
 
     return render_template('project_list/index.html', rows=rows, view=view, effective_role=user.role, today=date.today(), filter_options=filter_options, 
-                           active_filters=active_filters, filter_counts=filter_counts, view_total=view_total, table_key=table_key, saved_layout=saved_layout)
+                           active_filters=active_filters, filter_counts=filter_counts, view_total=view_total, table_key=table_key, saved_layout=saved_layout, active_filter_count=active_filter_count,
+                           saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout)
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required
@@ -410,13 +517,6 @@ def save_layout():
 @project_list_bp.route('/<int:project_id>/expand')
 @login_required
 def expand(project_id):
-    """
-    Fetched on-demand the first time a row is expanded — this is the
-    render-on-demand principle we locked at the start: we do NOT
-    pre-render every project's customer/deliverable breakdown on initial
-    page load just to hide it. Only the rows someone actually expands ever
-    hit this endpoint.
-    """
     project = Project.query.get_or_404(project_id)
 
     if project.brief_type == 'ccm':
@@ -426,25 +526,29 @@ def expand(project_id):
                 continue
             rows.append({
                 'label': pc.customer.name,
+                'design_deadline': pc.design_deadline,
+                'installation_date': pc.installation_date,
+                'deliverable_count': len(pc.deliverables),
+                'revision_count': pc.posm_revision_count,
                 'blanket_status': _blanket_status(pc.status),
-                'rollup': _rollup_for(Deliverable.query.filter_by(project_customer_id=pc.id)),
-                'next_deadline': _next_deadline_for(
-                    Deliverable.query.filter_by(project_customer_id=pc.id)
-                ),
+                'expand_url': url_for('project_list.expand_customer', project_customer_id=pc.id),
             })
-    else:
-        rows = []
-        for d in project.project_deliverables:
-            rows.append({
-                'label': d.name,
-                'blanket_status': _blanket_status(d.status),
-                'rollup': None,         # a single deliverable has nothing further to roll up
-                'next_deadline': _next_deadline_for(
-                    Deliverable.query.filter_by(id=d.id)
-                ),
-            })
+        return render_template('project_list/_expand_rows.html', rows=rows, today=date.today())
 
-    return render_template('project_list/_expand_rows.html', rows=rows, today=date.today())
+    rows = [_serialize_deliverable_row(d) for d in project.project_deliverables]
+    return render_template('project_list/_deliverable_table.html', rows=rows, today=date.today(), brief_type='standard')
+
+@project_list_bp.route('/customer/<int:project_customer_id>/expand')
+@login_required
+def expand_customer(project_customer_id):
+    """
+    Sublevel 2, C&CM only: one customer's own deliverables. Same on-
+    demand/fetch-once principle as expand() above — built and sent down
+    the wire only once someone actually clicks that customer's toggle.
+    """
+    pc = ProjectCustomer.query.get_or_404(project_customer_id)
+    rows = [_serialize_deliverable_row(d) for d in pc.deliverables]
+    return render_template('project_list/_deliverable_table.html', rows=rows, today=date.today(), brief_type='ccm')
 
 def _blanket_status(granular_status):
     """ Maps the granular workflow states down to the following:

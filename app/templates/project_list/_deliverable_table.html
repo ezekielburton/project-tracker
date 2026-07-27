@@ -1,0 +1,54 @@
+{# app/templates/project_list/_deliverable_table.html
+The fixed-shape deliverable sub-table — Standard's direct project-level
+expansion and C&CM's per-customer expansion both render THIS same
+partial (see expand()/expand_customer() in project_list.py). Unlike the
+outer table, this has no drag-reorder/column customization — same
+"always this shape" spirit the old Deliverable View preset had.
+
+Every class here is prefixed expand-deliverable-* rather than plain
+deliverable-* — main.css already has an unrelated .deliverable-row
+class (from the brief-creation flow's deliverable list), loaded
+globally on every page, and it was silently colliding with this one. #}
+{% from '_shared_macros.html' import tag, person_chip %}
+<div class="expand-deliverable-table expand-deliverable-table--{{ brief_type }}">
+    <div class="expand-deliverable-row expand-deliverable-header">
+        <span class="expand-deliverable-col-name" data-col-key="name">Deliverable Name<span
+                class="expand-deliverable-col-resize-handle"></span></span>
+        <span class="expand-deliverable-col-deadline" data-col-key="deadline">Deadline<span
+                class="expand-deliverable-col-resize-handle"></span></span>
+        <span class="expand-deliverable-col-deadline-time" data-col-key="deadline-time">Deadline Time<span
+                class="expand-deliverable-col-resize-handle"></span></span>
+        <span class="expand-deliverable-col-team" data-col-key="2d">2D<span
+                class="expand-deliverable-col-resize-handle"></span></span>
+        <span class="expand-deliverable-col-team" data-col-key="3d">3D<span
+                class="expand-deliverable-col-resize-handle"></span></span>
+        <span class="expand-deliverable-col-team" data-col-key="technical">Technical<span
+                class="expand-deliverable-col-resize-handle"></span></span>
+                <span class="expand-deliverable-col-status" data-col-key="status">Status<span
+                        class="expand-deliverable-col-resize-handle"></span></span>
+    </div>
+    {% for d in rows %}
+    <div class="expand-deliverable-row">
+        <span class="expand-deliverable-col-name">{{ d.name }}</span>
+        <span
+            class="expand-deliverable-col-deadline{% if d.deadline and d.deadline < today %} project-deadline--past{% endif %}">
+            {{ d.deadline.strftime('%d %b %Y') if d.deadline else '—' }}
+        </span>
+        <span class="expand-deliverable-col-deadline-time">
+            {{ d.deadline_time.strftime('%H:%M') if d.deadline_time else '—' }}
+        </span>
+        {% for team in ['2D', '3D', 'Technical'] %}
+        <span class="expand-deliverable-col-team" data-col-key="{{ team|lower }}">
+            {% if not d.teams[team].required %}
+            {{ tag('Not Required', 'muted') }}
+            {% else %}
+            {{ person_chip(d.teams[team].designer, missing_label='Not Assigned') }}
+            {% endif %}
+        </span>
+        {% endfor %}
+        <span class="expand-deliverable-col-status">{{ tag(d.blanket_status, 'action') }}</span>
+    </div>
+    {% else %}
+    <p class="project-list-empty">No deliverables yet.</p>
+    {% endfor %}
+</div>
