@@ -11,15 +11,29 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const table = document.getElementById('project-table');
+    // #project-table (the grid itself) is no longer the element that
+    // scrolls — it's sized with `width: max-content` in project_list.css
+    // so it can be exactly as wide as its columns need, and the actual
+    // scrollable viewport is one level up, #project-table-scroll (the
+    // .project-table-rounded-clip wrapper). Every scrollLeft/scrollWidth/
+    // clientWidth/getBoundingClientRect() read below that's about "how
+    // much can be scrolled" or "what's actually visible" needs to be
+    // against THIS element, not `table` — `table`'s own box now just
+    // matches its content exactly, so scrollWidth === clientWidth on it
+    // always, which would make the sticky scrollbar think there's never
+    // anything to scroll. `table` itself is still correct for everything
+    // about the grid's own custom properties (--track-N, --pos-*) and for
+    // querying cells/header — that part is unchanged.
+    const scrollContainer = document.getElementById('project-table-scroll') || table;
     const stickyScrollbar = document.getElementById('sticky-scrollbar');
     const stickyScrollbarInner = document.getElementById('sticky-scrollbar-inner');
     const dragIndicator = document.getElementById('resize-drag-indicator');
-    
+
     function syncStickyScrollbar() {
         if (!stickyScrollbar || !stickyScrollbarInner) return;
-        stickyScrollbarInner.style.width = `${table.scrollWidth}px`;
+        stickyScrollbarInner.style.width = `${scrollContainer.scrollWidth}px`;
         // No point showing a scrollbar if there's nothing to scroll.
-        stickyScrollbar.hidden = table.scrollWidth <= table.clientWidth;
+        stickyScrollbar.hidden = scrollContainer.scrollWidth <= scrollContainer.clientWidth;
     }
 
     if (!table) return;
@@ -34,7 +48,6 @@ document.addEventListener('DOMContentLoaded', () => {
         client: 100,
         cs: 120,
         designers: 140,
-        teams: 130,
         deadline: 90,
         'next-deadline': 90,
         urgency: 90,
@@ -48,24 +61,58 @@ document.addEventListener('DOMContentLoaded', () => {
     // ever dragged anything — mirrors the original hand-written order/widths.
     // Expand is deliberately excluded everywhere below: pinned, always
     // position 1, never resizable or reorderable.
+    // Widths used to be fr strings ('2fr', '1.6fr', ...) — a shared-space
+    // unit that let one column's content (next-deliverable, holding long
+    // unbroken names) inflate every OTHER fr column via the grid spec's
+    // "find the size of an fr" step, regardless of that other column's own
+    // content (see the long comment on .project-table in project_list.css
+    // for the full diagnosis — this was Pass 4 of the scroll/resize bug).
+    // 'max-content' sidesteps that entirely: paired with the CSS's
+    // minmax(min-content, max-content), each column is sized purely from
+    // its own content, with no cross-column sharing at all.
     const DEFAULT_LAYOUT = [
-        { key: 'name', width: '2fr' },
-        { key: 'client', width: '1.2fr' },
-        { key: 'cs', width: '1.4fr' },
-        { key: 'designers', width: '1.6fr' },
-        { key: 'teams', width: '1.3fr'},
-        { key: 'deadline', width: '1fr' },
-        { key: 'next-deadline', width: '1fr' },
-        { key: 'urgency', width: '1fr' },
-        { key: 'next-deliverable', width: '1.4fr' },
-        { key: 'status', width: '1fr' },
-        { key: 'summary', width: '1fr' },
-        { key: 'job', width: '1fr' },
+        { key: 'name', width: 'max-content' },
+        { key: 'client', width: 'max-content' },
+        { key: 'cs', width: 'max-content' },
+        { key: 'designers', width: 'max-content' },
+        { key: 'deadline', width: 'max-content' },
+        { key: 'next-deadline', width: 'max-content' },
+        { key: 'urgency', width: 'max-content' },
+        { key: 'next-deliverable', width: 'max-content' },
+        { key: 'status', width: 'max-content' },
+        { key: 'summary', width: 'max-content' },
+        { key: 'job', width: 'max-content' },
     ];
 
     let layout = (window.__savedTableLayout && window.__savedTableLayout.length)
         ? window.__savedTableLayout
         : DEFAULT_LAYOUT.map((c) => ({ ...c }));
+
+    // Auto-heal: an account that used this table before Pass 4 may have a
+    // saved layout with the old fr-based widths (either an untouched
+    // default, like '2fr', or a value a drag ended on, since the drag
+    // handler used to compute its floor from an already fr-inflated
+    // rendered width). Upgrade any fr-suffixed width to 'max-content'
+    // transparently, so the fix applies immediately without asking anyone
+    // to reset their saved column widths by hand.
+    layout.forEach((col) => {
+        if (typeof col.width === 'string' && /fr$/.test(col.width.trim())) {
+            col.width = 'max-content';
+        }
+    });
+
+    // Prune: the inverse of the "append missing columns" step below. If a
+    // column ever existed in an earlier build and was later removed from
+    // the template (this app used to have a real "Team" column before Team
+    // became filter-only), an account that saved a layout back then still
+    // has that key sitting in its DB row. applyLayout() below doesn't check
+    // whether a key has a matching DOM element before giving it a real grid
+    // track and width — so a leftover key silently claims one whole column
+    // slot with nothing in it, which is exactly the blank "ghost column"
+    // bug. Keeping only keys that still exist in DEFAULT_LAYOUT removes any
+    // such orphan automatically, the same way the block below adds any
+    // brand-new one.
+    layout = layout.filter((col) => DEFAULT_LAYOUT.some((def) => def.key === col.key));
 
     // Defensive: if a column gets added in some future build, an older
     // saved layout won't know about it yet — append it at its default
@@ -119,9 +166,24 @@ document.addEventListener('DOMContentLoaded', () => {
             // actually needs — measured fresh at the start of each drag, so
             // it reflects whatever's really on screen right now rather than
             // a fixed guess that goes stale as the data changes.
+            //
+            // cell.scrollWidth alone is NOT safe here: a grid item stretches
+            // to fill its track's assigned width by default, so if the
+            // column is currently wider than its content needs (as it always
+            // was under the old fr-sharing bug — see project_list.css),
+            // scrollWidth just reports that already-inflated rendered width
+            // back, not the content's real minimum. That's what made the
+            // column self-reinforcing: every drag re-measured the bloat it
+            // was trying to shrink, so the floor never moved and dragging
+            // narrower appeared to do nothing. Forcing width: max-content
+            // for the instant of measurement reads the cell's true intrinsic
+            // size regardless of how wide its track currently is.
             let contentMinWidth = 0;
             table.querySelectorAll(`.project-col-${key}`).forEach((cell) => {
+                const prevWidth = cell.style.width;
+                cell.style.width = 'max-content';
                 contentMinWidth = Math.max(contentMinWidth, cell.scrollWidth);
+                cell.style.width = prevWidth;
             });
             const minWidth = Math.max(MIN_WIDTHS[key] || 80, contentMinWidth);
 
@@ -136,14 +198,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (dragIndicator) dragIndicator.hidden = false;
 
             function tick() {
-                const rect = table.getBoundingClientRect();
+                // The edge-of-screen auto-extend check needs the visible
+                // scrollable viewport's edges, not the (often much wider,
+                // since it's sized to its own content now) grid's own
+                // bounding box — so this reads scrollContainer, not table.
+                const rect = scrollContainer.getBoundingClientRect();
 
                 if (lastClientX >= rect.right - EDGE_ZONE) {
                     currentWidth += EXTEND_SPEED;
-                    table.scrollLeft += EXTEND_SPEED;
+                    scrollContainer.scrollLeft += EXTEND_SPEED;
                 } else if (lastClientX <= rect.left + EDGE_ZONE) {
                     currentWidth -= EXTEND_SPEED;
-                    table.scrollLeft -= EXTEND_SPEED;
+                    scrollContainer.scrollLeft -= EXTEND_SPEED;
                 } else {
                     currentWidth += lastClientX - prevClientX;
                 }
@@ -162,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Only span the table itself, clamped to whatever's actually
                     // visible on screen right now — not the whole page top-to-bottom.
-                    const tableRect = table.getBoundingClientRect();
+                    const tableRect = scrollContainer.getBoundingClientRect();
                     const top = Math.max(0, tableRect.top);
                     const bottom = Math.min(window.innerHeight, tableRect.bottom);
                     dragIndicator.style.top = `${top}px`;
@@ -253,17 +319,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (stickyScrollbar) {
         let syncingScroll = false;
 
-        table.addEventListener('scroll', () => {
+        scrollContainer.addEventListener('scroll', () => {
             if (syncingScroll) return;
             syncingScroll = true;
-            stickyScrollbar.scrollLeft = table.scrollLeft;
+            stickyScrollbar.scrollLeft = scrollContainer.scrollLeft;
             syncingScroll = false;
         });
 
         stickyScrollbar.addEventListener('scroll', () => {
             if (syncingScroll) return;
             syncingScroll = true;
-            table.scrollLeft = stickyScrollbar.scrollLeft;
+            scrollContainer.scrollLeft = stickyScrollbar.scrollLeft;
             syncingScroll = false;
         });
     }
@@ -278,102 +344,115 @@ document.addEventListener('DOMContentLoaded', () => {
     // show up later.
     const pageEl = document.querySelector('.project-list-page');
 
-    // ---- Customer sub-table resize (shared across every open instance) ----
-    // Same architecture as the deliverable sub-table above: one set of
-    // column widths, written as --ctrack-* variables on .project-list-page,
-    // shared by every .expand-customer-table on the page, present or future.
-    const CUSTOMER_MIN_WIDTHS = {
-        name: 150,
-        'design-deadline': 110,
-        'installation-date': 120,
-        'deliverable-count': 90,
-        'revision-count': 90,
-        status: 90,
-    };
+    if (pageEl) {
+        const DELIVERABLE_MIN_WIDTHS = {
+            name: 150,
+            deadline: 90,
+            'deadline-time': 90,
+            '2d': 110,
+            '3d': 110,
+            technical: 110,
+            status: 90,
+        };
 
-    const CUSTOMER_DEFAULT_LAYOUT = [
-        { key: 'name', width: '2fr' },
-        { key: 'design-deadline', width: '1fr' },
-        { key: 'installation-date', width: '1fr' },
-        { key: 'deliverable-count', width: '1fr' },
-        { key: 'revision-count', width: '1fr' },
-        { key: 'status', width: '1fr' },
-    ];
+        const DELIVERABLE_DEFAULT_LAYOUT = [
+            { key: 'name', width: '2fr' },
+            { key: 'deadline', width: '1fr' },
+            { key: 'deadline-time', width: '1fr' },
+            { key: '2d', width: '1.3fr' },
+            { key: '3d', width: '1.3fr' },
+            { key: 'technical', width: '1.3fr' },
+            { key: 'status', width: '1fr' },
+        ];
 
-    let customerLayout = (window.__savedCustomerTableLayout && window.__savedCustomerTableLayout.length)
-        ? window.__savedCustomerTableLayout
-        : CUSTOMER_DEFAULT_LAYOUT.map((c) => ({ ...c }));
+        let deliverableLayout = (window.__savedDeliverableTableLayout && window.__savedDeliverableTableLayout.length)
+            ? window.__savedDeliverableTableLayout
+            : DELIVERABLE_DEFAULT_LAYOUT.map((c) => ({ ...c }));
 
-    CUSTOMER_DEFAULT_LAYOUT.forEach((def) => {
-        if (!customerLayout.find((c) => c.key === def.key)) {
-            customerLayout.push({ ...def });
-        }
-    });
-
-    function applyCustomerLayout() {
-        customerLayout.forEach((col) => {
-            pageEl.style.setProperty(`--ctrack-${col.key}`, col.width);
-        });
-    }
-
-    applyCustomerLayout();
-
-    let customerSaveTimeout;
-    function scheduleCustomerSave() {
-        clearTimeout(customerSaveTimeout);
-        customerSaveTimeout = setTimeout(() => {
-            fetch('/projects-new/layout', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ table_key: 'project_list:customer_table', layout: customerLayout }),
-            });
-        }, 500);
-    }
-
-    document.addEventListener('mousedown', (e) => {
-        const handle = e.target.closest('.expand-customer-col-resize-handle');
-        if (!handle) return;
-
-        e.preventDefault();
-        const headerCell = handle.closest('[data-col-key]');
-        const key = headerCell.dataset.colKey;
-        const entry = customerLayout.find((c) => c.key === key);
-
-        // Same .closest() scoping as the deliverable table's own handler —
-        // "name" and "status" are key names shared with other tables on
-        // this page, so a plain [data-col-key] lookup would also catch
-        // cells that aren't part of a customer sub-table at all.
-        let contentMinWidth = 0;
-        document.querySelectorAll(`[data-col-key="${key}"]`).forEach((cell) => {
-            if (cell.closest('.expand-customer-table')) {
-                contentMinWidth = Math.max(contentMinWidth, cell.scrollWidth);
+        DELIVERABLE_DEFAULT_LAYOUT.forEach((def) => {
+            if (!deliverableLayout.find((c) => c.key === def.key)) {
+                deliverableLayout.push({ ...def });
             }
         });
-        const minWidth = Math.max(CUSTOMER_MIN_WIDTHS[key] || 80, contentMinWidth);
 
-        let currentWidth = headerCell.getBoundingClientRect().width;
-        let prevClientX = e.clientX;
-
-        handle.classList.add('is-resizing');
-        document.body.classList.add('is-resizing-column');
-
-        function onMouseMove(moveEvent) {
-            currentWidth += moveEvent.clientX - prevClientX;
-            prevClientX = moveEvent.clientX;
-            currentWidth = Math.max(minWidth, currentWidth);
-            entry.width = `${currentWidth}px`;
-            applyCustomerLayout();
+        function applyDeliverableLayout() {
+            deliverableLayout.forEach((col) => {
+                pageEl.style.setProperty(`--dtrack-${col.key}`, col.width);
+            });
         }
 
-        function onMouseUp() {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            handle.classList.remove('is-resizing');
-            document.body.classList.remove('is-resizing-column');
-            scheduleCustomerSave();
+        applyDeliverableLayout();
+
+        let deliverableSaveTimeout;
+        function scheduleDeliverableSave() {
+            clearTimeout(deliverableSaveTimeout);
+            deliverableSaveTimeout = setTimeout(() => {
+                fetch('/projects-new/layout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table_key: 'project_list:deliverable_table', layout: deliverableLayout }),
+                });
+            }, 500);
         }
 
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    });
+        // Delegated on document, not bound per-handle — a sub-table can be
+        // added to the page at any time (fetched the first time someone
+        // expands a row), so one listener here beats trying to re-bind a
+        // fresh one every time new content shows up.
+        document.addEventListener('mousedown', (e) => {
+            const handle = e.target.closest('.expand-deliverable-col-resize-handle');
+            if (!handle) return;
+
+            e.preventDefault();
+            const headerCell = handle.closest('[data-col-key]');
+            const key = headerCell.dataset.colKey;
+            const entry = deliverableLayout.find((c) => c.key === key);
+
+            // Same idea as the outer table, but scoped: "name", "deadline",
+            // and "status" are key names used by BOTH tables, so a plain
+            // [data-col-key] lookup would also catch the outer table's own
+            // cells. The .closest() guard keeps this measuring only cells
+            // that are actually inside a deliverable sub-table, across
+            // every one currently open on the page.
+            // Same contamination risk as the outer table's handler above —
+            // scrollWidth on a cell that's currently stretched wider than
+            // its content reports that inflated width back, not the true
+            // minimum. Force max-content for the measurement instant only.
+            let contentMinWidth = 0;
+            document.querySelectorAll(`[data-col-key="${key}"]`).forEach((cell) => {
+                if (cell.closest('.expand-deliverable-table')) {
+                    const prevWidth = cell.style.width;
+                    cell.style.width = 'max-content';
+                    contentMinWidth = Math.max(contentMinWidth, cell.scrollWidth);
+                    cell.style.width = prevWidth;
+                }
+            });
+            const minWidth = Math.max(DELIVERABLE_MIN_WIDTHS[key] || 80, contentMinWidth);
+
+            let currentWidth = headerCell.getBoundingClientRect().width;
+            let prevClientX = e.clientX;
+
+            handle.classList.add('is-resizing');
+            document.body.classList.add('is-resizing-column');
+
+            function onMouseMove(moveEvent) {
+                currentWidth += moveEvent.clientX - prevClientX;
+                prevClientX = moveEvent.clientX;
+                currentWidth = Math.max(minWidth, currentWidth);
+                entry.width = `${currentWidth}px`;
+                applyDeliverableLayout();
+            }
+
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                handle.classList.remove('is-resizing');
+                document.body.classList.remove('is-resizing-column');
+                scheduleDeliverableSave();
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    }
 });

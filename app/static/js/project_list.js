@@ -7,21 +7,10 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const table = document.querySelector('.project-table');
-  
+
     if (!table) return;
 
     table.addEventListener('click', (e) => {
-        const groupHeader = e.target.closest('.project-group-header');
-        if (groupHeader) {
-            const toggle = groupHeader.querySelector('.project-group-header-toggle');
-            const body = groupHeader.nextElementSibling;
-            const isCollapsed = toggle.getAttribute('aria-expanded') === 'false';
-            toggle.setAttribute('aria-expanded', isCollapsed ? 'true' : 'false');
-            body.hidden = !isCollapsed;
-            return;
-        }
-
-        // ...everything already here stays exactly the same...
         const toggle = e.target.closest('.project-expand-toggle');
         if (!toggle) return;
 
@@ -30,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         e.stopPropagation();
 
-        const row = toggle.closest('.project-row, .expand-customer-row');
+        const row = toggle.closest('.project-row');
         const container = row.nextElementSibling;
         if (!container || !container.classList.contains('project-expand-container')) return;
 
@@ -57,23 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 container.dataset.loaded = 'true';
             });
     });
-
-    function addSortParams(params) {
-        const panel = document.getElementById('sort-panel');
-        if (!panel) return;
-
-        const selectedGroup = panel.querySelector('.project-sort-option[data-param="group"].is-selected');
-        if (selectedGroup && selectedGroup.dataset.value) {
-            params.set('group', selectedGroup.dataset.value);
-        }
-
-        const selectedSort = panel.querySelector('.project-sort-option[data-param="sort"].is-selected');
-        if (selectedSort) {
-            params.set('sort', selectedSort.dataset.value);
-            params.set('dir', selectedSort.dataset.dir);
-        }
-    }
-    
 
     const filterToggle = document.getElementById('filter-toggle');
     const filterPanel = document.getElementById('filter-panel');
@@ -105,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // read from whichever chip rows currently carry .is-selected —
             // replaces the old checkbox :checked reads now that these are
             // buttons, not inputs.
-            const chipGroups = ['cs_lead', 'designers', 'client', 'brief_type', 'status', 'urgency', 'team', 'design_type'];
+            const chipGroups = ['cs_lead', 'designers', 'client', 'brief_type', 'status', 'urgency'];
             chipGroups.forEach((name) => {
                 const selected = Array.from(
                     filterPanel.querySelectorAll(`.filter-chip-row[data-filter-group="${name}"].is-selected`)
@@ -135,14 +107,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 params.set('search', searchEl.value.trim());
             }
 
-            addSortParams(params);
+            // Same idea as the view tab above — this function rebuilds the
+            // whole query string from scratch, so without this, clicking any
+            // filter chip would silently wipe out whatever sort was active.
+            const currentSort = new URLSearchParams(window.location.search).get('sort');
+            const currentDir = new URLSearchParams(window.location.search).get('dir');
+            if (currentSort) {
+                params.set('sort', currentSort);
+                if (currentDir) params.set('dir', currentDir);
+            }
+
             return `${window.location.pathname}?${params.toString()}`;
         }
 
         function applyFilters() {
             window.location.href = buildFilterUrl();
         }
-        
 
         // Clicking any chip row toggles its own selected state, then applies
         // instantly — one delegated listener on the whole panel handles
@@ -169,10 +149,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const clearAllBtn = document.getElementById('filter-clear-all');
         if (clearAllBtn) {
             clearAllBtn.addEventListener('click', () => {
-                const currentView = new URLSearchParams(window.location.search).get('view') || 'my';
+                // Clears filters only — sort is a separate control with its
+                // own Clear button, so it stays active across this click.
+                const existing = new URLSearchParams(window.location.search);
                 const params = new URLSearchParams();
-                params.set('view', currentView);
-                addSortParams(params);
+                params.set('view', existing.get('view') || 'my');
+                if (existing.get('sort')) {
+                    params.set('sort', existing.get('sort'));
+                    if (existing.get('dir')) params.set('dir', existing.get('dir'));
+                }
                 window.location.href = `${window.location.pathname}?${params.toString()}`;
             });
         }
@@ -180,168 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveNewViewBtn = document.getElementById('save-new-view-btn');
         if (saveNewViewBtn) {
             saveNewViewBtn.addEventListener('click', () => {
-                const name = prompt('Name this view:');
-                if (!name || !name.trim()) return;
-
-                // Every currently active filter is already sitting in the page's
-                // own URL - applyFilters() only ever adds a param when that
-                // dimension actually has something selected - so this is exactly
-                // the {param: value} shape create_view() wants to store. No need
-                // to re-read every chip/date input a second time here.
-                const params = new URLSearchParams(window.location.search);
-                params.delete('view');
-                const filters = Object.fromEntries(params.entries());
-
-                fetch(saveNewViewBtn.dataset.createViewUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: name.trim(),
-                        base_view: window.__currentBaseView,
-                        filters,
-                    }),
-                })
-                    .then((res) => res.json())
-                    .then((data) => {
-                        if (data.url) {
-                            window.location.href = data.url;
-                        } else {
-                            alert(data.error || 'Could not save this view.');
-                        }
-                    });
-            });
-        }
-
-        const tabsContainer = document.querySelector('.project-list-tabs');
-        if (tabsContainer) {
-            function closeAllTabPopovers() {
-                tabsContainer.querySelectorAll('.project-list-tab-menu.is-open, .project-list-tab-confirm.is-open')
-                    .forEach((el) => el.classList.remove('is-open'));
-            }
-
-            function startRenameInPlace(wrap, menuItem) {
-                const tabLink = wrap.querySelector('.project-list-tab');
-                const currentName = menuItem.dataset.viewName;
-
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'project-list-tab-rename-input';
-                input.value = currentName;
-                input.size = Math.max(currentName.length + 1, 6);
-
-                tabLink.style.display = 'none';
-                wrap.insertBefore(input, tabLink);
-                input.focus();
-                input.select();
-
-                function finish(save) {
-                    input.removeEventListener('keydown', onKeydown);
-                    input.removeEventListener('blur', onBlur);
-
-                    const newName = input.value.trim();
-                    input.remove();
-                    tabLink.style.display = '';
-
-                    if (!save || !newName || newName === currentName) return;
-
-                    fetch(menuItem.dataset.renameUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: newName }),
-                    })
-                        .then((res) => res.json())
-                        .then((data) => {
-                            if (data.error) { alert(data.error); return; }
-                            tabLink.textContent = data.name;
-                            menuItem.dataset.viewName = data.name;
-                        });
-                }
-
-                function onKeydown(e) {
-                    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-                    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-                }
-                function onBlur() { finish(true); }
-
-                input.addEventListener('keydown', onKeydown);
-                input.addEventListener('blur', onBlur);
-            }
-
-            document.addEventListener('click', (e) => {
-                const menuBtn = e.target.closest('.project-list-tab-menu-btn');
-                if (menuBtn) {
-                    e.preventDefault();
-                    const menu = menuBtn.nextElementSibling;
-                    const wasOpen = menu.classList.contains('is-open');
-                    closeAllTabPopovers();
-                    if (!wasOpen) menu.classList.add('is-open');
-                    return;
-                }
-
-                const menuItem = e.target.closest('.project-list-tab-menu-item');
-                if (menuItem) {
-                    const wrap = menuItem.closest('.project-list-tab-wrap');
-                    closeAllTabPopovers();
-
-                    if (menuItem.dataset.action === 'rename') startRenameInPlace(wrap, menuItem);
-                    if (menuItem.dataset.action === 'delete') {
-                        wrap.querySelector('.project-list-tab-confirm').classList.add('is-open');
-                    }
-                    return;
-                }
-
-                const cancelBtn = e.target.closest('[data-action="cancel-delete"]');
-                if (cancelBtn) { closeAllTabPopovers(); return; }
-
-                const confirmBtn = e.target.closest('[data-action="confirm-delete"]');
-                if (confirmBtn) {
-                    const wrap = confirmBtn.closest('.project-list-tab-wrap');
-                    fetch(confirmBtn.dataset.deleteUrl, { method: 'POST' })
-                        .then((res) => res.json())
-                        .then((data) => {
-                            if (data.error) { alert(data.error); return; }
-                            if (wrap.querySelector('.project-list-tab.active')) {
-                                window.location.href = confirmBtn.dataset.redirectUrl;
-                                return;
-                            }
-                            wrap.remove();
-                        });
-                    return;
-                }
-
-                closeAllTabPopovers();
-            });
-        }
-
-        const sortToggle = document.getElementById('sort-btn');
-        const sortPanel = document.getElementById('sort-panel');
-
-        if (sortToggle && sortPanel) {
-            sortToggle.addEventListener('click', () => {
-                sortPanel.hidden = !sortPanel.hidden;
-                sortToggle.classList.toggle('is-open', !sortPanel.hidden);
-            });
-
-            document.addEventListener('click', (e) => {
-                if (sortPanel.hidden) return;
-                if (sortPanel.contains(e.target) || sortToggle.contains(e.target)) return;
-                sortPanel.hidden = true;
-                sortToggle.classList.remove('is-open');
-            });
-
-            sortPanel.addEventListener('click', (e) => {
-                const option = e.target.closest('.project-sort-option');
-                if (!option) return;
-
-                // Radio behaviour, not toggle: picking one clears the others in
-                // its own section (Group by / Order by), unlike filter chips
-                // where several can be selected at once.
-                option.closest('.project-sort-panel-section')
-                    .querySelectorAll('.project-sort-option.is-selected')
-                    .forEach((el) => el.classList.remove('is-selected'));
-                option.classList.add('is-selected');
-
-                applyFilters();
+                console.log('Save as new view — not wired up yet.');
             });
         }
 
@@ -364,6 +188,49 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // ---- Sort ----
+        const sortToggle = document.getElementById('sort-toggle');
+        const sortPanel = document.getElementById('sort-panel');
+
+        if (sortToggle && sortPanel) {
+            sortToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                sortPanel.hidden = !sortPanel.hidden;
+                sortToggle.classList.toggle('is-open', !sortPanel.hidden);
+            });
+
+            // Same "close on outside click" pattern as the filter panel above.
+            document.addEventListener('click', (e) => {
+                if (sortPanel.hidden) return;
+                if (sortPanel.contains(e.target) || sortToggle.contains(e.target)) return;
+                sortPanel.hidden = true;
+                sortToggle.classList.remove('is-open');
+            });
+
+            // Picking a direction navigates straight away — same
+            // instant-apply feel as clicking a filter chip. Built on top
+            // of whatever's already in the URL (view, filters, search)
+            // rather than rebuilding the whole query string from scratch,
+            // since sort is the only thing this needs to change.
+            sortPanel.addEventListener('click', (e) => {
+                const option = e.target.closest('.project-sort-option');
+                if (!option) return;
+                const params = new URLSearchParams(window.location.search);
+                params.set('sort', option.dataset.sortField);
+                params.set('dir', option.dataset.sortDir);
+                window.location.href = `${window.location.pathname}?${params.toString()}`;
+            });
+
+            const sortClearBtn = document.getElementById('sort-clear-all');
+            if (sortClearBtn) {
+                sortClearBtn.addEventListener('click', () => {
+                    const params = new URLSearchParams(window.location.search);
+                    params.delete('sort');
+                    params.delete('dir');
+                    window.location.href = `${window.location.pathname}?${params.toString()}`;
+                });
+            }
+        }
         // ---- Date range picker (Initial Deadline / Next Deadline) ----
         const dateRangePicker = document.getElementById('date-range-picker');
         const dateRangeTitle = document.getElementById('date-range-picker-title');
