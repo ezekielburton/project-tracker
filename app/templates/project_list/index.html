@@ -1,5 +1,53 @@
 {% extends "base.html" %}
 {% from '_shared_macros.html' import card, person_chip, tag %}
+{% macro render_project_row(row, ns) %}
+<a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link"
+    style="--row-num: {{ ns.row_num }};">
+    <span class="project-col-expand">
+        <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
+            data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
+    </span>
+    <span class="project-col-name">{{ row.name }}</span>
+    <span class="project-col-client">{{ row.client or '—' }}</span>
+    <span class="project-col-cs">
+        {{ person_chip(row.cs_lead, 'CS Missing') }}
+    </span>
+    <span class="project-col-designers">
+        {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
+    </span>
+    <span class="project-col-teams">
+        {% if row.design_teams %}{% for team in row.design_teams %}{{ tag(team, 'muted') }}{% endfor %}{% else %}—{%
+        endif %}
+    </span>
+    <span
+        class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
+        {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
+    </span>
+    <span class="project-col-next-deadline">
+        {{ row.next_deadline.date.strftime('%d %b %Y') if row.next_deadline else '—' }}
+    </span>
+    <span class="project-col-urgency">
+        {% if row.urgency %}
+        <span class="project-urgency-wrap{% if row.urgency == 'overdue' %} project-urgency--overdue{% endif %}">
+            {{ tag(row.urgency|capitalize, row.urgency) }}
+        </span>
+        {% else %}
+        —
+        {% endif %}
+    </span>
+    <span class="project-col-next-deliverable">
+        {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
+    </span>
+    <span class="project-col-status">
+        {{ tag(row.blanket_status, 'action') }}
+    </span>
+    <span class="project-col-summary">
+        {{ row.rollup or '—' }} </span>
+    <span class="project-col-job">{{ row.job_number or '—' }}</span>
+</a>
+<div class="project-expand-container" hidden style="grid-row: {{ ns.row_num + 1 }};"></div>
+{% set ns.row_num = ns.row_num + 2 %}
+{% endmacro %}
 
 {% block title %}Projects — Vitamin-E{% endblock %}
 
@@ -22,34 +70,74 @@
             </a>
             <a href="{{ url_for('project_list.index', view='approved') }}"
                 class="project-list-tab{% if view == 'approved' %} active{% endif %}">Approved</a>
+            {% for v in saved_views %}
+            <span class="project-list-tab-wrap">
+                <a href="{{ url_for('project_list.index', view='view-' ~ v.id) }}"
+                    class="project-list-tab{% if view == 'view-' ~ v.id %} active{% endif %}">{{ v.name }}</a>
+                <button type="button" class="project-list-tab-menu-btn" aria-label="View options">&hellip;</button>
+                <div class="project-list-tab-menu">
+                    <button type="button" class="project-list-tab-menu-item" data-action="rename"
+                        data-view-name="{{ v.name }}"
+                        data-rename-url="{{ url_for('project_list.rename_view', view_id=v.id) }}">Rename</button>
+                    <button type="button" class="project-list-tab-menu-item project-list-tab-menu-item--danger"
+                        data-action="delete">Delete</button>
+                </div>
+                <div class="project-list-tab-confirm">
+                    <p class="project-list-tab-confirm-msg">Delete this view?</p>
+                    <div class="project-list-tab-confirm-actions">
+                        <button type="button" class="project-list-tab-confirm-cancel"
+                            data-action="cancel-delete">Cancel</button>
+                        <button type="button" class="project-list-tab-confirm-delete" data-action="confirm-delete"
+                            data-delete-url="{{ url_for('project_list.delete_view', view_id=v.id) }}"
+                            data-redirect-url="{{ url_for('project_list.index', view='my') }}">Delete</button>
+                    </div>
+                </div>
+            </span>
+            {% endfor %}
         </div>
 
         <div class="project-list-toolbar">
-            <button type="button" class="project-toolbar-new-item" id="new-project-btn">+ New Project</button>
+            <button type="button" class="project-toolbar-new-item" id="new-project-btn">New Project +</button>
 
             <div class="project-toolbar-search-wrap">
-                <button type="button" id="search-toggle" class="project-toolbar-icon-btn"
-                    aria-label="Search">🔍</button>
+                <button type="button" id="search-toggle" class="project-toolbar-icon-btn" aria-label="Search">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <span>Search</span>
+                </button>
                 <input type="text" name="search" id="toolbar-search" class="project-toolbar-search-input"
                     placeholder="Search..." value="{{ active_filters.search }}" hidden>
             </div>
 
             <div class="project-filter-wrap">
-                <button type="button" id="filter-toggle" class="project-filter-toggle{% if active_filter_count %} is-active{% endif %}">
-                    Filter{% if active_filter_count %} / {{ active_filter_count }}{% endif %}
-                </button>
+                <button type="button" id="filter-toggle"
+                    class="project-filter-toggle{% if active_filter_count %} is-active{% endif %}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                    <span>Filter{% if active_filter_count %} / {{ active_filter_count }}{% endif %}</span>
+                    <svg class="project-filter-toggle-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg> </button>
                 <div id="filter-panel" class="project-filter-panel" hidden>
-                
+
                     <div class="filter-panel-header">
                         <span class="filter-panel-count">Showing {{ rows|length }} of {{ view_total }} items</span>
                         <div class="filter-panel-header-actions">
                             <button type="button" class="filter-clear-all" id="filter-clear-all">Clear all</button>
-                            <button type="button" class="filter-save-view" id="save-new-view-btn">Save as new view</button>
+                            <button type="button" class="filter-save-view" id="save-new-view-btn"
+                                data-create-view-url="{{ url_for('project_list.create_view') }}">Save as new
+                                view</button>
                         </div>
                     </div>
-                
+
                     <div class="filter-columns">
-                
+
                         <div class="filter-column">
                             <div class="filter-column-label">CS Lead</div>
                             <div class="filter-column-list">
@@ -63,7 +151,7 @@
                                 {% endfor %}
                             </div>
                         </div>
-                
+
                         <div class="filter-column">
                             <div class="filter-column-label">Designers</div>
                             <div class="filter-column-list">
@@ -77,7 +165,7 @@
                                 {% endfor %}
                             </div>
                         </div>
-                
+
                         <div class="filter-column">
                             <div class="filter-column-label">Client</div>
                             <div class="filter-column-list">
@@ -89,9 +177,17 @@
                                     <span class="filter-chip-count">{{ filter_counts.client.get(c.id, 0) }}</span>
                                 </button>
                                 {% endfor %}
+                                {% if is_admin %}
+                                <button type="button"
+                                    class="filter-chip-row filter-chip-row--undefined{% if active_filters.client_undefined %} is-selected{% endif %}"
+                                    data-filter-group="client" data-filter-value="undefined">
+                                    <span class="filter-chip-text">Undefined</span>
+                                    <span class="filter-chip-count">{{ filter_counts.client.get(None, 0) }}</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
-                
+
                         <div class="filter-column">
                             <div class="filter-column-label">Brief Type</div>
                             <div class="filter-column-list">
@@ -105,7 +201,7 @@
                                 {% endfor %}
                             </div>
                         </div>
-                
+
                         <div class="filter-column">
                             <div class="filter-column-label">Status</div>
                             <div class="filter-column-list">
@@ -119,7 +215,7 @@
                                 {% endfor %}
                             </div>
                         </div>
-                
+
                         <div class="filter-column">
                             <div class="filter-column-label">Urgency</div>
                             <div class="filter-column-list">
@@ -133,65 +229,174 @@
                                 {% endfor %}
                             </div>
                         </div>
-                
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Team</div>
+                            <div class="filter-column-list">
+                                {% for value in filter_options.teams %}
+                                <button type="button"
+                                    class="filter-chip-row{% if value in active_filters.team %} is-selected{% endif %}"
+                                    data-filter-group="team" data-filter-value="{{ value }}">
+                                    <span class="filter-chip-text">{{ value }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.team.get(value, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                                {% if is_admin %}
+                                <button type="button"
+                                    class="filter-chip-row filter-chip-row--undefined{% if active_filters.team_undefined %} is-selected{% endif %}"
+                                    data-filter-group="team" data-filter-value="undefined">
+                                    <span class="filter-chip-text">Undefined</span>
+                                    <span class="filter-chip-count">{{ filter_counts.team.get(None, 0) }}</span>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Type of Design</div>
+                            <div class="filter-column-list">
+                                {% for value, label in filter_options.design_types %}
+                                <button type="button"
+                                    class="filter-chip-row{% if value in active_filters.design_type %} is-selected{% endif %}"
+                                    data-filter-group="design_type" data-filter-value="{{ value }}">
+                                    <span class="filter-chip-text">{{ label }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.design_type.get(value, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                                {% if is_admin %}
+                                <button type="button"
+                                    class="filter-chip-row filter-chip-row--undefined{% if active_filters.design_type_undefined %} is-selected{% endif %}"
+                                    data-filter-group="design_type" data-filter-value="undefined">
+                                    <span class="filter-chip-text">Undefined</span>
+                                    <span class="filter-chip-count">{{ filter_counts.design_type.get(None, 0) }}</span>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+
                     </div>
-                
+
                     <div class="filter-date-row">
                         <button type="button"
                             class="filter-date-btn{% if active_filters.initial_deadline_from or active_filters.initial_deadline_to %} is-active{% endif %}"
                             id="initial-deadline-filter-btn" data-param-prefix="initial_deadline"
-                            data-from="{{ active_filters.initial_deadline_from }}" data-to="{{ active_filters.initial_deadline_to }}">
+                            data-from="{{ active_filters.initial_deadline_from }}"
+                            data-to="{{ active_filters.initial_deadline_to }}">
                             Initial Deadline
                         </button>
                         <button type="button"
                             class="filter-date-btn{% if active_filters.next_deadline_from or active_filters.next_deadline_to %} is-active{% endif %}"
                             id="next-deadline-filter-btn" data-param-prefix="next_deadline"
-                            data-from="{{ active_filters.next_deadline_from }}" data-to="{{ active_filters.next_deadline_to }}">
+                            data-from="{{ active_filters.next_deadline_from }}"
+                            data-to="{{ active_filters.next_deadline_to }}">
                             Next Deadline
                         </button>
                     </div>
                 </div>
-                    <div class="date-range-picker" id="date-range-picker" hidden>
-                        <div class="date-range-picker-header">
-                            <span class="date-range-picker-title" id="date-range-picker-title">Set Dates</span>
-                        </div>
-                    
-                        <div class="date-range-picker-nav">
-                            <button type="button" class="date-range-picker-arrow" id="date-range-prev"
-                                aria-label="Previous month">&larr;</button>
-                    
-                            <div class="date-range-picker-months">
-                                <div class="date-range-picker-month">
-                                    <div class="date-range-picker-month-label" data-month-label="0"></div>
-                                    <div class="date-range-picker-weekdays">
-                                        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
-                                    </div>
-                                    <div class="date-range-picker-days" data-days="0"></div>
-                                </div>
-                                <div class="date-range-picker-month">
-                                    <div class="date-range-picker-month-label" data-month-label="1"></div>
-                                    <div class="date-range-picker-weekdays">
-                                        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
-                                    </div>
-                                    <div class="date-range-picker-days" data-days="1"></div>
-                                </div>
-                            </div>
-                    
-                            <button type="button" class="date-range-picker-arrow" id="date-range-next"
-                                aria-label="Next month">&rarr;</button>
-                        </div>
-                    
-                        <div class="date-range-picker-footer">
-                            <button type="button" class="date-range-picker-clear" id="date-range-clear">Clear</button>
-                            <div class="date-range-picker-footer-actions">
-                                <button type="button" class="date-range-picker-cancel" id="date-range-cancel">Cancel</button>
-                                <button type="button" class="date-range-picker-apply" id="date-range-apply">Apply</button>
-                            </div>
-                        </div>              
+                <div class="date-range-picker" id="date-range-picker" hidden>
+                    <div class="date-range-picker-header">
+                        <span class="date-range-picker-title" id="date-range-picker-title">Set Dates</span>
                     </div>
+
+                    <div class="date-range-picker-nav">
+                        <button type="button" class="date-range-picker-arrow" id="date-range-prev"
+                            aria-label="Previous month">&larr;</button>
+
+                        <div class="date-range-picker-months">
+                            <div class="date-range-picker-month">
+                                <div class="date-range-picker-month-label" data-month-label="0"></div>
+                                <div class="date-range-picker-weekdays">
+                                    <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                                </div>
+                                <div class="date-range-picker-days" data-days="0"></div>
+                            </div>
+                            <div class="date-range-picker-month">
+                                <div class="date-range-picker-month-label" data-month-label="1"></div>
+                                <div class="date-range-picker-weekdays">
+                                    <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                                </div>
+                                <div class="date-range-picker-days" data-days="1"></div>
+                            </div>
+                        </div>
+
+                        <button type="button" class="date-range-picker-arrow" id="date-range-next"
+                            aria-label="Next month">&rarr;</button>
+                    </div>
+
+                    <div class="date-range-picker-footer">
+                        <button type="button" class="date-range-picker-clear" id="date-range-clear">Clear</button>
+                        <div class="date-range-picker-footer-actions">
+                            <button type="button" class="date-range-picker-cancel"
+                                id="date-range-cancel">Cancel</button>
+                            <button type="button" class="date-range-picker-apply" id="date-range-apply">Apply</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <button type="button" class="project-toolbar-sort-btn" id="sort-btn">Sort</button>
+            <div class="project-sort-wrap">
+                <button type="button" class="project-toolbar-sort-btn" id="sort-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <polyline points="18 10 12 4 6 10"></polyline>
+                        <polyline points="6 14 12 20 18 14"></polyline>
+                    </svg>
+                    <span>Sort</span>
+                </button>
+                <div class="project-sort-panel" id="sort-panel" hidden>
+                    <div class="project-sort-panel-section">
+                        <div class="project-sort-panel-label">Group by</div>
+                        <div class="project-sort-panel-options">
+                            <button type="button"
+                                class="project-sort-option{% if not group_field %} is-selected{% endif %}"
+                                data-param="group" data-value="">None</button>
+                            <button type="button"
+                                class="project-sort-option{% if group_field == 'cs_lead' %} is-selected{% endif %}"
+                                data-param="group" data-value="cs_lead">CS Lead</button>
+                            <button type="button"
+                                class="project-sort-option{% if group_field == 'client' %} is-selected{% endif %}"
+                                data-param="group" data-value="client">Client</button>
+                            <button type="button"
+                                class="project-sort-option{% if group_field == 'team' %} is-selected{% endif %}"
+                                data-param="group" data-value="team">Design Team</button>
+                            <button type="button"
+                                class="project-sort-option{% if group_field == 'urgency' %} is-selected{% endif %}"
+                                data-param="group" data-value="urgency">Urgency</button>
+                            <button type="button"
+                                class="project-sort-option{% if group_field == 'status' %} is-selected{% endif %}"
+                                data-param="group" data-value="status">Status</button>
+                        </div>
+                    </div>
+                    <div class="project-sort-panel-section">
+                        <div class="project-sort-panel-label">Order by</div>
+                        <div class="project-sort-panel-options">
+                            <button type="button"
+                                class="project-sort-option{% if sort_field == 'name' and sort_dir == 'asc' %} is-selected{% endif %}"
+                                data-param="sort" data-value="name" data-dir="asc">Name (A–Z)</button>
+                            <button type="button"
+                                class="project-sort-option{% if sort_field == 'name' and sort_dir == 'desc' %} is-selected{% endif %}"
+                                data-param="sort" data-value="name" data-dir="desc">Name (Z–A)</button>
+                            <button type="button"
+                                class="project-sort-option{% if sort_field == 'initial_deadline' and sort_dir == 'asc' %} is-selected{% endif %}"
+                                data-param="sort" data-value="initial_deadline" data-dir="asc">Initial Deadline
+                                (Soonest)</button>
+                            <button type="button"
+                                class="project-sort-option{% if sort_field == 'initial_deadline' and sort_dir == 'desc' %} is-selected{% endif %}"
+                                data-param="sort" data-value="initial_deadline" data-dir="desc">Initial Deadline
+                                (Latest)</button>
+                            <button type="button"
+                                class="project-sort-option{% if sort_field == 'next_deadline' and sort_dir == 'asc' %} is-selected{% endif %}"
+                                data-param="sort" data-value="next_deadline" data-dir="asc">Next Deadline
+                                (Soonest)</button>
+                            <button type="button"
+                                class="project-sort-option{% if sort_field == 'next_deadline' and sort_dir == 'desc' %} is-selected{% endif %}"
+                                data-param="sort" data-value="next_deadline" data-dir="desc">Next Deadline
+                                (Latest)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
 
         </div>
@@ -199,80 +404,63 @@
 
     {% call card() %}
     <div class="project-table-scroll-region">
-    <div class="project-table-rounded-clip">
-    <div class="project-table" id="project-table" data-table-key="{{ table_key }}"
-        data-save-layout-url="{{ url_for('project_list.save_layout') }}">
-        <div class="project-table-header project-row" style="--row-num: 1;">
-            <span class="project-col-expand"></span>
-            <span class="project-col-name" data-col-key="name">Project Name<span class="project-col-resize-handle"></span></span>
-            <span class="project-col-client" data-col-key="client">Client<span class="project-col-resize-handle"></span></span>
-            <span class="project-col-cs" data-col-key="cs">CS Lead<span class="project-col-resize-handle"></span></span>
-            <span class="project-col-designers" data-col-key="designers">Lead Designers<span
-                    class="project-col-resize-handle"></span></span>
-            <span class="project-col-deadline" data-col-key="deadline">Initial Deadline<span
-                    class="project-col-resize-handle"></span></span>
-            <span class="project-col-next-deadline" data-col-key="next-deadline">Next Deadline<span
-                    class="project-col-resize-handle"></span></span>
-            <span class="project-col-urgency" data-col-key="urgency">Urgency<span
-                    class="project-col-resize-handle"></span></span>
-            <span class="project-col-next-deliverable" data-col-key="next-deliverable">Next Deliverable<span
-                    class="project-col-resize-handle"></span></span>
-            <span class="project-col-status" data-col-key="status">Status<span class="project-col-resize-handle"></span></span>
-            <span class="project-col-summary" data-col-key="summary">Summary<span
-                    class="project-col-resize-handle"></span></span>
-            <span class="project-col-job" data-col-key="job">Job Number<span class="project-col-resize-handle"></span></span>
+        <div class="project-table-rounded-clip">
+            <div class="project-table" id="project-table" data-table-key="{{ table_key }}"
+                data-save-layout-url="{{ url_for('project_list.save_layout') }}">
+                <div class="project-table-header project-row" style="--row-num: 1;">
+                    <span class="project-col-expand"></span>
+                    <span class="project-col-name" data-col-key="name">Project Name<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-client" data-col-key="client">Client<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-cs" data-col-key="cs">CS Lead<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-designers" data-col-key="designers">Lead Designers<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-teams" data-col-key="teams">Design Teams<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-deadline" data-col-key="deadline">Initial Deadline<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-next-deadline" data-col-key="next-deadline">Next Deadline<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-urgency" data-col-key="urgency">Urgency<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-next-deliverable" data-col-key="next-deliverable">Next Deliverable<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-status" data-col-key="status">Status<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-summary" data-col-key="summary">Summary<span
+                            class="project-col-resize-handle"></span></span>
+                    <span class="project-col-job" data-col-key="job">Job Number<span
+                            class="project-col-resize-handle"></span></span>
+                </div>
+
+                {% set ns = namespace(row_num=2) %}
+                {% if groups %}
+                {% for group in groups %}
+                <div class="project-group-header" style="grid-row: {{ ns.row_num }};">
+                    <button type="button" class="project-group-header-toggle" aria-expanded="true"
+                        aria-label="Collapse group">▾</button>
+                    <span class="project-group-header-label">{{ group.label }}</span>
+                    <span class="project-group-header-count">{{ group.rows|length }}</span>
+                </div>
+                {% set ns.row_num = ns.row_num + 1 %}
+                <div class="project-group-body">
+                    {% for row in group.rows %}{{ render_project_row(row, ns) }}{% endfor %}
+                </div>
+                {% endfor %}
+                {% else %}
+                {% for row in rows %}
+                {{ render_project_row(row, ns) }}
+                {% else %}
+                <p class="project-list-empty">No projects to show.</p>
+                {% endfor %}
+                {% endif %}
+            </div>
         </div>
-    
-    {% for row in rows %}
-    <a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link"
-        style="--row-num: {{ loop.index * 2 }};">
-        <span class="project-col-expand">
-            <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
-                data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
-        </span>
-        <span class="project-col-name">{{ row.name }}</span>
-        <span class="project-col-client">{{ row.client or '—' }}</span>
-        <span class="project-col-cs">
-            {{ person_chip(row.cs_lead, 'CS Missing') }}
-        </span>
-        <span class="project-col-designers">
-            {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
-        </span>
-        <span
-            class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
-            {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
-        </span>
-        <span class="project-col-next-deadline">
-            {{ row.next_deadline.date.strftime('%d %b %Y') if row.next_deadline else '—' }}
-        </span>
-        <span class="project-col-urgency">
-            {% if row.urgency %}
-            <span class="project-urgency-wrap{% if row.urgency == 'overdue' %} project-urgency--overdue{% endif %}">
-                {{ tag(row.urgency|capitalize, row.urgency) }}
-            </span>
-            {% else %}
-            —
-            {% endif %}
-        </span>
-        <span class="project-col-next-deliverable">
-            {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
-        </span>
-        <span class="project-col-status">
-            {{ tag(row.blanket_status, 'action') }}
-        </span>
-        <span class="project-col-summary">
-            {{ row.rollup or '—' }} </span>
-        <span class="project-col-job">{{ row.job_number or '—' }}</span>
-    </a>
-    <div class="project-expand-container" hidden style="grid-row: {{ loop.index * 2 + 1 }};"></div>
-    {% else %}
-    <p class="project-list-empty">No projects to show.</p>
-    {% endfor %}
-    </div>
-    </div>
-    <div class="project-table-sticky-scrollbar" id="sticky-scrollbar">
-        <div class="project-table-sticky-scrollbar-inner" id="sticky-scrollbar-inner"></div>
-    </div>
+        <div class="project-table-sticky-scrollbar" id="sticky-scrollbar">
+            <div class="project-table-sticky-scrollbar-inner" id="sticky-scrollbar-inner"></div>
+        </div>
     </div>
     {% endcall %}
 </div>
@@ -284,6 +472,7 @@
     window.__savedTableLayout = {{ saved_layout | tojson }};
     window.__savedDeliverableTableLayout = {{ saved_deliverable_layout | tojson }};
     window.__savedCustomerTableLayout = {{ saved_customer_layout | tojson }};
+    window.__currentBaseView = {{ current_base_view | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/project_list_layout.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_list.js') }}?v={{ config.STATIC_VERSION }}"></script>

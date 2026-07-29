@@ -4,11 +4,11 @@
 #   All now within one template that adapts to the viewing user's role, per app architecture
 
 from datetime import date
-from flask import Blueprint, render_template, session, request, jsonify, url_for
+from flask import Blueprint, render_template, session, request, jsonify, url_for, redirect
 from flask_login import login_required, current_user
 from sqlalchemy import nullslast
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
 
@@ -74,6 +74,24 @@ def _urgency_for(next_deadline, today):
 # projects_detail.py's own team lookups before relying on them here, rather
 # than guessing at casing.
 TEAM_KEYS = ['2D', '3D', 'Technical']
+
+SORT_FIELDS = [
+    ('initial_deadline', 'Initial Deadline'),
+    ('next_deadline', 'Next Deadline'),
+    ('name', 'Name'),
+]
+
+GROUP_FIELDS = [
+    ('cs_lead', 'CS Lead'),
+    ('client', 'Client'),
+    ('team', 'Design Team'),
+    ('urgency', 'Urgency'),
+    ('status', 'Status'),
+]
+
+URGENCY_ORDER = ['overdue', 'urgent', 'prioritize', 'normal']
+URGENCY_LABELS = {'overdue': 'Overdue', 'urgent': 'Urgent', 'prioritize': 'Prioritize', 'normal': 'Normal'}
+STATUS_ORDER = ['Not Started', 'Active', 'On Hold', 'Completed']
 
 def _team_columns_for(deliverable):
     """
@@ -156,8 +174,14 @@ def _apply_sql_filters(query, exclude=None):
 
     if exclude != 'client':
         client_ids = _parse_ids('client')
-        if client_ids:
-            query = query.filter(Project.client_id.in_(client_ids))
+        want_client_undefined = _has_undefined('client')
+        if client_ids or want_client_undefined:
+            conditions = []
+            if client_ids:
+                conditions.append(Project.client_id.in_(client_ids))
+            if want_client_undefined:
+                conditions.append(Project.client_id.is_(None))
+            query = query.filter(db.or_(*conditions))
 
     if exclude != 'brief_type':
         brief_types = _parse_values('brief_type')
@@ -205,8 +229,11 @@ def _apply_row_filters(rows, exclude=None):
     """
     if exclude != 'designers':
         designer_ids = _parse_ids('designers')
-        if designer_ids:
-            rows = [r for r in rows if any(d and d['id'] in designer_ids for d in r['designers'])]
+        want_undefined = _has_undefined('designers')
+        if designer_ids or want_undefined:
+            rows = [r for r in rows if
+                    (designer_ids and any(d and d['id'] in designer_ids for d in r['designers']))
+                    or (want_undefined and not r['designers'])]
 
     if exclude != 'status':
         statuses = _parse_values('status')
@@ -217,6 +244,22 @@ def _apply_row_filters(rows, exclude=None):
         urgencies = _parse_values('urgency')
         if urgencies:
             rows = [r for r in rows if r['urgency'] in urgencies]
+
+    if exclude != 'team':
+        teams = _parse_values('team')
+        want_undefined = _has_undefined('team')
+        if teams or want_undefined:
+            rows = [r for r in rows if
+                    any(t in teams for t in r['design_teams'])
+                    or (want_undefined and not r['design_teams'])]
+
+    if exclude != 'design_type':
+        design_types = _parse_values('design_type')
+        want_undefined = _has_undefined('design_type')
+        if design_types or want_undefined:
+            rows = [r for r in rows if
+                    r['design_type'] in design_types
+                    or (want_undefined and r['design_type'] is None)]
 
     if exclude != 'next_deadline':
         next_from = _parse_date('next_deadline_from')
@@ -229,6 +272,97 @@ def _apply_row_filters(rows, exclude=None):
 
     return rows
 
+def _sort_rows(rows, sort_field, direction):
+    """
+    Sorts the already-filtered rows for either the flat table or (when a
+    group is also active) for the position inside each group — same
+    function either way, since grouping happens after this and Python's
+    sort is stable, so rows keep this order once they're bucketed.
+    """
+    reverse = direction == 'desc'
+
+    if sort_field == 'name':
+        return sorted(rows, key=lambda r: (r['name'] or '').lower(), reverse=reverse)
+
+    if sort_field in ('initial_deadline', 'next_deadline'):
+        def get_date(r):
+            if sort_field == 'next_deadline':
+                return r['next_deadline']['date'] if r['next_deadline'] else None
+            return r['initial_deadline']
+
+        # Rows with no date at all always trail at the bottom, regardless
+        # of which direction you picked — "soonest first" and "latest
+        # first" both mean undated rows aren't the answer to the question.
+        with_date = [r for r in rows if get_date(r) is not None]
+        without_date = [r for r in rows if get_date(r) is None]
+        with_date.sort(key=get_date, reverse=reverse)
+        return with_date + without_date
+
+    return rows
+
+
+def _group_rows(rows, group_field):
+    """
+    Buckets already-sorted rows into named groups for the collapsible
+    group-table view. Every dimension puts each row in exactly one
+    bucket, except Design Team — a project can be both 2D and 3D, so it
+    lands in both of those groups.
+    """
+    buckets = {}
+
+    def add(key, label, row):
+        if key not in buckets:
+            buckets[key] = {'key': key, 'label': label, 'rows': []}
+        buckets[key]['rows'].append(row)
+
+    if group_field == 'cs_lead':
+        for r in rows:
+            if r['cs_lead']:
+                add(r['cs_lead']['id'], r['cs_lead']['name'], r)
+            else:
+                add('undefined', 'CS Unassigned', r)
+
+    elif group_field == 'client':
+        for r in rows:
+            if r['client']:
+                add(r['client_id'], r['client'], r)
+            else:
+                add('undefined', 'Client Missing', r)
+
+    elif group_field == 'team':
+        for r in rows:
+            if r['design_teams']:
+                for team in r['design_teams']:
+                    add(team, team, r)
+            else:
+                add('undefined', 'Team Unassigned', r)
+
+    elif group_field == 'urgency':
+        for r in rows:
+            if r['urgency']:
+                add(r['urgency'], URGENCY_LABELS[r['urgency']], r)
+            else:
+                add('undefined', 'No Deadline', r)
+
+    elif group_field == 'status':
+        for r in rows:
+            add(r['blanket_status'], r['blanket_status'], r)
+
+    groups = list(buckets.values())
+
+    # The buckets themselves need an order too. Urgency/Status/Team have a
+    # real order (severity, workflow stage, canonical team list) that
+    # isn't A-Z; CS Lead/Client just go alphabetical, with "undefined"
+    # pinned last no matter which dimension it's for.
+    fixed_order = {'urgency': URGENCY_ORDER, 'status': STATUS_ORDER, 'team': TEAM_KEYS}
+    if group_field in fixed_order:
+        order = fixed_order[group_field]
+        groups.sort(key=lambda g: order.index(g['key']) if g['key'] in order else len(order))
+    else:
+        groups.sort(key=lambda g: (g['key'] == 'undefined', g['label'].lower()))
+
+    return groups
+
 def _base_query_for_view(view, user):
     """
     Returns (query, order_by) for whichever of the three fixed views is
@@ -239,6 +373,18 @@ def _base_query_for_view(view, user):
     """
     order_by = Project.first_output_deadline.asc()
 
+    if view.startswith('view-'):
+        try:
+            saved_view_id = int(view[len('view-'):])
+        except ValueError:
+            saved_view_id = None
+        saved_view = (
+            ProjectTableView.query.filter_by(id=saved_view_id, user_id=user.id).first()
+            if saved_view_id else None
+        )
+
+        return _base_query_for_view(saved_view.base_view if saved_view else 'my', user)
+ 
     if view == 'all':
         if user.role in ('cs', 'admin', 'management'):
             query = Project.query.filter(
@@ -298,7 +444,7 @@ def _rows_excluding(view, user, exclude):
     every OTHER active filter.
     """
     sql_dims = ('cs_lead', 'client', 'brief_type', 'initial_deadline', 'search')
-    row_dims = ('designers', 'status', 'urgency', 'next_deadline')
+    row_dims = ('designers', 'status', 'urgency', 'next_deadline', 'team', 'design_type')
 
     query, order_by = _base_query_for_view(view, user)
     if query is None:
@@ -380,13 +526,33 @@ def _build_filter_counts(view, user):
     Computes every filter option's live count, each scoped to "this view
     plus every other currently active filter."
     """
+    client_rows = _rows_excluding(view, user, 'client')
+    designer_rows = _rows_excluding(view, user, 'designers')
+    design_type_rows = _rows_excluding(view, user, 'design_type')
+
+    client_counts = _count_by_value(client_rows, 'client_id')
+    client_counts[None] = _count_undefined(client_rows, 'client_id')
+
+    designer_counts = _count_by_id_list(designer_rows, 'designers')
+    designer_counts[None] = _count_undefined(designer_rows, 'designers')
+
+    design_type_counts = _count_by_value(design_type_rows, 'design_type')
+    design_type_counts[None] = _count_undefined(design_type_rows, 'design_type')
+
+    team_rows = _rows_excluding(view, user, 'team')
+    team_counts = _count_by_list_membership(team_rows, 'design_teams')
+    team_counts[None] = _count_undefined(team_rows, 'design_teams')
+    
+
     return {
         'cs_lead': _count_by_id(_rows_excluding(view, user, 'cs_lead'), 'cs_lead'),
-        'designers': _count_by_id_list(_rows_excluding(view, user, 'designers'), 'designers'),
-        'client': _count_by_value(_rows_excluding(view, user, 'client'), 'client_id'),
+        'designers': designer_counts,
+        'client': client_counts,
         'brief_type': _count_by_value(_rows_excluding(view, user, 'brief_type'), 'brief_type'),
         'status': _count_by_value(_rows_excluding(view, user, 'status'), 'blanket_status'),
         'urgency': _count_by_value(_rows_excluding(view, user, 'urgency'), 'urgency'),
+        'team': _count_by_list_membership(_rows_excluding(view, user, 'team'), 'design_teams'),
+        'design_type': design_type_counts,
     }
 
 def _serialize_row(p):
@@ -401,6 +567,8 @@ def _serialize_row(p):
         'job_number': p.job_number,
         'cs_lead': _serialize_person(p.cs_lead),
         'designers': [_serialize_person(pd.designer) for pd in p.assigned_designers],
+        'design_teams': [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()],
+        'design_type': 'ccm' if p.brief_type == 'ccm' else (str(p.design_type_id) if p.design_type_id else None),
         'initial_deadline': p.first_output_deadline,
         'status': p.project_status,
         'blanket_status': _blanket_status(p.project_status),
@@ -417,6 +585,30 @@ def index():
     """ Three fixes presets. Set now as we build it out"""
     user = _effective_user()
     view = request.args.get('view', 'my')
+
+    # Landing on a custom view fresh - Redirect once. From that point on this is just a normal
+    # filtered request; every existing _parse_ids/_parse_values/chip-highlight call works
+    # completely unchanged, since the saved filters are the query string
+
+    if view.startswith('view-'):
+        has_filter_params = any (
+            k in request.args for k in
+            ('cs_lead', 'client', 'designers', 'brief_type', 'status', 'urgency', 'team', 'design_type', 'search',
+             'initial_deadline_from', 'initial_deadline', 'initial_deadline_to', 'next_deadline_from', 'next_deadline_to')
+        )
+        if not has_filter_params:
+            try:
+                saved_view_id = int(view[len('view-'):])
+            except ValueError:
+                saved_view_id = None
+            saved_view = (
+                ProjectTableView.query.filter_by(id=saved_view_id, user_id=user.id).first()
+                if saved_view_id else None
+            )
+            if saved_view and saved_view.filters:
+                from urllib.parse import urlencode
+                return redirect(f"{request.path}?view={view}&{urlencode(saved_view.filters)}")
+        
 
     table_key = f'project_list:{view}'
     layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key=table_key).first()
@@ -450,6 +642,8 @@ def index():
         'brief_types': [('standard', 'Standard'), ('ccm', 'C&CM')],
         'statuses': ['Not Started', 'Active', 'On Hold', 'Completed'],
         'urgencies': [('overdue', 'Overdue'), ('urgent', 'Urgent'), ('prioritize', 'Prioritize'), ('normal', 'Normal')],
+        'teams': TEAM_KEYS,
+        'design_types': [('ccm', 'C&CM')] + [(str(dt.id), dt.name) for dt in DesignType.query.order_by(DesignType.name).all()],
     }
 
     active_filters = {
@@ -459,6 +653,12 @@ def index():
         'brief_type': _parse_values('brief_type'),
         'status': _parse_values('status'),
         'urgency': _parse_values('urgency'),
+        'team': _parse_values('team'),
+        'design_type': _parse_values('design_type'),
+        'client_undefined': _has_undefined('client'),
+        'designers_undefined': _has_undefined('designers'),
+        'team_undefined': _has_undefined('team'),
+        'design_type_undefined': _has_undefined('design_type'),
         'search': request.args.get('search', '').strip(),
         'initial_deadline_from': request.args.get('initial_deadline_from', ''),
         'initial_deadline_to': request.args.get('initial_deadline_to', ''),
@@ -466,11 +666,6 @@ def index():
         'next_deadline_to': request.args.get('next_deadline_to', ''),
     }
 
-    # Count of DISTINCT filter dimensions with an active selection — not the
-    # total number of individually selected values. Matches Monday.com's own
-    # "Filter / 2" badge: two dimensions active (say, one CS Lead + one
-    # Status), regardless of how many values are picked within either one.
-    # Search has its own separate icon/input, so it's deliberately excluded.
     active_filter_count = sum([
         bool(active_filters['cs_lead']),
         bool(active_filters['client']),
@@ -478,14 +673,42 @@ def index():
         bool(active_filters['brief_type']),
         bool(active_filters['status']),
         bool(active_filters['urgency']),
+        bool(active_filters['team']),
+        bool(active_filters['design_type']),
         bool(active_filters['initial_deadline_from'] or active_filters['initial_deadline_to']),
         bool(active_filters['next_deadline_from'] or active_filters['next_deadline_to']),
     ])
-        
+
+    saved_views = ProjectTableView.query.filter_by(user_id=user.id).order_by(ProjectTableView.created_at).all()
+
+    if view.startswith('view-'):
+        try:
+            current_view_row = ProjectTableView.query.filter_by(id=int(view[len('view-'):]), user_id=user.id).first()
+        except ValueError:
+            current_view_row = None
+        current_base_view = current_view_row.base_view if current_view_row else 'my'
+    else:
+        current_base_view = view
+
+    sort_field = request.args.get('sort', 'initial_deadline')
+    if sort_field not in dict(SORT_FIELDS):
+        sort_field = 'initial_deadline'
+
+    sort_dir = request.args.get('dir', 'asc')
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'asc'
+
+    group_field = request.args.get('group')
+    if group_field not in dict(GROUP_FIELDS):
+        group_field = None
+
+    rows = _sort_rows(rows, sort_field, sort_dir)
+    groups = _group_rows(rows, group_field) if group_field else None
 
     return render_template('project_list/index.html', rows=rows, view=view, effective_role=user.role, today=date.today(), filter_options=filter_options, 
-                           active_filters=active_filters, filter_counts=filter_counts, view_total=view_total, table_key=table_key, saved_layout=saved_layout, active_filter_count=active_filter_count,
-                           saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout)
+                   active_filters=active_filters, filter_counts=filter_counts, view_total=view_total, table_key=table_key, saved_layout=saved_layout, active_filter_count=active_filter_count,
+                   saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout, is_admin=(user.role == 'admin'), saved_views=saved_views, current_base_view=current_base_view,
+                   sort_field=sort_field, sort_dir=sort_dir, group_field=group_field, groups=groups)
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required
@@ -513,6 +736,59 @@ def save_layout():
 
     return jsonify({'status': 'ok'})
 
+@project_list_bp.route('/views', methods=['POST'])
+@login_required
+def create_view():
+    """ Saves one new named custom view: a name, which fixed preset it is built on top of to that preset,
+        and  the current filter selection as a plain {param_name: value} dict - the exact shape a query
+        string already has, so applying it back later uses urlencode() and a redirect, no reparsing needed"""
+
+    user = _effective_user()
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    base_view = data.get('base_view')
+    filters = data.get('filters') or {}
+
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+    if base_view not in ('my', 'all', 'approved'):
+        return jsonify({'error': 'Invalid base view'}), 400
+
+    view = ProjectTableView(user_id=user.id, name=name, base_view=base_view, filters=filters)
+    db.session.add(view)
+    db.session.commit()
+
+    return jsonify({'id': view.id, 'url': url_for('project_list.index', view=f'view-{view.id}')})
+
+@project_list_bp.route('/views/<int:view_id>/rename', methods=['POST'])
+@login_required
+def rename_view(view_id):
+    user = _effective_user()
+    view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first()
+    if not view:
+        return jsonify({'error': 'View not found.'}), 404
+
+    data = request.get_json(silent=True) or {}
+    new_name = (data.get('name') or '').strip()
+    if not new_name:
+        return jsonify({'error': 'Name cannot be empty.'}), 400
+
+    view.name = new_name
+    db.session.commit()
+    return jsonify({'success': True, 'name': view.name})
+
+
+@project_list_bp.route('/views/<int:view_id>/delete', methods=['POST'])
+@login_required
+def delete_view(view_id):
+    user = _effective_user()
+    view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first()
+    if not view:
+        return jsonify({'error': 'View not found.'}), 404
+
+    db.session.delete(view)
+    db.session.commit()
+    return jsonify({'success': True})
 
 @project_list_bp.route('/<int:project_id>/expand')
 @login_required

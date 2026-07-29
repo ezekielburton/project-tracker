@@ -184,6 +184,20 @@ DEFAULT_ROLE_TITLES = {
     'team_lead': 'Design Captain',
     'management': 'The Big Picture',
 }
+
+class ProjectTableView(db.Model):
+    """ A user's saved custom view on the Projects page. This consists of a name plus a remembered filter selectin,
+    which is layered on top of the three fixed presets. Also saves sorting options"""
+    __tablename__ = 'project_table_views'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    base_view = db.Column(db.String(20), nullable=False) # my / all / approved
+    filters = db.Column(db.JSON, nullable=True) 
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='project_table_views')
     
 
 class NotificationSound (db.Model):
