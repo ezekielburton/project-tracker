@@ -9,6 +9,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import nullslast
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView
+from app.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
 
@@ -110,12 +111,14 @@ def _serialize_deliverable_row(d):
     deliverable looks the same either way once you're this deep, so this
     is the one function both paths call.
     """
+    status_label, status_class = derive_deliverable_status(d)
     return {
         'id': d.id,
         'name': d.name,
         'deadline': d.design_deadline,
         'deadline_time': d.design_deadline_time,
-        'blanket_status': _blanket_status(d.status),
+        'blanket_status': status_label,
+        'status_pill_class': status_class,
         'teams': _team_columns_for(d),
     }
 
@@ -450,6 +453,7 @@ def _serialize_row(p):
     """Turns one Project into the flat dict the template needs. Pulled out of index(), now that there are three different queries feeding
     in the same row shape.""" 
     next_deadline = _next_deadline_for(Deliverable.query.filter_by(project_id=p.id))
+    status_label, status_class = derive_project_status(p)
     return {
         'id': p.id,
         'name': p.name,
@@ -462,7 +466,8 @@ def _serialize_row(p):
         'design_type': 'ccm' if p.brief_type == 'ccm' else (str(p.design_type_id) if p.design_type_id else None),
         'initial_deadline': p.first_output_deadline,
         'status': p.project_status,
-        'blanket_status': _blanket_status(p.project_status),
+        'blanket_status': status_label,
+        'status_pill_class': status_class,
         'brief_type': p.brief_type,
         'rollup': _rollup_for(Deliverable.query.filter_by(project_id=p.id)),
         'customer_count': sum(1 for pc in p.project_customers if not pc.cancelled) if p.brief_type == 'ccm' else None,
@@ -548,7 +553,11 @@ def index():
         'designers': UserModel.query.filter(UserModel.role.in_(['designer', 'team_lead'])).order_by(UserModel.name).all(),
         'clients': Client.query.order_by(Client.name).all(),
         'brief_types': [('standard', 'Standard'), ('ccm', 'C&CM')],
-        'statuses': ['Not Started', 'Active', 'On Hold', 'Completed'],
+        'statuses': [
+            'In Design', 'Client Approved', 'Pre-Production', 'Handed to Production',
+            'Briefed', 'In Progress', 'Design Completed',
+            'On Hold', 'Cancelled',
+        ],
         'urgencies': [('overdue', 'Overdue'), ('urgent', 'Urgent'), ('prioritize', 'Prioritize'), ('normal', 'Normal')],
         'teams': TEAM_KEYS,
         'design_types': [('ccm', 'C&CM')] + [(str(dt.id), dt.name) for dt in DesignType.query.order_by(DesignType.name).all()],
@@ -653,13 +662,15 @@ def expand(project_id):
         for pc in project.project_customers:
             if pc.cancelled:
                 continue
+            status_label, status_class = derive_customer_pipeline_status(pc)
             rows.append({
                 'label': pc.customer.name,
                 'design_deadline': pc.design_deadline,
                 'installation_date': pc.installation_date,
                 'deliverable_count': len(pc.deliverables),
                 'revision_count': pc.posm_revision_count,
-                'blanket_status': _blanket_status(pc.status),
+                'blanket_status': status_label,
+                'status_pill_class': status_class,
                 'expand_url': url_for('project_list.expand_customer', project_customer_id=pc.id),
             })
         return render_template('project_list/_expand_rows.html', rows=rows, today=date.today())
@@ -678,19 +689,6 @@ def expand_customer(project_customer_id):
     pc = ProjectCustomer.query.get_or_404(project_customer_id)
     rows = [_serialize_deliverable_row(d) for d in pc.deliverables]
     return render_template('project_list/_deliverable_table.html', rows=rows, today=date.today(), brief_type='ccm')
-
-def _blanket_status(granular_status):
-    """ Maps the granular workflow states down to the following:
-        Not Started / Active / On Hold / Completed / Archived.
-    """
-
-    if granular_status == 'draft':
-        return 'Not Started'
-    if granular_status == 'on_hold':
-        return 'On Hold'
-    if granular_status == 'approved':
-        return 'Completed'
-    return 'Active'
 
 def _rollup_for(deliverable_query):
     """ The computed rollup: Shows how many of this projects deliverables are Approved out of the total."""

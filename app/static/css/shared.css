@@ -201,3 +201,61 @@
     color: var(--oak);
 }
 
+/*  ---- Status Pill
+    The new three-tier status vocabulary (Deliverable / Pipeline / C&CM aggregate) from
+    the Detail+Briefing overlay rework — see Projects Redesign Architecture.md §4.
+    One base shape + a color modifier per distinct pill color (not per status label),
+    since several statuses across tiers intentionally share the same color (e.g.
+    Client Approved / Handed to Production / Design Completed are all --clover).
+    Which label maps to which modifier is decided server-side (M2 backend derivation) —
+    this file only owns shape + color. */
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    color: var(--black);
+    /* placeholder — per-pill text colors TBD, you said ignore these for now */
+}
+
+.status-pill--sky {
+    background: var(--sky);
+}
+
+.status-pill--coral {
+    background: var(--coral);
+}
+
+.status-pill--canary {
+    background: var(--canary);
+}
+
+.status-pill--sage {
+    background: var(--sage);
+}
+
+.status-pill--lavender {
+    background: var(--lavender);
+}
+
+.status-pill--clover {
+    background: var(--clover);
+}
+
+.status-pill--oak {
+    background: var(--oak);
+}
+
+.status-pill--poppy {
+    background: var(--poppy);
+}
+
+.status-pill--salmon {
+    background: var(--salmon);
+}
+

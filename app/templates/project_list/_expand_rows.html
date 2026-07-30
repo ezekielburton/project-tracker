@@ -15,7 +15,7 @@ outer table — so, also like the outer table, each row and its container
 gets an explicit --row-num / grid-row rather than relying on the grid's
 automatic placement, since a hidden container coming in and out of the
 layout could otherwise shift things around. #}
-{% from '_shared_macros.html' import tag %}
+{% from '_shared_macros.html' import tag, status_pill %}
 <div class="expand-customer-table">
     <div class="expand-customer-row expand-customer-header" style="--row-num: 1;">
         <span class="expand-customer-col-expand"></span>
@@ -49,7 +49,7 @@ layout could otherwise shift things around. #}
         </span>
         <span class="expand-customer-col-deliverable-count">{{ row.deliverable_count }}</span>
         <span class="expand-customer-col-revision-count">{{ row.revision_count }}</span>
-        <span class="expand-customer-col-status">{{ tag(row.blanket_status, 'action') }}</span>
+        <span class="expand-customer-col-status">{{ status_pill(row.blanket_status, row.status_pill_class) }}</span>
     </div>
 <div class="project-expand-container project-expand-container--customer-nested" hidden
         style="grid-row: {{ loop.index * 2 + 1 }};"></div>

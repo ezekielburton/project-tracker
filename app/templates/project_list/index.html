@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from '_shared_macros.html' import card, person_chip, tag %}
+{% from '_shared_macros.html' import card, person_chip, tag, status_pill %}
 
 {# One project row (the link row itself, plus its expand-container sibling).
 `ns` is a Jinja namespace object (a mutable counter, not a plain {% set %}
@@ -45,7 +45,7 @@ running count, which is exactly why this needs a namespace instead. #}
         {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
     </span>
     <span class="project-col-status">
-        {{ tag(row.blanket_status, 'action') }}
+        {{ status_pill(row.blanket_status, row.status_pill_class) }}
     </span>
     <span class="project-col-summary">
         {{ row.rollup or '—' }} </span>

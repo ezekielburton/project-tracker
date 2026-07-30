@@ -9,7 +9,7 @@ Every class here is prefixed expand-deliverable-* rather than plain
 deliverable-* — main.css already has an unrelated .deliverable-row
 class (from the brief-creation flow's deliverable list), loaded
 globally on every page, and it was silently colliding with this one. #}
-{% from '_shared_macros.html' import tag, person_chip %}
+{% from '_shared_macros.html' import tag, person_chip, status_pill %}
 <div class="expand-deliverable-table expand-deliverable-table--{{ brief_type }}">
     <div class="expand-deliverable-row expand-deliverable-header">
         <span class="expand-deliverable-col-name" data-col-key="name">Deliverable Name<span
@@ -46,7 +46,7 @@ globally on every page, and it was silently colliding with this one. #}
             {% endif %}
         </span>
         {% endfor %}
-        <span class="expand-deliverable-col-status">{{ tag(d.blanket_status, 'action') }}</span>
+        <span class="expand-deliverable-col-status">{{ status_pill(d.blanket_status, d.status_pill_class) }}</span>
     </div>
     {% else %}
     <p class="project-list-empty">No deliverables yet.</p>

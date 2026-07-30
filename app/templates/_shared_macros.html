@@ -81,3 +81,6 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {% macro tag(text, variant='action') %}
     <span class="tag tag--{{ variant }}">{{ text }}</span>
     {% endmacro %}
+    {% macro status_pill(text, modifier) %}
+    <span class="status-pill status-pill--{{ modifier }}">{{ text }}</span>
+    {% endmacro %}
