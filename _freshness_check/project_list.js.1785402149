@@ -30,9 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const expandCell = e.target.closest('.project-col-expand');
-        if (!expandCell) return;
-        const toggle = expandCell.querySelector('.project-expand-toggle');
+        const toggle = e.target.closest('.project-expand-toggle');
         if (!toggle) return;
 
         // The button lives inside the row's <a> — without these two lines,

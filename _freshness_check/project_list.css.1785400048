@@ -271,6 +271,7 @@
     grid-auto-rows: auto;
     align-items: stretch;
     width: max-content;
+    min-width: 100%;
 }
 
 .project-table-rounded-clip {
@@ -318,8 +319,6 @@
     position: relative;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
-    width: fit-content;
-    max-width: 100%;
 }
 
 .project-table-sticky-scrollbar {
@@ -427,16 +426,15 @@ body.is-resizing-column * {
     background: none;
     border: none;
     cursor: pointer;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     font-size: var(--text-1g);
     color: var(--grey-dark);
     padding: 0;
     line-height: 1;
     transition: transform 0.15s ease;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;   
 }
 
 .project-expand-toggle[aria-expanded="true"] {
@@ -519,6 +517,7 @@ body.is-resizing-column * {
 .project-group {
     position: relative;
     width: max-content;
+    min-width: 100%;
     background: var(--white);
     border-radius: var(--radius);
     overflow: hidden;
