@@ -1005,9 +1005,6 @@ body.is-resizing-column * {
 .project-sort-wrap {
     position: relative;
 }
-.project-save-view-wrap {
-    position: relative;
-}
 
 .project-sort-panel {
     position: absolute;

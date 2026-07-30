@@ -76,6 +76,7 @@
     --text-xs: 0.7rem;
     --text-sm: 0.78rem;
     --text-base: 1rem;
+    --text-med: 1.1rem;
     --text-1g: 1.25rem;
     --text-xl: 1.6rem;
 
@@ -319,7 +320,7 @@ textarea {
    max-width: 0 collapses it to zero layout width so it doesn't push the toggle button over the V. */
 .sidebar-logo-max {
     font-family: var(--font-logo);
-    font-size: 1.6rem;
+    font-size: var(--text-med);
     color: var(--tangerine);
     line-height: 1;
     opacity: 0;

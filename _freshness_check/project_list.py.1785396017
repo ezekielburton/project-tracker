@@ -600,21 +600,14 @@ def index():
         active_saved_view = ProjectTableView.query.filter_by(id=active_view_id, user_id=user.id).first() if active_view_id else None
         current_base_view = active_saved_view.base_view if active_saved_view else 'my'
     else:
-        active_saved_view = None
         current_base_view = view
-
-    # Dirty = the current filters/sort/group no longer what is active in the tab. 
-    # Column layout is not included, that preference is saved seperately and persistent across all tabs.
-    current_params = {k: v for k, v in request.args.items() if k!= 'view' and v}
-    baseline_params = dict(active_saved_view.filters) if active_saved_view and active_saved_view.filters else {}
-    is_dirty = current_params != baseline_params
 
     return render_template('project_list/index.html', rows=rows, view=view, effective_role=user.role, today=date.today(), filter_options=filter_options,
                        active_filters=active_filters, filter_counts=filter_counts, view_total=view_total, table_key=table_key, saved_layout=saved_layout, active_filter_count=active_filter_count,
                        saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout, is_admin=(user.role == 'admin'),
                        sort_options=SORT_OPTIONS, sort_field=sort_field, sort_dir=sort_dir,
-                       saved_views=saved_views, current_base_view=current_base_view, is_dirty=is_dirty,
-                       group_options=GROUP_FIELDS, group_field=group_field, groups=groups, )
+                       saved_views=saved_views, current_base_view=current_base_view,
+                       group_options=GROUP_FIELDS, group_field=group_field, groups=groups)
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required

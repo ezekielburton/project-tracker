@@ -600,7 +600,7 @@ def index():
         active_saved_view = ProjectTableView.query.filter_by(id=active_view_id, user_id=user.id).first() if active_view_id else None
         current_base_view = active_saved_view.base_view if active_saved_view else 'my'
     else:
-        active_saved_view = None
+        active_saved_view: None
         current_base_view = view
 
     # Dirty = the current filters/sort/group no longer what is active in the tab. 
