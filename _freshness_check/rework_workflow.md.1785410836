@@ -1,0 +1,143 @@
+# Projects Rework Workflow — Build Instructions
+
+**Purpose:** the step-by-step execution plan for the Detail + Briefing **overlay** rework. This doc tells the implementing model (Sonnet) *what to build, in what order, and when to stop and verify.* The **design decisions and full spec** live in `Projects Redesign Architecture.md`; the **live Projects-list-page reference** lives in `Projects.md`. Read both before starting a milestone — this doc is the sequence, not the spec.
+
+**Created:** 30 Jul 2026.
+
+---
+
+## How to use this doc (read first, every session)
+
+1. **Work one milestone at a time, in order.** Do not start milestone N+1 until milestone N is verified working in the browser and Ezekiel says go. Each milestone is a logical, independently-verifiable chunk.
+2. **Figma-gated visual milestones.** Any milestone marked **🎨 Figma-gated** must NOT begin until Ezekiel provides that milestone's Figma reference. Build to *that specific reference*, not from memory of the whole design — this is deliberate, so you always work from a concrete visual for the chunk in front of you instead of carrying the entire design in context. If the reference is missing, ask for it and stop.
+3. **Working mode (unchanged standing rule):** Ezekiel writes the code himself. You provide code **one chunk at a time, with explanation and exact line references** (`file` + where to insert/replace), and you teach as you go — never apply edits directly unless Ezekiel grants a one-time exception. He implements, you verify.
+4. **Verify freshness before trusting any file** (device-bridge quirk, see `Projects.md`): `device_bash cp <live-file> <new-timestamped-name>`, stage it, diff against your last read. Files have drifted stale mid-session before.
+5. **Device-bridge git quirks** (see `Projects.md`): harmless `unable to unlink '.git/*.lock'` warnings; a stale lock is fixed by `mv`-ing it aside, not deleting; git identity is already set locally in this repo; a broad `git add` will sweep in scratch dirs — glance at `git status` first.
+6. **Conventions that apply throughout** (from `Projects.md` / the architecture doc): fresh files never edits to old ones; comment standard (what/how/why per block); event delegation not per-row listeners; render-on-demand; no checkboxes (tag/button + `.is-selected`); `minmax(min-content, max-content)` grid discipline; `STATIC_VERSION` cache-bust (restart Flask after static edits); lazy-load avatars; debounce inputs.
+7. **Each milestone ends with a verification gate** — the concrete thing that must be true before moving on. Prefer a browser check; use a subagent for higher-stakes verification where noted.
+8. **Update `Projects.md` and the architecture doc as milestones land** — document each chunk as it happens, same discipline the Projects page followed.
+
+---
+
+## Milestone map (overview)
+
+| # | Milestone | Figma? | Depends on |
+|---|---|---|---|
+| M0 | Prep & branch hygiene | — | — |
+| M1 | Data model + migrations | — | M0 |
+| M2 | Status vocabulary propagation (incl. Projects page) | 🎨 (pills only) | M1 |
+| M3 | Overlay shell + View mode | 🎨 | M2 |
+| M4 | Edit mode + granular logging + SSE | 🎨 | M3 |
+| M5 | Create mode + drafts (Briefing folded in) | 🎨 | M4 |
+| M6 | Deliverables roster + per-deliverable status + assignment | 🎨 | M3 |
+| M7 | Submissions flow (design/client-facing) + submission summary | 🎨 | M6 |
+| M8 | Pre-Production tab + Project Owner flow + production-only | 🎨 | M6, M7 |
+| M9 | Cancel/Archive + Project Notes + Site Visits | 🎨 | M3 |
+| M10 | Cleanup & cutover (delete old detail page/routes/dead code) | — | all |
+
+Rough dependency logic: data first (M1), then the vocabulary everything renders (M2), then the shell that hosts everything (M3). M4/M5 build the edit/create modes on the shell; M6 the roster the later phases read; M7/M8 the submission→pre-production→handoff flow; M9 the cross-cutting actions; M10 removes the old surface only once the new one fully replaces it.
+
+---
+
+## M0 — Prep & branch hygiene *(no Figma)*
+**Goal:** clean starting point.
+- Confirm on `dev`, in sync with `origin/dev`; `git status` clean (no stray scratch).
+- Re-read `Projects Redesign Architecture.md` (the spec) and this doc.
+- Confirm the migration approach (additive, no data loss) and that `main` stays deployable.
+**Verify:** `git status` clean on `dev`; both docs re-read; Ezekiel confirms go.
+
+## M1 — Data model + migrations *(no Figma)*
+**Goal:** every new table/column/role from the architecture doc's §D/§E exists, additively.
+- New tables: `ProjectNote` (+tags), `SiteVisit`, the "seen-overlay-before" marker.
+- New columns: `Project.project_owner_id`, `Project.is_production_only` + pre-prod requirements text, `Deliverable.needs_technical`/`needs_artwork` + technical/artwork status, `Project.is_deleted`/`deleted_at`/`deleted_by_id`, `ProjectSubmission.workflow_status` + `last_internal_review_notified_at` + `cs_note`.
+- New `User.role` values: `project_owner`, `finance`, `production`, `logistics`.
+- Atomic job-number mechanism (SEQUENCE or `SELECT ... FOR UPDATE` counter).
+- Granular activity-log mechanism (richer `log_activity` payload or a small change-log table — pick the cleaner one, document the choice).
+- Backfill `ProjectSubmission.workflow_status` from existing signals (per §C). Plan (don't yet execute) the `project_status` vocabulary cutover mapping.
+- Drops (`ProjectApproval`, `ProjectReviewer` after eyeball, dead columns) can be deferred to M10 to keep M1 purely additive — but decide and note.
+**Verify:** migrations run clean on a copy; models import; existing pages still load; `workflow_status` backfill spot-checked against real rows. **Use a subagent to verify the backfill logic against actual DB rows.**
+
+## M2 — Status vocabulary propagation *(🎨 status pills only)*
+**Goal:** the new three-tier status vocabulary renders everywhere, including the Projects list page, so nothing disagrees.
+- Backend: the deliverable-status derivation (Unassigned→…→Client Approved), the pipeline vocabulary, the C&CM aggregate (Briefed/In Progress/Design Completed). Update `_blanket_status()` + the Projects-page Status filter list in `project_list.py`.
+- Projects list page: Status column + filter show the new vocabulary.
+- **Figma:** the status **pill** styles (colors/labels for each tier's states) — Ezekiel provides the pill reference; this is the only visual part of M2.
+**Verify:** Projects page Status column + filter show new vocabulary correctly across My/All/Approved and a C&CM project; pills match the Figma; a subagent double-checks the derivation against a few real projects.
+
+## M3 — Overlay shell + View mode *(🎨 Figma-gated)*
+**Goal:** clicking a project opens the near-fullscreen overlay showing the project read-only; closing restores the table.
+- Shell: near-fullscreen sheet, blurred table + sidebar behind, close via X / blur / Esc / Back.
+- URL: `project=<id>` param via `pushState`/`popstate`; click-row opens without reload; direct load/refresh auto-opens; close drops only `project=`. Optional copy-link.
+- Rail: pipeline tabs (Design | Pre-Production | Production | Logistics + Finance) with first-to-reach activation + accordion sub-sections; Design's Project Details/Deliverables/Submissions; first-visit default (Project Details) via the marker table.
+- View mode: render existing project detail content read-only (port from the old detail page as reference), fetch-on-open fragment, render-on-demand.
+- Point the Projects-page rows at the overlay instead of the old detail route (keep old route alive until M10).
+- **Figma:** the overlay shell + rail + View layout.
+**Verify:** click a project → overlay opens with correct content; tabs/accordion behave; URL updates, refresh reopens, Back closes; blur/Esc/X close; table state preserved underneath. Test Standard and C&CM.
+
+## M4 — Edit mode + granular logging + SSE *(🎨 Figma-gated)*
+**Goal:** the sticky top Edit toggle flips the section editable; Save commits + logs granularly + pushes live.
+- Edit toggle (CS/Mgmt/Admin/Owner), per-section global edit, single Save/Cancel, unsaved-edit guard on close/section-switch.
+- On Save: concurrent-edit check → commit → SSE push to other viewers → **field-level diff logged** (changed field, old→new, actor, time).
+- Deliverable add/remove → targeted notifications (team-requested designers on add; assigned designers on remove).
+- **Figma:** edit-mode field states + the sticky header/Edit control + the combined activity/notes timeline.
+**Verify:** edit a few fields → Save → other open viewer updates live; activity log shows per-field changes (not the flat message); add/remove a deliverable → right designers notified; unsaved-edit guard fires on close.
+
+## M5 — Create mode + drafts (Briefing folded in) *(🎨 Figma-gated)*
+**Goal:** create a project inside the overlay; on submit it becomes the View of the new project — no page nav.
+- Create mode = edit form + create-only controls: brief-type toggle (Standard/C&CM), Project Owner assignment, production-only flag, generate Job/FOC (atomic job-number fix lands here), Review & Submit.
+- Drafts: save-as-draft + drafts list/step in the same modal; a draft = Not Started.
+- On submit → switch to View of the new project.
+- C&CM create specifics (Concept & KV, Regions & Customers with persistent selected-customers chip strip + per-country count badges, per-customer deliverables reusing the shared edit component).
+- **Figma:** the create flow (both brief types) + Review & Submit + drafts step.
+**Verify:** create a Standard project end-to-end → lands in View; create a C&CM project; save a draft, reopen, finish it; job numbers are unique under concurrent create (test the atomic mechanism); old briefing page not yet removed (M10).
+
+## M6 — Deliverables roster + per-deliverable status + assignment *(🎨 Figma-gated)*
+**Goal:** the Deliverables section is the roster (all deliverables, all phases, status pills) with inline assignment.
+- Roster rows: name, team tags → Deadline → Files → Status pill; Focused/All toggle (team-scoped roles); count header.
+- Team-tag click-to-assign (dashed "+" at rest; self-assign / team-lead-assign; reassignment confirm-gated).
+- C&CM: Region → Customer → Deliverable nesting, two collapse levels, region-level Focused/All, counts at both levels, install date on customer header, bulk self-assign + conflict modal.
+- **Figma:** the roster (Standard + C&CM) + assignment states + pills in context.
+**Verify:** roster shows every deliverable with correct pill; assign/reassign works and logs; Focused/All correct per role; C&CM nesting + bulk-assign + conflict modal work.
+
+## M7 — Submissions flow + submission summary *(🎨 Figma-gated)*
+**Goal:** the client-facing design submission lifecycle, with the invoicing-complete submission summary.
+- Design Submissions surface: draft (one active per channel) → Submit to Client (gate + modified-since SSE check) → Sent → [Approved | Revision → Start Revision reopens draft].
+- **Submission summary modal at Submit to Client:** full deck = newly-submitted deliverables + already-approved/pre-production ones as read-only indicators (deck/invoicing completeness; never changes their status).
+- Deck versioning + revision counters (deliverable vs project/customer, labeled); expected filename preview; CS revision confirmation at send.
+- Universal undo on every transition (CS/Admin/Mgmt/Owner), logged. Deliverable picker reuses the roster.
+- Gulf per-customer routes (logic change, always set `posm_customer_id`).
+- **Figma:** submission surface states (draft/sent/revision/approved) + the submission summary modal + submission history.
+**Verify:** run a deliverable draft→submit→approve and draft→submit→revision→re-submit; submission summary shows locked deliverables correctly without touching their status; undo each transition; Gulf per-customer route independent; revision counters label correctly.
+
+## M8 — Pre-Production tab + Project Owner flow + production-only *(🎨 Figma-gated)*
+**Goal:** the pre-production work-surface, driven by the Project Owner, with per-deliverable staggering.
+- On Client Approved (per deliverable) + CS move-to-pre-production: Owner notified, reviews, flags deliverables (needs technical/artwork).
+- Pre-Production tab = work-surface filtered to flagged deliverables; technical/artwork upload; per-deliverable staggering; completion feeds Handed to Production; that transition lights the Production tab (first-to-reach).
+- Technical files route to their NAS subfolder, auto-copy to DWG/PDF on approval.
+- Production-only projects: start in Pre-Production, CS pre-prod requirements text + CS/Owner-added deliverables.
+- **Figma:** the Pre-Production tab work-surface + the Owner's deliverable-selection UI + production-only create variant.
+**Verify:** take a client-approved deliverable into pre-production while another stays in design (staggering holds; roster pills correct); Owner selection + notification works; Pre-Production tab activates first-to-reach; technical approval auto-copies files + advances toward Handed to Production; create a production-only project.
+
+## M9 — Cancel/Archive + Project Notes + Site Visits *(🎨 Figma-gated)*
+**Goal:** the cross-cutting actions and the outlier layer.
+- Cancel (reason required + logged, reversible, dashboard-visible to admin/mgmt) → Archive view (read-only + reactivate); admin hard-delete from archive.
+- Project Notes: freeform, attributed, timestamped, file link, tags; rendered in the combined timeline.
+- Site Visits: structured record (who/when/where) → project timeline + a hook for the dashboard availability view (dashboard surfacing itself can be a later small pass).
+- **Figma:** cancel/confirm + archive view + notes composer/timeline + site-visit entry.
+**Verify:** cancel a project (reason logged, leaves active views, shows in archive, reactivates, visible to admin/mgmt); add a note with a tag + file link (appears in timeline); log a site visit (appears on project; data ready for dashboard).
+
+## M10 — Cleanup & cutover *(no Figma)*
+**Goal:** remove the old surface only now that the overlay fully replaces it.
+- Delete the old `/projects/<id>` detail page + route + `detail.js`/`create.html`; confirm the `project=` param keeps all inbound links working.
+- Remove dead code (architecture doc §H): Project Settings menu, Edit-Brief/Edit-Project page, dead "Remove secondary CS" modal, `flagRevision()` dead selector, `work_hours_between()`, legacy Gulf POSM path, native `confirm()`s, old Review & Submit copy.
+- Execute the deferred drops (`ProjectApproval`, `ProjectReviewer` after eyeball, dead columns) and the `project_status` vocabulary cutover.
+- Final full regression pass.
+**Verify (subagent-assisted):** every old inbound link (notification, achievement, escalation) opens the overlay; no references to deleted routes/functions remain; a full click-through of Standard + C&CM projects across all phases; migrations for drops run clean.
+
+---
+
+## Notes for the implementing model
+- If a milestone is bigger than one sitting, split it into sub-chunks but keep the verification gate at the milestone boundary.
+- When a milestone touches the Projects list page (M2 especially), re-read `Projects.md` first — that page has hard-won grid/sizing conventions you must not regress.
+- Prefer reusing existing backend business logic (status-log funnel, notification triggers, achievement hooks) over re-deriving it. The rewrite is templates/CSS/JS/rendering — not the proven backend.
+- Keep both docs current as you land milestones.

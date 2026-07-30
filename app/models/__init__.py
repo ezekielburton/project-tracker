@@ -320,10 +320,27 @@ class Project(db.Model):
     design_direction_id = db.Column(db.Integer, db.ForeignKey('design_directions.id'), nullable=True)
     client_expectation = db.Column(db.Text, nullable=True)
     what_to_avoid = db.Column(db.Text, nullable=True)
+
     additional_information = db.Column(db.Text, nullable=True)
+    project_owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    is_production_only = db.Column(db.Boolean, default=False, nullable=False)
+    preproduction_requirements = db.Column(db.Text, nullable=True)
+
+    # Cancel/Archive (reversible) — see Projects Redesign Architecture.md §9
+    cancel_reason = db.Column(db.Text, nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    cancelled_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Soft-delete — rare, admin-only, permanent removal from the archive
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deleted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     # Relationships
     cs_lead = db.relationship('User', foreign_keys=[cs_lead_id])
+    project_owner = db.relationship('User', foreign_keys=[project_owner_id])
+    cancelled_by = db.relationship('User', foreign_keys=[cancelled_by_id])
+    deleted_by = db.relationship('User', foreign_keys=[deleted_by_id])
     creator = db.relationship('User', foreign_keys=[created_by_id])
     lead_designer = db.relationship('User', foreign_keys=[lead_designer_id])
     scope = db.relationship('Scope', backref='projects')
@@ -533,6 +550,10 @@ class Deliverable(db.Model):
     brief_flag_resolved = db.Column(db.Boolean, default=False, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    needs_technical = db.Column(db.Boolean, default=False, nullable=False)
+    needs_artwork = db.Column(db.Boolean, default=False, nullable=False)
+    technical_status = db.Column(db.String(50), nullable=True)
+    artwork_status = db.Column(db.String(50), nullable=True)
 
     # overlaps= tells SQLAlchemy these relationships intentionally share the same
     # foreign key — project_deliverables and project_ref are the other side of this mapping
@@ -645,6 +666,7 @@ class ActivityLog(db.Model):
     entity_name = db.Column(db.String(200), nullable=True)
     entity_id = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    changes = db.Column(db.JSON, nullable=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
 
@@ -738,7 +760,77 @@ class ProjectFile(db.Model):
     def __repr__(self):
         return f'<ProjectFile {self.original_filename} project={self.project_id}>'
     
+class ProjectNote(db.Model):
+    """
+    Freeform, attributed, timestamped note on a project — the deliberate
+    escape hatch for documenting workflow outliers (e.g. "Ibrahim — early
+    draft of 1x1 stand technical — 4 Aug 10AM — [link]") without trying to
+    model every out-of-scope case in the status/data model itself. Distinct
+    from ActivityLog, which is machine-written; these are human-written.
+    Tags set up the future chat features (Projects Redesign Architecture.md §11).
+    """
+    __tablename__ = 'project_notes'
 
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    file_link = db.Column(db.String(500), nullable=True)
+    tags = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref=db.backref('notes', cascade='all, delete-orphan'))
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<ProjectNote project={self.project_id} author={self.author_id}>'
+
+
+class SiteVisit(db.Model):
+    """
+    Structured record of a technical person's site visit — start/end
+    times captured precisely (not a freeform note) so the dashboard can
+    compute when a technical designer is out of the building
+    (Projects Redesign Architecture.md §11).
+    """
+    __tablename__ = 'site_visits'
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    start_at = db.Column(db.DateTime, nullable=False)
+    end_at = db.Column(db.DateTime, nullable=False)
+    location = db.Column(db.String(255), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref=db.backref('site_visits', cascade='all, delete-orphan'))
+    user = db.relationship('User', foreign_keys=[user_id])
+
+    def __repr__(self):
+        return f'<SiteVisit project={self.project_id} user={self.user_id}>'
+
+
+class ProjectOverlaySeen(db.Model):
+    """
+    One row per (user, project) marking that user's first visit to the new
+    Detail overlay for that project — drives "first visit defaults to
+    Project Details, later visits default to Deliverables"
+    (Projects Redesign Architecture.md §3). A marker, not a log.
+    """
+    __tablename__ = 'project_overlay_views'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    first_viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    project = db.relationship('Project', foreign_keys=[project_id])
+
+    def __repr__(self):
+        return f'<ProjectOverlaySeen user={self.user_id} project={self.project_id}>'
+    
 class ProjectSubmission(db.Model):
     __tablename__= 'project_submissions'
 
@@ -777,6 +869,12 @@ class ProjectSubmission(db.Model):
     posm_customer_id = db.Column(db.Integer, db.ForeignKey('project_customers.id'), nullable=True)
     posm_country     = db.Column(db.String(50), nullable=True)  # 'uae','kuwait' etc. for Gulf projects
     phase = db.Column(db.String(20), default='concept_kv', nullable=False)  # 'concept_kv' or 'posm'
+    # Explicit workflow lifecycle — see Projects Redesign Architecture.md §C.
+    # Backfilled from existing signals in a dedicated follow-up script (not
+    # yet run) rather than assumed correct from this column definition alone.
+    workflow_status = db.Column(db.String(30), nullable=True)
+    last_internal_review_notified_at = db.Column(db.DateTime, nullable=True)
+    cs_note = db.Column(db.Text, nullable=True)
 
     # Relationships
     project = db.relationship('Project', backref=db.backref('submissions', cascade='all, delete-orphan'))
