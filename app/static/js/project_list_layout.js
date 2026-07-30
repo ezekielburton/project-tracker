@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
         client: 100,
         cs: 120,
         designers: 140,
+        team: 90,
         deadline: 90,
         'next-deadline': 90,
         urgency: 90,
@@ -75,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { key: 'client', width: 'max-content' },
         { key: 'cs', width: 'max-content' },
         { key: 'designers', width: 'max-content' },
+        { key: 'team', width: 'max-content' },
         { key: 'deadline', width: 'max-content' },
         { key: 'next-deadline', width: 'max-content' },
         { key: 'urgency', width: 'max-content' },
@@ -100,19 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
             col.width = 'max-content';
         }
     });
-
-    // Prune: the inverse of the "append missing columns" step below. If a
-    // column ever existed in an earlier build and was later removed from
-    // the template (this app used to have a real "Team" column before Team
-    // became filter-only), an account that saved a layout back then still
-    // has that key sitting in its DB row. applyLayout() below doesn't check
-    // whether a key has a matching DOM element before giving it a real grid
-    // track and width — so a leftover key silently claims one whole column
-    // slot with nothing in it, which is exactly the blank "ghost column"
-    // bug. Keeping only keys that still exist in DEFAULT_LAYOUT removes any
-    // such orphan automatically, the same way the block below adds any
-    // brand-new one.
-    layout = layout.filter((col) => DEFAULT_LAYOUT.some((def) => def.key === col.key));
 
     // Defensive: if a column gets added in some future build, an older
     // saved layout won't know about it yet — append it at its default

@@ -1,6 +1,59 @@
 {% extends "base.html" %}
 {% from '_shared_macros.html' import card, person_chip, tag %}
 
+{# One project row (the link row itself, plus its expand-container sibling).
+   `ns` is a Jinja namespace object (a mutable counter, not a plain {% set %}
+   scalar) carrying the running --row-num across BOTH the flat "no grouping"
+   loop and the grouped-boxes loop below — a plain {% set %} inside a macro
+   or a nested {% for %} would re-scope on every iteration and lose the
+   running count, which is exactly why this needs a namespace instead. #}
+{% macro project_row(row, ns) %}
+<a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link"
+    style="--row-num: {{ ns.row_num }};">
+    <span class="project-col-expand">
+        <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
+            data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
+    </span>
+    <span class="project-col-name">{{ row.name }}</span>
+    <span class="project-col-client">{{ row.client or '—' }}</span>
+    <span class="project-col-cs">
+        {{ person_chip(row.cs_lead, 'CS Missing') }}
+    </span>
+    <span class="project-col-designers">
+        {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
+    </span>
+    <span class="project-col-team">
+        {% for t in row.design_teams %}{{ tag(t, t|lower) }}{% endfor %}{% if not row.design_teams %}—{% endif %} </span>
+    <span
+        class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
+        {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
+    </span>
+    <span class="project-col-next-deadline">
+        {{ row.next_deadline.date.strftime('%d %b %Y') if row.next_deadline else '—' }}
+    </span>
+    <span class="project-col-urgency">
+        {% if row.urgency %}
+        <span class="project-urgency-wrap{% if row.urgency == 'overdue' %} project-urgency--overdue{% endif %}">
+            {{ tag(row.urgency|capitalize, row.urgency) }}
+        </span>
+        {% else %}
+        —
+        {% endif %}
+    </span>
+    <span class="project-col-next-deliverable">
+        {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
+    </span>
+    <span class="project-col-status">
+        {{ tag(row.blanket_status, 'action') }}
+    </span>
+    <span class="project-col-summary">
+        {{ row.rollup or '—' }} </span>
+    <span class="project-col-job">{{ row.job_number or '—' }}</span>
+</a>
+<div class="project-expand-container" hidden style="grid-row: {{ ns.row_num + 1 }};"></div>
+{% set ns.row_num = ns.row_num + 2 %}
+{% endmacro %}
+
 {% block title %}Projects — Vitamin-E{% endblock %}
 
 {% block extra_css %}
@@ -22,6 +75,20 @@
             </a>
             <a href="{{ url_for('project_list.index', view='approved') }}"
                 class="project-list-tab{% if view == 'approved' %} active{% endif %}">Approved</a>
+
+            {% for sv in saved_views %}
+            <div class="project-list-tab-wrap{% if view == 'view-' ~ sv.id %} active{% endif %}" data-view-id="{{ sv.id }}">
+                <a href="{{ url_for('project_list.index', view='view-' ~ sv.id) }}"
+                    class="project-list-tab project-list-tab-saved{% if view == 'view-' ~ sv.id %} active{% endif %}">
+                    <span class="project-list-tab-label">{{ sv.name }}</span>
+                </a>
+                <button type="button" class="project-list-tab-menu-btn" aria-label="View options">⋯</button>
+                <div class="project-list-tab-menu" hidden>
+                    <button type="button" class="project-list-tab-menu-item" data-action="rename">Rename</button>
+                    <button type="button" class="project-list-tab-menu-item project-list-tab-menu-item-danger" data-action="delete">Delete</button>
+                </div>
+            </div>
+            {% endfor %}
         </div>
 
         <div class="project-list-toolbar">
@@ -44,7 +111,8 @@
                         <span class="filter-panel-count">Showing {{ rows|length }} of {{ view_total }} items</span>
                         <div class="filter-panel-header-actions">
                             <button type="button" class="filter-clear-all" id="filter-clear-all">Clear all</button>
-                            <button type="button" class="filter-save-view" id="save-new-view-btn">Save as new view</button>
+                            <button type="button" class="filter-save-view" id="save-new-view-btn"
+                                data-create-view-url="{{ url_for('project_list.create_view') }}">Save as new view</button>
                         </div>
                     </div>
                 
@@ -133,7 +201,27 @@
                                 {% endfor %}
                             </div>
                         </div>
-                
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Team</div>
+                            <div class="filter-column-list">
+                                {% for value in filter_options.teams %}
+                                <button type="button"
+                                    class="filter-chip-row{% if value in active_filters.team %} is-selected{% endif %}"
+                                    data-filter-group="team" data-filter-value="{{ value }}">
+                                    <span class="filter-chip-text">{{ value }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.team.get(value, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                                <button type="button"
+                                    class="filter-chip-row{% if active_filters.team_undefined %} is-selected{% endif %}"
+                                    data-filter-group="team" data-filter-value="undefined">
+                                    <span class="filter-chip-text">Undefined</span>
+                                    <span class="filter-chip-count">{{ filter_counts.team.get(None, 0) }}</span>
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
                 
                     <div class="filter-date-row">
@@ -192,28 +280,45 @@
             </div>
 
             <div class="project-sort-wrap">
-                <button type="button" id="sort-toggle" class="project-toolbar-sort-btn{% if sort_field %} is-active{% endif %}">
-                    Sort{% if sort_field %} / 1{% endif %}
+                <button type="button" id="sort-toggle" class="project-toolbar-sort-btn{% if sort_field or group_field %} is-active{% endif %}">
+                    Sort{% if sort_field and group_field %} / 2{% elif sort_field or group_field %} / 1{% endif %}
                 </button>
                 <div id="sort-panel" class="project-sort-panel" hidden>
                     <div class="sort-panel-header">
-                        <span class="sort-panel-title">Sort by</span>
+                        <span class="sort-panel-title">Sort</span>
                         <button type="button" class="sort-clear-all" id="sort-clear-all">Clear</button>
                     </div>
-                    <div class="sort-panel-options">
-                        {% for value, label in sort_options %}
-                        <div class="sort-option-row">
-                            <span class="sort-option-label">{{ label }}</span>
-                            <div class="sort-option-directions">
+                    <div class="project-sort-panel-columns">
+                        <div class="project-sort-panel-col">
+                            <div class="project-sort-panel-col-title">Group by</div>
+                            <div class="sort-panel-options">
+                                {% for value, label in group_options %}
                                 <button type="button"
-                                    class="project-sort-option{% if sort_field == value and sort_dir == 'asc' %} is-selected{% endif %}"
-                                    data-sort-field="{{ value }}" data-sort-dir="asc" aria-label="Sort {{ label }} ascending">▲</button>
-                                <button type="button"
-                                    class="project-sort-option{% if sort_field == value and sort_dir == 'desc' %} is-selected{% endif %}"
-                                    data-sort-field="{{ value }}" data-sort-dir="desc" aria-label="Sort {{ label }} descending">▼</button>
+                                    class="project-group-option{% if group_field == value %} is-selected{% endif %}"
+                                    data-group-field="{{ value }}">
+                                    {{ label }}
+                                </button>
+                                {% endfor %}
                             </div>
                         </div>
-                        {% endfor %}
+                        <div class="project-sort-panel-col">
+                            <div class="project-sort-panel-col-title">Order by</div>
+                            <div class="sort-panel-options">
+                                {% for value, label in sort_options %}
+                                <div class="sort-option-row">
+                                    <span class="sort-option-label">{{ label }}</span>
+                                    <div class="sort-option-directions">
+                                        <button type="button"
+                                            class="project-sort-option{% if sort_field == value and sort_dir == 'asc' %} is-selected{% endif %}"
+                                            data-sort-field="{{ value }}" data-sort-dir="asc" aria-label="Sort {{ label }} ascending">▲</button>
+                                        <button type="button"
+                                            class="project-sort-option{% if sort_field == value and sort_dir == 'desc' %} is-selected{% endif %}"
+                                            data-sort-field="{{ value }}" data-sort-dir="desc" aria-label="Sort {{ label }} descending">▼</button>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -233,6 +338,7 @@
             <span class="project-col-cs" data-col-key="cs">CS Lead<span class="project-col-resize-handle"></span></span>
             <span class="project-col-designers" data-col-key="designers">Lead Designers<span
                     class="project-col-resize-handle"></span></span>
+            <span class="project-col-team" data-col-key="team">Team<span class="project-col-resize-handle"></span></span>
             <span class="project-col-deadline" data-col-key="deadline">Initial Deadline<span
                     class="project-col-resize-handle"></span></span>
             <span class="project-col-next-deadline" data-col-key="next-deadline">Next Deadline<span
@@ -246,52 +352,29 @@
                     class="project-col-resize-handle"></span></span>
             <span class="project-col-job" data-col-key="job">Job Number<span class="project-col-resize-handle"></span></span>
         </div>
-    
-    {% for row in rows %}
-    <a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link"
-        style="--row-num: {{ loop.index * 2 }};">
-        <span class="project-col-expand">
-            <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
-                data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
-        </span>
-        <span class="project-col-name">{{ row.name }}</span>
-        <span class="project-col-client">{{ row.client or '—' }}</span>
-        <span class="project-col-cs">
-            {{ person_chip(row.cs_lead, 'CS Missing') }}
-        </span>
-        <span class="project-col-designers">
-            {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
-        </span>
-        <span
-            class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
-            {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
-        </span>
-        <span class="project-col-next-deadline">
-            {{ row.next_deadline.date.strftime('%d %b %Y') if row.next_deadline else '—' }}
-        </span>
-        <span class="project-col-urgency">
-            {% if row.urgency %}
-            <span class="project-urgency-wrap{% if row.urgency == 'overdue' %} project-urgency--overdue{% endif %}">
-                {{ tag(row.urgency|capitalize, row.urgency) }}
-            </span>
-            {% else %}
-            —
-            {% endif %}
-        </span>
-        <span class="project-col-next-deliverable">
-            {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
-        </span>
-        <span class="project-col-status">
-            {{ tag(row.blanket_status, 'action') }}
-        </span>
-        <span class="project-col-summary">
-            {{ row.rollup or '—' }} </span>
-        <span class="project-col-job">{{ row.job_number or '—' }}</span>
-    </a>
-    <div class="project-expand-container" hidden style="grid-row: {{ loop.index * 2 + 1 }};"></div>
+
+    {% set ns = namespace(row_num=2) %}
+    {% if groups %}
+        {% for group in groups %}
+        <div class="project-group-header" style="--row-num: {{ ns.row_num }};">
+            <button type="button" class="project-group-toggle" aria-expanded="true" aria-label="Collapse group">▸</button>
+            <span class="project-group-label">{{ group.label }}</span>
+            <span class="project-group-count">{{ group.rows|length }}</span>
+        </div>
+        {% set ns.row_num = ns.row_num + 1 %}
+        <div class="project-group-body">
+            {% for row in group.rows %}
+            {{ project_row(row, ns) }}
+            {% endfor %}
+        </div>
+        {% endfor %}
     {% else %}
-    <p class="project-list-empty">No projects to show.</p>
-    {% endfor %}
+        {% for row in rows %}
+        {{ project_row(row, ns) }}
+        {% else %}
+        <p class="project-list-empty">No projects to show.</p>
+        {% endfor %}
+    {% endif %}
     </div>
     </div>
     <div class="project-table-sticky-scrollbar" id="sticky-scrollbar">
@@ -307,6 +390,7 @@
 <script>
     window.__savedTableLayout = {{ saved_layout | tojson }};
     window.__savedDeliverableTableLayout = {{ saved_deliverable_layout | tojson }};
+    window.__currentBaseView = {{ current_base_view | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/project_list_layout.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_list.js') }}?v={{ config.STATIC_VERSION }}"></script>

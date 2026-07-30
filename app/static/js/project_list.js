@@ -7,10 +7,24 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const table = document.querySelector('.project-table');
-
+  
     if (!table) return;
 
     table.addEventListener('click', (e) => {
+        // Group-by header collapse/expand — same event-delegation pattern
+        // as row expansion below, since group headers are only rendered
+        // at all when Group by is active (see the `groups` template var).
+        const groupToggle = e.target.closest('.project-group-toggle');
+        if (groupToggle) {
+            const header = groupToggle.closest('.project-group-header');
+            const body = header && header.nextElementSibling;
+            if (!body || !body.classList.contains('project-group-body')) return;
+            const isOpen = groupToggle.getAttribute('aria-expanded') === 'true';
+            groupToggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+            body.hidden = isOpen;
+            return;
+        }
+
         const toggle = e.target.closest('.project-expand-toggle');
         if (!toggle) return;
 
@@ -77,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // read from whichever chip rows currently carry .is-selected —
             // replaces the old checkbox :checked reads now that these are
             // buttons, not inputs.
-            const chipGroups = ['cs_lead', 'designers', 'client', 'brief_type', 'status', 'urgency'];
+            const chipGroups = ['cs_lead', 'designers', 'client', 'brief_type', 'status', 'urgency', 'team'];
             chipGroups.forEach((name) => {
                 const selected = Array.from(
                     filterPanel.querySelectorAll(`.filter-chip-row[data-filter-group="${name}"].is-selected`)
@@ -109,13 +123,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Same idea as the view tab above — this function rebuilds the
             // whole query string from scratch, so without this, clicking any
-            // filter chip would silently wipe out whatever sort was active.
+            // filter chip would silently wipe out whatever sort/group was active.
             const currentSort = new URLSearchParams(window.location.search).get('sort');
             const currentDir = new URLSearchParams(window.location.search).get('dir');
             if (currentSort) {
                 params.set('sort', currentSort);
                 if (currentDir) params.set('dir', currentDir);
             }
+
+            const currentGroup = new URLSearchParams(window.location.search).get('group');
+            if (currentGroup) params.set('group', currentGroup);
 
             return `${window.location.pathname}?${params.toString()}`;
         }
@@ -149,8 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const clearAllBtn = document.getElementById('filter-clear-all');
         if (clearAllBtn) {
             clearAllBtn.addEventListener('click', () => {
-                // Clears filters only — sort is a separate control with its
-                // own Clear button, so it stays active across this click.
+                // Clears filters only — sort/group are a separate control
+                // with its own Clear button, so they stay active across this click.
                 const existing = new URLSearchParams(window.location.search);
                 const params = new URLSearchParams();
                 params.set('view', existing.get('view') || 'my');
@@ -158,16 +175,183 @@ document.addEventListener('DOMContentLoaded', () => {
                     params.set('sort', existing.get('sort'));
                     if (existing.get('dir')) params.set('dir', existing.get('dir'));
                 }
+                if (existing.get('group')) params.set('group', existing.get('group'));
                 window.location.href = `${window.location.pathname}?${params.toString()}`;
             });
         }
 
+        // ---- Save current filters/sort/group as a new tab ----
         const saveNewViewBtn = document.getElementById('save-new-view-btn');
         if (saveNewViewBtn) {
-            saveNewViewBtn.addEventListener('click', () => {
-                console.log('Save as new view — not wired up yet.');
+            saveNewViewBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const existingPopover = document.getElementById('save-view-popover');
+                if (existingPopover) {
+                    existingPopover.remove();
+                    return;
+                }
+
+                const popover = document.createElement('div');
+                popover.id = 'save-view-popover';
+                popover.className = 'save-view-popover';
+                popover.innerHTML = `
+                    <input type="text" class="save-view-popover-input" placeholder="View name" maxlength="100">
+                    <div class="save-view-popover-actions">
+                        <button type="button" class="save-view-popover-save">Save</button>
+                        <button type="button" class="save-view-popover-cancel">Cancel</button>
+                    </div>
+                `;
+                saveNewViewBtn.insertAdjacentElement('afterend', popover);
+                const input = popover.querySelector('.save-view-popover-input');
+                input.focus();
+
+                function closePopover() {
+                    popover.remove();
+                    document.removeEventListener('click', outsideClose);
+                }
+                function outsideClose(ev) {
+                    if (popover.contains(ev.target) || saveNewViewBtn.contains(ev.target)) return;
+                    closePopover();
+                }
+                document.addEventListener('click', outsideClose);
+
+                popover.querySelector('.save-view-popover-cancel').addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    closePopover();
+                });
+
+                popover.querySelector('.save-view-popover-save').addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    const name = input.value.trim();
+                    if (!name) return;
+
+                    // Everything currently in the URL except `view` itself is
+                    // this new tab's remembered filter/sort/group selection —
+                    // replayed as real query params the moment someone lands
+                    // on this tab (see project_list.py's fresh-landing redirect).
+                    const params = new URLSearchParams(window.location.search);
+                    params.delete('view');
+                    const filters = {};
+                    params.forEach((value, key) => { filters[key] = value; });
+
+                    fetch(saveNewViewBtn.dataset.createViewUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name,
+                            base_view: window.__currentBaseView || 'my',
+                            filters,
+                        }),
+                    })
+                        .then((res) => res.json())
+                        .then((data) => {
+                            if (data.id) {
+                                window.location.href = `${window.location.pathname}?view=view-${data.id}`;
+                            }
+                        });
+                });
+
+                input.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter') popover.querySelector('.save-view-popover-save').click();
+                    if (ev.key === 'Escape') closePopover();
+                });
             });
         }
+
+        // ---- Saved-view tabs: rename / delete ----
+        document.querySelectorAll('.project-list-tab-wrap').forEach((wrap) => {
+            const menuBtn = wrap.querySelector('.project-list-tab-menu-btn');
+            const menu = wrap.querySelector('.project-list-tab-menu');
+            const label = wrap.querySelector('.project-list-tab-label');
+            const viewId = wrap.dataset.viewId;
+            if (!menuBtn || !menu || !label || !viewId) return;
+
+            menuBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                document.querySelectorAll('.project-list-tab-menu').forEach((m) => {
+                    if (m !== menu) m.hidden = true;
+                });
+                menu.hidden = !menu.hidden;
+            });
+
+            menu.querySelectorAll('.project-list-tab-menu-item').forEach((item) => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    menu.hidden = true;
+
+                    if (item.dataset.action === 'rename') {
+                        const currentName = label.textContent.trim();
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'project-list-tab-rename-input';
+                        input.value = currentName;
+                        label.replaceWith(input);
+                        input.focus();
+                        input.select();
+
+                        const commit = () => {
+                            const newName = input.value.trim();
+                            if (!newName || newName === currentName) {
+                                input.replaceWith(label);
+                                return;
+                            }
+                            fetch(`/projects-new/views/${viewId}/rename`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: newName }),
+                            }).then(() => window.location.reload());
+                        };
+                        input.addEventListener('keydown', (ev) => {
+                            if (ev.key === 'Enter') input.blur();
+                            if (ev.key === 'Escape') { input.value = currentName; input.blur(); }
+                        });
+                        input.addEventListener('blur', commit, { once: true });
+                    }
+
+                    if (item.dataset.action === 'delete') {
+                        // Small inline confirm, not window.confirm() — keeps
+                        // every popover on this page the same custom style.
+                        let confirmBox = wrap.querySelector('.project-list-tab-confirm-delete');
+                        if (confirmBox) return;
+
+                        confirmBox = document.createElement('div');
+                        confirmBox.className = 'project-list-tab-confirm-delete';
+                        confirmBox.innerHTML = `
+                            <span>Delete this view?</span>
+                            <button type="button" class="project-list-tab-confirm-yes">Delete</button>
+                            <button type="button" class="project-list-tab-confirm-no">Cancel</button>
+                        `;
+                        wrap.appendChild(confirmBox);
+
+                        confirmBox.querySelector('.project-list-tab-confirm-yes').addEventListener('click', (ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            fetch(`/projects-new/views/${viewId}/delete`, { method: 'POST' })
+                                .then(() => {
+                                    if (wrap.classList.contains('is-active')) {
+                                        window.location.href = `${window.location.pathname}?view=my`;
+                                    } else {
+                                        window.location.reload();
+                                    }
+                                });
+                        });
+                        confirmBox.querySelector('.project-list-tab-confirm-no').addEventListener('click', (ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            confirmBox.remove();
+                        });
+                    }
+                });
+            });
+        });
+
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.project-list-tab-menu').forEach((m) => { m.hidden = true; });
+        });
 
         const searchToggle = document.getElementById('search-toggle');
         const toolbarSearch = document.getElementById('toolbar-search');
@@ -214,19 +398,40 @@ document.addEventListener('DOMContentLoaded', () => {
             // since sort is the only thing this needs to change.
             sortPanel.addEventListener('click', (e) => {
                 const option = e.target.closest('.project-sort-option');
-                if (!option) return;
-                const params = new URLSearchParams(window.location.search);
-                params.set('sort', option.dataset.sortField);
-                params.set('dir', option.dataset.sortDir);
-                window.location.href = `${window.location.pathname}?${params.toString()}`;
+                if (option) {
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('sort', option.dataset.sortField);
+                    params.set('dir', option.dataset.sortDir);
+                    window.location.href = `${window.location.pathname}?${params.toString()}`;
+                    return;
+                }
+
+                // Group by lives in the same combined panel, but is a fully
+                // independent query param from Sort — clicking a group
+                // option toggles it on, clicking the already-active one
+                // again clears it, same "click to toggle" feel as a filter chip.
+                const groupOption = e.target.closest('.project-group-option');
+                if (groupOption) {
+                    const params = new URLSearchParams(window.location.search);
+                    const field = groupOption.dataset.groupField;
+                    if (params.get('group') === field) {
+                        params.delete('group');
+                    } else {
+                        params.set('group', field);
+                    }
+                    window.location.href = `${window.location.pathname}?${params.toString()}`;
+                }
             });
 
             const sortClearBtn = document.getElementById('sort-clear-all');
             if (sortClearBtn) {
                 sortClearBtn.addEventListener('click', () => {
+                    // Clears both halves of this combined panel — Sort and
+                    // Group by — since they share this one Clear button.
                     const params = new URLSearchParams(window.location.search);
                     params.delete('sort');
                     params.delete('dir');
+                    params.delete('group');
                     window.location.href = `${window.location.pathname}?${params.toString()}`;
                 });
             }

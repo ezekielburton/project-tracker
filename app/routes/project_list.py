@@ -4,11 +4,11 @@
 #   All now within one template that adapts to the viewing user's role, per app architecture
 
 from datetime import date
-from flask import Blueprint, render_template, session, request, jsonify, url_for
+from flask import Blueprint, render_template, session, request, jsonify, url_for, redirect
 from flask_login import login_required, current_user
 from sqlalchemy import nullslast
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
 
@@ -264,6 +264,18 @@ def _base_query_for_view(view, user):
     """
     order_by = Project.first_output_deadline.asc()
 
+    # A saved custom view ("view-<id>") isn't itself a base query — it's a
+    # name + a remembered filter selection layered on top of one of the
+    # three fixed presets. Resolve it down to that preset here so every
+    # other branch below only ever has to know about 'my'/'all'/'approved'.
+    if view.startswith('view-'):
+        try:
+            view_id = int(view.split('-', 1)[1])
+        except ValueError:
+            view_id = None
+        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
+        view = saved_view.base_view if saved_view else 'my'
+
     if view == 'all':
         if user.role in ('cs', 'admin', 'management'):
             query = Project.query.filter(
@@ -465,6 +477,23 @@ def index():
     user = _effective_user()
     view = request.args.get('view', 'my')
 
+    # Fresh landing on a saved view (just clicked its tab, no filter params
+    # yet) - replay its saved filters as real query params via a redirect,
+    # so every existing filter/sort/group code path (all of which read from
+    # request.args) picks them up for free instead of needing its own
+    # separate "saved filter" code path. `len(request.args) <= 1` is the
+    # "fresh landing" check - only `view` itself is present so far.
+    if view.startswith('view-') and len(request.args) <= 1:
+        try:
+            view_id = int(view.split('-', 1)[1])
+        except ValueError:
+            view_id = None
+        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
+        if saved_view is not None and saved_view.filters:
+            params = dict(saved_view.filters)
+            params['view'] = view
+            return redirect(url_for('project_list.index', **params))
+
     table_key = f'project_list:{view}'
     layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key=table_key).first()
     saved_layout = layout_row.layout if layout_row else None
@@ -496,6 +525,18 @@ def index():
         # order rather than silently sorting by a field that doesn't exist.
         sort_field = ''
         sort_dir = ''
+
+    # Group by is independent of Sort - a separate `group` query param, and
+    # the two can both be active at once. Grouping buckets the already-
+    # sorted rows into named boxes; a row's position relative to its own
+    # group's other rows is untouched, since Python's sort (above) is
+    # stable and grouping never re-sorts within a group.
+    group_field = request.args.get('group', '')
+    if group_field in dict(GROUP_FIELDS):
+        groups = _group_rows(rows, group_field)
+    else:
+        group_field = ''
+        groups = None
 
     filter_counts = _build_filter_counts(view, user)
 
@@ -546,10 +587,27 @@ def index():
         bool(active_filters['next_deadline_from'] or active_filters['next_deadline_to']),
     ])
 
+    # Saved-view tabs (rendered after the 3 fixed presets) and which fixed
+    # preset the CURRENTLY active view is built on - the latter is what the
+    # "Save as new view" popover submits as `base_view` when the user isn't
+    # already sitting on a saved view of their own.
+    saved_views = ProjectTableView.query.filter_by(user_id=user.id).order_by(ProjectTableView.created_at.asc()).all()
+    if view.startswith('view-'):
+        try:
+            active_view_id = int(view.split('-', 1)[1])
+        except ValueError:
+            active_view_id = None
+        active_saved_view = ProjectTableView.query.filter_by(id=active_view_id, user_id=user.id).first() if active_view_id else None
+        current_base_view = active_saved_view.base_view if active_saved_view else 'my'
+    else:
+        current_base_view = view
+
     return render_template('project_list/index.html', rows=rows, view=view, effective_role=user.role, today=date.today(), filter_options=filter_options,
                        active_filters=active_filters, filter_counts=filter_counts, view_total=view_total, table_key=table_key, saved_layout=saved_layout, active_filter_count=active_filter_count,
                        saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout, is_admin=(user.role == 'admin'),
-                       sort_options=SORT_OPTIONS, sort_field=sort_field, sort_dir=sort_dir)
+                       sort_options=SORT_OPTIONS, sort_field=sort_field, sort_dir=sort_dir,
+                       saved_views=saved_views, current_base_view=current_base_view,
+                       group_options=GROUP_FIELDS, group_field=group_field, groups=groups)
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required
@@ -693,3 +751,137 @@ def _sort_rows(rows, field, direction):
         return rows
     reverse = direction == 'desc'
     return sorted(rows, key=lambda r: key_fn(r, reverse), reverse=reverse)
+
+
+# ---- Grouping ----
+# Every dimension a user can group rows by, in display order. Independent
+# of Sort (`group` and `sort` are separate query params, and both can be
+# active at once) - Group by buckets rows into named boxes; whichever sort
+# is active still runs first, so a group's own rows stay in that order.
+GROUP_FIELDS = [
+    ('cs_lead', 'CS Lead'),
+    ('client', 'Client'),
+    ('team', 'Team'),
+    ('urgency', 'Urgency'),
+    ('status', 'Status'),
+]
+
+def _group_key_and_label(row, field):
+    """
+    Returns (sort_key, label) for the single-value group fields. `team` is
+    handled separately in _group_rows, since it's the one multi-value field
+    here - a row can legitimately belong to more than one team's group at
+    once (a project requesting both 2D and 3D design).
+    """
+    if field == 'cs_lead':
+        person = row['cs_lead']
+        return ((0, person['name'].lower()), person['name']) if person else ((1, ''), 'No CS Lead')
+    if field == 'client':
+        return ((0, row['client'].lower()), row['client']) if row['client'] else ((1, ''), 'No Client')
+    if field == 'urgency':
+        order = _URGENCY_SORT_ORDER.get(row['urgency'], 4)
+        label = (row['urgency'] or 'normal').capitalize()
+        return ((order,), label)
+    if field == 'status':
+        return ((row['blanket_status'].lower(),), row['blanket_status'])
+    return None
+
+def _group_rows(rows, field):
+    """
+    Buckets an already-filtered (and already-sorted) row list into named
+    groups for whichever field the user picked in the Group by panel. Each
+    row keeps its position relative to its own group's other rows - Group
+    by changes how rows are BOXED, not the order they're compared in.
+
+    Returns a list of {'key', 'label', 'rows'} dicts, one per group, in
+    display order (alphabetical/urgency-order by label, except `team`
+    which follows the fixed TEAM_KEYS order plus a trailing Undefined box).
+
+    `team` fans a row out into every team-group it belongs to, since
+    design_teams is a list, not a single value - a project requesting both
+    2D and 3D legitimately shows up in both boxes.
+    """
+    if field == 'team':
+        buckets = {team: [] for team in TEAM_KEYS}
+        undefined_bucket = []
+        for row in rows:
+            teams = row['design_teams']
+            if not teams:
+                undefined_bucket.append(row)
+                continue
+            for team in teams:
+                buckets.setdefault(team, [])
+                buckets[team].append(row)
+        groups = [{'key': t, 'label': t, 'rows': buckets[t]} for t in TEAM_KEYS if buckets[t]]
+        if undefined_bucket:
+            groups.append({'key': None, 'label': 'Undefined', 'rows': undefined_bucket})
+        return groups
+
+    groups = {}
+    order = []
+    for row in rows:
+        result = _group_key_and_label(row, field)
+        if result is None:
+            return [{'key': None, 'label': None, 'rows': rows}]
+        sort_key, label = result
+        if label not in groups:
+            groups[label] = {'sort_key': sort_key, 'rows': []}
+            order.append(label)
+        groups[label]['rows'].append(row)
+
+    order.sort(key=lambda label: groups[label]['sort_key'])
+    return [{'key': label, 'label': label, 'rows': groups[label]['rows']} for label in order]
+
+
+@project_list_bp.route('/views', methods=['POST'])
+@login_required
+def create_view():
+    """
+    Saves the current filter selection (whatever's active right now) as a
+    new named tab, layered on top of one of the three fixed presets. The
+    frontend submits `base_view` (the preset the user is currently sitting
+    on, or already sitting on top of if they're on another saved view) and
+    `filters` (the current page's own query params, minus `view` itself).
+    """
+    user = _effective_user()
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    base_view = data.get('base_view') or 'my'
+    filters = data.get('filters') or {}
+
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    if base_view not in ('my', 'all', 'approved'):
+        base_view = 'my'
+
+    view = ProjectTableView(user_id=user.id, name=name, base_view=base_view, filters=filters)
+    db.session.add(view)
+    db.session.commit()
+
+    return jsonify({'status': 'ok', 'id': view.id, 'name': view.name})
+
+
+@project_list_bp.route('/views/<int:view_id>/rename', methods=['POST'])
+@login_required
+def rename_view(view_id):
+    user = _effective_user()
+    view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first_or_404()
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+
+    view.name = name
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+@project_list_bp.route('/views/<int:view_id>/delete', methods=['POST'])
+@login_required
+def delete_view(view_id):
+    user = _effective_user()
+    view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first_or_404()
+    db.session.delete(view)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
