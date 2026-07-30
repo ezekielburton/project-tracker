@@ -180,3 +180,24 @@
     color: #E60000;
 }
 
+/* Team tags — same colors as the .discipline-tag.tag--2d/3d/technical
+   variants already used elsewhere in the app (main.css), so a project's
+   team badge looks the same whether you're looking at it here or on the
+   deliverable/detail page. Kept as separate rules (rather than reusing
+   .discipline-tag directly) because the shared tag() macro only ever
+   renders the base .tag class, never .discipline-tag. */
+.tag--2d {
+    background: #e8f0e8;
+    color: var(--pine);
+}
+
+.tag--3d {
+    background: #e8edf5;
+    color: var(--ashen);
+}
+
+.tag--technical {
+    background: #f0eee8;
+    color: var(--oak);
+}
+
