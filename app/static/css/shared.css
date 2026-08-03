@@ -259,3 +259,120 @@
     background: var(--salmon);
 }
 
+/*  ---- Tab Strip
+    The Projects-list page's tab-selector look (tangerine text + tangerine
+    underline on .active), generalized so any page can use it — first reused
+    by the Detail+Briefing overlay's rail (30 Jul 2026). Values are pixel-
+    identical to the old .project-list-tabs/.project-list-tab rules they
+    replace; only the names changed. */
+
+.tab-strip {
+    display: flex;
+    gap: var(--space-5);
+    margin-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    justify-content: left;
+}
+
+.tab-strip-item {
+    font-family: var(--font-logo);
+    font-size: var(--text-base);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: var(--space-2) 0;
+    color: var(--grey-dark);
+    text-decoration: none;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    
+}
+
+.tab-strip-item.active {
+    color: var(--tangerine);
+    border-bottom-color: var(--tangerine);
+}
+
+.tab-strip-item:hover:not(.active) {
+    color: var(--black);
+}
+
+/* ------- Avatar picker: button + popover list of avatar+name rows -------
+   Same toggle-button + absolute-positioned-popover recipe as the Projects
+   page's .project-filter-panel/.project-sort-panel (project_list.css) —
+   reused here rather than invented fresh, just sized for a short list.
+   Lives in shared.css (not project_list.css) since this is used across
+   the overlay's own cards (CS Lead/Secondary CS/Project Owner so far),
+   not just the Projects list page. */
+
+.avatar-picker {
+    position: relative;
+    display: inline-block;
+}
+
+.avatar-picker-trigger {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.avatar-picker-placeholder {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+    padding: 0.15rem var(--space-3);
+    border: 1px dashed var(--border-subtle);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.avatar-picker-popover {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    left: 0;
+    width: max-content;
+    min-width: 200px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    padding: var(--space-2);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.avatar-picker-popover[hidden] {
+    display: none;
+}
+
+.avatar-picker-option {
+    background: none;
+    border: none;
+    text-align: left;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+}
+
+.avatar-picker-option:hover {
+    background: var(--surface-hover);
+}
+
+.avatar-picker-empty {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+    padding: var(--space-2);
+    margin: 0;
+}
+

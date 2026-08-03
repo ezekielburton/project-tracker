@@ -98,7 +98,9 @@ def create_app():
     from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
     from app.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
     from app.routes.projects_transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
-    from app.routes.project_list import project_list_bp #New projects page list
+    from app.routes.project_list import project_list_bp # Projects page list
+    from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
+    
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -122,6 +124,7 @@ def create_app():
     app.register_blueprint(time_tracking_bp)
     app.register_blueprint(transfer_bp)
     app.register_blueprint(project_list_bp)
+    app.register_blueprint(project_overlay_bp)
 
     @app.context_processor
     @app.context_processor

@@ -6,20 +6,85 @@
 // start of this build.
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ---- Detail + Briefing overlay: open/close + URL state ----
+    // Real click-to-open wiring (M3 Step 2) — replaces the old full-page
+    // navigation to project_detail.detail with an overlay fetched and
+    // injected on demand, addressable via a `project=<id>` query param so
+    // links/refreshes/back-forward all keep working (architecture doc §1).
+    // Deliberately declared above the `if (!table) return` guard below —
+    // the overlay mount isn't inside the table, so it must still work on
+    // an empty-state page (e.g. a direct link into a filtered, empty view).
+
+    const overlayMount = document.getElementById('project-overlay-mount');
+    let activeOverlay = null;       // the ProjectOverlay.init() handle, or null when closed
+    let activeDetailsCard = null;   // the ProjectDetailsCard.init() handle, or null when closed
+
+    function openProjectOverlay(projectId, pushHistory = true) {
+        fetch(`/projects/${projectId}/overlay`)
+            .then((res) => res.text())
+            .then((html) => {
+                overlayMount.innerHTML = html;
+                activeOverlay = window.ProjectOverlay.init(closeProjectOverlay);
+                activeDetailsCard = window.ProjectDetailsCard.init(overlayMount, projectId, function () {
+                    openProjectOverlay(projectId, false);  // re-fetch to reflect the change, no new history entry
+                });
+
+                if (pushHistory) {
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('project', projectId);
+                    history.pushState({ projectId }, '', `${window.location.pathname}?${params.toString()}`);
+                }
+            });
+    }
+
+    function closeProjectOverlay(pushHistory = true) {
+        if (activeOverlay) {
+            activeOverlay.destroy();
+            activeOverlay = null;
+        }
+        if (activeDetailsCard) {
+            activeDetailsCard.destroy();
+            activeDetailsCard = null;
+        }
+        overlayMount.innerHTML = '';
+
+        if (pushHistory) {
+            const params = new URLSearchParams(window.location.search);
+            params.delete('project');
+            const query = params.toString();
+            history.pushState({}, '', `${window.location.pathname}${query ? '?' + query : ''}`);
+        }
+    }
+
+    // Browser Back/Forward: re-derive open/closed state from the URL
+    // rather than trusting the popstate event's direction, since the user
+    // could navigate multiple steps at once.
+    window.addEventListener('popstate', () => {
+        const params = new URLSearchParams(window.location.search);
+        const projectId = params.get('project');
+        if (projectId) {
+            openProjectOverlay(projectId, false);
+        } else {
+            closeProjectOverlay(false);
+        }
+    });
+
+    // Direct load / refresh with `?project=<id>` already in the URL —
+    // every inbound link (notifications, achievements, escalations) will
+    // depend on this once the old detail page is deleted at M10.
+    (function autoOpenFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const projectId = params.get('project');
+        if (projectId) openProjectOverlay(projectId, false);
+    })();
+
+    // ---- Row expansion + row-click-to-open (existing table, unchanged structure) ----
+
     const table = document.querySelector('.project-table');
-  
+
     if (!table) return;
 
     table.addEventListener('click', (e) => {
-        // Group-by header collapse/expand — same event-delegation pattern
-        // as row expansion below, since group headers are only rendered
-        // at all when Group by is active (see the `groups` template var).
-        // The whole tangerine label bar is the click target (it's a
-        // <button> spanning the full card), not a small icon inside it —
-        // collapsing hides its entire mini-table (the very next sibling,
-        // .project-group-table — repeated column header AND rows all at
-        // once), leaving just this label bar, same as collapsing a group
-        // in Monday.
         const groupHeader = e.target.closest('.project-group-header');
         if (groupHeader) {
             const groupTable = groupHeader.nextElementSibling;
@@ -31,41 +96,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const expandCell = e.target.closest('.project-col-expand');
-        if (!expandCell) return;
-        const toggle = expandCell.querySelector('.project-expand-toggle');
-        if (!toggle) return;
+        if (expandCell) {
+            const toggle = expandCell.querySelector('.project-expand-toggle');
+            if (!toggle) return;
 
-        // The button lives inside the row's <a> — without these two lines,
-        // clicking it would also follow the link to the detail page.
-        e.preventDefault();
-        e.stopPropagation();
+            e.preventDefault();
+            e.stopPropagation();
 
-        const row = toggle.closest('.project-row');
-        const container = row.nextElementSibling;
-        if (!container || !container.classList.contains('project-expand-container')) return;
+            const row = toggle.closest('.project-row');
+            const container = row.nextElementSibling;
+            if (!container || !container.classList.contains('project-expand-container')) return;
 
-        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
-        if (isOpen) {
-            container.hidden = true;
-            toggle.setAttribute('aria-expanded', 'false');
+            const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+            if (isOpen) {
+                container.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+                return;
+            }
+
+            toggle.setAttribute('aria-expanded', 'true');
+            container.hidden = false;
+
+            if (container.dataset.loaded === 'true') return;
+
+            fetch(toggle.dataset.expandUrl)
+                .then((res) => res.text())
+                .then((html) => {
+                    container.innerHTML = html;
+                    container.dataset.loaded = 'true';
+                });
             return;
         }
 
-        toggle.setAttribute('aria-expanded', 'true');
-        container.hidden = false;
+        // Not the expand toggle — a click anywhere else on a project row
+        // opens the overlay instead of navigating to the old detail page.
+        const rowLink = e.target.closest('.project-row--link');
+        if (!rowLink) return;
 
-        // Fetch only the first time this row is opened — cached in the DOM
-        // afterwards so re-opening it never re-hits the server. This is the
-        // render-on-demand principle: fetch when it's actually needed, not
-        // pre-loaded for every row up front.
-        if (container.dataset.loaded === 'true') return;
-
-        fetch(toggle.dataset.expandUrl)
-            .then((res) => res.text())
-            .then((html) => {
-                container.innerHTML = html;
-                container.dataset.loaded = 'true';
-            });
+        e.preventDefault();
+        openProjectOverlay(rowLink.dataset.projectId);
     });
 
     const filterToggle = document.getElementById('filter-toggle');

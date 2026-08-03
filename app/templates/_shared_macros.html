@@ -27,6 +27,7 @@ uses for summary_html. Body content goes in the {% call %} block.
 {% endmacro %}
 
 
+
 {#
 person_chip(person, missing_label, missing_class)
 ──────────────────────────────────────────────────────
@@ -84,3 +85,43 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {% macro status_pill(text, modifier) %}
     <span class="status-pill status-pill--{{ modifier }}">{{ text }}</span>
     {% endmacro %}
+
+    {#
+    avatar_picker(picker_id, current_person, options, missing_label)
+    ──────────────────────────────────────────────────────────────
+    A button showing the current pick (person_chip, or missing_label if
+    unset) that opens a small popover list of avatar+name rows to choose
+    from — same toggle-button + absolute-positioned-popover recipe as
+    .project-filter-panel/.project-sort-panel (project_list.css), just
+    sized for a short list instead of a wide multi-column one. Generic:
+    the caller supplies `options` (a list of {id, name, avatar_filename}
+    — the same person shape person_chip() already expects). This macro
+    only renders markup — it doesn't know what picking someone should DO
+    (save a CS lead vs a Project Owner are different routes/rules), that
+    lives in avatar_picker.js's onSelect callback, wired up per instance
+    by whichever card uses it. picker_id must be unique per instance on
+    the page (becomes an element id).
+    #}
+    {% macro avatar_picker(picker_id, current_person, options, missing_label='Select…') %}
+    <div class="avatar-picker" id="{{ picker_id }}">
+        <button type="button" class="avatar-picker-trigger">
+            {% if current_person %}
+            {{ person_chip(current_person) }}
+            {% else %}
+            <span class="avatar-picker-placeholder">{{ missing_label }}</span>
+            {% endif %}
+        </button>
+        <div class="avatar-picker-popover" hidden>
+            {% for person in options %}
+            <button type="button" class="avatar-picker-option" data-user-id="{{ person.id }}">
+                {{ person_chip(person) }}
+            </button>
+            {% else %}
+            <p class="avatar-picker-empty">Nobody available.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endmacro %}
+
+
+

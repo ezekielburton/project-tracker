@@ -1,0 +1,300 @@
+/*  app/static/css/project_overlay.css
+    The detail & briefing overlay shell and it's two-tier rail.
+    Main options are always visible, with sub-options adapting to the main
+    option selection. 
+*/
+
+.project-overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-6);
+    background: rgba(26, 26, 26, 0.25);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.project-overlay-sheet {
+    width: 85%;
+    height: 85%;
+    max-width: 1600px;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ------- Header: name, divider, rail, divider, close — one row ------- */
+
+.project-overlay-header {
+    display: flex;
+    align-items: flex-end;
+    padding: var(--space-1) var(--space-5) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    --section-color: var(--tangerine);
+}
+
+.project-overlay-name {
+    align-self: center;
+    font-family: var(--font-logo);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--black);
+    padding-bottom: var(--space-3);
+}
+
+.project-overlay-header-divider {
+    align-self: stretch;
+    width: 1px;
+    margin: var(--space-2) var(--space-5);
+    background: var(--border-subtle);
+}
+
+.project-overlay-header-divider--push {
+    margin-left: auto;
+}
+
+/* ------- Rail: back chevron, main options, sub-tabs — one fixed row -------
+   Nothing here ever reorders. Collapsing a button just shrinks its width
+   (and zeroes its padding/margin/opacity) to 0 — since it takes up no
+   space anymore, whichever button stays expanded automatically reads as
+   "first". Widths are measured and animated by JS (project_overlay.js);
+   the CSS below only declares what transitions and what ".is-collapsed"
+   looks like. */
+
+.project-overlay-rail.tab-strip {
+    align-items: flex-end;
+    border-bottom: none;
+    gap: 0;
+    margin-bottom: 0;
+}
+
+.project-overlay-back,
+.project-overlay-rail .tab-strip-item {
+    position: relative;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: width 0.3s ease, padding 0.3s ease, margin 0.3s ease, opacity 0.2s ease;
+}
+
+.project-overlay-back.is-collapsed,
+.project-overlay-rail .tab-strip-item.is-collapsed {
+    overflow: hidden;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.project-overlay-back.is-collapsed {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    font-size: 0 !important;
+}
+
+.project-overlay-rail .tab-strip-item {
+    padding: var(--space-3) var(--space-2);
+    margin-right: var(--space-5);
+}
+
+.project-overlay-rail .tab-strip-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    right: calc(var(--space-5) / -2);
+    width: 1px;
+    background: var(--border-subtle);
+}
+
+.project-overlay-back {
+    background: none;
+    border: none;
+    font-size: 1.8rem;
+    line-height: 1;
+    color: var(--grey-mid);
+    cursor: pointer;
+    padding: var(--space-2) var(--space-2);
+    margin-left: calc(var(--space-3) * -1);
+    margin-right: var(--space-3);
+}
+
+.project-overlay-back:hover {
+    color: var(--section-color);
+}
+
+/* Each main option's own color when active — static, since Design is
+   always tangerine, Finance is always ashen, and so on. */
+
+.project-overlay-rail .tab-strip-item[data-main-tab="design"].active {
+    color: var(--tangerine);
+    border-bottom-color: var(--tangerine);
+}
+
+.project-overlay-rail .tab-strip-item[data-main-tab="finance"].active {
+    color: var(--ashen);
+    border-bottom-color: var(--ashen);
+}
+
+.project-overlay-rail .tab-strip-item[data-main-tab="production"].active {
+    color: var(--oak);
+    border-bottom-color: var(--oak);
+}
+
+.project-overlay-rail .tab-strip-item[data-main-tab="logistics"].active {
+    color: var(--pine);
+    border-bottom-color: var(--pine);
+}
+
+.project-overlay-subrail {
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+    transition: width 0.3s ease, margin 0.3s ease, opacity 0.2s ease;
+}
+
+.project-overlay-subrail.is-collapsed {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.project-overlay-subrail .tab-strip-item.active {
+    color: var(--section-color);
+    border-bottom-color: var(--section-color);
+}
+
+.project-overlay-close {
+    align-self: center;
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--grey-dark);
+    cursor: pointer;
+    padding: var(--space-2);
+    transition: color 0.2s;
+}
+
+.project-overlay-close:hover {
+    color: var(--tangerine);
+}
+
+.project-overlay-content {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--space-5);
+}
+
+@media (max-width: 900px) {
+    .project-overlay-name {
+        font-size: var(--text-med);
+    }
+
+    .project-overlay-header-divider {
+        margin: var(--space-2) var(--space-3);
+    }
+
+    .project-overlay-rail.tab-strip {
+        gap: var(--space-3);
+    }
+
+    .project-overlay-rail .tab-strip-item {
+        padding: var(--space-2) var(--space-1);
+    }
+}
+
+@media (max-width: 600px) {
+    .project-overlay-rail .tab-strip-item {
+        font-size: var(--text-sm);
+    }
+
+    .project-overlay-rail.tab-strip {
+        gap: var(--space-2);
+    }
+}
+
+/* ------- Design > Details content: field grid + card layout ------- */
+
+.overlay-details-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+}
+
+.overlay-field-grid {
+    display: flex;
+    gap: var(--space-6);
+}
+
+.overlay-field-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    flex: 1;
+}
+
+.overlay-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.overlay-field-label {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--grey-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.overlay-field-value {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--black);
+}
+
+.overlay-field-empty {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+}
+
+.overlay-secondary-cs-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.overlay-secondary-cs-row {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.overlay-secondary-cs-remove {
+    background: none;
+    border: none;
+    color: var(--grey-mid);
+    cursor: pointer;
+    font-size: var(--text-sm);
+    line-height: 1;
+    padding: 0 var(--space-1);
+}
+
+.overlay-secondary-cs-remove:hover {
+    color: var(--rose);
+}
+
+.overlay-placeholder {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--grey-mid);
+}

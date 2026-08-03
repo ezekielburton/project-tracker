@@ -9,7 +9,7 @@ or a nested {% for %} would re-scope on every iteration and lose the
 running count, which is exactly why this needs a namespace instead. #}
 {% macro project_row(row, ns) %}
 <a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link"
-    style="--row-num: {{ ns.row_num }};">
+    data-project-id="{{ row.id }}" style="--row-num: {{ ns.row_num }};">
     <span class="project-col-expand">
         <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
             data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
@@ -94,6 +94,7 @@ everywhere at once, same as a single real table would. #}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/shared.css') }}?v={{ config.STATIC_VERSION }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/project_list.css') }}?v={{ config.STATIC_VERSION }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
 {% endblock %}
 
 {% block content %}
@@ -101,21 +102,21 @@ everywhere at once, same as a single real table would. #}
     <h1 class="project-list-heading">Projects</h1>
 
     <div class="project-list-header">
-        <div class="project-list-tabs">
+        <div class="tab-strip">
             <a href="{{ url_for('project_list.index', view='my') }}"
-                class="project-list-tab{% if view == 'my' %} active{% endif %}">My Projects</a>
+                class="tab-strip-item{% if view == 'my' %} active{% endif %}">My Projects</a>
             <a href="{{ url_for('project_list.index', view='all') }}"
-                class="project-list-tab{% if view == 'all' %} active{% endif %}">
+                class="tab-strip-item{% if view == 'all' %} active{% endif %}">
                 {% if effective_role in ('cs', 'admin', 'management') %}All Projects{% else %}Team Projects{% endif %}
             </a>
             <a href="{{ url_for('project_list.index', view='approved') }}"
-                class="project-list-tab{% if view == 'approved' %} active{% endif %}">Approved</a>
+                class="tab-strip-item{% if view == 'approved' %} active{% endif %}">Approved</a>
 
             {% for sv in saved_views %}
             <div class="project-list-tab-wrap{% if view == 'view-' ~ sv.id %} active{% endif %}"
                 data-view-id="{{ sv.id }}">
                 <a href="{{ url_for('project_list.index', view='view-' ~ sv.id) }}"
-                    class="project-list-tab project-list-tab-saved{% if view == 'view-' ~ sv.id %} active{% endif %}">
+                    class="tab-strip-item project-list-tab-saved{% if view == 'view-' ~ sv.id %} active{% endif %}">
                     <span class="project-list-tab-label">{{ sv.name }}</span>
                 </a>
                 <button type="button" class="project-list-tab-menu-btn" aria-label="View options">⋯</button>
@@ -423,10 +424,11 @@ everywhere at once, same as a single real table would. #}
         <div class="project-table-sticky-scrollbar" id="sticky-scrollbar">
             <div class="project-table-sticky-scrollbar-inner" id="sticky-scrollbar-inner"></div>
         </div>
-    </div>
+        </div>
     {% endcall %}
 </div>
 <div class="project-resize-drag-indicator" id="resize-drag-indicator" hidden></div>
+<div id="project-overlay-mount"></div>
 {% endblock %}
 
 {% block extra_js %}
@@ -437,4 +439,7 @@ everywhere at once, same as a single real table would. #}
 </script>
 <script src="{{ url_for('static', filename='js/project_list_layout.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_list.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_overlay.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/avatar_picker.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_details_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

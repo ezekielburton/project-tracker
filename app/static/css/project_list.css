@@ -11,37 +11,6 @@
     margin-bottom: var(--space-5);
 }
 
-.project-list-tabs {
-    display: flex;
-    gap: var(--space-5);
-    margin-bottom: var(--space-4);
-    border-bottom: 1px solid var(--border-subtle);
-}
-
-.project-list-tab {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    padding: var(--space-2) 0;
-    color: var(--grey-dark);
-    text-decoration: none;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-}
-
-.project-list-tab.active {
-    color: var(--tangerine);
-    border-bottom-color: var(--tangerine);
-}
-
-.project-list-tab:hover:not(.active) {
-    color: var(--black);
-}
-
 /* A saved view's tab is the same .project-list-tab styling as the 3 fixed
    presets, just wrapped in a positioning parent so its "⋯" menu button and
    popovers (rename input swap-in, delete confirm) can anchor to it. */
