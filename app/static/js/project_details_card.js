@@ -1,83 +1,111 @@
-// app/static/js/project_details_card.js
-//
-// Wires the Project Name card's three avatar pickers (CS Lead, Add
-// Secondary CS, Project Owner) plus the Secondary CS remove buttons.
-// Each pick/remove POSTs to its existing route, then asks the caller to
-// re-fetch the whole overlay content fragment — simpler and more robust
-// than hand-patching the DOM three different ways, consistent with the
-// fetch-driven render-on-demand approach used everywhere else here.
-//
-// init() is explicit (not auto-running) — same reasoning as
-// ProjectOverlay/AvatarPicker: this markup is injected on open, not
-// present at page load.
-
 window.ProjectDetailsCard = (function () {
     function init(rootEl, projectId, onChanged) {
         if (!rootEl) return null;
-
         var pickerHandles = [];
+        function handleResponse(res) { return res.json().then(function (data) { if (data.success) { onChanged(); } else { alert(data.error || 'Something went wrong.'); } }); }
+        function postForm(url, body) { fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }).then(handleResponse); }
+        function postJson(url, body) { fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(handleResponse); }
 
-        function handleResponse(res) {
-            return res.json().then(function (data) {
-                if (data.success) {
-                    onChanged();
-                } else {
-                    alert(data.error || 'Something went wrong.');
-                }
+        var csLeadPicker = rootEl.querySelector('#cs-lead-picker');
+        if (csLeadPicker) pickerHandles.push(window.AvatarPicker.init(csLeadPicker, function (userId) { postJson(`/projects/${projectId}/reassign-cs-lead`, { new_cs_lead_id: userId }); }));
+
+        var secondaryCsAddPicker = rootEl.querySelector('#secondary-cs-add-picker');
+        if (secondaryCsAddPicker) pickerHandles.push(window.AvatarPicker.init(secondaryCsAddPicker, function (userId) { postForm(`/projects/${projectId}/secondary-cs`, `user_id=${userId}`); }));
+
+        var ownerPicker = rootEl.querySelector('#project-owner-picker');
+        if (ownerPicker) pickerHandles.push(window.AvatarPicker.init(ownerPicker, function (userId) { postForm(`/projects/${projectId}/set-project-owner`, `user_id=${userId}`); }));
+
+        rootEl.querySelectorAll('.avatar-picker[data-team]').forEach(function (pickerEl) {
+            pickerHandles.push(window.AvatarPicker.init(pickerEl, function (userId) {
+                postJson(`/projects/${projectId}/assign-lead`, { team: pickerEl.dataset.team, new_designer_id: userId });
+            }));
+        });
+
+        rootEl.querySelectorAll('.overlay-secondary-cs-remove').forEach(function (btn) {
+            btn.addEventListener('click', function () { postForm(`/projects/${projectId}/secondary-cs/${btn.dataset.userId}/remove`, ''); });
+        });
+
+        // ── Reference Files: upload, preview, remove, download all ─────
+        var refFileBtn = rootEl.querySelector('#overlay-reference-file-btn');
+        var refFileInput = rootEl.querySelector('#overlay-reference-file-input');
+        if (refFileBtn && refFileInput) {
+            refFileBtn.addEventListener('click', function () { refFileInput.click(); });
+
+            refFileInput.addEventListener('change', function () {
+                var file = refFileInput.files[0];
+                if (!file) return;
+                var status = rootEl.querySelector('#overlay-reference-file-status');
+                if (status) status.textContent = 'Uploading...';
+
+                var formData = new FormData();
+                formData.append('file', file);
+
+                fetch(`/projects/${projectId}/upload-file`, { method: 'POST', body: formData })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.success) {
+                            if (status) status.textContent = '';
+                            alert(data.error || 'File could not be saved.');
+                            return;
+                        }
+                        onChanged();
+                    })
+                    .catch(function () {
+                        if (status) status.textContent = '';
+                        alert('Upload failed. Please try again.');
+                    });
             });
         }
 
-        function postForm(url, body) {
-            fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: body,
-            }).then(handleResponse);
-        }
+        enableDragAndDrop();
 
-        function postJson(url, body) {
-            fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            }).then(handleResponse);
-        }
-
-        var csLeadPicker = rootEl.querySelector('#cs-lead-picker');
-        if (csLeadPicker) {
-            pickerHandles.push(window.AvatarPicker.init(csLeadPicker, function (userId) {
-                postJson(`/projects/${projectId}/reassign-cs-lead`, { new_cs_lead_id: userId });
-            }));
-        }
-
-        var secondaryCsAddPicker = rootEl.querySelector('#secondary-cs-add-picker');
-        if (secondaryCsAddPicker) {
-            pickerHandles.push(window.AvatarPicker.init(secondaryCsAddPicker, function (userId) {
-                postForm(`/projects/${projectId}/secondary-cs`, `user_id=${userId}`);
-            }));
-        }
-
-        var ownerPicker = rootEl.querySelector('#project-owner-picker');
-        if (ownerPicker) {
-            pickerHandles.push(window.AvatarPicker.init(ownerPicker, function (userId) {
-                postForm(`/projects/${projectId}/set-project-owner`, `user_id=${userId}`);
-            }));
-        }
-
-        rootEl.querySelectorAll('.overlay-secondary-cs-remove').forEach(function (btn) {
+        rootEl.querySelectorAll('.overlay-reference-file-remove').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                postForm(`/projects/${projectId}/secondary-cs/${btn.dataset.userId}/remove`, '');
+                showConfirm('Remove this file? This cannot be undone.', function () {
+                    fetch(`/projects/files/${btn.dataset.fileId}/delete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (!data.success) { alert(data.error || 'Could not delete file.'); return; }
+                            onChanged();
+                        });
+                });
             });
         });
 
-        return {
-            destroy: function () {
-                pickerHandles.forEach(function (handle) {
-                    if (handle) handle.destroy();
-                });
-            }
-        };
-    }
+        rootEl.querySelectorAll('.overlay-reference-file-preview').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var item = btn.closest('.overlay-reference-file-item');
+                var nameEl = item ? item.querySelector('.overlay-reference-file-name') : null;
+                window.openFilePreview(btn.dataset.previewUrl, btn.dataset.downloadUrl, nameEl ? nameEl.textContent : 'file');
+            });
+        });
 
+        var downloadAllBtn = rootEl.querySelector('#overlay-download-all-files');
+        if (downloadAllBtn) {
+            downloadAllBtn.addEventListener('click', function () {
+                var originalText = downloadAllBtn.textContent;
+                downloadAllBtn.disabled = true;
+                downloadAllBtn.textContent = 'Zipping...';
+                fetch(downloadAllBtn.dataset.downloadAllUrl)
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        downloadAllBtn.disabled = false;
+                        downloadAllBtn.textContent = originalText;
+                        if (!data.success) { alert(data.error || 'Could not build zip.'); return; }
+                        window.location = data.download_url;
+                    })
+                    .catch(function () {
+                        downloadAllBtn.disabled = false;
+                        downloadAllBtn.textContent = originalText;
+                        alert('Something went wrong.');
+                    });
+            });
+        }
+
+        return { destroy: function () { pickerHandles.forEach(function (h) { if (h) h.destroy(); }); } };
+    }
     return { init: init };
 })();

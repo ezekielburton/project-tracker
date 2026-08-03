@@ -11,6 +11,9 @@ that's later M3 steps. #}
     <div class="project-overlay-sheet" id="project-overlay-sheet">
         <div class="project-overlay-header" id="project-overlay-header">
             <div class="project-overlay-name">{{ project.name }}</div>
+            {% if can_edit_project %}
+            <button type="button" class="project-overlay-edit-btn" id="project-overlay-edit-btn">Edit</button>
+            {% endif %}
             <div class="project-overlay-header-divider"></div>
 
             <div class="project-overlay-rail tab-strip" id="project-overlay-rail">
@@ -37,8 +40,8 @@ that's later M3 steps. #}
             {% if project.brief_type == 'standard' %}
             {% include "project_overlay/_details_standard.html" %}
             {% else %}
-            <p class="overlay-placeholder">C&CM Brief Details — coming in the next chunk.</p>
-            {% endif %}  
+            {% include "project_overlay/_details_ccm.html" %}
+            {% endif %}
         </div>
     </div>
     </div>

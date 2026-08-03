@@ -1668,21 +1668,34 @@ def update_secondary_cs_regions(project_id):
 
 @detail_bp.route('/projects/<int:project_id>/assign-concept-kv', methods=['POST'])
 @login_required
-@role_required('admin', 'team_lead', 'cs', 'management', 'designer')
+@role_required('admin', 'team_lead', 'management', 'designer')
 def assign_concept_kv(project_id):
+    from app.models import User
+    from flask import session
+
     project = Project.query.get_or_404(project_id)
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role== 'admin') else current_user
 
     concept_id = request.form.get('concept_designer_id')
     kv_id = request.form.get('kv_designer_id')
 
-    # Designers can only assign themselves — block any attempt to assign someone else
-    if current_user.role == 'designer':
-        if concept_id and int(concept_id) != current_user.id:
+    full_control = actor.role in ('admin', 'management')
+    self_claim_only = actor.role in ('designer', 'team_lead')
+
+    if not full_control and not self_claim_only:
+        abort(403)
+
+    # Designer/team_lead can assign themselves. CS cannot touch this at all
+    if self_claim_only:
+        if concept_id and int(concept_id) != actor.id:
             abort(403)
-        if kv_id and int(kv_id) != current_user.id:
+        if kv_id and int(kv_id) != actor.id:
             abort(403)
 
-    if concept_id:
+
+    if concept_id: 
         project.concept_designer_id = int(concept_id)
     if kv_id:
         project.kv_designer_id = int(kv_id)
@@ -1691,14 +1704,14 @@ def assign_concept_kv(project_id):
     if concept_id:
         concept_designer = User.query.get(int(concept_id))
         if concept_designer:
-            notify_designer_of_concept_kv_assignment(project, concept_designer, 'Concept', triggered_by=current_user)
-            log_activity('designer_assigned', f'{concept_designer.name} assigned as Concept designer on "{project.name}"', user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
+            notify_designer_of_concept_kv_assignment(project, concept_designer, 'Concept', triggered_by=actor)
+            log_activity('designer_assigned', f'{concept_designer.name} assigned as Concept designer on "{project.name}"', user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
     if kv_id:
         kv_designer = User.query.get(int(kv_id))
         if kv_designer:
-            notify_designer_of_concept_kv_assignment(project, kv_designer, 'Key Visual', triggered_by=current_user)
-            log_activity('designer_assigned', f'{kv_designer.name} assigned as KV designer on "{project.name}"', user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
-    return jsonify({'success': True})
+            notify_designer_of_concept_kv_assignment(project, kv_designer, 'Key Visual', triggered_by=actor)
+            log_activity('designer_assigned', f'{kv_designer.name} assigned as KV designer on "{project.name}"', user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    return jsonify({'success': True})    
 
 @detail_bp.route('/projects/<int:project_id>/standard-deliverables/add', methods=['POST'])
 @login_required
@@ -1864,8 +1877,20 @@ import uuid
 def upload_project_file(project_id):
     """Handle reference file uploads for a project. CS and admin only."""
     from app.models import ProjectFile
+    from flask import session
 
     project = Project.query.get_or_404(project_id)
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    can_manage_files = (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in {a.user_id for a in project.secondary_cs_assignments}
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+    if not can_manage_files:
+        return jsonify({'success': False, 'error': 'You are lacking permissions to perform this action.'}), 403
 
     # Check a file was actually included in the request
     if 'file' not in request.files:
@@ -1904,7 +1929,7 @@ def upload_project_file(project_id):
         filename=original_filename,
         original_filename=original_filename,
         file_type=ext,
-        uploaded_by_id=current_user.id
+        uploaded_by_id=actor.id
     )
 
     db.session.add(project_file)
@@ -1916,7 +1941,7 @@ def upload_project_file(project_id):
     # 4.13.40 PM (1).jpeg', which read as noise): was
     # f'Reference file "{original_filename}" uploaded to "{project.name}"'.
     log_activity('file_uploaded', f'{current_user.name} added {file_type_label(ext)} as a reference file to "{project.name}"',
-                 user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({
         'success': True,
@@ -1924,7 +1949,7 @@ def upload_project_file(project_id):
             'id': project_file.id,
             'original_filename': original_filename,
             'file_type': ext,
-            'uploaded_by': current_user.name
+            'uploaded_by': actor.name
         }
     })
 
@@ -2051,21 +2076,33 @@ def preview_project_file(file_id):
 
 @detail_bp.route('/projects/files/<int:file_id>/delete', methods=['POST'])
 @login_required
-@role_required('admin', 'cs', 'management')
 def delete_project_file(file_id):
-    """Delete a reference file. CS and admin only."""
-    from app.models import ProjectFile
-
+    """Delete a reference file. Admin/Management (any project), this project's CS lead/secondary CS, or this projects project owner"""
+    from app.models import ProjectFile, User
+    from flask import session
+ 
     project_file = ProjectFile.query.get_or_404(file_id)
     project = Project.query.get(project_file.project_id)
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    can_manage_files = (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in {a.user_id for a in project.secondary_cs_assignments}
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+    if not can_manage_files:
+        return jsonify({'success': False, 'error': 'You are lacking permissions to perform this action.'}), 403
 
     # Delete from NAS
     from app.nas import delete_app_file, build_file_path
     nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
     delete_app_file(nas_path)
 
-    log_activity('file_deleted', f'{current_user.name} removed a reference file from "{project.name}"',
-                 user=current_user, entity_type='project', entity_name=project.name, entity_id=project.id)
+    log_activity('file_deleted', f'{actor.name} removed a reference file from "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     db.session.delete(project_file)
     db.session.commit()

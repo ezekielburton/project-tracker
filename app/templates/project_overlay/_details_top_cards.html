@@ -1,13 +1,4 @@
-{# app/templates/project_overlay/_details_standard.html
-Design > Details — Standard brief, Project Name card (M3 Step 2). Ported
-from the old detail.html's Project Name section onto the new shared
-macros (card/person_chip/avatar_picker) instead of the old .detail-*
-classes. CS Lead/Secondary CS/Project Owner are interactive actions, not
-brief content — always-on regardless of Edit mode (architecture doc §2),
-same carve-out as team-tag self-assign. #}
-{% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
-<div class="overlay-details-grid">
     <div class="overlay-card-third overlay-card-narrow">
         {% call card('Summary') %}
         <div class="overlay-field-grid">
@@ -156,57 +147,3 @@ same carve-out as team-tag self-assign. #}
         {% endif %}
         {% endcall %}
     </div>
-
-    <div class="overlay-card-full">
-        {% call card('Brief Overview') %}
-        <div class="overlay-field-grid">
-            <div class="overlay-field-col">
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Client</span>
-                    <span class="overlay-field-value">{{ project.client_brand.name if project.client_brand else '—'
-                        }}</span>
-                </div>
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Type of Design</span>
-                    <span class="overlay-field-value">{{ project.design_type.name if project.design_type else '—'
-                        }}</span>
-                </div>
-            </div>
-            <div class="overlay-field-col">
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Initial Deadline</span>
-                    <span class="overlay-field-value">{{ project.first_output_deadline.strftime('%d %b %Y') if
-                        project.first_output_deadline else '—' }}</span>
-                </div>
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Final Deadline</span>
-                    <span class="overlay-field-value">{{ project.execution_date.strftime('%d %b %Y') if
-                        project.execution_date
-                        else '—' }}</span>
-                </div>
-            </div>
-        </div>
-
-        {% if project.client_expectation %}
-        <div class="overlay-notes">
-            <span class="overlay-field-label">Client Expectation</span>
-            <p class="overlay-notes-text">{{ project.client_expectation }}</p>
-        </div>
-        {% endif %}
-
-        {% if project.what_to_avoid %}
-        <div class="overlay-notes">
-            <span class="overlay-field-label">What to Avoid</span>
-            <p class="overlay-notes-text">{{ project.what_to_avoid }}</p>
-        </div>
-        {% endif %}
-
-        {% if project.additional_information %}
-        <div class="overlay-notes">
-            <span class="overlay-field-label">Additional Information</span>
-            <p class="overlay-notes-text">{{ project.additional_information }}</p>
-        </div>
-        {% endif %}
-        {% endcall %}
-    </div>
-</div>

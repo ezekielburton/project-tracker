@@ -1,0 +1,59 @@
+{% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
+
+<div class="overlay-details-grid">
+    {% include "project_overlay/_details_top_cards.html" %}
+
+    <div class="overlay-card-half">
+        {% call card('Brief') %}
+        <div class="overlay-field-grid">
+            <div class="overlay-field-col">
+                <div class="overlay-field"><span class="overlay-field-label">Client</span><span
+                        class="overlay-field-value">{{ project.client_brand.name if project.client_brand else '—'
+                        }}</span></div>
+                <div class="overlay-field"><span class="overlay-field-label">Briefing Date</span><span
+                        class="overlay-field-value">{{ project.briefing_date.strftime('%d %b %Y') if
+                        project.briefing_date else '—' }}</span></div>
+            </div>
+            <div class="overlay-field-col">
+                <div class="overlay-field"><span class="overlay-field-label">Initial Deadline</span><span
+                        class="overlay-field-value">{{ project.first_output_deadline.strftime('%d %b %Y') if
+                        project.first_output_deadline else '—' }}</span></div>
+                <div class="overlay-field"><span class="overlay-field-label">Final Deadline</span><span
+                        class="overlay-field-value">{{ project.execution_date.strftime('%d %b %Y') if
+                        project.execution_date else '—' }}</span></div>
+            </div>
+        </div>
+        {% endcall %}
+    </div>
+
+    <div class="overlay-card-half">
+        {% call card('Concept & KV') %}
+        <div class="overlay-field-grid">
+            <div class="overlay-field-col">
+                <div class="overlay-field"><span class="overlay-field-label">Concept & KV Deadline</span><span
+                        class="overlay-field-value">{{ project.concept_deadline.strftime('%d %b %Y') if
+                        project.concept_deadline else '—' }}</span></div>
+                <div class="overlay-field"><span class="overlay-field-label">Options Required</span><span
+                        class="overlay-field-value">{{ project.concept_options_required or '—' }}</span></div>
+            </div>
+            <div class="overlay-field-col">
+                <div class="overlay-field">
+                    <span class="overlay-field-label">Concept & KV Designer</span>
+                    {% if can_manage_concept_kv %}
+                    {{ avatar_picker('concept-kv-designer-picker', concept_kv_designer, concept_kv_designer_options,
+                    'Select Designer…') }}
+                    {% else %}
+                    {{ person_chip(concept_kv_designer, 'Unassigned') }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% if project.campaign_notes %}
+        <div class="overlay-notes">
+            <span class="overlay-field-label">Requirements</span>
+            <p class="overlay-notes-text">{{ project.campaign_notes }}</p>
+        </div>
+        {% endif %}
+        {% endcall %}
+    </div>
+</div>

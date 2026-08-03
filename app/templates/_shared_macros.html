@@ -102,10 +102,13 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     by whichever card uses it. picker_id must be unique per instance on
     the page (becomes an element id).
     #}
-    {% macro avatar_picker(picker_id, current_person, options, missing_label='Select…') %}
-    <div class="avatar-picker" id="{{ picker_id }}">
+    {% macro avatar_picker(picker_id, current_person, options, missing_label='Select…', trigger_label=None, data_team=None)
+    %}
+    <div class="avatar-picker" id="{{ picker_id }}" {% if data_team %} data-team="{{ data_team }}" {% endif %}>
         <button type="button" class="avatar-picker-trigger">
-            {% if current_person %}
+            {% if trigger_label %}
+            <span class="avatar-picker-action-label">{{ trigger_label }}</span>
+            {% elif current_person %}
             {{ person_chip(current_person) }}
             {% else %}
             <span class="avatar-picker-placeholder">{{ missing_label }}</span>

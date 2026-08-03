@@ -35,6 +35,15 @@ def overlay(project_id):
 
     can_reassign_cs_lead = actor.role in ('admin', 'management')
     can_manage_cs = actor.role in ('admin', 'management') or actor.id == project.cs_lead_id
+    can_manage_reference_files = (
+    can_manage_cs
+    or actor.id in secondary_cs_ids
+    or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+
+    # Edit toggle gatin   
+    can_edit_project = can_manage_reference_files
+
     can_assign_owner = (
         actor.role in ('admin', 'management')
         or actor.id == project.cs_lead_id
@@ -61,6 +70,55 @@ def overlay(project_id):
 
     status_label, status_class = derive_project_status(project)
 
+    requested_teams = [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
+    assignments_by_team = {pd.team: pd for pd in project.assigned_designers}
+    # Union of requested teams + any team that actually has an assignment —
+    # design_teams_requested can be blank/stale on some projects even when
+    # a ProjectDesigner row exists. assigned_designers is the real source
+    # of truth for "who's actually on this project" — same reasoning
+    # project_list.py's _serialize_row() uses it (not this field) for its
+    # own Lead Designers column.
+    all_teams = requested_teams + [t for t in sorted(assignments_by_team) if t not in requested_teams]
+
+    designer_rows = []
+    for team in all_teams:
+        assignment = assignments_by_team.get(team)
+        can_manage = (
+            actor.role in ('admin', 'management')
+            or actor.team == team
+            or (assignment and assignment.user_id == actor.id)
+        )
+        options = User.query.filter(
+            User.team == team,
+            User.role.in_(['designer', 'team_lead'])
+        ).order_by(User.name).all() if can_manage else []
+        designer_rows.append({
+            'team': team,
+            'designer': assignment.designer if assignment else None,
+            'can_manage': can_manage,
+            'options': options,
+        })
+
+    can_manage_concept_kv_full = actor.role in ('admin', 'management')
+    can_self_claim_concept_kv = actor.role in ('designer', 'team_lead')
+    can_manage_concept_kv = can_manage_concept_kv_full or can_self_claim_concept_kv
+
+    if can_manage_concept_kv_full:
+        concept_kv_designer_options = User.query.filter(
+            User.role.in_(['designer', 'team_lead'])
+        ).order_by(User.name).all()
+    elif can_self_claim_concept_kv:
+        concept_kv_designer_options = [actor]
+    else:
+        concept_kv_designer_options = []
+
+    # Legacy data may have concept_designer/kv_designer set independently
+    # before this merged picker existed. Going forward this route always
+    # sets both together, so favoring concept_designer here is a safe,
+    # simple default rather than surfacing a rare historical mismatch.
+    concept_kv_designer = project.concept_designer or project.kv_designer
+        
+
     return render_template(
         'project_overlay/_overlay.html',
         project=project,
@@ -72,6 +130,12 @@ def overlay(project_id):
         cs_lead_options=cs_lead_options,
         available_cs_users=available_cs_users,
         owner_options=owner_options,
+        designer_rows=designer_rows,
+        can_manage_reference_files=can_manage_reference_files,
+        can_edit_project=can_edit_project,
+        can_manage_concept_kv=can_manage_concept_kv,
+        concept_kv_designer_options=concept_kv_designer_options,
+        concept_kv_designer=concept_kv_designer,
     )
 
 @project_overlay_bp.route('/projects/<int:project_id>/set-project-owner', methods=['POST'])
