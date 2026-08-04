@@ -32,6 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
             url: (projectId) => `/projects/${projectId}/overlay/deliverables`,
             module: () => window.ProjectDeliverablesCard,
         },
+        submissions: {
+            url: (projectId) => `/projects/${projectId}/overlay/submissions`,
+            module: () => window.ProjectSubmissionsCard,
+        },
     };
 
     function loadSubTabContent(projectId, subTabKey) {

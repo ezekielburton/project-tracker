@@ -401,15 +401,16 @@ def upload_submission(project_id):
 
     if channel:
         country = channel.posm_country or ''
-        if country == 'uae' and channel.posm_customer_id:
+        if channel.posm_customer_id:
             from app.models import ProjectCustomer as _PC
             pc = _PC.query.get(channel.posm_customer_id)
             posm_rev = (pc.posm_revision_count or 0) if pc else 0
             posm_label = 'Initial' if posm_rev == 0 else f'Revision {posm_rev}'
             customer_name = pc.customer.name if (pc and pc.customer) else 'Customer'
+            country_display = GULF_REGION_NAMES.get(country, country.title())
             submission.original_filename = (
                 f'{_sanitize(client_name)} - {_sanitize(project.name)} - '
-                f'UAE - {_sanitize(customer_name)} - POSM - {posm_label}.{ext}'
+                f'{country_display} - {_sanitize(customer_name)} - POSM - {posm_label}.{ext}'
             )
         elif country:
             country_display = GULF_REGION_NAMES.get(country, country.title())
@@ -1084,9 +1085,8 @@ def download_all_submissions(project_id):
 
         if s.phase == 'concept_kv':
             folder = 'Concept & KV'
-        elif s.posm_country == 'uae':
-            customer_name = s.posm_customer.customer.name if s.posm_customer else 'Customer'
-            folder = f'POSM - UAE - {customer_name}'
+        elif s.posm_customer:
+            folder = f'POSM - {(s.posm_country or "Unknown").upper()} - {s.posm_customer.customer.name}'
         else:
             folder = f'POSM - {(s.posm_country or "Unknown").upper()}'
 
@@ -1239,10 +1239,10 @@ def send_revision(project_id):
 
     # Resolve POSM customer — channel takes precedence, else fall back to request fields
     posm_pc = None
-    if channel and channel.posm_country == 'uae' and channel.posm_customer_id:
+    if channel and channel.posm_customer_id:
         from app.models import ProjectCustomer
         posm_pc = ProjectCustomer.query.get(channel.posm_customer_id)
-    elif not channel and posm_country == 'uae' and posm_customer_id:
+    elif not channel and posm_customer_id:
         from app.models import ProjectCustomer
         posm_pc = ProjectCustomer.query.filter_by(
             id=int(posm_customer_id), project_id=project_id

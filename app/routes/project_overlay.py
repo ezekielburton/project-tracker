@@ -3,7 +3,7 @@ Project Details Overlay Route File.
 New blueprint for file hygiene, easier to work on chunks rather than one long file.
 """
 
-from flask import Blueprint, render_template, abort
+from flask import Blueprint, render_template, abort, request
 from flask_login import login_required, current_user
 
 from app.models import Project
@@ -94,6 +94,37 @@ def _build_ccm_deliverable_sections(project):
             'key': region_key,
             'name': region_names.get(region_key, region_key.title()),
             'customers': customers,
+        })
+    return sections
+
+def _build_submission_regions(project):
+    """Groups a C&CM project's customers as Region -> Customer for the
+    Submissions rail (names/ids only — no submission data queried here,
+    that's fetched per-selection once a pill is clicked). Same grouping as
+    _build_ccm_deliverable_sections, kept as its own lightweight version
+    since Submissions doesn't need each customer's deliverables list.
+    """
+    by_region = {}
+    for pc in project.project_customers:
+        if pc.cancelled:
+            continue
+        region_key = pc.customer.region or 'other'
+        by_region.setdefault(region_key, []).append(pc)
+
+    region_names = {
+        'uae': 'UAE', 'kuwait': 'Kuwait', 'qatar': 'Qatar',
+        'bahrain': 'Bahrain', 'oman': 'Oman', 'other': 'Other',
+    }
+    region_order = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman', 'other']
+
+    sections = []
+    for region_key in region_order:
+        if region_key not in by_region:
+            continue
+        sections.append({
+            'key': region_key,
+            'name': region_names.get(region_key, region_key.title()),
+            'customers': by_region[region_key],
         })
     return sections
 
@@ -440,4 +471,47 @@ def set_project_owner(project_id):
     )
 
     return jsonify({'success': True, 'owner_name': new_owner.name})
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions')
+@login_required
+def overlay_submissions(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    if project.brief_type != 'ccm':
+        return render_template('project_overlay/_submissions_standard.html', project=project)
+
+    from app.routes.projects_detail import ensure_posm_channels
+    regions = _build_submission_regions(project)
+    brief_sections = {r['key']: r['customers'] for r in regions}
+    ensure_posm_channels(project, brief_sections)
+
+    has_gulf_regions = any(r['key'] in ('kuwait', 'qatar', 'bahrain', 'oman') for r in regions)
+    all_customers = [c for r in regions for c in r['customers']]
+
+    return render_template(
+        'project_overlay/_submissions_ccm.html',
+        project=project,
+        regions=regions,
+        has_gulf_regions=has_gulf_regions,
+        default_region_key=regions[0]['key'] if regions else None,
+        default_customer_id=all_customers[0].id if all_customers else None,
+        show_ckv=bool(project.has_concept or project.has_kv),
+    )
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/content')
+@login_required
+def overlay_submissions_content(project_id):
+    from app.models import ProjectCustomer
+    project = Project.query.get_or_404(project_id)
+
+    if request.args.get('scope') == 'ckv':
+        label = 'Concept & KV'
+    else:
+        customer_id = request.args.get('customer_id', type=int)
+        pc = ProjectCustomer.query.filter_by(id=customer_id, project_id=project_id).first() if customer_id else None
+        label = pc.customer.name if pc else 'Unknown'
+
+    # Placeholder — the real draft/upload/submit/revision surface is the next chunk.
+    return render_template('project_overlay/_submissions_content_placeholder.html', label=label)
                     

@@ -1,0 +1,46 @@
+{% from '_shared_macros.html' import card %}
+
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% call card('Submissions') %}
+        <div class="{{ 'tab-strip' if has_gulf_regions else 'overlay-deliverables-customer-rail' }}"
+            id="overlay-submissions-top-rail">
+            {% if show_ckv %}
+            <button type="button"
+                class="{{ 'tab-strip-item' if has_gulf_regions else 'overlay-deliverables-customer-pill' }}"
+                data-scope="ckv">Concept &amp; KV</button>
+            {% endif %}
+            {% if has_gulf_regions %}
+            {% for region in regions %}
+            <button type="button" class="tab-strip-item" data-scope="region" data-region="{{ region.key }}">{{
+                region.name }}</button>
+            {% endfor %}
+            {% else %}
+            {% for region in regions %}
+            {% for pc in region.customers %}
+            <button type="button" class="overlay-deliverables-customer-pill" data-scope="customer"
+                data-customer-id="{{ pc.id }}">{{ pc.customer.name }}</button>
+            {% endfor %}
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        {% if has_gulf_regions %}
+        {% for region in regions %}
+        <div class="overlay-deliverables-customer-rail is-hidden" data-region-rail="{{ region.key }}">
+            {% for pc in region.customers %}
+            <button type="button" class="overlay-deliverables-customer-pill" data-customer-id="{{ pc.id }}">{{
+                pc.customer.name }}</button>
+            {% endfor %}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <div id="overlay-submissions-content" class="overlay-submissions-content"
+            data-default-region="{{ default_region_key or '' }}"
+            data-default-customer-id="{{ default_customer_id or '' }}"
+            data-has-gulf-regions="{{ 'true' if has_gulf_regions else 'false' }}"
+            data-show-ckv="{{ 'true' if show_ckv else 'false' }}"></div>
+        {% endcall %}
+    </div>
+</div>

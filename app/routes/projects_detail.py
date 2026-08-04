@@ -30,6 +30,57 @@ from app.routes.api import _detail_fingerprint
 
 detail_bp = Blueprint('project_detail', __name__)
 
+def ensure_posm_channels(project, brief_sections):
+    """Self-healing: creates any ProjectPosmChannel rows a C&CM project's
+    current customer roster needs but doesn't have yet — one channel per
+    UAE *and* Gulf customer (never per-region-only anymore). The one
+    deliberate exception: Oman's handful of pre-migration legacy
+    region-level channels (posm_customer_id IS NULL) are frozen read-only
+    history per the 4 Aug 2026 Gulf-per-customer migration — this function
+    must never delete or touch those, only ever add genuinely new
+    per-customer channels alongside them.
+    Commits if it adds anything. Returns True if it added any channels.
+    """
+    from app.models import ProjectPosmChannel
+
+    GULF_REGION_KEYS = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman']
+
+    # UAE-only orphan cleanup: a deleted-then-recreated ProjectCustomer leaves
+    # its old UAE channel with posm_customer_id=NULL (ON DELETE SET NULL) —
+    # delete it so it gets recreated below with the new ProjectCustomer ID.
+    # Deliberately scoped to UAE only — a NULL-customer_id Gulf channel is
+    # Oman's frozen legacy history, not an orphan.
+    orphaned = [ch for ch in project.posm_channels
+                if ch.posm_country == 'uae' and ch.posm_customer_id is None]
+    if orphaned:
+        for ch in orphaned:
+            db.session.delete(ch)
+        db.session.flush()
+
+    existing_channel_keys = {
+        (ch.posm_country, ch.posm_customer_id) for ch in project.posm_channels
+    }
+
+    new_channels_added = False
+    for region_key in GULF_REGION_KEYS:
+        if region_key not in brief_sections:
+            continue
+        for pc in brief_sections[region_key]:
+            if pc.cancelled:
+                continue
+            if (region_key, pc.id) not in existing_channel_keys:
+                db.session.add(ProjectPosmChannel(
+                    project_id=project.id,
+                    posm_country=region_key,
+                    posm_customer_id=pc.id,
+                    status='in_queue',
+                ))
+                new_channels_added = True
+
+    if new_channels_added:
+        db.session.commit()
+    return new_channels_added
+
 @detail_bp.route('/projects/<int:project_id>')
 @login_required
 def detail(project_id):
@@ -251,54 +302,7 @@ def detail(project_id):
     if is_gulf:
         from app.models import ProjectPosmChannel, ProjectSubmission as _PS, ProjectRevision as _PR
 
-        # Remove orphaned UAE channels — these arise when an edit deletes+recreates
-        # ProjectCustomer records and PostgreSQL's ON DELETE SET NULL fires, leaving
-        # a UAE channel with posm_customer_id=NULL. Delete them now so they get
-        # recreated correctly below with the new ProjectCustomer ID.
-        orphaned = [ch for ch in project.posm_channels
-                    if ch.posm_country == 'uae' and ch.posm_customer_id is None]
-        if orphaned:
-            for ch in orphaned:
-                db.session.delete(ch)
-            db.session.flush()
-
-        # Build a set of channel keys that already exist
-        existing_channel_keys = set()
-        for ch in project.posm_channels:
-            if ch.posm_country == 'uae':
-                existing_channel_keys.add(('uae', ch.posm_customer_id))
-            else:
-                existing_channel_keys.add((ch.posm_country, None))
-
-        # Create any channels that are missing (new customers / first-time load)
-        new_channels_added = False
-        for region_key in GULF_REGION_KEYS:
-            if region_key not in brief_sections:
-                continue
-            if region_key == 'uae':
-                
-                for pc in brief_sections['uae']:
-                    if pc.cancelled:
-                        continue
-                    if ('uae', pc.id) not in existing_channel_keys:
-                        db.session.add(ProjectPosmChannel(
-                            project_id=project_id,
-                            posm_country='uae',
-                            posm_customer_id=pc.id,
-                            status='in_queue',
-                        ))
-                        new_channels_added = True
-            else:
-                if (region_key, None) not in existing_channel_keys:
-                    db.session.add(ProjectPosmChannel(
-                        project_id=project_id,
-                        posm_country=region_key,
-                        posm_customer_id=None,
-                        status='in_queue',
-                    ))
-                    new_channels_added = True
-        if new_channels_added:
-            db.session.commit()
+        ensure_posm_channels(project, brief_sections)
 
         # Sort channels: UAE first (by customer name), then other regions in Gulf key order
         def _ch_sort_key(ch):
@@ -307,8 +311,9 @@ def detail(project_id):
             return (idx, cust_name)
 
         for channel in sorted(project.posm_channels, key=_ch_sort_key):
-            if channel.posm_country == 'uae' and channel.posm_customer:
-                label = f'UAE — {channel.posm_customer.customer.name}'
+            if channel.posm_customer:
+                region_display = GULF_REGION_NAMES.get(channel.posm_country, channel.posm_country.title())
+                label = f'{region_display} — {channel.posm_customer.customer.name}'
             else:
                 label = GULF_REGION_NAMES.get(channel.posm_country, channel.posm_country.title())
 
