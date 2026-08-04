@@ -1,0 +1,71 @@
+{% from '_shared_macros.html' import card %}
+
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% call card('Deliverables') %}
+        <button type="button" class="overlay-file-action-btn" id="overlay-add-deliverable-btn">Add Deliverable</button>
+
+        <div class="overlay-deliverables-edit-header">
+            <span>Deliverable Name</span>
+            <span class="overlay-deliverables-edit-header-deadline">Design Deadline</span>
+            <span>2D</span>
+            <span>3D</span>
+            <span>Technical</span>
+            <span></span>
+        </div>
+
+        <div class="overlay-deliverables-edit-list" id="overlay-deliverables-edit-list">
+            {% for d in deliverables %}
+            {% set current_teams = (d.teams or '').split(',') %}
+            <div class="overlay-deliverables-edit-row" data-deliverable-id="{{ d.id }}">
+                <input type="text" class="overlay-deliverables-edit-name" value="{{ d.name }}"
+                    placeholder="Deliverable Name">
+                <input type="date" class="overlay-deliverables-edit-date"
+                    value="{{ d.design_deadline.isoformat() if d.design_deadline else '' }}">
+                <select class="overlay-deliverables-edit-time">
+                    <option value="">Time…</option>
+                    {% for value, label in time_options %}
+                    <option value="{{ value }}" {% if d.design_deadline_time and
+                        d.design_deadline_time.strftime('%H:%M')==value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button"
+                    class="overlay-deliverables-edit-toggle {% if '2D' in current_teams %}is-active{% endif %}"
+                    data-team="2D">2D</button>
+                <button type="button"
+                    class="overlay-deliverables-edit-toggle {% if '3D' in current_teams %}is-active{% endif %}"
+                    data-team="3D">3D</button>
+                <button type="button"
+                    class="overlay-deliverables-edit-toggle {% if 'Technical' in current_teams %}is-active{% endif %}"
+                    data-team="Technical">Technical</button>
+                <button type="button" class="overlay-deliverables-edit-delete" aria-label="Delete">Delete</button>
+            </div>
+            {% endfor %}
+        </div>
+
+        <template id="overlay-deliverable-row-template">
+            <div class="overlay-deliverables-edit-row">
+                <input type="text" class="overlay-deliverables-edit-name" placeholder="Deliverable Name">
+                <input type="date" class="overlay-deliverables-edit-date">
+                <select class="overlay-deliverables-edit-time">
+                    <option value="">Time…</option>
+                    {% for value, label in time_options %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="overlay-deliverables-edit-toggle" data-team="2D">2D</button>
+                <button type="button" class="overlay-deliverables-edit-toggle" data-team="3D">3D</button>
+                <button type="button" class="overlay-deliverables-edit-toggle" data-team="Technical">Technical</button>
+                <button type="button" class="overlay-deliverables-edit-delete" aria-label="Delete">Delete</button>
+            </div>
+        </template>
+
+        <div class="overlay-deliverables-edit-actions">
+            <button type="button" class="overlay-file-action-btn" id="overlay-apply-deadline-all-btn">Apply Deadline to
+                All</button>
+            <button type="button" class="overlay-file-action-btn" id="overlay-save-deliverables-btn">Save
+                Deliverables</button>
+        </div>
+        {% endcall %}
+    </div>
+</div>

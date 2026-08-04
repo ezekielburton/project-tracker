@@ -1,0 +1,69 @@
+{% from '_shared_macros.html' import card, tag, status_pill %}
+
+{% set focus_toggle_html %}
+{% if can_toggle_focus %}
+<span class="overlay-focus-toggle" id="overlay-deliverables-focus-toggle">
+    <button type="button" class="overlay-focus-toggle-btn{% if not default_focus %} active{% endif %}"
+        data-scope="all">All</button>
+    <button type="button" class="overlay-focus-toggle-btn{% if default_focus %} active{% endif %}"
+        data-scope="focused">Focused</button>
+</span>
+{% endif %}
+{% endset %}
+
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% call card('Deliverables', header_extra_html=focus_toggle_html) %}
+        <div class="overlay-deliverables-body{% if default_focus %} is-focused{% endif %}"
+            id="overlay-deliverables-body">
+            <div class="overlay-deliverables-header">
+                <span>Name</span>
+                <span>Reference</span>
+                <span>Team</span>
+                <span>Deadline</span>
+                <span>Status</span>
+                <span>Revisions</span>
+            </div>
+            <div class="overlay-deliverables-list" id="overlay-deliverables-list">
+                {% for d in deliverables %}
+                <div class="overlay-deliverables-row"
+                    data-assigned-to-me="{{ 'true' if d.id in assigned_ids else 'false' }}">
+                    <span class="overlay-deliverables-name">{{ d.name }}</span>
+                    <span class="overlay-deliverables-image">
+                        {% if d.deliverable_type and d.deliverable_type.reference_image %}
+                        <img src="{{ url_for('static', filename='deliverable-images/' + d.deliverable_type.reference_image) }}" alt=""
+                            class="deliverable-row-thumb">
+                        {% else %}
+                        <span class="overlay-deliverables-image-empty"></span>
+                        {% endif %}
+                    </span>
+                    <span class="overlay-deliverables-tags">
+                        {% if d.deliverable_type and d.deliverable_type.disciplines %}
+                            {% for disc in d.deliverable_type.disciplines %}{{ tag(disc.team, disc.team|lower) }}{% endfor %}
+                        {% elif d.teams %}
+                            {% for t in d.teams.split(',') if t %}{{ tag(t, t|lower) }}{% endfor %}
+                        {% else %}
+                            <span class="overlay-field-empty">—</span>
+                        {% endif %}             
+                    </span>
+                    <span class="overlay-deliverables-deadline">
+                        {{ d.design_deadline.strftime('%d %b %Y') if d.design_deadline else '—' }}{% if
+                        d.design_deadline_time %} · {{ d.design_deadline_time.strftime('%H:%M') }}{% endif %}
+                    </span>
+                    <span class="overlay-deliverables-status">
+                        {{ status_pill(status_by_id[d.id][0], status_by_id[d.id][1]) }}
+                    </span>
+                    <span class="overlay-deliverables-revisions">{{ d.revision_count }}</span>
+                </div>
+                {% else %}
+                <p class="overlay-field-empty">No deliverables yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% if can_manage_deliverables %}
+        <button type="button" class="overlay-file-action-btn" id="overlay-edit-deliverables-btn">Edit
+            Deliverables</button>
+        {% endif %}
+        {% endcall %}
+    </div>
+</div>

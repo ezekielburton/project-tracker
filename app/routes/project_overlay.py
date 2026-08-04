@@ -3,45 +3,130 @@ Project Details Overlay Route File.
 New blueprint for file hygiene, easier to work on chunks rather than one long file.
 """
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, abort
 from flask_login import login_required, current_user
 
 from app.models import Project
 
 project_overlay_bp = Blueprint('project_overlay', __name__)
 
-@project_overlay_bp.route('/projects/<int:project_id>/overlay')
-@login_required
-def overlay(project_id):
-    """
-    Real content-fetch route for the Detail + Briefing overlay. M3 Step 2:
-    now computes Design > Details context for a Standard brief's Project
-    Name card — CS Lead/Secondary CS/Project Owner options and per-role
-    gating, mirroring the existing reassign_cs_lead/add_secondary_cs/
-    set_project_owner routes' own gating so the picker options shown
-    match what the backend will actually allow (no point showing someone
-    an option that will just 403).
-    """
+def _get_actor():
+    """Emulation-aware actor lookup — an admin viewing-as another user acts
+    (and gets logged) as that user; everyone else acts as themselves. Every
+    overlay route uses this, not just overlay() itself."""
     from app.models import User
     from flask import session
-    from app.status_vocabulary import derive_project_status
-
-    project = Project.query.get_or_404(project_id)
-
     emulating_id = session.get('emulating_user_id')
-    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+    return User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+
+def _can_manage_deliverables(project, actor):
+    """Same rule as Reference Files management — admin/management (any
+    project), this project's CS Lead, this project's Secondary CS, or the
+    specific assigned Project Owner. Kept as its own function even though
+    it's identical to can_manage_reference_files today, same reasoning as
+    can_edit_project — they may diverge later."""
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    return (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+
+def _build_deliverable_focus_context(deliverables, actor):
+    """Computes the per-deliverable status pill + Focused/All eligibility data
+    that both the Standard and C&CM Deliverables views need, so the two
+    branches in overlay_deliverables() can't drift out of sync on this.
+    """
+    from app.status_vocabulary import derive_deliverable_status
+    status_by_id = {}
+    assigned_ids = set()
+    for d in deliverables:
+        status_by_id[d.id] = derive_deliverable_status(d)
+        if any(a.designer_id == actor.id for a in d.disciplines):
+            assigned_ids.add(d.id)
+    return {
+        'status_by_id': status_by_id,
+        'assigned_ids': assigned_ids,
+        # Designer/Team Lead/Admin get the toggle; everyone else always sees All.
+        'can_toggle_focus': actor.role in ('designer', 'team_lead', 'admin'),
+        # Designer/Team Lead default to Focused (their own workload first);
+        # Admin's toggle doesn't filter anything either way, per your call —
+        # defaulting it to All just means it starts in the "off" position.
+        'default_focus': actor.role in ('designer', 'team_lead'),
+    }
+
+def _build_ccm_deliverable_sections(project):
+    """Groups a C&CM project's deliverables as Region -> Customer -> Deliverables,
+    mirroring the brief_sections pattern used elsewhere (projects_detail.py's overlay
+    route, the old detail page's C&CM section) so this view can't drift from how the
+    rest of the app already understands region/customer structure. Customers whose
+    region isn't one of the five known keys land in a single 'other' bucket rather
+    than being silently dropped.
+    """
+    from app.models import Deliverable
+
+    by_region = {}
+    for pc in project.project_customers:
+        if pc.cancelled:
+            continue
+        region_key = pc.customer.region or 'other'
+        by_region.setdefault(region_key, []).append(pc)
+
+    region_names = {
+        'uae': 'UAE', 'kuwait': 'Kuwait', 'qatar': 'Qatar',
+        'bahrain': 'Bahrain', 'oman': 'Oman', 'other': 'Other',
+    }
+    region_order = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman', 'other']
+
+    sections = []
+    for region_key in region_order:
+        if region_key not in by_region:
+            continue
+        customers = []
+        for pc in by_region[region_key]:
+            deliverables = Deliverable.query.filter_by(
+                project_id=project.id, project_customer_id=pc.id
+            ).order_by(Deliverable.id).all()
+            customers.append({'project_customer': pc, 'deliverables': deliverables})
+        sections.append({
+            'key': region_key,
+            'name': region_names.get(region_key, region_key.title()),
+            'customers': customers,
+        })
+    return sections
+
+
+# Hourly slots, 8:00 AM through 10:00 PM, as (value, label) pairs for the
+# Deliverables edit table's Time dropdown. value is 24h "HH:00" (matches
+# how <input type="time"> / our own parsing expects it); label is the
+# 12h display form.
+DESIGN_DEADLINE_TIME_OPTIONS = [
+    (f'{h:02d}:00', f'{((h - 1) % 12) + 1}:00 {"AM" if h < 12 else "PM"}')
+    for h in range(8, 23)
+]
+
+
+def _build_details_context(project, actor):
+    """Everything the Design > Details sub-tab needs — permissions, picker
+    option lists, designer rows, C&CM concept/kv data. Shared by the
+    initial /overlay fetch (which embeds Details directly) and the
+    standalone /overlay/details fetch (used when navigating back to
+    Details after visiting another sub-tab), so the two can never drift
+    apart from each other."""
+    from app.models import User
+    from app.status_vocabulary import derive_project_status
 
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
 
     can_reassign_cs_lead = actor.role in ('admin', 'management')
     can_manage_cs = actor.role in ('admin', 'management') or actor.id == project.cs_lead_id
     can_manage_reference_files = (
-    can_manage_cs
-    or actor.id in secondary_cs_ids
-    or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+        can_manage_cs
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
     )
-
-    # Edit toggle gatin   
     can_edit_project = can_manage_reference_files
 
     can_assign_owner = (
@@ -61,9 +146,6 @@ def overlay(project_id):
     if actor.role in ('admin', 'management') or actor.id == project.cs_lead_id:
         owner_options = User.query.filter_by(role='project_owner').order_by(User.name).all()
     elif actor.role == 'project_owner':
-        # A plain Project Owner can only self-claim (per set_project_owner's
-        # own gating), so their popover only ever shows themselves — no
-        # point listing people they're not allowed to pick anyway.
         owner_options = [actor]
     else:
         owner_options = []
@@ -72,12 +154,6 @@ def overlay(project_id):
 
     requested_teams = [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
     assignments_by_team = {pd.team: pd for pd in project.assigned_designers}
-    # Union of requested teams + any team that actually has an assignment —
-    # design_teams_requested can be blank/stale on some projects even when
-    # a ProjectDesigner row exists. assigned_designers is the real source
-    # of truth for "who's actually on this project" — same reasoning
-    # project_list.py's _serialize_row() uses it (not this field) for its
-    # own Lead Designers column.
     all_teams = requested_teams + [t for t in sorted(assignments_by_team) if t not in requested_teams]
 
     designer_rows = []
@@ -112,16 +188,9 @@ def overlay(project_id):
     else:
         concept_kv_designer_options = []
 
-    # Legacy data may have concept_designer/kv_designer set independently
-    # before this merged picker existed. Going forward this route always
-    # sets both together, so favoring concept_designer here is a safe,
-    # simple default rather than surfacing a rare historical mismatch.
     concept_kv_designer = project.concept_designer or project.kv_designer
-        
 
-    return render_template(
-        'project_overlay/_overlay.html',
-        project=project,
+    return dict(
         status_label=status_label,
         status_class=status_class,
         can_reassign_cs_lead=can_reassign_cs_lead,
@@ -137,6 +206,186 @@ def overlay(project_id):
         concept_kv_designer_options=concept_kv_designer_options,
         concept_kv_designer=concept_kv_designer,
     )
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay')
+@login_required
+def overlay(project_id):
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    context = _build_details_context(project, actor)
+    return render_template('project_overlay/_overlay.html', project=project, **context)
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/details')
+@login_required
+def overlay_details(project_id):
+    """Standalone Design > Details fragment. The initial /overlay fetch
+    above already embeds Details directly (so opening a project has no
+    extra round-trip) — this route's only caller is the sub-tab switcher
+    in project_list.js, used when navigating BACK to Details after
+    visiting another sub-tab."""
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    context = _build_details_context(project, actor)
+    template = (
+        'project_overlay/_details_standard.html' if project.brief_type == 'standard'
+        else 'project_overlay/_details_ccm.html'
+    )
+    return render_template(template, project=project, **context)
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables')
+@login_required
+def overlay_deliverables(project_id):
+    from app.models import Deliverable
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    can_manage = _can_manage_deliverables(project, actor)
+
+    if project.brief_type == 'ccm':
+        regions = _build_ccm_deliverable_sections(project)
+        has_gulf_regions = any(r['key'] in ('kuwait', 'qatar', 'bahrain', 'oman') for r in regions)
+        all_customers = [c for r in regions for c in r['customers']]
+        first_customer_id = all_customers[0]['project_customer'].id if all_customers else None
+        all_deliverables = [d for c in all_customers for d in c['deliverables']]
+        return render_template(
+            'project_overlay/_deliverables_ccm.html',
+            project=project,
+            regions=regions,
+            all_customers=all_customers,
+            has_gulf_regions=has_gulf_regions,
+            first_customer_id=first_customer_id,
+            can_manage_deliverables=can_manage,
+            **_build_deliverable_focus_context(all_deliverables, actor),
+        )
+
+    deliverables = Deliverable.query.filter_by(
+        project_id=project_id, project_customer_id=None
+    ).order_by(Deliverable.id).all()
+    return render_template(
+        'project_overlay/_deliverables_standard.html',
+        project=project,
+        deliverables=deliverables,
+        can_manage_deliverables=can_manage,
+        **_build_deliverable_focus_context(deliverables, actor),
+    )
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/edit')
+@login_required
+def overlay_deliverables_edit(project_id):
+    from app.models import Deliverable
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if not _can_manage_deliverables(project, actor):
+        abort(403)
+    deliverables = Deliverable.query.filter_by(
+        project_id=project_id, project_customer_id=None
+    ).order_by(Deliverable.id).all()
+    return render_template(
+        'project_overlay/_deliverables_standard_edit.html',
+        project=project,
+        deliverables=deliverables,
+        time_options=DESIGN_DEADLINE_TIME_OPTIONS,
+    )
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/save', methods=['POST'])
+@login_required
+def save_standard_deliverables(project_id):
+    """Bulk create/update/delete for the Standard Brief Deliverables
+    editable table — one request from Save Deliverables covers every
+    change made since Edit Deliverables was opened, committed once.
+    Shape borrowed from assign_standard_deliverables_bulk in
+    projects_detail.py (loop, single commit, log after) — but this route
+    creates/updates/deletes rows rather than assigning designers, so it's
+    new rather than reused outright."""
+    from datetime import datetime as dt
+    from app.models import Deliverable
+    from app import db
+    from app.utils import log_activity
+    from flask import request, jsonify, session
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if not _can_manage_deliverables(project, actor):
+        abort(403)
+
+    data = request.get_json(silent=True) or {}
+    rows = data.get('deliverables') or []
+
+    def parse_date(val):
+        if not val:
+            return None
+        try:
+            return dt.strptime(val, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    def parse_time(val):
+        if not val:
+            return None
+        try:
+            return dt.strptime(val, '%H:%M').time()
+        except ValueError:
+            return None
+
+    created, updated, deleted = [], [], []
+
+    for row in rows:
+        row_id = row.get('id')
+
+        if row_id and row.get('deleted'):
+            deliverable = Deliverable.query.filter_by(id=row_id, project_id=project_id).first()
+            if deliverable:
+                deleted.append(deliverable.name)
+                db.session.delete(deliverable)
+            continue
+
+        name = (row.get('name') or '').strip()
+        if not name:
+            continue  # a blank row that was never filled in — skip it rather than fail the whole save
+
+        design_deadline = parse_date(row.get('design_deadline'))
+        design_deadline_time = parse_time(row.get('design_deadline_time'))
+        teams = ','.join(row.get('teams') or [])
+
+        if row_id:
+            deliverable = Deliverable.query.filter_by(id=row_id, project_id=project_id).first()
+            if not deliverable:
+                continue
+            deliverable.name = name
+            deliverable.design_deadline = design_deadline
+            deliverable.design_deadline_time = design_deadline_time
+            deliverable.teams = teams
+            updated.append(deliverable.name)
+        else:
+            deliverable = Deliverable(
+                project_id=project_id,
+                project_customer_id=None,
+                deliverable_type_id=None,
+                name=name,
+                design_deadline=design_deadline,
+                design_deadline_time=design_deadline_time,
+                teams=teams,
+                status='in_queue',
+                created_by=actor,
+            )
+            db.session.add(deliverable)
+            created.append(name)
+
+    db.session.commit()
+
+    for name in created:
+        log_activity('deliverable_created', f'Standard deliverable "{name}" added to "{project.name}"',
+                     user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    for name in updated:
+        log_activity('deliverable_updated', f'Standard deliverable "{name}" updated on "{project.name}"',
+                     user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    for name in deleted:
+        log_activity('deliverable_deleted', f'Standard deliverable "{name}" removed from "{project.name}"',
+                     user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
 
 @project_overlay_bp.route('/projects/<int:project_id>/set-project-owner', methods=['POST'])
 @login_required

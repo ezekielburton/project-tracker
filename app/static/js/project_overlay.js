@@ -15,7 +15,7 @@
 // principle as the rest of this rework (architecture doc §1).
 
 window.ProjectOverlay = (function () {
-    function init(onCloseRequested) {
+    function init(onCloseRequested, onSubTabSelected) {
         var backdrop = document.getElementById('project-overlay-backdrop');
         var closeBtn = document.getElementById('project-overlay-close');
 
@@ -129,9 +129,11 @@ window.ProjectOverlay = (function () {
 
             subrail.querySelectorAll('.tab-strip-item').forEach(function (btn) {
                 btn.addEventListener('click', function () {
+                    if (btn.classList.contains('active')) return;  // already showing this sub-tab
                     subrail.querySelectorAll('.tab-strip-item').forEach(function (b) {
                         b.classList.toggle('active', b === btn);
                     });
+                    if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
                 });
             });
         }

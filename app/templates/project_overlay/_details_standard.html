@@ -1,212 +1,39 @@
-{# app/templates/project_overlay/_details_standard.html
-Design > Details — Standard brief, Project Name card (M3 Step 2). Ported
-from the old detail.html's Project Name section onto the new shared
-macros (card/person_chip/avatar_picker) instead of the old .detail-*
-classes. CS Lead/Secondary CS/Project Owner are interactive actions, not
-brief content — always-on regardless of Edit mode (architecture doc §2),
-same carve-out as team-tag self-assign. #}
 {% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
 <div class="overlay-details-grid">
-    <div class="overlay-card-third overlay-card-narrow">
-        {% call card('Summary') %}
-        <div class="overlay-field-grid">
-            <div class="overlay-field-col">
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Job Number</span>
-                    <span class="overlay-field-value">{{ project.job_number or '—' }}</span>
-                </div>
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Project Status</span>
-                    {{ status_pill(status_label, status_class) }}
-                </div>
-                {% if can_manage_cs %}
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Add Secondary CS</span>
-                    {{ avatar_picker('secondary-cs-add-picker', None, available_cs_users, '+ Add Secondary CS') }}
-                </div>
-                {% endif %}
-            </div>
-            <div class="overlay-field-col">
-                <div class="overlay-field">
-                    <span class="overlay-field-label">CS Lead</span>
-                    {% if can_reassign_cs_lead %}
-                    {{ avatar_picker('cs-lead-picker', project.cs_lead, cs_lead_options, 'Select CS Lead…') }}
-                    {% else %}
-                    {{ person_chip(project.cs_lead, 'CS Missing') }}
-                    {% endif %}
-                </div>
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Secondary CS</span>
-                    <div class="overlay-secondary-cs-list">
-                        {% for assignment in project.secondary_cs_assignments %}
-                        <span class="overlay-secondary-cs-row">
-                            {{ person_chip(assignment.user) }}
-                            {% if can_manage_cs %}
-                            <button type="button" class="overlay-secondary-cs-remove"
-                                data-user-id="{{ assignment.user_id }}" aria-label="Remove">&times;</button>
-                            {% endif %}
-                        </span>
-                        {% else %}
-                        <span class="overlay-field-empty">None</span>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Project Owner</span>
-                    {% if can_assign_owner %}
-                    {{ avatar_picker('project-owner-picker', project.project_owner, owner_options, '+ Add Project
-                    Owner…')
-                    }}
-                    {% else %}
-                    {{ person_chip(project.project_owner, 'Unassigned') }}
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endcall %}
-    </div>
-
-    <div class="overlay-card-third overlay-card-narrow">
-        {% call card('Designer Assignments') %}
-        <div class="overlay-designer-table">
-            <div class="overlay-designer-table-header">
-                <span>Team</span>
-                <span>Designer</span>
-                <span>Action</span>
-            </div>
-            {% for row in designer_rows %}
-            <div class="overlay-designer-table-row">
-                <span>{{ tag(row.team, row.team|lower) }}</span>
-                <span>
-                    {% if row.designer %}
-                    {{ person_chip(row.designer) }}
-                    {% else %}
-                    <span class="overlay-field-empty">Unassigned</span>
-                    {% endif %}
-                </span>
-                <span>
-                    {% if row.can_manage %}
-                    {{ avatar_picker('designer-picker-' ~ row.team|lower, None, row.options,
-                    trigger_label=('Reassign' if row.designer else 'Assign'), data_team=row.team) }}
-                    {% else %}
-                    —
-                    {% endif %}
-                </span>
-            </div>
-            {% else %}
-            <p class="overlay-field-empty">No teams requested.</p>
-            {% endfor %}
-        </div>
-        {% endcall %}
-    </div>
-
-    <div class="overlay-card-third overlay-card-wide">
-        {% call card('Reference Files') %}
-        {% if project.reference_files %}
-        <div class="overlay-reference-files-header">
-            <button type="button" class="overlay-file-action-btn" id="overlay-download-all-files"
-                data-download-all-url="{{ url_for('project_detail.download_all_reference_files', project_id=project.id) }}">
-                Download All
-            </button>
-        </div>
-        {% endif %}
-        <div class="overlay-reference-files-list" id="overlay-reference-files-list">
-            {% for f in project.reference_files %}
-            <div class="overlay-reference-file-item" data-file-id="{{ f.id }}">
-                <span class="overlay-reference-file-icon">
-                    {% if f.file_type in ['jpg', 'jpeg', 'png'] %}🖼
-                    {% elif f.file_type == 'pdf' %}📄
-                    {% elif f.file_type == 'docx' %}📝
-                    {% elif f.file_type == 'xlsx' %}📊
-                    {% elif f.file_type in ['mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v'] %}🎬
-                    {% else %}📎
-                    {% endif %}
-                </span>
-                <span class="overlay-reference-file-name">{{ f.original_filename }}</span>
-                <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
-                <div class="overlay-reference-file-actions">
-                    <button type="button" class="overlay-file-action-btn overlay-reference-file-preview"
-                        data-preview-url="{{ url_for('project_detail.preview_project_file', file_id=f.id) }}"
-                        data-download-url="{{ url_for('project_detail.download_project_file', file_id=f.id) }}">Preview</button>
-                    <a href="{{ url_for('project_detail.download_project_file', file_id=f.id) }}"
-                        class="overlay-file-action-btn">Download</a>
-                    {% if can_manage_reference_files %}
-                    <button type="button"
-                        class="overlay-file-action-btn overlay-file-action-btn--danger overlay-reference-file-remove"
-                        data-file-id="{{ f.id }}">Remove</button>
-                    {% endif %}
-                </div>
-            </div>
-            {% else %}
-            <p class="overlay-field-empty" id="overlay-no-reference-files">No reference files uploaded yet.</p>
-            {% endfor %}
-        </div>
-
-        {% if can_manage_reference_files %}
-        <div class="overlay-reference-file-upload">
-            <input type="file" id="overlay-reference-file-input" class="hidden"
-                accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.pptx,.zip,.dwg,.mp4,.mov,.avi,.webm,.mkv,.wmv,.m4v">
-            <button type="button" id="overlay-reference-file-btn" class="overlay-file-action-btn"
-                data-project-id="{{ project.id }}">
-                Drop a file or click to attach…
-            </button>
-            <span id="overlay-reference-file-status" class="overlay-reference-file-status"></span>
-        </div>
-        {% endif %}
-        {% endcall %}
-    </div>
+    {% include "project_overlay/_details_top_cards.html" %}
 
     <div class="overlay-card-full">
         {% call card('Brief Overview') %}
         <div class="overlay-field-grid">
             <div class="overlay-field-col">
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Client</span>
-                    <span class="overlay-field-value">{{ project.client_brand.name if project.client_brand else '—'
-                        }}</span>
-                </div>
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Type of Design</span>
-                    <span class="overlay-field-value">{{ project.design_type.name if project.design_type else '—'
-                        }}</span>
-                </div>
+                <div class="overlay-field"><span class="overlay-field-label">Client</span><span
+                        class="overlay-field-value">{{ project.client_brand.name if project.client_brand else '—'
+                        }}</span></div>
+                <div class="overlay-field"><span class="overlay-field-label">Type of Design</span><span
+                        class="overlay-field-value">{{ project.design_type.name if project.design_type else '—'
+                        }}</span></div>
             </div>
             <div class="overlay-field-col">
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Initial Deadline</span>
-                    <span class="overlay-field-value">{{ project.first_output_deadline.strftime('%d %b %Y') if
-                        project.first_output_deadline else '—' }}</span>
-                </div>
-                <div class="overlay-field">
-                    <span class="overlay-field-label">Final Deadline</span>
-                    <span class="overlay-field-value">{{ project.execution_date.strftime('%d %b %Y') if
-                        project.execution_date
-                        else '—' }}</span>
-                </div>
+                <div class="overlay-field"><span class="overlay-field-label">Initial Deadline</span><span
+                        class="overlay-field-value">{{ project.first_output_deadline.strftime('%d %b %Y') if
+                        project.first_output_deadline else '—' }}</span></div>
+                <div class="overlay-field"><span class="overlay-field-label">Final Deadline</span><span
+                        class="overlay-field-value">{{ project.execution_date.strftime('%d %b %Y') if
+                        project.execution_date else '—' }}</span></div>
             </div>
         </div>
-
-        {% if project.client_expectation %}
-        <div class="overlay-notes">
-            <span class="overlay-field-label">Client Expectation</span>
+        {% if project.client_expectation %}<div class="overlay-notes"><span class="overlay-field-label">Client
+                Expectation</span>
             <p class="overlay-notes-text">{{ project.client_expectation }}</p>
-        </div>
-        {% endif %}
-
-        {% if project.what_to_avoid %}
-        <div class="overlay-notes">
-            <span class="overlay-field-label">What to Avoid</span>
+        </div>{% endif %}
+        {% if project.what_to_avoid %}<div class="overlay-notes"><span class="overlay-field-label">What to Avoid</span>
             <p class="overlay-notes-text">{{ project.what_to_avoid }}</p>
-        </div>
-        {% endif %}
-
-        {% if project.additional_information %}
-        <div class="overlay-notes">
-            <span class="overlay-field-label">Additional Information</span>
+        </div>{% endif %}
+        {% if project.additional_information %}<div class="overlay-notes"><span class="overlay-field-label">Additional
+                Information</span>
             <p class="overlay-notes-text">{{ project.additional_information }}</p>
-        </div>
-        {% endif %}
+        </div>{% endif %}
         {% endcall %}
     </div>
 </div>

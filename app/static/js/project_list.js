@@ -16,17 +16,60 @@ document.addEventListener('DOMContentLoaded', () => {
     // an empty-state page (e.g. a direct link into a filtered, empty view).
 
     const overlayMount = document.getElementById('project-overlay-mount');
-    let activeOverlay = null;       // the ProjectOverlay.init() handle, or null when closed
-    let activeDetailsCard = null;   // the ProjectDetailsCard.init() handle, or null when closed
+    let activeOverlay = null;
+    let activeSubTabCard = null;   // whichever sub-tab's card module is currently mounted (Details, Deliverables, ...)
+
+    // Registry of sub-tab content loaders, keyed by the subrail button's
+    // data-sub-tab value. Submissions/Pre-Production aren't built yet
+    // (later M3 steps) — clicking them just changes the active tab
+    // styling with no content swap until they get an entry here.
+    const SUBTAB_LOADERS = {
+        details: {
+            url: (projectId) => `/projects/${projectId}/overlay/details`,
+            module: () => window.ProjectDetailsCard,
+        },
+        deliverables: {
+            url: (projectId) => `/projects/${projectId}/overlay/deliverables`,
+            module: () => window.ProjectDeliverablesCard,
+        },
+    };
+
+    function loadSubTabContent(projectId, subTabKey) {
+        const loader = SUBTAB_LOADERS[subTabKey];
+        if (!loader) return;
+
+        const contentEl = document.getElementById('project-overlay-content');
+        if (!contentEl) return;
+
+        fetch(loader.url(projectId))
+            .then((res) => res.text())
+            .then((html) => {
+                if (activeSubTabCard) {
+                    activeSubTabCard.destroy();
+                    activeSubTabCard = null;
+                }
+                contentEl.innerHTML = html;
+                const CardModule = loader.module();
+                if (CardModule) {
+                    activeSubTabCard = CardModule.init(contentEl, projectId, function () {
+                        loadSubTabContent(projectId, subTabKey);
+                    });
+                }
+            });
+    }
 
     function openProjectOverlay(projectId, pushHistory = true) {
         fetch(`/projects/${projectId}/overlay`)
             .then((res) => res.text())
             .then((html) => {
                 overlayMount.innerHTML = html;
-                activeOverlay = window.ProjectOverlay.init(closeProjectOverlay);
-                activeDetailsCard = window.ProjectDetailsCard.init(overlayMount, projectId, function () {
-                    openProjectOverlay(projectId, false);  // re-fetch to reflect the change, no new history entry
+                const contentEl = document.getElementById('project-overlay-content');
+
+                activeOverlay = window.ProjectOverlay.init(closeProjectOverlay, function (subTabKey) {
+                    loadSubTabContent(projectId, subTabKey);
+                });
+                activeSubTabCard = window.ProjectDetailsCard.init(contentEl, projectId, function () {
+                    loadSubTabContent(projectId, 'details');
                 });
 
                 if (pushHistory) {
@@ -42,9 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
             activeOverlay.destroy();
             activeOverlay = null;
         }
-        if (activeDetailsCard) {
-            activeDetailsCard.destroy();
-            activeDetailsCard = null;
+        if (activeSubTabCard) {
+            activeSubTabCard.destroy();
+            activeSubTabCard = null;
         }
         overlayMount.innerHTML = '';
 

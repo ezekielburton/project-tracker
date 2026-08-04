@@ -2,6 +2,20 @@
    main.css, but needs its own much larger box than the standard
    .modal-box (which tops out at 420px, fine for small forms, useless for
    viewing a document). */
+
+/* Overrides .modal-overlay's shared z-index (1000) — same value as the
+Detail + Briefing overlay's own backdrop, so whichever one happened to
+render later in the DOM was winning the tie and covering the other.
+File preview should always sit above both the overlay (1000) and its
+avatar-picker popovers (2000), since previewing a file is usually
+something you're doing FROM inside that overlay. Scoped to this one
+modal's id, not the shared .modal-overlay class, so nothing else that
+reuses that class elsewhere in the app is affected. */
+
+#file-preview-modal {
+    z-index: 2500;
+}
+
 .file-preview-modal-box {
     background: var(--white);
     border-radius: var(--radius);
