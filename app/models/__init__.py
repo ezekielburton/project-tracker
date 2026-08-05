@@ -875,6 +875,11 @@ class ProjectSubmission(db.Model):
     workflow_status = db.Column(db.String(30), nullable=True)
     last_internal_review_notified_at = db.Column(db.DateTime, nullable=True)
     cs_note = db.Column(db.Text, nullable=True)
+    # Post-Approval Edits: incremented each time an already-Client-Approved
+    # submission's file is replaced without going through a full revision
+    # cycle. Stored counter, same convention as revision_count/
+    # posm_revision_count/ckv_revision_count elsewhere in this model.
+    post_approval_edit_count = db.Column(db.Integer, default=0, nullable=False)
 
     # Relationships
     project = db.relationship('Project', backref=db.backref('submissions', cascade='all, delete-orphan'))
@@ -1049,6 +1054,18 @@ class ProjectSubmissionFile(db.Model):
     project     = db.relationship('Project',
                                   backref=db.backref('submission_extra_files', cascade='all, delete-orphan'))
     uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+    # Draft-stage cache tracking (M3 Step 4 — Submissions content build).
+    # 'cache' = sitting in the local draft-cache folder, not yet on the NAS.
+    # 'nas'   = confirmed on the NAS (either zipped at Submit to Client, or
+    #           a post-submission "Attach Supporting File" upload, which
+    #           always goes straight to 'nas' and never touches the cache).
+    storage_location = db.Column(db.String(10), default='nas', nullable=False)
+    local_cache_path = db.Column(db.String(500), nullable=True)
+    # Exactly one file per active draft can be True at a time (app-enforced,
+    # not a DB constraint — same pattern as "only one active draft per
+    # channel"). Decides which file gets the canonical auto-generated name
+    # when the draft is zipped and moved to the NAS.
+    is_main_deck     = db.Column(db.Boolean, default=False, nullable=False)
 
     def __repr__(self):
         return f'<ProjectSubmissionFile {self.original_filename} submission={self.submission_id}>'

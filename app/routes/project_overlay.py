@@ -128,6 +128,52 @@ def _build_submission_regions(project):
         })
     return sections
 
+def _resolve_submission_scope(project, scope, customer_id=None):
+    """
+    Resolves a Submissions rail selection (scope='ckv', or scope='customer'
+    + customer_id) into the phase/channel context a ProjectSubmission
+    needs to be scoped correctly. Shared by every new overlay Submissions
+    route (content read, draft upload, remove file, submit to client, ...)
+    so scope resolution can't drift between them.
+
+    Returns {'channel': ProjectPosmChannel|None, 'phase': str,
+    'posm_country': str|None, 'posm_customer_id': int|None}.
+    """
+    from app.models import ProjectPosmChannel
+
+    if scope == 'customer' and customer_id:
+        channel = ProjectPosmChannel.query.filter_by(
+            project_id=project.id, posm_customer_id=customer_id
+        ).first()
+        return {
+            'channel': channel,
+            'phase': 'posm',
+            'posm_country': channel.posm_country if channel else None,
+            'posm_customer_id': customer_id,
+        }
+
+    # scope == 'ckv', or a Standard Brief project (no rail, no scope param
+    # at all) — both are the same non-channel "concept_kv" phase today.
+    return {'channel': None, 'phase': 'concept_kv', 'posm_country': None, 'posm_customer_id': None}
+
+
+def _get_active_draft(project, resolved):
+    """Returns the current active Draft ProjectSubmission for this scope,
+    or None if there isn't one yet. 'Active draft' = is_active AND
+    workflow_status == 'draft' — the new overlay Submissions routes are
+    the ones that actually maintain workflow_status going forward (the
+    old detail page's routes in projects_submission.py never set it;
+    that's fine, they're untouched legacy code for the page being
+    replaced)."""
+    from app.models import ProjectSubmission
+    return ProjectSubmission.query.filter_by(
+        project_id=project.id,
+        phase=resolved['phase'],
+        posm_country=resolved['posm_country'],
+        posm_customer_id=resolved['posm_customer_id'],
+        is_active=True,
+        workflow_status='draft',
+    ).first()
 
 # Hourly slots, 8:00 AM through 10:00 PM, as (value, label) pairs for the
 # Deliverables edit table's Time dropdown. value is 24h "HH:00" (matches
@@ -514,4 +560,115 @@ def overlay_submissions_content(project_id):
 
     # Placeholder — the real draft/upload/submit/revision surface is the next chunk.
     return render_template('project_overlay/_submissions_content_placeholder.html', label=label)
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/upload', methods=['POST'])
+@login_required
+def overlay_submissions_upload(project_id):
+    """
+    Add a file to a Draft submission's local cache (NOT the NAS — see
+    app/submission_cache.py). Creates the draft ProjectSubmission itself
+    on the very first file if one doesn't exist yet for this scope; every
+    subsequent file for the same scope attaches to that same draft as
+    another ProjectSubmissionFile row, storage_location='cache'.
+
+    filename/original_filename/file_type on the new draft row are set to
+    a 'draft' placeholder — there's no single canonical name to give the
+    submission until Submit to Client actually builds the zip and computes
+    the real one (see the zip-naming design note in the workflow doc).
+
+    The first file uploaded into a brand-new draft is automatically
+    flagged is_main_deck — see ProjectSubmissionFile.is_main_deck's
+    comment in app/models/__init__.py for the reasoning.
+    """
+    from app.models import ProjectSubmission, ProjectSubmissionFile
+    from app.submission_cache import cache_submission_file
+    from app import db
+    from app.utils import log_activity
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+    allowed = {'pdf', 'pptx', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'ai', 'psd', 'zip'}
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in allowed:
+        return jsonify({'success': False, 'error': f'File type .{ext} is not supported'}), 400
+
+    scope = request.form.get('scope', 'ckv')
+    customer_id = request.form.get('customer_id', type=int)
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+
+    draft = _get_active_draft(project, resolved)
+    if not draft:
+        # Only one is_active=True submission may exist per scope at a time
+        # — same invariant the old upload_submission() route enforced.
+        # Matters once a scope has real history (e.g. Start Revision
+        # reopening Draft, a later sub-step); a brand-new scope has
+        # nothing to deactivate.
+        previous = ProjectSubmission.query.filter_by(
+            project_id=project.id,
+            phase=resolved['phase'],
+            posm_country=resolved['posm_country'],
+            posm_customer_id=resolved['posm_customer_id'],
+            is_active=True,
+        ).first()
+        if previous:
+            previous.is_active = False
+
+        draft = ProjectSubmission(
+            project_id=project.id,
+            filename='draft',
+            original_filename='draft',
+            file_type='draft',
+            uploaded_by_id=actor.id,
+            is_active=True,
+            phase=resolved['phase'],
+            posm_country=resolved['posm_country'],
+            posm_customer_id=resolved['posm_customer_id'],
+            workflow_status='draft',
+        )
+        db.session.add(draft)
+        db.session.flush()  # need draft.id before caching the file under it
+
+    file_bytes = file.read()
+    local_path = cache_submission_file(project.id, draft.id, file_bytes, file.filename)
+
+    existing_count = ProjectSubmissionFile.query.filter_by(
+        submission_id=draft.id, storage_location='cache'
+    ).count()
+
+    draft_file = ProjectSubmissionFile(
+        submission_id=draft.id,
+        project_id=project.id,
+        original_filename=file.filename,
+        file_type=ext,
+        uploaded_by_id=actor.id,
+        storage_location='cache',
+        local_cache_path=local_path,
+        is_main_deck=(existing_count == 0),
+    )
+    db.session.add(draft_file)
+    db.session.commit()
+
+    log_activity('submission_draft_file_added',
+                 f'{actor.name} added "{file.filename}" to the draft submission for "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({
+        'success': True,
+        'submission_id': draft.id,
+        'file': {
+            'id': draft_file.id,
+            'original_filename': draft_file.original_filename,
+            'file_type': draft_file.file_type,
+            'is_main_deck': draft_file.is_main_deck,
+            'uploaded_by': actor.name,
+        }
+    })
                     

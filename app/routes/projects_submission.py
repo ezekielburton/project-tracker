@@ -872,7 +872,6 @@ def submit_to_client(project_id):
 @submission_bp.route('/projects/submission/<int:submission_id>/download')
 @login_required
 def download_submission(submission_id):
-    """Serve a submission deck. Submitted decks are on NAS; drafts are on local disk."""
     from app.models import ProjectSubmission
     from flask import send_file
     import io, os
