@@ -4503,7 +4503,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 .emulation-badge {
     position: fixed;
-    top: 4rem;
+    bottom: 1rem;
     right: 1.25rem;
     z-index: 300;
     display: flex;

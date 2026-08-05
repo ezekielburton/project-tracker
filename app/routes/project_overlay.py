@@ -671,4 +671,94 @@ def overlay_submissions_upload(project_id):
             'uploaded_by': actor.name,
         }
     })
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/file/<int:file_id>/remove', methods=['POST'])
+@login_required
+def overlay_submissions_remove_draft_file(project_id, file_id):
+    """
+    Remove a single file from a Draft submission's local cache.
+
+    Non-main-deck files delete immediately — nothing else to resolve.
+
+    The main-deck file is special: removing it while OTHER cached files still
+    exist would leave the draft with no canonical file to auto-name at zip
+    time, so this is gated. The caller must resolve it in the SAME request,
+    either by:
+      - 'new_main_deck_file_id' — promote an existing other cached file, or
+      - 'file' — upload a brand-new file, which becomes the new main deck.
+    Neither present -> nothing is deleted, we return 409 with the list of
+    other files so the frontend can prompt the designer to choose.
+
+    If the main-deck file is the ONLY file left, it deletes freely and the
+    draft goes back to empty — per Ezekiel: "If the file is solo, it's fine
+    to revert to a empty draft."
+    """
+    from app.models import ProjectSubmissionFile
+    from app.submission_cache import cache_submission_file, delete_cached_file
+    from app import db
+    from app.utils import log_activity
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    target = ProjectSubmissionFile.query.filter_by(
+        id=file_id, project_id=project.id, storage_location='cache'
+    ).first_or_404()
+
+    submission_id = target.submission_id
+    siblings = ProjectSubmissionFile.query.filter(
+        ProjectSubmissionFile.submission_id == submission_id,
+        ProjectSubmissionFile.storage_location == 'cache',
+        ProjectSubmissionFile.id != target.id,
+    ).all()
+
+    if target.is_main_deck and siblings:
+        new_main_deck_file_id = request.form.get('new_main_deck_file_id', type=int)
+        new_file = request.files.get('file')
+
+        if not new_main_deck_file_id and not new_file:
+            return jsonify({
+                'success': False,
+                'error': 'main_deck_replacement_required',
+                'other_files': [
+                    {'id': f.id, 'original_filename': f.original_filename}
+                    for f in siblings
+                ],
+            }), 409
+
+        if new_main_deck_file_id:
+            promoted = next((f for f in siblings if f.id == new_main_deck_file_id), None)
+            if not promoted:
+                return jsonify({'success': False, 'error': 'new_main_deck_file_id not found in this draft'}), 400
+            promoted.is_main_deck = True
+        else:
+            allowed = {'pdf', 'pptx', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'ai', 'psd', 'zip'}
+            ext = new_file.filename.rsplit('.', 1)[-1].lower() if '.' in new_file.filename else ''
+            if ext not in allowed:
+                return jsonify({'success': False, 'error': f'File type .{ext} is not supported'}), 400
+            file_bytes = new_file.read()
+            local_path = cache_submission_file(project.id, submission_id, file_bytes, new_file.filename)
+            promoted = ProjectSubmissionFile(
+                submission_id=submission_id,
+                project_id=project.id,
+                original_filename=new_file.filename,
+                file_type=ext,
+                uploaded_by_id=actor.id,
+                storage_location='cache',
+                local_cache_path=local_path,
+                is_main_deck=True,
+            )
+            db.session.add(promoted)
+
+    removed_name = target.original_filename
+    delete_cached_file(target.local_cache_path)
+    db.session.delete(target)
+    db.session.commit()
+
+    log_activity('submission_draft_file_removed',
+                 f'{actor.name} removed "{removed_name}" from the draft submission for "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
                     
