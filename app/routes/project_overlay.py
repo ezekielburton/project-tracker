@@ -158,13 +158,17 @@ def _resolve_submission_scope(project, scope, customer_id=None):
 
 
 def _get_active_draft(project, resolved):
-    """Returns the current active Draft ProjectSubmission for this scope,
-    or None if there isn't one yet. 'Active draft' = is_active AND
-    workflow_status == 'draft' — the new overlay Submissions routes are
-    the ones that actually maintain workflow_status going forward (the
-    old detail page's routes in projects_submission.py never set it;
-    that's fine, they're untouched legacy code for the page being
-    replaced)."""
+    """Returns the current active ProjectSubmission for this scope, across
+    any stage of the new overlay's review cycle — draft, internal_review,
+    or internal_revision — not literally just 'draft'. Widened in sub-step
+    6: once a submission locks (Submit for Review) or gets flagged (Flag
+    Internal Revision), it's still THE active submission for this scope —
+    uploads/edits during an Edit session need to land on it, not silently
+    spawn a second one. workflow_status is never NULL for a row this new
+    architecture created (upload always sets it to 'draft' on first
+    creation), so restricting to these three values still correctly
+    excludes stale legacy rows the old detail page's routes in
+    projects_submission.py left with workflow_status=NULL."""
     from app.models import ProjectSubmission
     return ProjectSubmission.query.filter_by(
         project_id=project.id,
@@ -172,8 +176,101 @@ def _get_active_draft(project, resolved):
         posm_country=resolved['posm_country'],
         posm_customer_id=resolved['posm_customer_id'],
         is_active=True,
-        workflow_status='draft',
+    ).filter(
+        ProjectSubmission.workflow_status.in_(['draft', 'internal_review', 'internal_revision'])
     ).first()
+
+def _build_draft_card_context(project, actor, resolved):
+    """
+    Everything the Draft card needs to render for one Submissions scope —
+    shared by the Standard Brief's initial /overlay/submissions render and
+    the C&CM /overlay/submissions/content per-scope fetch, so the two
+    can't drift out of sync (same reasoning as _build_details_context).
+
+    can_manage_draft mirrors the old detail page's upload_submission /
+    submit_for_internal_review gating exactly: admin/designer/team_lead
+    only — CS can view a submission but never uploads or removes a file.
+
+    Extended in sub-step 6 (Submit for Review / Edit / Flag Internal
+    Revision): also builds the deliverable / Concept & KV picker options
+    for this scope, the review-state flags the frontend needs to decide
+    which controls to show (is_locked / is_being_edited), and the event
+    history timeline. can_review mirrors the old flag_submission gating
+    (admin/cs/management) — the "Flag Internal Revision" side.
+
+    is_editable / is_locked state machine (confirmed with Ezekiel,
+    5 Aug 2026): draft -> fully editable. internal_review -> locked,
+    unless is_being_edited (designer clicked Edit). internal_revision ->
+    immediately editable again, no separate unlock click needed, since
+    CS's flag message IS the reason. Submitting for review — whether it's
+    the first time or after an edit/flag cycle — always re-locks to
+    internal_review and clears is_being_edited.
+    """
+    from app.models import ProjectSubmissionFile, Deliverable
+
+    draft = _get_active_draft(project, resolved)
+    cached_files = []
+    if draft:
+        cached_files = ProjectSubmissionFile.query.filter_by(
+            submission_id=draft.id, storage_location='cache'
+        ).order_by(
+            ProjectSubmissionFile.is_main_deck.desc(),
+            ProjectSubmissionFile.uploaded_at.asc(),
+        ).all()
+
+    workflow_status = draft.workflow_status if draft else 'draft'
+    is_being_edited = bool(draft.is_being_edited) if draft else False
+    is_editable = (
+        workflow_status in ('draft', 'internal_revision')
+        or (workflow_status == 'internal_review' and is_being_edited)
+    )
+    is_locked = draft is not None and not is_editable
+
+    events = list(draft.events) if draft else []
+
+    # Deliverable / Concept & KV picker options for this scope. The C&CM
+    # "Concept & KV" pill (phase='concept_kv' on a 'ccm' project) is
+    # concept/KV toggles, not deliverables; a Standard Brief project also
+    # resolves to phase='concept_kv' (it has no customer scoping at all)
+    # but its "deck" covers real deliverables, so it gets the deliverable
+    # picker instead.
+    is_ckv_toggle_scope = resolved['phase'] == 'concept_kv' and project.brief_type == 'ccm'
+    if is_ckv_toggle_scope:
+        deliverable_options = []
+    elif resolved['phase'] == 'concept_kv':
+        deliverable_options = Deliverable.query.filter_by(
+            project_id=project.id, project_customer_id=None
+        ).order_by(Deliverable.id).all()
+    else:
+        deliverable_options = Deliverable.query.filter_by(
+            project_id=project.id, project_customer_id=resolved['posm_customer_id']
+        ).order_by(Deliverable.id).all()
+
+    selected_deliverable_ids = []
+    includes_concept = False
+    includes_kv = False
+    if draft:
+        selected_deliverable_ids = [link.deliverable_id for link in draft.included_deliverables]
+        includes_concept = draft.includes_concept
+        includes_kv = draft.includes_kv
+
+    return {
+        'draft': draft,
+        'cached_files': cached_files,
+        'can_manage_draft': actor.role in ('admin', 'designer', 'team_lead'),
+        'can_review': actor.role in ('admin', 'cs', 'management'),
+        'workflow_status': workflow_status,
+        'is_being_edited': is_being_edited,
+        'is_locked': is_locked,
+        'events': events,
+        'is_ckv_toggle_scope': is_ckv_toggle_scope,
+        'deliverable_options': deliverable_options,
+        'selected_deliverable_ids': selected_deliverable_ids,
+        'includes_concept': includes_concept,
+        'includes_kv': includes_kv,
+        'has_concept': project.has_concept,
+        'has_kv': project.has_kv,
+    }
 
 # Hourly slots, 8:00 AM through 10:00 PM, as (value, label) pairs for the
 # Deliverables edit table's Time dropdown. value is 24h "HH:00" (matches
@@ -522,9 +619,16 @@ def set_project_owner(project_id):
 @login_required
 def overlay_submissions(project_id):
     project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
 
     if project.brief_type != 'ccm':
-        return render_template('project_overlay/_submissions_standard.html', project=project)
+        resolved = _resolve_submission_scope(project, 'ckv')
+        draft_context = _build_draft_card_context(project, actor, resolved)
+        return render_template(
+            'project_overlay/_submissions_standard.html',
+            project=project, scope='ckv', customer_id=None,
+            **draft_context
+        )
 
     from app.routes.projects_detail import ensure_posm_channels
     regions = _build_submission_regions(project)
@@ -550,16 +654,25 @@ def overlay_submissions(project_id):
 def overlay_submissions_content(project_id):
     from app.models import ProjectCustomer
     project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
 
-    if request.args.get('scope') == 'ckv':
+    scope = request.args.get('scope', 'ckv')
+    customer_id = request.args.get('customer_id', type=int)
+
+    if scope == 'ckv':
         label = 'Concept & KV'
     else:
-        customer_id = request.args.get('customer_id', type=int)
         pc = ProjectCustomer.query.filter_by(id=customer_id, project_id=project_id).first() if customer_id else None
         label = pc.customer.name if pc else 'Unknown'
 
-    # Placeholder — the real draft/upload/submit/revision surface is the next chunk.
-    return render_template('project_overlay/_submissions_content_placeholder.html', label=label)
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+    draft_context = _build_draft_card_context(project, actor, resolved)
+
+    return render_template(
+        'project_overlay/_submissions_draft_card.html',
+        project=project, label=label, scope=scope, customer_id=customer_id,
+        **draft_context
+    )
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/upload', methods=['POST'])
 @login_required
@@ -758,6 +871,267 @@ def overlay_submissions_remove_draft_file(project_id, file_id):
 
     log_activity('submission_draft_file_removed',
                  f'{actor.name} removed "{removed_name}" from the draft submission for "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/file/<int:file_id>/set-main-deck', methods=['POST'])
+@login_required
+def overlay_submissions_set_main_deck(project_id, file_id):
+    """
+    Promotes an existing cached file to main deck without removing anything
+    — the "Set as Main Deck" button on a non-main-deck row. Demotes whichever
+    file currently holds the flag (there's always at most one, so this is a
+    simple two-row flip, not a bulk unset).
+    """
+    from app.models import ProjectSubmissionFile
+    from app import db
+    from app.utils import log_activity
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    target = ProjectSubmissionFile.query.filter_by(
+        id=file_id, project_id=project.id, storage_location='cache'
+    ).first_or_404()
+
+    if not target.is_main_deck:
+        current_main = ProjectSubmissionFile.query.filter_by(
+            submission_id=target.submission_id, storage_location='cache', is_main_deck=True
+        ).first()
+        if current_main:
+            current_main.is_main_deck = False
+        target.is_main_deck = True
+        db.session.commit()
+
+        log_activity('submission_draft_main_deck_changed',
+                     f'{actor.name} set "{target.original_filename}" as the main deck for the draft submission on "{project.name}"',
+                     user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/submit-for-review', methods=['POST'])
+@login_required
+def overlay_submissions_submit_for_review(project_id):
+    """
+    Designer locks in the draft and sends it to CS for internal review —
+    covers both the very first submission and every re-submission after an
+    Edit or a CS-flagged Internal Revision (same route, same effect: lock,
+    log, notify). Deliverable / Concept & KV selection is captured here,
+    via the same ProjectSubmissionDeliverable junction the old detail
+    page's submit_for_internal_review route already used.
+
+    Body (JSON): scope, customer_id, note (optional), deliverable_ids
+    (list — Standard Brief / C&CM customer scope) or includes_concept /
+    includes_kv (bool — C&CM's Concept & KV pill only).
+    """
+    from app.models import (Deliverable, ProjectSubmissionDeliverable,
+                             ProjectSubmissionEvent, ProjectSubmissionFile)
+    from app.status_tracking import record_deliverable_status
+    from app.notifications import create_notification
+    from app.utils import log_activity
+    from app import db
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role not in ('admin', 'designer', 'team_lead'):
+        return jsonify({'success': False, 'error': 'You do not have permission to submit this draft.'}), 403
+    
+    data = request.get_json() or {}
+    scope = data.get('scope', 'ckv')
+    customer_id = data.get('customer_id')
+    note = (data.get('note') or '').strip() or None
+    deliverable_ids = data.get('deliverable_ids') or []
+    includes_concept = bool(data.get('includes_concept', False))
+    includes_kv = bool(data.get('includes_kv', False))
+
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+    draft = _get_active_draft(project, resolved)
+    if not draft:
+        return jsonify({'success': False, 'error': 'No active draft to submit.'}), 400
+
+    has_files = ProjectSubmissionFile.query.filter_by(
+        submission_id=draft.id, storage_location='cache'
+    ).first() is not None
+    if not has_files:
+        return jsonify({'success': False, 'error': 'Add at least one file before submitting.'}), 400
+
+    is_ckv_toggle_scope = resolved['phase'] == 'concept_kv' and project.brief_type == 'ccm'
+    if is_ckv_toggle_scope:
+        if not includes_concept and not includes_kv:
+            return jsonify({'success': False, 'error': 'Select Concept and/or KV to include.'}), 400
+    elif not deliverable_ids:
+        return jsonify({'success': False, 'error': 'Select at least one deliverable to include.'}), 400
+
+    # Clear + relink deliverables — safe to replace, same as the old route
+    ProjectSubmissionDeliverable.query.filter_by(submission_id=draft.id).delete()
+    for d_id in deliverable_ids:
+        deliverable = Deliverable.query.filter_by(id=d_id, project_id=project.id).first()
+        if deliverable:
+            db.session.add(ProjectSubmissionDeliverable(submission_id=draft.id, deliverable_id=d_id))
+            record_deliverable_status(deliverable, 'internal_review', actor)
+
+    draft.includes_concept = includes_concept
+    draft.includes_kv = includes_kv
+    if is_ckv_toggle_scope:
+        if includes_concept and project.has_concept:
+            project.concept_status = 'internal_review'
+        if includes_kv and project.has_kv:
+            project.kv_status = 'internal_review'
+
+    was_reopened = draft.workflow_status in ('internal_review', 'internal_revision')
+    draft.workflow_status = 'internal_review'
+    draft.is_being_edited = False
+    draft.editing_started_at = None
+
+    db.session.add(ProjectSubmissionEvent(
+        submission_id=draft.id, event_type='submitted_for_review',
+        author_id=actor.id, message=note,
+    ))
+
+    db.session.commit()
+
+    if project.cs_lead and project.cs_lead.id != actor.id:
+        create_notification(
+            recipient=project.cs_lead,
+            message=(f'"{project.name}" was updated and re-submitted for internal review by {actor.name}'
+                      if was_reopened else
+                      f'"{project.name}" has been submitted for internal review by {actor.name}'),
+            notification_type='internal_review_submitted',
+            project=project,
+            triggered_by=actor,
+        )
+
+    log_activity('internal_review_submitted',
+                 f'"{project.name}" submitted for internal review by {actor.name} '
+                 f'({len(deliverable_ids)} deliverable(s) included)',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/edit', methods=['POST'])
+@login_required
+def overlay_submissions_edit_draft(project_id):
+    """
+    Designer reopens an already-locked (workflow_status='internal_review')
+    submission to fix something themselves — requires a reason, logged as
+    a ProjectSubmissionEvent, so CS can see what changed and why without
+    having to ask. Does NOT touch workflow_status (stays internal_review)
+    — is_being_edited is what unlocks the Draft card's file controls again
+    (see _build_draft_card_context's is_editable logic). A CS-flagged
+    internal_revision needs no equivalent route: it's already editable the
+    moment it's flagged, since the flag message itself is the reason.
+    """
+    from app.models import ProjectSubmissionEvent
+    from app.utils import log_activity
+    from app import db
+    from datetime import datetime as dt
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role not in ('admin', 'designer', 'team_lead'):
+        return jsonify({'success': False, 'error': 'You do not have permission to edit this draft.'}), 403
+
+    data = request.get_json() or {}
+    scope = data.get('scope', 'ckv')
+    customer_id = data.get('customer_id')
+    reason = (data.get('reason') or '').strip()
+    if not reason:
+        return jsonify({'success': False, 'error': 'Please provide a reason for editing.'}), 400
+
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+    draft = _get_active_draft(project, resolved)
+    if not draft or draft.workflow_status != 'internal_review':
+        return jsonify({'success': False, 'error': 'This draft is not currently locked for review.'}), 400
+
+    draft.is_being_edited = True
+    draft.editing_started_at = dt.utcnow()
+
+    db.session.add(ProjectSubmissionEvent(
+        submission_id=draft.id, event_type='edited',
+        author_id=actor.id, message=reason,
+    ))
+    db.session.commit()
+
+    log_activity('submission_draft_edit_started',
+                 f'{actor.name} reopened the locked draft submission on "{project.name}" to fix: {reason}',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/flag-internal-revision', methods=['POST'])
+@login_required
+def overlay_submissions_flag_internal_revision(project_id):
+    """
+    CS flags the locked submission with a revision note (rich HTML, may
+    include inline images via the existing rich-editor.js / /inline-image
+    route — same tool flag_submission already uses on the old detail
+    page). Sets workflow_status -> internal_revision, which
+    _build_draft_card_context treats as immediately editable for the
+    designer (no separate "start editing" click needed — the flag message
+    IS the reason). Pushes every deliverable included in this submission,
+    and concept/KV if included, back into internal_revision status —
+    mirrors the old flag_submission route exactly.
+    """
+    from app.models import ProjectSubmissionEvent
+    from app.status_tracking import record_deliverable_status
+    from app.notifications import create_notification
+    from app.utils import strip_html, log_activity
+    from app import db
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role not in ('admin', 'cs', 'management'):
+        return jsonify({'success': False, 'error': 'You do not have permission to flag this submission.'}), 403
+
+    data = request.get_json() or {}
+    scope = data.get('scope', 'ckv')
+    customer_id = data.get('customer_id')
+    message = (data.get('message') or '').strip()
+    if not message or not strip_html(message).strip():
+        return jsonify({'success': False, 'error': 'Please provide a reason for the revision.'}), 400
+
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+    draft = _get_active_draft(project, resolved)
+    if not draft or draft.workflow_status != 'internal_review':
+        return jsonify({'success': False, 'error': 'This submission is not currently pending review.'}), 400
+
+    draft.workflow_status = 'internal_revision'
+    draft.is_being_edited = False
+    draft.editing_started_at = None
+
+    for link in draft.included_deliverables:
+        if link.deliverable:
+            record_deliverable_status(link.deliverable, 'internal_revision', actor)
+    if draft.includes_concept and project.has_concept:
+        project.concept_status = 'internal_revision'
+    if draft.includes_kv and project.has_kv:
+        project.kv_status = 'internal_revision'
+
+    db.session.add(ProjectSubmissionEvent(
+        submission_id=draft.id, event_type='internal_revision',
+        author_id=actor.id, message=message,
+    ))
+    db.session.commit()
+
+    plain_message = strip_html(message)
+    if draft.uploaded_by and draft.uploaded_by.id != actor.id:
+        create_notification(
+            recipient=draft.uploaded_by,
+            message=f'Your submission for "{project.name}" was flagged for internal revision by {actor.name}: {plain_message}',
+            notification_type='internal_revision_flagged',
+            project=project,
+            triggered_by=actor,
+        )
+
+    log_activity('internal_revision_flagged',
+                 f'Draft submission for "{project.name}" flagged for internal revision by {actor.name}: {plain_message}',
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})

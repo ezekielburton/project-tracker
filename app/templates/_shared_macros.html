@@ -126,5 +126,47 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     </div>
     {% endmacro %}
 
+    {#
+    deliverable_picker(picker_id, options, selected_ids)
+    ──────────────────────────────────────────────────────────────
+    A popover multi-select — same trigger-button + fixed-position-popover
+    recipe as avatar_picker() above, sized for toggling a list of
+    deliverables on/off instead of picking exactly one person. The trigger
+    label ("2 deliverables selected") and each option's .is-selected class
+    are the only state that matters — deliverable_picker.js keeps both in
+    sync after the initial render. This macro only renders markup; the
+    caller decides what a selection change should DO. picker_id must be
+    unique per instance on the page (becomes an element id).
+    #}
+    {% macro deliverable_picker(picker_id, options, selected_ids=[]) %}
+    <div class="deliverable-picker" id="{{ picker_id }}">
+        <button type="button" class="deliverable-picker-trigger">
+            <span class="deliverable-picker-trigger-label">
+                {% set count = selected_ids|length %}
+                {%- if count == 0 %}Select deliverables to include
+                {%- elif count == 1 %}1 deliverable selected
+                {%- else %}{{ count }} deliverables selected
+                {%- endif %}
+            </span>
+        </button>
+        <div class="deliverable-picker-popover" hidden>
+            <div class="deliverable-picker-list">
+                {% for d in options %}
+                <button type="button" class="deliverable-picker-option{{ ' is-selected' if d.id in selected_ids else '' }}"
+                    data-deliverable-id="{{ d.id }}">{{ d.name }}</button>
+                {% else %}
+                <p class="deliverable-picker-empty">No deliverables available.</p>
+                {% endfor %}
+            </div>
+            {% if options %}
+            <div class="deliverable-picker-footer">
+                <button type="button" class="deliverable-picker-select-all">Select All</button>
+                <button type="button" class="deliverable-picker-clear">Clear</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endmacro %}
+
 
 

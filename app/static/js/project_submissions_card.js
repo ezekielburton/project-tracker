@@ -6,19 +6,29 @@ window.ProjectSubmissionsCard = (function () {
         var contentEl = rootEl.querySelector('#overlay-submissions-content');
         var topRail = rootEl.querySelector('#overlay-submissions-top-rail');
         if (!contentEl) {
-            // Standard Brief — static placeholder, nothing to wire.
+            // Defensive no-op — both brief types now render a
+            // #overlay-submissions-content div, so this shouldn't happen.
             return { destroy: function () { destroyed = true; } };
         }
 
         var storageKey = 'submissions-selection-' + projectId;
+        var currentParams = { scope: contentEl.dataset.scope || 'ckv', customer_id: contentEl.dataset.customerId || '' };
+
+        function refreshDraftCard() {
+            window.ProjectSubmissionsDraftCard.init(contentEl, projectId, currentParams, function () {
+                loadContent(currentParams);
+            });
+        }
 
         function loadContent(params) {
+            currentParams = params;
             var query = new URLSearchParams(params).toString();
             fetch(`/projects/${projectId}/overlay/submissions/content?${query}`)
                 .then(function (r) { return r.text(); })
                 .then(function (html) {
                     if (destroyed) return;
                     contentEl.innerHTML = html;
+                    refreshDraftCard();
                 });
         }
 
@@ -86,7 +96,10 @@ window.ProjectSubmissionsCard = (function () {
         });
 
         // Resolve initial selection: last saved choice for this project, else the
-        // server's suggested default. Only ONE of these fires.
+        // server's suggested default. Only ONE of these fires — and for Standard
+        // Brief (no rail, content already server-rendered), none of the dataset
+        // flags below are present, so we fall through to wiring the already
+        // -rendered content directly instead of fetching it again.
         var saved = null;
         try { saved = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) { saved = null; }
 
@@ -102,6 +115,9 @@ window.ProjectSubmissionsCard = (function () {
             selectCustomer(contentEl.dataset.defaultCustomerId);
         } else if (contentEl.dataset.showCkv === 'true') {
             selectCkv();
+        } else if (!topRail) {
+            // Standard Brief: content is already there, no fetch needed — just wire it.
+            refreshDraftCard();
         }
 
         return { destroy: function () { destroyed = true; } };

@@ -881,6 +881,15 @@ class ProjectSubmission(db.Model):
     # posm_revision_count/ckv_revision_count elsewhere in this model.
     post_approval_edit_count = db.Column(db.Integer, default=0, nullable=False)
 
+    # Set while a designer is mid-fix after clicking "Edit" on an already-
+    # locked (workflow_status='internal_review') submission — a modifier on
+    # top of that phase, not a new phase itself, since CS already knows to
+    # look and shouldn't be silently un-notified by an edit in progress.
+    # Cleared when the designer re-submits for review. The later SSE work
+    # (M4) will watch this to show CS a live "currently being edited" marker.
+    is_being_edited = db.Column(db.Boolean, default=False, nullable=False)
+    editing_started_at = db.Column(db.DateTime, nullable=True)
+
     # Relationships
     project = db.relationship('Project', backref=db.backref('submissions', cascade='all, delete-orphan'))
     uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
@@ -1030,6 +1039,41 @@ class ProjectSubmissionDeliverable(db.Model):
 
     def __repr__(self):
         return f'<ProjectSubmissionDeliverable submission={self.submission_id} deliverable={self.deliverable_id}>'
+
+
+class ProjectSubmissionEvent(db.Model):
+    """Append-only history log for one submission's internal-review cycle —
+    M3 Step 4 sub-step 6 (Submit for Review / Edit / Flag Internal Revision).
+
+    One row per action: a designer's optional note when first submitting
+    for review, a designer's required reason when editing an already-locked
+    submission, or CS's required message (rich HTML, may include inline
+    images via the existing rich-editor.js / /inline-image route) when
+    flagging an internal revision. Rendered as a flat timeline — same
+    pattern as the Dashboard's .decision-flag-thread, not the nested
+    .flag-thread reply system, since this is a straight append-only log
+    with no replies-to-replies.
+
+    Distinct from ProjectRevision just above, which is a separate, later
+    concept: a revision CS sends back to the designer *after* a deck has
+    already gone to the client (M3 Step 4 sub-step 8 territory), not this
+    pre-client internal-review loop."""
+    __tablename__ = 'project_submission_events'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
+    event_type    = db.Column(db.String(30), nullable=False)  # 'submitted_for_review' | 'edited' | 'internal_revision'
+    author_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message       = db.Column(db.Text, nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    submission = db.relationship('ProjectSubmission',
+                                 backref=db.backref('events', cascade='all, delete-orphan',
+                                                    order_by='ProjectSubmissionEvent.created_at'))
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<ProjectSubmissionEvent submission={self.submission_id} type={self.event_type}>'
 
 
 class ProjectSubmissionFile(db.Model):

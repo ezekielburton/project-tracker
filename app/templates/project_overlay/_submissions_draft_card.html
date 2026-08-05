@@ -1,0 +1,179 @@
+{% from '_shared_macros.html' import status_pill, deliverable_picker, person_chip %}
+
+{% if workflow_status != 'draft' %}
+<div class="overlay-draft-card-section overlay-draft-header-card">
+    <div class="overlay-draft-state-row">
+        <span class="overlay-draft-state-badge">
+            {% if workflow_status == 'internal_review' and is_being_edited %}
+            {{ status_pill('Being Edited', 'coral') }}
+            {% elif workflow_status == 'internal_review' %}
+            {{ status_pill('Pending Internal Review', 'canary') }}
+            {% elif workflow_status == 'internal_revision' %}
+            {{ status_pill('Internal Revision', 'lavender') }}
+            {% endif %}
+        </span>
+        <div class="overlay-draft-state-actions">
+            {% if events %}
+            <button type="button" class="overlay-file-action-btn overlay-draft-view-toggle-btn active"
+                data-view="draft">Draft</button>
+            <button type="button" class="overlay-file-action-btn overlay-draft-view-toggle-btn"
+                data-view="history">History</button>
+            {% endif %}
+        
+        </div>
+    </div>
+
+    {% if workflow_status == 'internal_revision' and events and events[-1].message %}
+    <div class="revision-card" id="overlay-draft-revision-spotlight">
+        <p class="detail-label">Revision Request from {{ events[-1].author.name }}</p>
+        <div class="revision-message">{{ events[-1].message | safe }}</div>
+        <p class="revision-meta">{{ events[-1].created_at | dubai_time }}</p>
+    </div>
+    {% elif can_review and is_locked and events and events[-1].message %}
+    <div class="revision-card" id="overlay-draft-note-spotlight">
+        <p class="detail-label">Note from {{ events[-1].author.name }}</p>
+        <div class="revision-message">{{ events[-1].message }}</div>
+        <p class="revision-meta">{{ events[-1].created_at | dubai_time }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<div id="overlay-draft-view">
+    <div class="overlay-draft-card-section overlay-draft-files-card">
+        {% if cached_files %}
+        <div class="overlay-reference-files-header">
+            {% if can_manage_draft and is_locked %}
+            <button type="button" class="overlay-file-action-btn" id="overlay-draft-edit-btn">Edit</button>
+            {% endif %}
+            <span class="overlay-field-empty">{{ cached_files|length }} file{{ 's' if cached_files|length != 1 else '' }}
+                in this draft</span>
+        </div>
+        {% endif %}
+        <div class="overlay-reference-files-list{{ ' overlay-reference-files-list--locked' if is_locked else '' }}"
+            id="overlay-draft-files-list">
+            {% for f in cached_files %}
+            <div class="overlay-reference-file-item{{ ' overlay-draft-file-item--main-deck' if f.is_main_deck else '' }}"
+                data-file-id="{{ f.id }}">
+                <span class="overlay-reference-file-icon">
+                    {% if f.file_type in ['jpg', 'jpeg', 'png'] %}🖼
+                    {% elif f.file_type == 'pdf' %}📄
+                    {% elif f.file_type in ['docx', 'doc'] %}📝
+                    {% elif f.file_type == 'pptx' %}📊
+                    {% elif f.file_type in ['ai', 'psd'] %}🎨
+                    {% else %}📎
+                    {% endif %}
+                </span>
+                <span class="overlay-reference-file-name">{{ f.original_filename }}</span>
+                <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
+                {% if can_manage_draft and not is_locked %}
+                <div class="overlay-reference-file-actions">
+                    <button type="button"
+                        class="overlay-file-action-btn overlay-draft-main-deck-btn{{ ' overlay-draft-main-deck-btn--active' if f.is_main_deck else '' }}"
+                        data-file-id="{{ f.id }}" {{ 'disabled' if f.is_main_deck else '' }}>
+                        {{ 'Main Deck' if f.is_main_deck else 'Set as Main Deck' }}
+                    </button>
+                    <button type="button"
+                        class="overlay-file-action-btn overlay-file-action-btn--danger overlay-draft-file-remove"
+                        data-file-id="{{ f.id }}">Remove</button>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="overlay-field-empty" id="overlay-no-draft-files">No files in this draft yet.</p>
+            {% endfor %}
+        </div>
+
+        {% if can_manage_draft and not is_locked %}
+        <div class="overlay-reference-file-upload">
+            <input type="file" id="overlay-draft-file-input" class="hidden"
+                accept=".pdf,.pptx,.docx,.doc,.png,.jpg,.jpeg,.ai,.psd,.zip">
+            <button type="button" id="overlay-draft-file-btn" class="overlay-file-action-btn">
+                Drop a file or click to attach…
+            </button>
+            <span id="overlay-draft-file-status" class="overlay-reference-file-status"></span>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if can_manage_draft and not is_locked and cached_files %}
+    <div class="overlay-draft-card-section overlay-submit-review-section">
+        <div class="overlay-submit-review-columns">
+            <div class="overlay-field">
+                <span class="overlay-field-label">Include in this Submission</span>
+                {% if is_ckv_toggle_scope %}
+                <div class="overlay-focus-toggle" id="overlay-submit-review-ckv-toggle">
+                    <button type="button" class="overlay-focus-toggle-btn{{ ' active' if includes_concept else '' }}"
+                        data-ckv="concept">Concept</button>
+                    <button type="button" class="overlay-focus-toggle-btn{{ ' active' if includes_kv else '' }}"
+                        data-ckv="kv">KV</button>
+                </div>
+                {% else %}
+                {{ deliverable_picker('overlay-submit-review-deliverable-picker', deliverable_options,
+                selected_deliverable_ids) }}
+                {% endif %}
+            </div>
+            <div class="overlay-field overlay-submit-review-note-field">
+                <label class="overlay-field-label" for="overlay-submit-review-note">Note for CS (optional)</label>
+                <textarea id="overlay-submit-review-note" class="overlay-submit-review-note" rows="3"
+                    placeholder="Anything CS should know…"></textarea>
+            </div>
+        </div>
+        <span class="overlay-submit-review-error hidden" id="overlay-submit-review-error"></span>
+        <button type="button" class="overlay-file-action-btn" id="overlay-submit-review-btn">Submit for
+            Review</button>
+    </div>
+    {% endif %}
+
+    {% if can_review and is_locked %}
+    <div class="overlay-draft-card-section overlay-submit-review-section" id="overlay-cs-review-section">
+        <div class="overlay-cs-review-actions">
+            <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
+                id="overlay-flag-revision-btn">Flag Internal Revision</button>
+            <button type="button" class="overlay-file-action-btn" id="overlay-submit-to-client-btn" disabled
+                title="Coming soon">Submit to Client</button>
+        </div>
+        <div class="overlay-flag-revision-form is-hidden" id="overlay-flag-revision-form">
+            <div id="overlay-flag-revision-message" contenteditable="true" data-rich-editor
+                data-project-id="{{ project.id }}" class="form-input rich-editor overlay-flag-revision-input"
+                data-placeholder="Describe what needs to be fixed…"></div>
+            <span class="overlay-flag-revision-error hidden" id="overlay-flag-revision-error"></span>
+            <div class="overlay-flag-revision-form-actions">
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
+                    id="overlay-flag-revision-confirm">Send</button>
+                <button type="button" class="overlay-file-action-btn" id="overlay-flag-revision-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if events %}
+<div id="overlay-history-view" class="is-hidden">
+    <div class="decision-flag-thread">
+        {% for event in events|reverse %}
+        <div class="decision-flag-message">
+            <div class="decision-flag-message-head">
+                {{ person_chip(event.author) }}
+                <span class="overlay-history-event-type">
+                    {% if event.event_type == 'submitted_for_review' %}Submitted for Review
+                    {% elif event.event_type == 'edited' %}Edited
+                    {% elif event.event_type == 'internal_revision' %}Internal Revision Requested
+                    {% endif %}
+                </span>
+                <span class="decision-flag-message-time">{{ event.created_at | dubai_time }}</span>
+            </div>
+            {% if event.message %}
+            {% if event.event_type == 'internal_revision' %}
+            <div class="flag-message-text">{{ event.message | safe }}</div>
+            {% else %}
+            <div class="flag-message-text">{{ event.message }}</div>
+            {% endif %}
+            {% else %}
+            <p class="flag-message-text overlay-field-empty">No note provided.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
