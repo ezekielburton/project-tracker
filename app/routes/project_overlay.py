@@ -301,8 +301,6 @@ def _build_draft_card_context(project, actor, resolved):
         actor.role in ('admin', 'cs', 'management')
         and sent_submission is not None
         and sent_revision_event is None
-        and resolved['channel'] is None
-        and project.brief_type != 'ccm'
     )
 
     # Revision history — every deck Sent to Client for this scope, newest
@@ -1586,8 +1584,6 @@ def overlay_submissions_client_revision(project_id):
         return jsonify({'success': False, 'error': 'Please describe the revision the client requested.'}), 400
 
     resolved = _resolve_submission_scope(project, scope, customer_id)
-    if resolved['channel'] is not None or project.brief_type == 'ccm':
-        return jsonify({'success': False, 'error': 'Client Revision is not wired for this scope yet.'}), 400
 
     sent = _get_sent_submission(project, resolved)
     if sent is None:
@@ -1595,11 +1591,53 @@ def overlay_submissions_client_revision(project_id):
     if any(e.event_type == 'client_revision' for e in sent.events):
         return jsonify({'success': False, 'error': 'A client revision has already been requested for this deck.'}), 400
 
-    project.revision_count = (project.revision_count or 0) + 1
-    record_project_status(project, 'revision_in_queue', actor)
-    for deliverable in project.project_deliverables:
-        record_deliverable_status(deliverable, 'revision_in_queue', actor)
-        deliverable.revision_count = project.revision_count
+    # Scope-branched effect. Standard is whole-project (project.revision_count +
+    # project status + ALL deliverables). C&CM Concept & KV and per-customer
+    # POSM are PER-SCOPE - they bump only that scope's counter and move only
+    # that scope's statuses/deliverables, never the whole project.
+    channel = resolved['channel']
+    if channel is not None:
+        # POSM (UAE/Gulf per-customer) - bump the customer/country counter, move
+        # the channel + the sent deck's deliverables into revision. No project-
+        # level status (the C&CM aggregate is derived from channel states).
+        channel.status = 'revision_in_queue'
+        if channel.posm_customer_id:
+            from app.models import ProjectCustomer
+            pc = ProjectCustomer.query.get(channel.posm_customer_id)
+            new_rev = ((pc.posm_revision_count or 0) + 1) if pc else 1
+            if pc:
+                pc.posm_revision_count = new_rev
+        elif channel.posm_country:
+            counts = dict(project.posm_country_revision_counts or {})
+            counts[channel.posm_country] = counts.get(channel.posm_country, 0) + 1
+            project.posm_country_revision_counts = counts
+            new_rev = counts[channel.posm_country]
+        else:
+            new_rev = (project.revision_count or 0) + 1
+            project.revision_count = new_rev
+        for link in sent.included_deliverables:
+            if link.deliverable:
+                record_deliverable_status(link.deliverable, 'revision_in_queue', actor)
+                link.deliverable.revision_count = new_rev
+        rev_label = f'#{new_rev}'
+    elif project.brief_type == 'ccm':
+        # C&CM Concept & KV - bump the C&KV counter and move only the concept/KV
+        # statuses the sent deck included. Deliverables are untouched (they stay
+        # briefed until the POSM stage), matching the C&KV submit-to-client branch.
+        project.ckv_revision_count = (project.ckv_revision_count or 0) + 1
+        if sent.includes_concept and project.has_concept:
+            project.concept_status = 'revision_in_queue'
+        if sent.includes_kv and project.has_kv:
+            project.kv_status = 'revision_in_queue'
+        rev_label = f'#{project.ckv_revision_count}'
+    else:
+        # Standard Brief - whole project + all deliverables.
+        project.revision_count = (project.revision_count or 0) + 1
+        record_project_status(project, 'revision_in_queue', actor)
+        for deliverable in project.project_deliverables:
+            record_deliverable_status(deliverable, 'revision_in_queue', actor)
+            deliverable.revision_count = project.revision_count
+        rev_label = f'#{project.revision_count}'
 
     db.session.add(ProjectSubmissionEvent(
         submission_id=sent.id, event_type='client_revision',
@@ -1611,14 +1649,14 @@ def overlay_submissions_client_revision(project_id):
         if assignment.designer and assignment.designer.id != actor.id:
             create_notification(
                 recipient=assignment.designer,
-                message=f'Client revision #{project.revision_count} requested on "{project.name}" by {actor.name}.',
+                message=f'Client revision {rev_label} requested on "{project.name}" by {actor.name}.',
                 notification_type='revision_requested',
                 project=project,
                 triggered_by=actor,
             )
 
     log_activity('revision_requested',
-                 f'Client revision #{project.revision_count} requested on "{project.name}" by {actor.name}: {strip_html(message)[:100]}',
+                 f'Client revision {rev_label} requested on "{project.name}" by {actor.name}: {strip_html(message)[:100]}',
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})

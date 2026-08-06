@@ -1,4 +1,4 @@
-{% from '_shared_macros.html' import status_pill, deliverable_picker, person_chip, tag %}
+{% from '_shared_macros.html' import status_pill, deliverable_picker, person_chip, tag, included_summary %}
 {# ── Scope-level Current / History toggle. Current = the working area (draft
 card or sent-state, which keeps its own internal Draft/History for the live
 submission); History = every deck Sent to Client for this scope (the
@@ -28,21 +28,20 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
             {% else %}{{ status_pill('Active with Client', 'sage') }}{% endif %}
         </span>
     </div>
-    {% if sent_submission.included_deliverables or sent_submission.includes_concept or sent_submission.includes_kv %}
-    <div class="overlay-submissions-history-included">
-        {% if sent_submission.includes_concept %}{{ tag('Concept', 'muted') }}{% endif %}
-        {% if sent_submission.includes_kv %}{{ tag('KV', 'muted') }}{% endif %}
-        {% for link in sent_submission.included_deliverables %}
-        {% if link.deliverable %}{{ tag(link.deliverable.name, 'muted') }}{% endif %}
-        {% endfor %}
+    {{ included_summary(
+    sent_submission.includes_concept,
+    sent_submission.includes_kv,
+    sent_submission.included_deliverables | map(attribute='deliverable') | select | map(attribute='name') | list
+    ) }}
+    <div class="overlay-sent-meta">
+        <span class="overlay-sent-meta-file">{{ sent_submission.original_filename }}</span>
+        {% if sent_submission.submitted_by %}
+        <span>Sent by {{ sent_submission.submitted_by.name }}</span>
+        {% endif %}
+        {% if sent_submission.submitted_to_client_at %}
+        <span>{{ sent_submission.submitted_to_client_at | dubai_time }}</span>
+        {% endif %}
     </div>
-    {% endif %}
-    <p class="overlay-sent-meta">
-        {{ sent_submission.original_filename }}
-        {% if sent_submission.submitted_by %} · Sent by {{ sent_submission.submitted_by.name }}{% endif %}
-        {% if sent_submission.submitted_to_client_at %} · {{ sent_submission.submitted_to_client_at | dubai_time }}{%
-        endif %}
-    </p>
 </div>
 
 {% if sent_revision_event %}
@@ -304,13 +303,7 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
                     }}{% endif %}
                 </span>
             </div>
-            {% if h.included_names or h.includes_concept or h.includes_kv %}
-            <div class="overlay-submissions-history-included">
-                {% if h.includes_concept %}{{ tag('Concept', 'muted') }}{% endif %}
-                {% if h.includes_kv %}{{ tag('KV', 'muted') }}{% endif %}
-                {% for name in h.included_names %}{{ tag(name, 'muted') }}{% endfor %}
-            </div>
-            {% endif %}
+            {{ included_summary(h.includes_concept, h.includes_kv, h.included_names) }}
             {% if h.files %}
             <div class="overlay-reference-files-list">
                 {% for f in h.files %}

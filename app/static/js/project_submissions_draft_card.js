@@ -101,6 +101,20 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         });
 
+        // Collapsed "N deliverables ▾" toggles — on the Active-with-Client
+        // indicator and every History entry. nextElementSibling (not an id)
+        // so any number of instances work with no collisions.
+        contentEl.querySelectorAll('.overlay-inc-toggle').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var list = btn.nextElementSibling;
+                if (!list) return;
+                var open = list.classList.toggle('is-hidden') === false;
+                btn.classList.toggle('is-open', open);
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+        });
+        
+
         // ── Submit for Review — gathers the note + whichever selection
         // control is showing (deliverable picker, or the Concept & KV
         // toggle pair) and posts to the route that locks the draft. ──

@@ -1241,10 +1241,17 @@
 
 /* Sent-to-Client state in the draft card, once the deck is submitted. */
 .overlay-sent-meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
     margin: var(--space-2) 0 0;
     font-size: var(--text-sm);
     color: var(--grey-mid);
     word-break: break-word;
+}
+
+.overlay-sent-meta-file {
+    color: var(--grey-dark);
 }
 
 /* ── Scope-level Current / History toggle (Submissions revision history) ──
@@ -1302,9 +1309,52 @@
 }
 
 /* Included deliverables (or Concept/KV) tags on each revision-history entry. */
-.overlay-submissions-history-included {
+.overlay-inc {
+    margin-bottom: var(--space-3);
+}
+
+.overlay-inc-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: var(--text-sm);
+    color: var(--grey-dark);
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.overlay-inc-toggle:hover {
+    border-color: var(--tangerine);
+    color: var(--tangerine);
+}
+
+.overlay-inc-toggle.is-open {
+    border-color: var(--tangerine);
+    color: var(--tangerine);
+    background: rgba(242, 127, 85, 0.08);
+}
+
+.overlay-inc-chevron {
+    display: inline-block;
+    font-size: var(--text-xs);
+    transition: transform 0.15s ease;
+}
+
+.overlay-inc-toggle.is-open .overlay-inc-chevron {
+    transform: rotate(180deg);
+}
+
+.overlay-inc-list {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-bottom: var(--space-3);
+    margin-top: var(--space-2);
+}
+
+.overlay-inc-list.is-hidden {
+    display: none;
 }
