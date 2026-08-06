@@ -34,6 +34,25 @@ overlay_submissions_submit_to_client. #}
             </ul>
         </div>
 
+        {% if is_ckv_toggle_scope %}
+        {# C&CM Concept & KV deck — no deliverables; the "going for decision"
+        set is whichever of Concept / KV this draft included. #}
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Going for decision</span>
+            <ul class="overlay-submit-summary-deliverables">
+                {% if includes_concept %}
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">Concept</span>
+                </li>
+                {% endif %}
+                {% if includes_kv %}
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">KV</span>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+        {% else %}
         <div class="overlay-submit-summary-section">
             <span class="overlay-field-label">Going for decision ({{ included|length }})</span>
             {% if included %}
@@ -49,6 +68,7 @@ overlay_submissions_submit_to_client. #}
             <p class="overlay-field-empty">No deliverables selected.</p>
             {% endif %}
         </div>
+        {% endif %}
 
         {% if indicators %}
         <div class="overlay-submit-summary-section overlay-submit-summary-section--readonly">

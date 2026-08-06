@@ -540,6 +540,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
     padding: var(--space-4);
+    margin-top: 1rem;
 }
 
 #overlay-draft-view {
@@ -1246,3 +1247,64 @@
     word-break: break-word;
 }
 
+/* ── Scope-level Current / History toggle (Submissions revision history) ──
+   Matches the internal Draft/History toggle's pill look; distinct class so
+   the two toggles never cross-fire (see project_submissions_draft_card.js). */
+.overlay-submissions-view-toggle {
+    display: flex;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.overlay-submissions-view-toggle-btn {
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-4);
+}
+
+.overlay-submissions-view-toggle-btn.active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
+
+.overlay-submissions-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.overlay-submissions-history-entry {
+    padding: var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+}
+
+.overlay-submissions-history-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.overlay-submissions-history-meta {
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+}
+
+/* "Next Draft" label separating the Active-with-Client indicator from the
+   working draft area below it, on the Submissions Current tab. */
+.overlay-submissions-next-draft-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--grey-dark);
+    margin: var(--space-5) 0 var(--space-3);
+}
+
+/* Included deliverables (or Concept/KV) tags on each revision-history entry. */
+.overlay-submissions-history-included {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}

@@ -198,6 +198,34 @@ def _get_sent_submission(project, resolved):
         workflow_status='sent_to_client',
     ).order_by(ProjectSubmission.submitted_to_client_at.desc()).first()
 
+def _get_submission_history(project, resolved):
+    """Every submission for this scope that was actually Sent to Client
+    (submitted_to_client_at set), newest first — the client-facing revision
+    history. Scope-matched the same way _get_active_draft / _get_sent_submission
+    are, so Standard / C&CM Concept & KV / per-customer POSM each get their own
+    history. NOT filtered by is_active (past revisions get deactivated but must
+    still appear); includes the current sent deck too, so History is the full
+    record rather than 'older than current'."""
+    from app.models import ProjectSubmission
+    return ProjectSubmission.query.filter_by(
+        project_id=project.id,
+        phase=resolved['phase'],
+        posm_country=resolved['posm_country'],
+        posm_customer_id=resolved['posm_customer_id'],
+    ).filter(
+        ProjectSubmission.submitted_to_client_at.isnot(None)
+    ).order_by(ProjectSubmission.submitted_to_client_at.desc()).all()
+
+
+def _revision_label_from_name(name):
+    """Pull the 'Initial' / 'Revision N' label out of a canonical deck name
+    (…- Initial.zip / …- Revision 2.pptx) for a compact history chip. Both the
+    overlay zip names and the old-flow deck names end this way, so one regex
+    covers both; anything unexpected falls back to the bare filename."""
+    import re
+    m = re.search(r'-\s*(Initial|Revision\s+\d+)\.[^.]+$', name or '', re.IGNORECASE)
+    return m.group(1) if m else (name or 'Deck')
+
 def _build_draft_card_context(project, actor, resolved):
     """
     Everything the Draft card needs to render for one Submissions scope —
@@ -246,22 +274,44 @@ def _build_draft_card_context(project, actor, resolved):
 
     events = list(draft.events) if draft else []
 
-    # Sent-to-client state. Once Submit to Client runs, workflow_status flips
-    # to 'sent_to_client' and _get_active_draft stops matching it — so without
-    # this the content would fall back to the empty upload state and the sent
-    # deck would vanish. Only looked up when there's no active draft (an active
-    # draft always takes precedence — e.g. a revision reopened after sending).
-    sent_submission = None
+    # The current Sent-to-Client deck for this scope, if any. Computed
+    # UNCONDITIONALLY (not only when there's no active draft) so the Current
+    # tab can show it as an "Active with Client" indicator ABOVE the working
+    # draft — a designer/CS opening the page sees at a glance that a deck is
+    # live with the client, while still working the next draft.
+    sent_submission = _get_sent_submission(project, resolved)
     sent_files = []
-    if draft is None:
-        sent_submission = _get_sent_submission(project, resolved)
-        if sent_submission:
-            sent_files = ProjectSubmissionFile.query.filter_by(
-                submission_id=sent_submission.id
-            ).order_by(
-                ProjectSubmissionFile.is_main_deck.desc(),
-                ProjectSubmissionFile.uploaded_at.asc(),
-            ).all()
+    if sent_submission:
+        sent_files = ProjectSubmissionFile.query.filter_by(
+            submission_id=sent_submission.id
+        ).order_by(
+            ProjectSubmissionFile.is_main_deck.desc(),
+            ProjectSubmissionFile.uploaded_at.asc(),
+        ).all()
+
+    # Revision history — every deck Sent to Client for this scope, newest
+    # first (Initial, Revision 1, …). Includes the current sent deck too, so
+    # History is the full client-facing record; it fills out as the revision
+    # cycle produces more sends. Each entry carries its files for per-file
+    # preview/download (via the NAS zip-extract path); a legacy old-flow
+    # submission with no ProjectSubmissionFile rows falls back to a deck-level
+    # download in the template.
+    history_submissions = []
+    for sub in _get_submission_history(project, resolved):
+        sub_files = ProjectSubmissionFile.query.filter_by(
+            submission_id=sub.id
+        ).order_by(
+            ProjectSubmissionFile.is_main_deck.desc(),
+            ProjectSubmissionFile.uploaded_at.asc(),
+        ).all()
+        history_submissions.append({
+            'submission': sub,
+            'files': sub_files,
+            'label': _revision_label_from_name(sub.original_filename),
+            'included_names': [link.deliverable.name for link in sub.included_deliverables if link.deliverable],
+            'includes_concept': sub.includes_concept,
+            'includes_kv': sub.includes_kv,
+        })
 
     # Deliverable / Concept & KV picker options for this scope. The C&CM
     # "Concept & KV" pill (phase='concept_kv' on a 'ccm' project) is
@@ -307,7 +357,9 @@ def _build_draft_card_context(project, actor, resolved):
         'has_kv': project.has_kv,
         'sent_submission': sent_submission,
         'sent_files': sent_files,
+        'history_submissions': history_submissions,
     }
+
 
 # Hourly slots, 8:00 AM through 10:00 PM, as (value, label) pairs for the
 # Deliverables edit table's Time dropdown. value is 24h "HH:00" (matches
@@ -756,17 +808,22 @@ def overlay_submissions_upload(project_id):
 
     draft = _get_active_draft(project, resolved)
     if not draft:
-        # Only one is_active=True submission may exist per scope at a time
-        # — same invariant the old upload_submission() route enforced.
-        # Matters once a scope has real history (e.g. Start Revision
-        # reopening Draft, a later sub-step); a brand-new scope has
-        # nothing to deactivate.
+        # Deactivate any previous active DRAFT-cycle submission for this scope
+        # (draft / internal_review / internal_revision) — NEVER the sent deck.
+        # A Sent-to-Client submission stays is_active so it can coexist with a
+        # new working draft: the sent deck shows as the "Active with Client"
+        # indicator on the Current tab while the next draft is worked. Since
+        # _get_active_draft already returned None here, this is normally a
+        # no-op, but it keeps the "one active draft per scope" invariant for
+        # reopen paths.
         previous = ProjectSubmission.query.filter_by(
             project_id=project.id,
             phase=resolved['phase'],
             posm_country=resolved['posm_country'],
             posm_customer_id=resolved['posm_customer_id'],
             is_active=True,
+        ).filter(
+            ProjectSubmission.workflow_status.in_(['draft', 'internal_review', 'internal_revision'])
         ).first()
         if previous:
             previous.is_active = False
@@ -1175,20 +1232,53 @@ def overlay_submissions_flag_internal_revision(project_id):
 
 def _canonical_deck_basename(project, resolved):
     """Canonical deck name WITHOUT extension, for a submission's zip object
-    and its main-deck member. Standard Brief only in this pass:
-    "<Client> - <Project> - <Initial|Revision N>". Uses the current
-    project.revision_count for the label — the CS-confirmed "Is this a
-    revision?" counter bump is deferred (see Projects Rework Workflow.md
-    sub-step 7). C&CM Concept & KV and UAE/Gulf POSM naming (which also
-    encode region / customer / phase) land in the next pass, mirroring the
-    old projects_submission.py upload route's own naming branches."""
+    and its main-deck member. Mirrors the old projects_submission.py upload
+    route's naming branches exactly, keyed off the resolved scope:
+      - POSM channel, per-customer:  "<Client> - <Project> - <Country> - <Customer> - POSM - <Initial|Revision N>"
+      - POSM channel, per-country (legacy whole-region, posm_customer_id NULL): "... - <Country> - POSM - <label>"
+      - POSM channel, no country:    "... - POSM - <label>"  (project.revision_count)
+      - C&CM Concept & KV:           "<Client> - <Project> - Concept & KV - <Initial|Revision N>"  (project.ckv_revision_count)
+      - Standard Brief:              "<Client> - <Project> - <Initial|Revision N>"  (project.revision_count)
+    Revision labels read the CURRENT counters — the CS-confirmed counter bump
+    lives in the Client Revision flow (revision cycle), not here."""
     import re
+
     def _sanitize(s):
         return re.sub(r'[\\/:*?"<>|]', '', s or '').strip()
-    client_name = project.client_brand.name if project.client_brand else 'Client'
+
+    GULF_REGION_NAMES = {'uae': 'UAE', 'kuwait': 'Kuwait', 'qatar': 'Qatar',
+                         'bahrain': 'Bahrain', 'oman': 'Oman'}
+    client = _sanitize(project.client_brand.name if project.client_brand else 'Client')
+    proj = _sanitize(project.name)
+
+    channel = resolved.get('channel')
+    if channel is not None:
+        country = channel.posm_country or ''
+        country_display = GULF_REGION_NAMES.get(country, country.title())
+        if channel.posm_customer_id:
+            from app.models import ProjectCustomer
+            pc = ProjectCustomer.query.get(channel.posm_customer_id)
+            posm_rev = (pc.posm_revision_count or 0) if pc else 0
+            label = 'Initial' if posm_rev == 0 else f'Revision {posm_rev}'
+            customer = _sanitize(pc.customer.name if (pc and pc.customer) else 'Customer')
+            return f'{client} - {proj} - {country_display} - {customer} - POSM - {label}'
+        if country:
+            counts = project.posm_country_revision_counts or {}
+            posm_rev = counts.get(country, 0)
+            label = 'Initial' if posm_rev == 0 else f'Revision {posm_rev}'
+            return f'{client} - {proj} - {country_display} - POSM - {label}'
+        is_revised = (project.revision_count or 0) > 0
+        label = 'Initial' if not is_revised else f'Revision {project.revision_count}'
+        return f'{client} - {proj} - POSM - {label}'
+
+    if project.brief_type == 'ccm':
+        ckv_rev = project.ckv_revision_count or 0
+        label = 'Initial' if ckv_rev == 0 else f'Revision {ckv_rev}'
+        return f'{client} - {proj} - Concept & KV - {label}'
+
     is_revised = (project.revision_count or 0) > 0
-    revision_label = 'Initial' if not is_revised else f'Revision {project.revision_count}'
-    return f'{_sanitize(client_name)} - {_sanitize(project.name)} - {revision_label}'
+    label = 'Initial' if not is_revised else f'Revision {project.revision_count}'
+    return f'{client} - {proj} - {label}'
 
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/submit-to-client', methods=['POST'])
@@ -1235,10 +1325,6 @@ def overlay_submissions_submit_to_client(project_id):
     customer_id = data.get('customer_id')
 
     resolved = _resolve_submission_scope(project, scope, customer_id)
-    # Standard Brief only this pass — a channel-scoped (POSM) selection or a
-    # C&CM project is rejected until the next pass wires those branches.
-    if resolved['channel'] is not None or project.brief_type == 'ccm':
-        return jsonify({'success': False, 'error': 'Submit to Client is not wired for this scope yet.'}), 400
 
     draft = _get_active_draft(project, resolved)
     if not draft:
@@ -1246,6 +1332,16 @@ def overlay_submissions_submit_to_client(project_id):
     if draft.workflow_status != 'internal_review' or draft.is_being_edited:
         return jsonify({'success': False,
                         'error': 'The deck must be in internal review (not mid-edit) before submitting to client.'}), 400
+
+    # Interim guard (until the revision cycle's Client-Revision gate exists):
+    # a scope can't send a SECOND deck while one is already with the client.
+    # The revision counter only advances via Client Revision, so a second send
+    # would reuse the same canonical name and silently overwrite the sent zip
+    # on the NAS. The Client-Revision flow will replace this with a proper
+    # "revision requested" gate.
+    if _get_sent_submission(project, resolved) is not None:
+        return jsonify({'success': False,
+                        'error': 'A deck is already with the client for this scope — request a Client Revision first.'}), 400
 
     cached_files = ProjectSubmissionFile.query.filter_by(
         submission_id=draft.id, storage_location='cache'
@@ -1297,22 +1393,41 @@ def overlay_submissions_submit_to_client(project_id):
     draft.submitted_to_client_at = dt.utcnow()
     draft.submitted_by_id = actor.id
 
-    # ── Status transitions — mirrors the old submit_to_client Standard branch.
-    # revision_count is deliberately NOT incremented here (only send_revision
-    # does that); included deliverables get the current revision_count stamped
-    # by assignment for idempotency across internal review cycles. ──
-    record_project_status(project, 'submitted_to_client', actor)
-    is_revised_submission = (project.revision_count or 0) > 0
-    included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
-    for deliverable in project.project_deliverables:
-        if deliverable.id in included_ids:
-            record_deliverable_status(deliverable, 'submitted_to_client', actor)
-            if is_revised_submission:
-                deliverable.revision_count = project.revision_count
-    if project.concept_status:
-        project.concept_status = 'submitted_to_client'
-    if project.kv_status:
-        project.kv_status = 'submitted_to_client'
+    # ── Status transitions, by scope. revision_count is deliberately NOT
+    # incremented here (only the Client Revision flow does that); included
+    # deliverables get the current revision_count stamped by assignment for
+    # idempotency across internal-review cycles. ──
+    channel = resolved['channel']
+    if channel is not None:
+        # POSM (UAE/Gulf per-customer) — advance the channel + its included
+        # deliverables. The C&CM project aggregate is derived from channel
+        # states, so there's nothing to set at the project level here.
+        channel.status = 'submitted_to_client'
+        for link in draft.included_deliverables:
+            if link.deliverable:
+                record_deliverable_status(link.deliverable, 'submitted_to_client', actor)
+    elif project.brief_type == 'ccm':
+        # C&CM Concept & KV — advance only the concept/KV statuses this draft
+        # included; deliverables stay 'briefed' until the POSM stage (mirrors
+        # the old submit_to_client C&KV branch).
+        if draft.includes_concept and project.has_concept:
+            project.concept_status = 'submitted_to_client'
+        if draft.includes_kv and project.has_kv:
+            project.kv_status = 'submitted_to_client'
+    else:
+        # Standard Brief — pipeline status + included deliverables (unchanged).
+        record_project_status(project, 'submitted_to_client', actor)
+        is_revised_submission = (project.revision_count or 0) > 0
+        included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
+        for deliverable in project.project_deliverables:
+            if deliverable.id in included_ids:
+                record_deliverable_status(deliverable, 'submitted_to_client', actor)
+                if is_revised_submission:
+                    deliverable.revision_count = project.revision_count
+        if project.concept_status:
+            project.concept_status = 'submitted_to_client'
+        if project.kv_status:
+            project.kv_status = 'submitted_to_client'
 
     db.session.add(ProjectSubmissionEvent(
         submission_id=draft.id, event_type='submitted_to_client',
@@ -1341,11 +1456,12 @@ def overlay_submissions_submit_summary(project_id):
     PLUS the ones already Client-Approved, shown as read-only indicators
     (they ride along in the deck for client-completeness + invoicing, but
     this submission never changes their status). Plus the expected deck
-    filename and the files being sent. Standard Brief scope only this pass.
+    filename and the files being sent. Scope-aware: Standard, C&CM Concept &
+    KV (concept/KV inclusion instead of deliverables), and UAE/Gulf POSM.
 
     GET, read-only — populates the modal on button click (render-on-demand).
     """
-    from app.models import ProjectSubmissionFile
+    from app.models import ProjectSubmissionFile, Deliverable
     from app.status_vocabulary import derive_deliverable_status
     from flask import jsonify
 
@@ -1357,8 +1473,6 @@ def overlay_submissions_submit_summary(project_id):
     scope = request.args.get('scope', 'ckv')
     customer_id = request.args.get('customer_id', type=int)
     resolved = _resolve_submission_scope(project, scope, customer_id)
-    if resolved['channel'] is not None or project.brief_type == 'ccm':
-        return jsonify({'success': False, 'error': 'Submit to Client is not wired for this scope yet.'}), 400
 
     draft = _get_active_draft(project, resolved)
     if not draft or draft.workflow_status != 'internal_review' or draft.is_being_edited:
@@ -1378,22 +1492,35 @@ def overlay_submissions_submit_summary(project_id):
     # Expected deck filename previewed to CS (the NAS zip object name).
     expected_filename = f'{_canonical_deck_basename(project, resolved)}.zip'
 
-    # Split the roster: this draft's included deliverables are "newly for
-    # decision"; already-Client-Approved ones ride along as read-only
-    # indicators. derive_deliverable_status returns (label, modifier).
-    included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
+    # What's going for decision depends on scope. The C&CM concept and KV deck is 
+    # concept/KV toggles, not deliverables. Every other scope shows
+    # deliverables split into this draft's included set vs already client-approved read
+    # only indicators.
+    is_ckv_toggle_scope = resolved['phase'] == 'concept_kv' and project.brief_type == 'ccm'
     included = []
     indicators = []
-    for d in project.project_deliverables:
-        entry = {'deliverable': d, 'pill': derive_deliverable_status(d)}
-        if d.id in included_ids:
-            included.append(entry)
-        elif d.status == 'approved':
-            indicators.append(entry)
+    if not is_ckv_toggle_scope:
+        if resolved['phase'] == 'concept_kv':
+            scope_deliverables = Deliverable.query.filter_by(
+                project_id=project.id, project_customer_id=None
+            ).order_by(Deliverable.id).all()
+        else:
+            scope_deliverables = Deliverable.query.filter_by(
+                project_id=project.id, project_customer_id = resolved['posm_customer_id']
+            ).order_by(Deliverable.id).all()
+        included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
+        for d in scope_deliverables:
+            entry = {'deliverable': d, 'pill': derive_deliverable_status(d)}
+            if d.id in included_ids:
+                included.append(entry)
+            elif d.status == 'approved':
+                indicators.append(entry)
 
     return render_template(
         'project_overlay/_submissions_submit_summary.html',
         project=project, scope=scope, customer_id=customer_id,
         expected_filename=expected_filename,
         files=cached_files, included=included, indicators=indicators,
+        is_ckv_toggle_scope=is_ckv_toggle_scope,
+        includes_concept=draft.includes_concept, includes_kv=draft.includes_kv,
     )

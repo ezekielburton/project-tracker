@@ -63,6 +63,25 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
+        // ── Scope-level Current / History toggle (revision history). Distinct
+        // from the internal Draft/History toggle above: this swaps the whole
+        // working area (#overlay-submissions-current) for the list of decks
+        // sent to client (#overlay-submissions-history). Same pure class-toggle
+        // pattern; both panels are already server-rendered. ──
+        var subViewBtns = contentEl.querySelectorAll('.overlay-submissions-view-toggle-btn');
+        if (subViewBtns.length) {
+            var currentPanel = contentEl.querySelector('#overlay-submissions-current');
+            var historyPanel = contentEl.querySelector('#overlay-submissions-history');
+            subViewBtns.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    subViewBtns.forEach(function (b) { b.classList.toggle('active', b === btn); });
+                    var showHistory = btn.dataset.subView === 'history';
+                    if (currentPanel) currentPanel.classList.toggle('is-hidden', showHistory);
+                    if (historyPanel) historyPanel.classList.toggle('is-hidden', !showHistory);
+                });
+            });
+        }
+
         // ── Preview — hand the file's preview + download URLs to the
         // app-wide file-preview modal (window.openFilePreview, from
         // preview.js, already loaded globally via base.html). Mirrors the
