@@ -205,6 +205,102 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
+        // ── Submit to Client ────────────────────────────────────
+        // Fetches the deck summary on demand, mounts it as a modal, and on
+        // confirm POSTs to the submit-to-client gate, then refresh()es —
+        // which re-renders this scope into the read-only Sent-to-Client state.
+        var submitToClientBtn = contentEl.querySelector('#overlay-submit-to-client-btn');
+        if (submitToClientBtn) {
+            submitToClientBtn.addEventListener('click', function () {
+                var scope = params.scope || 'ckv';
+                var customerId = params.customer_id || '';
+                submitToClientBtn.disabled = true;
+                fetch(`/projects/${projectId}/overlay/submissions/submit-summary`
+                    + `?scope=${encodeURIComponent(scope)}&customer_id=${encodeURIComponent(customerId)}`)
+                    .then(function (res) {
+                        if (!res.ok) {
+                            return res.json().then(function (data) {
+                                alert(data.error || 'Could not open the submission summary.');
+                                return null;
+                            });
+                        }
+                        return res.text();
+                    })
+                    .then(function (html) {
+                        submitToClientBtn.disabled = false;
+                        if (html) showSubmitSummaryModal(html, scope, customerId);
+                    })
+                    .catch(function () {
+                        submitToClientBtn.disabled = false;
+                        alert('Something went wrong opening the summary.');
+                    });
+            });
+        }
+
+        function closeSubmitSummaryModal(modal) {
+            if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
+            if (window.helixPolling) window.helixPolling.resume();
+        }
+
+        function showSubmitSummaryModal(html, scope, customerId) {
+            // Drop any stale instance, then mount fresh on <body> so the
+            // fixed-position modal escapes the overlay's own stacking/clipping
+            // context (same reasoning as the avatar-picker popover fix).
+            var stale = document.getElementById('overlay-submit-summary-modal');
+            if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = html;
+            var modal = wrapper.querySelector('#overlay-submit-summary-modal');
+            if (!modal) return;
+            document.body.appendChild(modal);
+            if (window.helixPolling) window.helixPolling.pause();
+
+            var cancelBtn = modal.querySelector('#overlay-submit-summary-cancel');
+            var confirmBtn = modal.querySelector('#overlay-submit-summary-confirm');
+            var errorEl = modal.querySelector('#overlay-submit-summary-error');
+
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function () { closeSubmitSummaryModal(modal); });
+            }
+            // Clicking the dark backdrop (not the box) closes it too.
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) closeSubmitSummaryModal(modal);
+            });
+
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', function () {
+                    confirmBtn.disabled = true;
+                    if (errorEl) errorEl.classList.add('hidden');
+                    fetch(`/projects/${projectId}/overlay/submissions/draft/submit-to-client`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ scope: scope, customer_id: customerId || null }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (!data.success) {
+                                confirmBtn.disabled = false;
+                                if (errorEl) {
+                                    errorEl.textContent = data.error || 'Could not submit to client.';
+                                    errorEl.classList.remove('hidden');
+                                }
+                                return;
+                            }
+                            closeSubmitSummaryModal(modal);
+                            refresh();
+                        })
+                        .catch(function () {
+                            confirmBtn.disabled = false;
+                            if (errorEl) {
+                                errorEl.textContent = 'Something went wrong. Please try again.';
+                                errorEl.classList.remove('hidden');
+                            }
+                        });
+                });
+            }
+        }
+
         // ── Upload ──────────────────────────────────────────────
         var uploadBtn = contentEl.querySelector('#overlay-draft-file-btn');
         var uploadInput = contentEl.querySelector('#overlay-draft-file-input');

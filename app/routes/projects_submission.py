@@ -918,8 +918,38 @@ def _load_submission_file_bytes(sub_file, project):
         with open(path, 'rb') as fh:
             return fh.read()
 
-    # storage_location == 'nas' — read it off the NAS exactly as before.
+    # storage_location == 'nas'. Two shapes live here:
+    #  1. Overlay flow (this rework): the submission's whole draft was zipped
+    #     into ONE archive at Submit to Client, so this file is a MEMBER of
+    #     that zip — download the zip, extract the one member. The member name
+    #     equals sub_file.original_filename (the submit-to-client route renames
+    #     the main deck to the canonical name before zipping, so every file's
+    #     member name == its original_filename — no per-file mapping needed).
+    #  2. Old flow: a post-submission "Attach Supporting File" upload, stored
+    #     as its own individual NAS object under its own name.
+    # The parent submission's stored deck name tells them apart: the overlay
+    # flow always stores a ".zip" there; the old flow stores the deck file
+    # itself (never a .zip).
     from app.nas import download_app_file, build_file_path
+
+    submission = sub_file.submission
+    deck_name = submission.original_filename if submission else None
+    if deck_name and deck_name.lower().endswith('.zip'):
+        import io
+        import zipfile
+        zip_bytes = download_app_file(build_file_path(project, 'Submissions', deck_name))
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                return zf.read(sub_file.original_filename)
+        except KeyError:
+            raise RuntimeError(
+                f'member {sub_file.original_filename!r} not found in zip {deck_name!r} '
+                f'(file_id={sub_file.id})'
+            )
+        except zipfile.BadZipFile as e:
+            raise RuntimeError(f'corrupt submission zip {deck_name!r} (file_id={sub_file.id}): {e}')
+
+    # Old individual-object supplementary file — read it directly as before.
     nas_path = build_file_path(project, 'Submissions', sub_file.original_filename)
     return download_app_file(nas_path)
 

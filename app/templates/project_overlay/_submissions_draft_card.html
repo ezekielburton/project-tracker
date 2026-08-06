@@ -1,4 +1,54 @@
 {% from '_shared_macros.html' import status_pill, deliverable_picker, person_chip %}
+{% if sent_submission %}
+{# Sent-to-Client state. Once the deck is submitted, _get_active_draft no
+longer matches it (workflow_status='sent_to_client'), so _build_draft_card_
+context surfaces it as sent_submission/sent_files instead — read-only:
+the deck is now the permanent client record. Files read from the NAS zip
+via the same Preview/Download routes (see _load_submission_file_bytes). #}
+<div class="overlay-draft-card-section overlay-draft-header-card">
+    <div class="overlay-draft-state-row">
+        <span class="overlay-draft-state-badge">{{ status_pill('Sent to Client', 'sage') }}</span>
+    </div>
+    <p class="overlay-sent-meta">
+        {{ sent_submission.original_filename }}
+        {% if sent_submission.submitted_by %} · Sent by {{ sent_submission.submitted_by.name }}{% endif %}
+        {% if sent_submission.submitted_to_client_at %} · {{ sent_submission.submitted_to_client_at | dubai_time }}{%
+        endif %}
+    </p>
+</div>
+
+<div class="overlay-draft-card-section overlay-draft-files-card">
+    <div class="overlay-reference-files-header">
+        <span class="overlay-field-empty">{{ sent_files|length }} file{{ 's' if sent_files|length != 1 else '' }} in
+            this deck</span>
+    </div>
+    <div class="overlay-reference-files-list">
+        {% for f in sent_files %}
+        <div class="overlay-reference-file-item{{ ' overlay-draft-file-item--main-deck' if f.is_main_deck else '' }}"
+            data-file-id="{{ f.id }}">
+            <span class="overlay-reference-file-icon">
+                {% if f.file_type in ['jpg', 'jpeg', 'png'] %}🖼
+                {% elif f.file_type == 'pdf' %}📄
+                {% elif f.file_type in ['docx', 'doc'] %}📝
+                {% elif f.file_type == 'pptx' %}📊
+                {% elif f.file_type in ['ai', 'psd'] %}🎨
+                {% else %}📎
+                {% endif %}
+            </span>
+            <span class="overlay-reference-file-name">{{ f.original_filename }}</span>
+            <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
+            <div class="overlay-reference-file-actions">
+                <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
+                    data-preview-url="{{ url_for('submission.preview_submission_file', file_id=f.id) }}"
+                    data-download-url="{{ url_for('submission.download_submission_file', file_id=f.id) }}">Preview</button>
+                <a href="{{ url_for('submission.download_submission_file', file_id=f.id) }}"
+                    class="overlay-file-action-btn">Download</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
 
 {% if workflow_status != 'draft' %}
 <div class="overlay-draft-card-section overlay-draft-header-card">
@@ -134,8 +184,7 @@
         <div class="overlay-cs-review-actions">
             <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
                 id="overlay-flag-revision-btn">Flag Internal Revision</button>
-            <button type="button" class="overlay-file-action-btn" id="overlay-submit-to-client-btn" disabled
-                title="Coming soon">Submit to Client</button>
+                <button type="button" class="overlay-file-action-btn" id="overlay-submit-to-client-btn">Submit to Client</button>
         </div>
         <div class="overlay-flag-revision-form is-hidden" id="overlay-flag-revision-form">
             <div id="overlay-flag-revision-message" contenteditable="true" data-rich-editor
@@ -163,6 +212,7 @@
                     {% if event.event_type == 'submitted_for_review' %}Submitted for Review
                     {% elif event.event_type == 'edited' %}Edited
                     {% elif event.event_type == 'internal_revision' %}Internal Revision Requested
+                    {% elif event.event_type == 'submitted_to_client' %}Submitted to Client
                     {% endif %}
                 </span>
                 <span class="decision-flag-message-time">{{ event.created_at | dubai_time }}</span>
@@ -180,4 +230,5 @@
         {% endfor %}
     </div>
 </div>
+{% endif %}
 {% endif %}

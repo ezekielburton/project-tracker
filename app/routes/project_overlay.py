@@ -180,6 +180,24 @@ def _get_active_draft(project, resolved):
         ProjectSubmission.workflow_status.in_(['draft', 'internal_review', 'internal_revision'])
     ).first()
 
+def _get_sent_submission(project, resolved):
+    """The most recent already-sent submission for this scope
+    (workflow_status='sent_to_client'). Separate from _get_active_draft on
+    purpose: once a deck is sent it leaves the editable draft/review/revision
+    cycle _get_active_draft tracks, but the Submissions surface still needs to
+    show it (read-only) rather than snapping back to an empty upload state.
+    Standard Brief today; the scope filter already covers channel/customer for
+    the later C&CM/Gulf pass."""
+    from app.models import ProjectSubmission
+    return ProjectSubmission.query.filter_by(
+        project_id=project.id,
+        phase=resolved['phase'],
+        posm_country=resolved['posm_country'],
+        posm_customer_id=resolved['posm_customer_id'],
+        is_active=True,
+        workflow_status='sent_to_client',
+    ).order_by(ProjectSubmission.submitted_to_client_at.desc()).first()
+
 def _build_draft_card_context(project, actor, resolved):
     """
     Everything the Draft card needs to render for one Submissions scope —
@@ -228,6 +246,23 @@ def _build_draft_card_context(project, actor, resolved):
 
     events = list(draft.events) if draft else []
 
+    # Sent-to-client state. Once Submit to Client runs, workflow_status flips
+    # to 'sent_to_client' and _get_active_draft stops matching it — so without
+    # this the content would fall back to the empty upload state and the sent
+    # deck would vanish. Only looked up when there's no active draft (an active
+    # draft always takes precedence — e.g. a revision reopened after sending).
+    sent_submission = None
+    sent_files = []
+    if draft is None:
+        sent_submission = _get_sent_submission(project, resolved)
+        if sent_submission:
+            sent_files = ProjectSubmissionFile.query.filter_by(
+                submission_id=sent_submission.id
+            ).order_by(
+                ProjectSubmissionFile.is_main_deck.desc(),
+                ProjectSubmissionFile.uploaded_at.asc(),
+            ).all()
+
     # Deliverable / Concept & KV picker options for this scope. The C&CM
     # "Concept & KV" pill (phase='concept_kv' on a 'ccm' project) is
     # concept/KV toggles, not deliverables; a Standard Brief project also
@@ -270,6 +305,8 @@ def _build_draft_card_context(project, actor, resolved):
         'includes_kv': includes_kv,
         'has_concept': project.has_concept,
         'has_kv': project.has_kv,
+        'sent_submission': sent_submission,
+        'sent_files': sent_files,
     }
 
 # Hourly slots, 8:00 AM through 10:00 PM, as (value, label) pairs for the
@@ -1135,4 +1172,228 @@ def overlay_submissions_flag_internal_revision(project_id):
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})
-                    
+
+def _canonical_deck_basename(project, resolved):
+    """Canonical deck name WITHOUT extension, for a submission's zip object
+    and its main-deck member. Standard Brief only in this pass:
+    "<Client> - <Project> - <Initial|Revision N>". Uses the current
+    project.revision_count for the label — the CS-confirmed "Is this a
+    revision?" counter bump is deferred (see Projects Rework Workflow.md
+    sub-step 7). C&CM Concept & KV and UAE/Gulf POSM naming (which also
+    encode region / customer / phase) land in the next pass, mirroring the
+    old projects_submission.py upload route's own naming branches."""
+    import re
+    def _sanitize(s):
+        return re.sub(r'[\\/:*?"<>|]', '', s or '').strip()
+    client_name = project.client_brand.name if project.client_brand else 'Client'
+    is_revised = (project.revision_count or 0) > 0
+    revision_label = 'Initial' if not is_revised else f'Revision {project.revision_count}'
+    return f'{_sanitize(client_name)} - {_sanitize(project.name)} - {revision_label}'
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/draft/submit-to-client', methods=['POST'])
+@login_required
+def overlay_submissions_submit_to_client(project_id):
+    """
+    CS/Management/Admin permanent gate. Everything up to here lived only in
+    the local draft cache; this is where the deck becomes real: zip the
+    cached files into one archive, upload it to the NAS under the canonical
+    deck name, wipe the cache, and advance the submission + project +
+    included deliverables to submitted_to_client.
+
+    Standard Brief scope ONLY in this pass (phase='concept_kv', no channel /
+    customer). C&CM Concept & KV and UAE/Gulf per-customer POSM scopes are
+    the next pass — see Projects Rework Workflow.md sub-step 7.
+
+    Reuses the transition logic the old projects_submission.py
+    submit_to_client route's Standard branch already proved (record_project_
+    status, included-deliverable status, revision-count stamping, concept/KV
+    advance, notify_of_submission_to_client). The only genuinely new work is
+    the cache -> zip -> NAS step in front of it — the old flow assumed the
+    file was already on the NAS.
+
+    Body (JSON): scope, customer_id (carried for the later C&CM/Gulf pass;
+    unused for Standard).
+    """
+    from app.models import ProjectSubmissionFile, ProjectSubmissionEvent
+    from app.status_tracking import record_project_status, record_deliverable_status
+    from app.notifications import notify_of_submission_to_client
+    from app.utils import log_activity
+    from app.submission_cache import build_zip_bytes, clear_submission_cache
+    from app.nas import build_file_path, upload_app_file
+    from app import db
+    from datetime import datetime as dt
+    from flask import jsonify, current_app
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role not in ('admin', 'cs', 'management'):
+        return jsonify({'success': False, 'error': 'You do not have permission to submit to client.'}), 403
+
+    data = request.get_json() or {}
+    scope = data.get('scope', 'ckv')
+    customer_id = data.get('customer_id')
+
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+    # Standard Brief only this pass — a channel-scoped (POSM) selection or a
+    # C&CM project is rejected until the next pass wires those branches.
+    if resolved['channel'] is not None or project.brief_type == 'ccm':
+        return jsonify({'success': False, 'error': 'Submit to Client is not wired for this scope yet.'}), 400
+
+    draft = _get_active_draft(project, resolved)
+    if not draft:
+        return jsonify({'success': False, 'error': 'No active submission to send.'}), 400
+    if draft.workflow_status != 'internal_review' or draft.is_being_edited:
+        return jsonify({'success': False,
+                        'error': 'The deck must be in internal review (not mid-edit) before submitting to client.'}), 400
+
+    cached_files = ProjectSubmissionFile.query.filter_by(
+        submission_id=draft.id, storage_location='cache'
+    ).order_by(
+        ProjectSubmissionFile.is_main_deck.desc(),
+        ProjectSubmissionFile.uploaded_at.asc(),
+    ).all()
+    if not cached_files:
+        return jsonify({'success': False, 'error': 'There are no files to send.'}), 400
+
+    main_deck = next((f for f in cached_files if f.is_main_deck), None)
+    if not main_deck:
+        return jsonify({'success': False, 'error': 'Flag a main deck before submitting.'}), 400
+
+    # ── Canonical naming. The zip object on the NAS carries the canonical
+    # name + .zip; INSIDE the zip the main deck takes the canonical name +
+    # its own extension (so member == original_filename after the rename
+    # below), every other file keeps its uploaded name. ──
+    base_name = _canonical_deck_basename(project, resolved)
+    main_ext = (main_deck.file_type or main_deck.original_filename.rsplit('.', 1)[-1]).lower()
+    main_deck.original_filename = f'{base_name}.{main_ext}'
+    zip_name = f'{base_name}.zip'
+
+    # Build the archive from the cache (files still on disk), THEN upload.
+    # Only wipe the cache + flip DB state once the NAS write succeeds, so a
+    # failed upload leaves the draft fully intact and re-sendable.
+    entries = [{'local_cache_path': f.local_cache_path, 'arcname': f.original_filename}
+               for f in cached_files]
+    zip_bytes = build_zip_bytes(entries)
+
+    nas_folder = build_file_path(project, 'Submissions', zip_name).rsplit('/', 1)[0]
+    try:
+        upload_app_file(zip_bytes, nas_folder, zip_name)
+    except RuntimeError as e:
+        current_app.logger.error(
+            f'Submit-to-client zip upload failed (project={project_id}, draft={draft.id}): {e}')
+        return jsonify({'success': False,
+                        'error': 'Could not save the deck to storage. Nothing was sent — please try again.'}), 502
+
+    # NAS write succeeded. Point every file row at the zip (preview/download
+    # extract members from it now — see _load_submission_file_bytes) and
+    # record the zip as the submission's stored file.
+    for f in cached_files:
+        f.storage_location = 'nas'
+        f.local_cache_path = None
+    draft.original_filename = zip_name
+    draft.filename = zip_name
+    draft.workflow_status = 'sent_to_client'
+    draft.submitted_to_client_at = dt.utcnow()
+    draft.submitted_by_id = actor.id
+
+    # ── Status transitions — mirrors the old submit_to_client Standard branch.
+    # revision_count is deliberately NOT incremented here (only send_revision
+    # does that); included deliverables get the current revision_count stamped
+    # by assignment for idempotency across internal review cycles. ──
+    record_project_status(project, 'submitted_to_client', actor)
+    is_revised_submission = (project.revision_count or 0) > 0
+    included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
+    for deliverable in project.project_deliverables:
+        if deliverable.id in included_ids:
+            record_deliverable_status(deliverable, 'submitted_to_client', actor)
+            if is_revised_submission:
+                deliverable.revision_count = project.revision_count
+    if project.concept_status:
+        project.concept_status = 'submitted_to_client'
+    if project.kv_status:
+        project.kv_status = 'submitted_to_client'
+
+    db.session.add(ProjectSubmissionEvent(
+        submission_id=draft.id, event_type='submitted_to_client',
+        author_id=actor.id, message=None,
+    ))
+    db.session.commit()
+
+    # Safe to wipe now — the files live in the zip on the NAS.
+    clear_submission_cache(project.id, draft.id)
+
+    log_activity('submitted_to_client',
+                 f'"{project.name}" submitted to client by {actor.name}',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    notify_of_submission_to_client(project, triggered_by=actor)
+
+    client_email = project.client_brand.contact_email if project.client_brand else None
+    return jsonify({'success': True, 'client_email': client_email or '', 'project_name': project.name})
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/submit-summary')
+@login_required
+def overlay_submissions_submit_summary(project_id):
+    """
+    The deck-summary fragment shown in the modal that opens when CS clicks
+    Submit to Client (locked spec, architecture doc §6): the COMPLETE deck —
+    the deliverables newly going for decision (this draft's included set),
+    PLUS the ones already Client-Approved, shown as read-only indicators
+    (they ride along in the deck for client-completeness + invoicing, but
+    this submission never changes their status). Plus the expected deck
+    filename and the files being sent. Standard Brief scope only this pass.
+
+    GET, read-only — populates the modal on button click (render-on-demand).
+    """
+    from app.models import ProjectSubmissionFile
+    from app.status_vocabulary import derive_deliverable_status
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role not in ('admin', 'cs', 'management'):
+        return jsonify({'success': False, 'error': 'You do not have permission to submit to client.'}), 403
+
+    scope = request.args.get('scope', 'ckv')
+    customer_id = request.args.get('customer_id', type=int)
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+    if resolved['channel'] is not None or project.brief_type == 'ccm':
+        return jsonify({'success': False, 'error': 'Submit to Client is not wired for this scope yet.'}), 400
+
+    draft = _get_active_draft(project, resolved)
+    if not draft or draft.workflow_status != 'internal_review' or draft.is_being_edited:
+        return jsonify({'success': False,
+                        'error': 'The deck must be in internal review (not mid-edit) before submitting to client.'}), 400
+
+    cached_files = ProjectSubmissionFile.query.filter_by(
+        submission_id=draft.id, storage_location='cache'
+    ).order_by(
+        ProjectSubmissionFile.is_main_deck.desc(),
+        ProjectSubmissionFile.uploaded_at.asc(),
+    ).all()
+    main_deck = next((f for f in cached_files if f.is_main_deck), None)
+    if not main_deck:
+        return jsonify({'success': False, 'error': 'Flag a main deck before submitting.'}), 400
+
+    # Expected deck filename previewed to CS (the NAS zip object name).
+    expected_filename = f'{_canonical_deck_basename(project, resolved)}.zip'
+
+    # Split the roster: this draft's included deliverables are "newly for
+    # decision"; already-Client-Approved ones ride along as read-only
+    # indicators. derive_deliverable_status returns (label, modifier).
+    included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
+    included = []
+    indicators = []
+    for d in project.project_deliverables:
+        entry = {'deliverable': d, 'pill': derive_deliverable_status(d)}
+        if d.id in included_ids:
+            included.append(entry)
+        elif d.status == 'approved':
+            indicators.append(entry)
+
+    return render_template(
+        'project_overlay/_submissions_submit_summary.html',
+        project=project, scope=scope, customer_id=customer_id,
+        expected_filename=expected_filename,
+        files=cached_files, included=included, indicators=indicators,
+    )

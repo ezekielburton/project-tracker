@@ -1,0 +1,78 @@
+{% from '_shared_macros.html' import status_pill %}
+
+{# Deck summary modal — opens when CS clicks Submit to Client. Shows the
+COMPLETE deck (architecture doc §6, locked): the files being sent, the
+deliverables going for decision, and any already-approved ones riding
+along read-only. Self-contained (.modal-overlay + .modal-box) so
+project_submissions_draft_card.js just injects + shows it. Returned by
+overlay_submissions_submit_summary; the confirm button posts to
+overlay_submissions_submit_to_client. #}
+<div class="modal-overlay overlay-submit-summary-modal" id="overlay-submit-summary-modal">
+    <div class="modal-box overlay-submit-summary-box">
+        <h3 class="modal-title">Submit to Client</h3>
+
+        <p class="overlay-submit-summary-intro">
+            This deck becomes the permanent client record. Review the full scope, then confirm.
+        </p>
+
+        <div class="overlay-submit-summary-filename">
+            <span class="overlay-field-label">Deck file</span>
+            <span class="overlay-submit-summary-filename-value">{{ expected_filename }}</span>
+        </div>
+
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Files in this deck ({{ files|length }})</span>
+            <ul class="overlay-submit-summary-files">
+                {% for f in files %}
+                <li class="overlay-submit-summary-file">
+                    <span class="overlay-submit-summary-file-name">{{ f.original_filename }}</span>
+                    {% if f.is_main_deck %}
+                    <span class="overlay-submit-summary-tag">Main deck</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Going for decision ({{ included|length }})</span>
+            {% if included %}
+            <ul class="overlay-submit-summary-deliverables">
+                {% for item in included %}
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">{{ item.deliverable.name }}</span>
+                    {{ status_pill(item.pill[0], item.pill[1]) }}
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="overlay-field-empty">No deliverables selected.</p>
+            {% endif %}
+        </div>
+
+        {% if indicators %}
+        <div class="overlay-submit-summary-section overlay-submit-summary-section--readonly">
+            <span class="overlay-field-label">Already approved — included for completeness</span>
+            <ul class="overlay-submit-summary-deliverables">
+                {% for item in indicators %}
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">{{ item.deliverable.name }}</span>
+                    {{ status_pill(item.pill[0], item.pill[1]) }}
+                </li>
+                {% endfor %}
+            </ul>
+            <p class="overlay-submit-summary-note">
+                These stay as they are — this submission doesn't change their status.
+            </p>
+        </div>
+        {% endif %}
+
+        <span class="overlay-submit-summary-error hidden" id="overlay-submit-summary-error"></span>
+
+        <div class="modal-actions">
+            <button type="button" class="overlay-file-action-btn" id="overlay-submit-summary-cancel">Cancel</button>
+            <button type="button" class="overlay-file-action-btn overlay-submit-summary-confirm"
+                id="overlay-submit-summary-confirm">Submit to Client</button>
+        </div>
+    </div>
+</div>
