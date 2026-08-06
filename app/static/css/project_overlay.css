@@ -636,7 +636,15 @@
     margin-bottom: var(--space-3);
 }
 
-.overlay-reference-files-list--locked .overlay-reference-file-item {
+/* Locked internal_review state: dim the row's *content* (icon/name/meta) to
+   read as read-only, but deliberately NOT the .overlay-reference-file-actions —
+   Preview/Download stay live because opening the deck is CS's whole job on a
+   locked card. (Can't just set the actions back to opacity:1: opacity on the
+   item creates a stacking context its children can't escape, so we dim the
+   individual children instead of the parent.) */
+.overlay-reference-files-list--locked .overlay-reference-file-item>.overlay-reference-file-icon,
+.overlay-reference-files-list--locked .overlay-reference-file-item>.overlay-reference-file-name,
+.overlay-reference-files-list--locked .overlay-reference-file-item>.overlay-reference-file-meta {
     opacity: 0.55;
 }
 

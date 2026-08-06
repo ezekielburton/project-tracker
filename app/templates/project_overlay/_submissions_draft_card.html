@@ -66,18 +66,22 @@
                 </span>
                 <span class="overlay-reference-file-name">{{ f.original_filename }}</span>
                 <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
-                {% if can_manage_draft and not is_locked %}
                 <div class="overlay-reference-file-actions">
+                    <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
+                        data-preview-url="{{ url_for('submission.preview_submission_file', file_id=f.id) }}"
+                        data-download-url="{{ url_for('submission.download_submission_file', file_id=f.id) }}">Preview</button>
+                    <a href="{{ url_for('submission.download_submission_file', file_id=f.id) }}"
+                        class="overlay-file-action-btn">Download</a>
+                    {% if can_manage_draft and not is_locked %}
                     <button type="button"
                         class="overlay-file-action-btn overlay-draft-main-deck-btn{{ ' overlay-draft-main-deck-btn--active' if f.is_main_deck else '' }}"
                         data-file-id="{{ f.id }}" {{ 'disabled' if f.is_main_deck else '' }}>
                         {{ 'Main Deck' if f.is_main_deck else 'Set as Main Deck' }}
                     </button>
-                    <button type="button"
-                        class="overlay-file-action-btn overlay-file-action-btn--danger overlay-draft-file-remove"
+                    <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-draft-file-remove"
                         data-file-id="{{ f.id }}">Remove</button>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
             {% else %}
             <p class="overlay-field-empty" id="overlay-no-draft-files">No files in this draft yet.</p>

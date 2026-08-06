@@ -63,6 +63,25 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
+        // ── Preview — hand the file's preview + download URLs to the
+        // app-wide file-preview modal (window.openFilePreview, from
+        // preview.js, already loaded globally via base.html). Mirrors the
+        // Reference Files card's own wiring in project_details_card.js.
+        // Shown in BOTH states (unlocked draft + locked internal_review),
+        // so CS can actually open the deck they're reviewing. Download is a
+        // plain <a> in the template, so it needs no JS here. ──
+        contentEl.querySelectorAll('.overlay-draft-file-preview').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var item = btn.closest('.overlay-reference-file-item');
+                var nameEl = item ? item.querySelector('.overlay-reference-file-name') : null;
+                window.openFilePreview(
+                    btn.dataset.previewUrl,
+                    btn.dataset.downloadUrl,
+                    nameEl ? nameEl.textContent.trim() : 'file'
+                );
+            });
+        });
+
         // ── Submit for Review — gathers the note + whichever selection
         // control is showing (deliverable picker, or the Concept & KV
         // toggle pair) and posts to the route that locks the draft. ──

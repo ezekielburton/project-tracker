@@ -19,6 +19,34 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeOverlay = null;
     let activeSubTabCard = null;   // whichever sub-tab's card module is currently mounted (Details, Deliverables, ...)
 
+    // ---- Detail + Briefing overlay: remember last section + sub-tab ----
+    // Per-project localStorage, same kebab-case-plus-projectId key shape
+    // project_submissions_card.js's own scope-memory already uses. Written
+    // on every rail click (main tab or sub-tab), not just on close, so a
+    // mid-session refresh or browser-back doesn't lose the last spot. The
+    // read side (acting on this to restore the view on open) is a
+    // separate, later chunk — this one only wires up the writes.
+    function lastViewKey(projectId) {
+        return 'overlay-last-view-' + projectId;
+    }
+
+    function saveLastView(projectId, section, subTab) {
+        try {
+            localStorage.setItem(lastViewKey(projectId), JSON.stringify({ section: section, subTab: subTab }));
+        } catch (e) {
+            // localStorage unavailable (private browsing, quota, etc.) —
+            // silently falls back to today's hardcoded Design/Details default.
+        }
+    }
+
+    function getLastView(projectId) {
+        try {
+            return JSON.parse(localStorage.getItem(lastViewKey(projectId)) || 'null');
+        } catch (e) {
+            return null;
+        }
+    }
+
     // Registry of sub-tab content loaders, keyed by the subrail button's
     // data-sub-tab value. Submissions/Pre-Production aren't built yet
     // (later M3 steps) — clicking them just changes the active tab
@@ -69,12 +97,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 overlayMount.innerHTML = html;
                 const contentEl = document.getElementById('project-overlay-content');
 
-                activeOverlay = window.ProjectOverlay.init(closeProjectOverlay, function (subTabKey) {
-                    loadSubTabContent(projectId, subTabKey);
-                });
-                activeSubTabCard = window.ProjectDetailsCard.init(contentEl, projectId, function () {
-                    loadSubTabContent(projectId, 'details');
-                });
+                activeOverlay = window.ProjectOverlay.init(
+                    closeProjectOverlay,
+                    function (subTabKey) {
+                        saveLastView(projectId, 'design', subTabKey);
+                        loadSubTabContent(projectId, subTabKey);
+                    },
+                    function (sectionKey) {
+                        // Re-entering Design alone (no sub-tab click) shouldn't
+                        // wipe out a previously remembered sub-tab — only a
+                        // genuine section change, or a real sub-tab click
+                        // (handled above), should overwrite it.
+                        if (sectionKey === 'design') {
+                            const existing = getLastView(projectId);
+                            saveLastView(projectId, 'design', existing && existing.section === 'design' ? existing.subTab : null);
+                        } else {
+                            saveLastView(projectId, sectionKey, null);
+                        }
+                    }
+                );
+
+                const lastView = getLastView(projectId);
+                if (lastView && lastView.section === 'design' && lastView.subTab && lastView.subTab !== 'details' && SUBTAB_LOADERS[lastView.subTab]) {
+                    // Remembered a real sub-tab other than the default —
+                    // fetch its content fresh and sync the rail to match.
+                    activeOverlay.restoreView('design', lastView.subTab);
+                    loadSubTabContent(projectId, lastView.subTab);
+                } else {
+                    // Nothing remembered, remembered view was already
+                    // 'details', or it's a non-Design section (Finance/
+                    // Production/Logistics have no real content yet, so
+                    // there's nothing to load — just sync the rail's
+                    // visual state and fall back to the embedded Details
+                    // content underneath).
+                    if (lastView && lastView.section && lastView.section !== 'design') {
+                        activeOverlay.restoreView(lastView.section, null);
+                    }
+                    activeSubTabCard = window.ProjectDetailsCard.init(contentEl, projectId, function () {
+                        loadSubTabContent(projectId, 'details');
+                    });
+                }
 
                 if (pushHistory) {
                     const params = new URLSearchParams(window.location.search);

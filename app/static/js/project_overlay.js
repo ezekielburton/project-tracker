@@ -15,7 +15,7 @@
 // principle as the rest of this rework (architecture doc §1).
 
 window.ProjectOverlay = (function () {
-    function init(onCloseRequested, onSubTabSelected) {
+    function init(onCloseRequested, onSubTabSelected, onSectionSelected) {
         var backdrop = document.getElementById('project-overlay-backdrop');
         var closeBtn = document.getElementById('project-overlay-close');
 
@@ -53,6 +53,10 @@ window.ProjectOverlay = (function () {
         var rail = document.getElementById('project-overlay-rail');
         var backBtn = document.getElementById('project-overlay-back');
         var subrail = document.getElementById('project-overlay-subrail');
+
+        // No-op default — reassigned below only if the rail markup is
+        // actually present, same guard the rest of this block already uses.
+        var restoreView = function () { };
 
         if (header && rail && backBtn && subrail) {
             var mainTabs = Array.prototype.slice.call(rail.querySelectorAll('.tab-strip-item[data-main-tab]'));
@@ -121,6 +125,7 @@ window.ProjectOverlay = (function () {
                         backToMain();
                     } else {
                         enterSection(btn.dataset.mainTab, btn);
+                        if (onSectionSelected) onSectionSelected(btn.dataset.mainTab);
                     }
                 });
             });
@@ -136,6 +141,26 @@ window.ProjectOverlay = (function () {
                     if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
                 });
             });
+
+            // Programmatic equivalent of a real click — drives the same
+            // enterSection()/active-class logic a click would, just called
+            // from outside instead of from a click event. Used on open to
+            // put the rail back where the user last left it.
+            restoreView = function (sectionKey, subTabKey) {
+                var targetBtn = null;
+                mainTabs.forEach(function (btn) {
+                    if (btn.dataset.mainTab === sectionKey) targetBtn = btn;
+                });
+                if (!targetBtn) return;
+
+                enterSection(sectionKey, targetBtn);
+
+                if (subTabKey) {
+                    subrail.querySelectorAll('.tab-strip-item').forEach(function (b) {
+                        b.classList.toggle('active', b.dataset.subTab === subTabKey);
+                    });
+                }
+            };
         }
 
         // Handle for the caller to clean up the document-level Esc
@@ -144,7 +169,8 @@ window.ProjectOverlay = (function () {
         return {
             destroy: function () {
                 document.removeEventListener('keydown', escHandler);
-            }
+            },
+            restoreView: restoreView
         };
     }
 

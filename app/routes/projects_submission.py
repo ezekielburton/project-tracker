@@ -895,6 +895,35 @@ def download_submission(submission_id):
         download_name=submission.original_filename
     )
 
+def _load_submission_file_bytes(sub_file, project):
+    """Return the raw bytes of a submission file, reading from wherever it
+    physically lives right now.
+
+    A Draft-stage file sits in the local draft cache
+    (storage_location == 'cache' → bytes on disk at local_cache_path); every
+    other file is on the NAS under the project's Submissions/ folder
+    (storage_location == 'nas', the column default). Raises RuntimeError on
+    any failure — deliberately the SAME contract app.nas.download_app_file
+    already follows — so the two view functions below keep a single
+    `except RuntimeError` branch and never have to care where the file was.
+    """
+    if sub_file.storage_location == 'cache':
+        import os
+        path = sub_file.local_cache_path
+        if not path or not os.path.isfile(path):
+            raise RuntimeError(
+                f'cached submission file missing on disk '
+                f'(file_id={sub_file.id}, path={path!r})'
+            )
+        with open(path, 'rb') as fh:
+            return fh.read()
+
+    # storage_location == 'nas' — read it off the NAS exactly as before.
+    from app.nas import download_app_file, build_file_path
+    nas_path = build_file_path(project, 'Submissions', sub_file.original_filename)
+    return download_app_file(nas_path)
+
+
 @submission_bp.route('/projects/submission/file/<int:file_id>/preview')
 @login_required
 def preview_submission_file(file_id):
@@ -903,7 +932,6 @@ def preview_submission_file(file_id):
     arbitrary supplementary uploads, not always something a browser can
     render natively."""
     from app.models import ProjectSubmissionFile
-    from app.nas import download_app_file, build_file_path
     from flask import send_file, jsonify
     import io
 
@@ -926,9 +954,9 @@ def preview_submission_file(file_id):
             }), 415
     
     project = Project.query.get(extra.project_id)
-    nas_path = build_file_path(project, 'Submissions', extra.original_filename)
+    from flask import current_app
     try:
-        file_bytes = download_app_file(nas_path)
+        file_bytes = _load_submission_file_bytes(extra, project)
     except RuntimeError as e:
         from flask import current_app
         current_app.logger.error(f'Submission file preview failed (file_id={file_id}): {e}')
@@ -1039,11 +1067,9 @@ def download_submission_file(file_id):
     extra   = ProjectSubmissionFile.query.get_or_404(file_id)
     project = Project.query.get(extra.project_id)
 
-    from app.nas import download_app_file, build_file_path
     from flask import current_app
-    nas_path   = build_file_path(project, 'Submissions', extra.original_filename)
     try:
-        file_bytes = download_app_file(nas_path)
+        file_bytes = _load_submission_file_bytes(extra, project)
     except RuntimeError as e:
         current_app.logger.error(f'Submission extra-file download failed (file_id={file_id}): {e}')
         return ('File could not be retrieved from storage. '
