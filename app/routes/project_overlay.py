@@ -289,6 +289,22 @@ def _build_draft_card_context(project, actor, resolved):
             ProjectSubmissionFile.uploaded_at.asc(),
         ).all()
 
+    # Client Revision (Standard scope this pass). CS/admin/management can
+    # request one on a sent deck that hasn't already had a revision requested;
+    # once requested, the indicator flips to a "Revision Requested" state
+    # showing the client's message (the latest client_revision event).
+    sent_revision_event = None
+    if sent_submission:
+        sent_revision_event = next(
+            (e for e in sent_submission.events if e.event_type == 'client_revision'), None)
+    can_request_client_revision = (
+        actor.role in ('admin', 'cs', 'management')
+        and sent_submission is not None
+        and sent_revision_event is None
+        and resolved['channel'] is None
+        and project.brief_type != 'ccm'
+    )
+
     # Revision history — every deck Sent to Client for this scope, newest
     # first (Initial, Revision 1, …). Includes the current sent deck too, so
     # History is the full client-facing record; it fills out as the revision
@@ -356,6 +372,8 @@ def _build_draft_card_context(project, actor, resolved):
         'has_concept': project.has_concept,
         'has_kv': project.has_kv,
         'sent_submission': sent_submission,
+        'sent_revision_event': sent_revision_event,
+        'can_request_client_revision': can_request_client_revision,
         'sent_files': sent_files,
         'history_submissions': history_submissions,
     }
@@ -1333,13 +1351,12 @@ def overlay_submissions_submit_to_client(project_id):
         return jsonify({'success': False,
                         'error': 'The deck must be in internal review (not mid-edit) before submitting to client.'}), 400
 
-    # Interim guard (until the revision cycle's Client-Revision gate exists):
-    # a scope can't send a SECOND deck while one is already with the client.
-    # The revision counter only advances via Client Revision, so a second send
-    # would reuse the same canonical name and silently overwrite the sent zip
-    # on the NAS. The Client-Revision flow will replace this with a proper
-    # "revision requested" gate.
-    if _get_sent_submission(project, resolved) is not None:
+    # Gate: don't overwrite the deck already with the client. A second send is
+    # allowed only once its canonical name would DIFFER from the sent deck's —
+    # which happens after CS requests a Client Revision (that bumps the scope's
+    # counter, changing the Initial/Revision-N label). Same name → block.
+    _sent = _get_sent_submission(project, resolved)
+    if _sent is not None and f'{_canonical_deck_basename(project, resolved)}.zip' == _sent.original_filename:
         return jsonify({'success': False,
                         'error': 'A deck is already with the client for this scope — request a Client Revision first.'}), 400
 
@@ -1392,6 +1409,12 @@ def overlay_submissions_submit_to_client(project_id):
     draft.workflow_status = 'sent_to_client'
     draft.submitted_to_client_at = dt.utcnow()
     draft.submitted_by_id = actor.id
+
+    # Supersede the prior sent deck (if any) for this scope — this new revision
+    # replaces it as the Active-with-Client deck; the old one stays in History.
+    # (_sent was fetched by the gate above.)
+    if _sent is not None:
+        _sent.is_active = False
 
     # ── Status transitions, by scope. revision_count is deliberately NOT
     # incremented here (only the Client Revision flow does that); included
@@ -1524,3 +1547,78 @@ def overlay_submissions_submit_summary(project_id):
         is_ckv_toggle_scope=is_ckv_toggle_scope,
         includes_concept=draft.includes_concept, includes_kv=draft.includes_kv,
     )
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/client-revision', methods=['POST'])
+@login_required
+def overlay_submissions_client_revision(project_id):
+    """
+    CS/admin/management requests a client revision on the deck currently with
+    the client (the Active-with-Client indicator). Standard Brief scope only in
+    this pass — C&CM Concept & KV and UAE/Gulf POSM land next.
+
+    Effect (locked revision-cycle design): bumps project.revision_count (the
+    deferred counter bump lives here); moves project + ALL deliverables to In
+    Revision (revision_in_queue), stamping each deliverable's revision_count;
+    records the client's rich-text message as a 'client_revision'
+    ProjectSubmissionEvent on the sent deck (what the "Revision Requested"
+    indicator surfaces, and — via the counter bump — what opens the
+    Submit-to-Client gate for the next draft); notifies every assigned designer
+    (mirrors the old send_revision set). Deliberately does NOT deactivate the
+    sent deck — it stays the client record until a new revision actually ships
+    (that supersession happens in overlay_submissions_submit_to_client).
+    """
+    from app.models import ProjectSubmissionEvent, ProjectDesigner
+    from app.status_tracking import record_project_status, record_deliverable_status
+    from app.notifications import create_notification
+    from app.utils import strip_html, log_activity
+    from app import db
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role not in ('admin', 'cs', 'management'):
+        return jsonify({'success': False, 'error': 'You do not have permission to request a client revision.'}), 403
+
+    data = request.get_json() or {}
+    scope = data.get('scope', 'ckv')
+    customer_id = data.get('customer_id')
+    message = (data.get('message') or '').strip()
+    if not message or not strip_html(message).strip():
+        return jsonify({'success': False, 'error': 'Please describe the revision the client requested.'}), 400
+
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+    if resolved['channel'] is not None or project.brief_type == 'ccm':
+        return jsonify({'success': False, 'error': 'Client Revision is not wired for this scope yet.'}), 400
+
+    sent = _get_sent_submission(project, resolved)
+    if sent is None:
+        return jsonify({'success': False, 'error': 'There is no deck with the client to revise.'}), 400
+    if any(e.event_type == 'client_revision' for e in sent.events):
+        return jsonify({'success': False, 'error': 'A client revision has already been requested for this deck.'}), 400
+
+    project.revision_count = (project.revision_count or 0) + 1
+    record_project_status(project, 'revision_in_queue', actor)
+    for deliverable in project.project_deliverables:
+        record_deliverable_status(deliverable, 'revision_in_queue', actor)
+        deliverable.revision_count = project.revision_count
+
+    db.session.add(ProjectSubmissionEvent(
+        submission_id=sent.id, event_type='client_revision',
+        author_id=actor.id, message=message,
+    ))
+    db.session.commit()
+
+    for assignment in ProjectDesigner.query.filter_by(project_id=project.id).all():
+        if assignment.designer and assignment.designer.id != actor.id:
+            create_notification(
+                recipient=assignment.designer,
+                message=f'Client revision #{project.revision_count} requested on "{project.name}" by {actor.name}.',
+                notification_type='revision_requested',
+                project=project,
+                triggered_by=actor,
+            )
+
+    log_activity('revision_requested',
+                 f'Client revision #{project.revision_count} requested on "{project.name}" by {actor.name}: {strip_html(message)[:100]}',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})

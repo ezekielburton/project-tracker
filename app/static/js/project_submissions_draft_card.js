@@ -224,6 +224,76 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
+        // ── Request Client Revision (on the Active-with-Client indicator) ──
+        // Same inline-reveal + rich-editor pattern as Flag Internal Revision,
+        // independent IDs. On success, refresh() re-renders the indicator into
+        // its "Revision Requested" state (badge + message spotlight).
+        var crBtn = contentEl.querySelector('#overlay-client-revision-btn');
+        var crForm = contentEl.querySelector('#overlay-client-revision-form');
+        var crConfirm = contentEl.querySelector('#overlay-client-revision-confirm');
+        var crCancel = contentEl.querySelector('#overlay-client-revision-cancel');
+
+        if (crBtn && crForm) {
+            crBtn.addEventListener('click', function () {
+                crBtn.classList.add('is-hidden');
+                crForm.classList.remove('is-hidden');
+            });
+        }
+
+        if (crCancel) {
+            crCancel.addEventListener('click', function () {
+                crForm.classList.add('is-hidden');
+                if (crBtn) crBtn.classList.remove('is-hidden');
+                if (window.clearRichContent) window.clearRichContent('overlay-client-revision-message');
+                var errorEl = contentEl.querySelector('#overlay-client-revision-error');
+                if (errorEl) errorEl.classList.add('hidden');
+            });
+        }
+
+        if (crConfirm) {
+            crConfirm.addEventListener('click', function () {
+                var errorEl = contentEl.querySelector('#overlay-client-revision-error');
+                var message = window.getRichContent ? window.getRichContent('overlay-client-revision-message') : '';
+                if (!message) {
+                    if (errorEl) {
+                        errorEl.textContent = 'Please describe the revision the client requested.';
+                        errorEl.classList.remove('hidden');
+                    }
+                    return;
+                }
+                crConfirm.disabled = true;
+                if (errorEl) errorEl.classList.add('hidden');
+                fetch(`/projects/${projectId}/overlay/submissions/client-revision`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        scope: params.scope || 'ckv',
+                        customer_id: params.customer_id || null,
+                        message: message,
+                    }),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.success) {
+                            crConfirm.disabled = false;
+                            if (errorEl) {
+                                errorEl.textContent = data.error || 'Could not request a client revision.';
+                                errorEl.classList.remove('hidden');
+                            }
+                            return;
+                        }
+                        refresh();
+                    })
+                    .catch(function () {
+                        crConfirm.disabled = false;
+                        if (errorEl) {
+                            errorEl.textContent = 'Something went wrong. Please try again.';
+                            errorEl.classList.remove('hidden');
+                        }
+                    });
+            });
+        }
+
         // ── Submit to Client ────────────────────────────────────
         // Fetches the deck summary on demand, mounts it as a modal, and on
         // confirm POSTs to the submit-to-client gate, then refresh()es —

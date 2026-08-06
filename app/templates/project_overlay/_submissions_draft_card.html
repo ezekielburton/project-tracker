@@ -23,7 +23,10 @@ the deck is now the permanent client record. Files read from the NAS zip
 via the same Preview/Download routes (see _load_submission_file_bytes). #}
 <div class="overlay-draft-card-section overlay-draft-header-card">
     <div class="overlay-draft-state-row">
-        <span class="overlay-draft-state-badge">{{ status_pill('Sent to Client', 'sage') }}</span>
+        <span class="overlay-draft-state-badge">
+            {% if sent_revision_event %}{{ status_pill('Revision Requested', 'lavender') }}
+            {% else %}{{ status_pill('Active with Client', 'sage') }}{% endif %}
+        </span>
     </div>
     {% if sent_submission.included_deliverables or sent_submission.includes_concept or sent_submission.includes_kv %}
     <div class="overlay-submissions-history-included">
@@ -41,6 +44,32 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
         endif %}
     </p>
 </div>
+
+{% if sent_revision_event %}
+<div class="revision-card">
+    <p class="detail-label">Client Revision from {{ sent_revision_event.author.name }}</p>
+    <div class="revision-message">{{ sent_revision_event.message | safe }}</div>
+    <p class="revision-meta">{{ sent_revision_event.created_at | dubai_time }}</p>
+</div>
+{% endif %}
+
+{% if can_request_client_revision %}
+<div class="overlay-draft-card-section">
+    <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
+        id="overlay-client-revision-btn">Request Client Revision</button>
+    <div class="overlay-flag-revision-form is-hidden" id="overlay-client-revision-form">
+        <div id="overlay-client-revision-message" contenteditable="true" data-rich-editor
+            data-project-id="{{ project.id }}" class="form-input rich-editor overlay-flag-revision-input"
+            data-placeholder="Describe the revision the client requested…"></div>
+        <span class="overlay-flag-revision-error hidden" id="overlay-client-revision-error"></span>
+        <div class="overlay-flag-revision-form-actions">
+            <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
+                id="overlay-client-revision-confirm">Send</button>
+            <button type="button" class="overlay-file-action-btn" id="overlay-client-revision-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="overlay-draft-card-section overlay-draft-files-card">
     <div class="overlay-reference-files-header">
