@@ -21,19 +21,37 @@ longer matches it (workflow_status='sent_to_client'), so _build_draft_card_
 context surfaces it as sent_submission/sent_files instead — read-only:
 the deck is now the permanent client record. Files read from the NAS zip
 via the same Preview/Download routes (see _load_submission_file_bytes). #}
-<div class="overlay-draft-card-section overlay-draft-header-card">
-    <div class="overlay-draft-state-row">
-        <span class="overlay-draft-state-badge">
-            {% if sent_revision_event %}{{ status_pill('Revision Requested', 'lavender') }}
-            {% else %}{{ status_pill('Active with Client', 'sage') }}{% endif %}
-        </span>
+<div class="overlay-sent-zones">
+    {# Zone 1 — status #}
+    <div class="overlay-sent-zone overlay-sent-zone--status">
+        {% if sent_revision_event %}{{ status_pill('Revision Requested', 'lavender') }}
+        {% else %}{{ status_pill('Submitted to Client', 'sage') }}{% endif %}
     </div>
-    {{ included_summary(
-    sent_submission.includes_concept,
-    sent_submission.includes_kv,
-    sent_submission.included_deliverables | map(attribute='deliverable') | select | map(attribute='name') | list
-    ) }}
-    <div class="overlay-sent-meta">
+
+    {# Zone 2 — deliverables, swaps in place #}
+    <div class="overlay-sent-zone overlay-sent-zone--deliverables">
+        {% set _names = sent_submission.included_deliverables | map(attribute='deliverable') | select |
+        map(attribute='name') | list %}
+        {% set _count = _names | length + (1 if sent_submission.includes_concept else 0) + (1 if
+        sent_submission.includes_kv else 0) %}
+        {% if _count %}
+        <button type="button" class="overlay-delz-btn">
+            <span class="overlay-inc-chevron">▾</span>
+            <span>{{ _count }} deliverable{{ '' if _count == 1 else 's' }}</span>
+        </button>
+        <div class="overlay-delz-panel is-hidden">
+            <div class="overlay-delz-list">
+                {% if sent_submission.includes_concept %}{{ tag('Concept', 'muted') }}{% endif %}
+                {% if sent_submission.includes_kv %}{{ tag('KV', 'muted') }}{% endif %}
+                {% for name in _names %}{{ tag(name, 'muted') }}{% endfor %}
+            </div>
+            <button type="button" class="overlay-delz-back">← Back</button>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Zone 3 — meta #}
+    <div class="overlay-sent-zone overlay-sent-zone--meta">
         <span class="overlay-sent-meta-file">{{ sent_submission.original_filename }}</span>
         {% if sent_submission.submitted_by %}
         <span>Sent by {{ sent_submission.submitted_by.name }}</span>
@@ -52,10 +70,66 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
 </div>
 {% endif %}
 
-{% if can_request_client_revision %}
+{% if can_mark_approved or can_request_client_revision %}
+{# Mutually-exclusive actions on the Submitted-to-Client indicator — both
+gated by the same can_mark_approved/can_request_client_revision (a sent deck
+with no revision already pending). Buttons share a flex row
+(.overlay-sent-actions); each reveal-form is a normal block below it, not
+part of that row — same inline pattern as before, just two of them now. #}
 <div class="overlay-draft-card-section">
-    <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
-        id="overlay-client-revision-btn">Request Client Revision</button>
+    <div class="overlay-sent-actions">
+        {% if can_mark_approved %}
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
+            id="overlay-mark-approved-btn">Mark Approved</button>
+        {% endif %}
+        {% if can_request_client_revision %}
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
+            id="overlay-client-revision-btn">Request Client Revision</button>
+        {% endif %}
+    </div>
+
+    {% if can_mark_approved %}
+    <div class="overlay-flag-revision-form is-hidden" id="overlay-mark-approved-form">
+        {% if is_ckv_toggle_scope or approvable_deliverables %}
+        {# Left: what's being approved (picker, or the C&KV no-split note).
+        Right: CS's freeform note about this batch, surfaced later on the
+        Pre-Production tab (ProjectSubmissionEvent event_type='client_
+        approval' + ProjectSubmissionEventDeliverable links — see
+        overlay_submissions_approve). Optional — an empty note still logs
+        the approval event, just with nothing to show later. #}
+        <div class="overlay-mark-approved-columns">
+            <div class="overlay-mark-approved-col overlay-mark-approved-col--picker">
+                {% if is_ckv_toggle_scope %}
+                <p class="overlay-field-empty">Approves Concept &amp; KV together — this scope has no deliverable
+                    list to split.</p>
+                {% else %}
+                {% set approvable_options = approvable_deliverables | map(attribute='deliverable') | list %}
+                {# Deselected by default — CS picks what's actually ready, rather
+                than deselecting what isn't. #}
+                {{ deliverable_picker('overlay-mark-approved-picker', approvable_options, []) }}
+                {% endif %}
+            </div>
+            <div class="overlay-mark-approved-col overlay-mark-approved-col--note">
+                <textarea class="overlay-mark-approved-note" id="overlay-mark-approved-note"
+                    placeholder="Notes for Pre-Production about this batch (optional)…"></textarea>
+            </div>
+        </div>
+        {% else %}
+        <p class="overlay-field-empty">Nothing left to approve — every deliverable in this deck is already Client
+            Approved.</p>
+        {% endif %}
+        <span class="overlay-flag-revision-error hidden" id="overlay-mark-approved-error"></span>
+        <div class="overlay-flag-revision-form-actions">
+            {% if is_ckv_toggle_scope or approvable_deliverables %}
+            <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
+                id="overlay-mark-approved-confirm">Confirm Approval</button>
+            {% endif %}
+            <button type="button" class="overlay-file-action-btn" id="overlay-mark-approved-cancel">Cancel</button>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if can_request_client_revision %}
     <div class="overlay-flag-revision-form is-hidden" id="overlay-client-revision-form">
         <div id="overlay-client-revision-message" contenteditable="true" data-rich-editor
             data-project-id="{{ project.id }}" class="form-input rich-editor overlay-flag-revision-input"
@@ -67,6 +141,7 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
             <button type="button" class="overlay-file-action-btn" id="overlay-client-revision-cancel">Cancel</button>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endif %}
 

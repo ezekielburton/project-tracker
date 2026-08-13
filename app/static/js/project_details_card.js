@@ -83,6 +83,28 @@ window.ProjectDetailsCard = (function () {
             });
         });
 
+        // ── Start Project: the manual "Briefed" -> "In Design" gate ────
+        var startProjectBtn = rootEl.querySelector('#overlay-start-project-btn');
+        if (startProjectBtn) {
+            startProjectBtn.addEventListener('click', function () {
+                startProjectBtn.disabled = true;
+                fetch(`/projects/${projectId}/overlay/start`, { method: 'POST' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.success) {
+                            startProjectBtn.disabled = false;
+                            alert(data.error || 'Could not start this project.');
+                            return;
+                        }
+                        onChanged();
+                    })
+                    .catch(function () {
+                        startProjectBtn.disabled = false;
+                        alert('Something went wrong. Please try again.');
+                    });
+            });
+        }
+
         var downloadAllBtn = rootEl.querySelector('#overlay-download-all-files');
         if (downloadAllBtn) {
             downloadAllBtn.addEventListener('click', function () {

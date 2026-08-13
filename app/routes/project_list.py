@@ -553,10 +553,13 @@ def index():
         'designers': UserModel.query.filter(UserModel.role.in_(['designer', 'team_lead'])).order_by(UserModel.name).all(),
         'clients': Client.query.order_by(Client.name).all(),
         'brief_types': [('standard', 'Standard'), ('ccm', 'C&CM')],
+        # 'In Progress' removed (13 Aug 2026) — the C&CM aggregate's "In
+        # Progress" stage was renamed to "In Design" to match Standard's
+        # wording (status_vocabulary.py), so it's no longer a distinct
+        # blanket_status value to filter on.
         'statuses': [
-            'In Design', 'Client Approved', 'Pre-Production', 'Handed to Production',
-            'Briefed', 'In Progress', 'Design Completed',
-            'On Hold', 'Cancelled',
+            'Briefed', 'In Design', 'Client Approved', 'Pre-Production', 'Handed to Production',
+            'Design Completed', 'On Hold', 'Cancelled',
         ],
         'urgencies': [('overdue', 'Overdue'), ('urgent', 'Urgent'), ('prioritize', 'Prioritize'), ('normal', 'Normal')],
         'teams': TEAM_KEYS,

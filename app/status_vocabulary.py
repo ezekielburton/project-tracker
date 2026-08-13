@@ -39,6 +39,26 @@ def derive_deliverable_status(deliverable):
     return ('Briefed', 'sky')
 
 
+def derive_preproduction_needs(deliverable):
+    """Auto-determines which Pre-Production release streams a deliverable
+    needs, from whichever design teams were already attached to it — no
+    manual Project Owner flagging step (locked with Ezekiel 13 Aug 2026,
+    superseding the earlier "Owner selects" note in the architecture doc's
+    §7): 2D/3D release artwork, Technical releases technical files. Same
+    disciplines-then-teams-string fallback the Deliverables card template
+    already uses for showing team tags, so this can't disagree with what's
+    displayed there. Pure function — called at the moment a deliverable
+    reaches 'approved' (Client Approval or Skip to Pre-Production), not
+    stored as its own status."""
+    if deliverable.deliverable_type and deliverable.deliverable_type.disciplines:
+        teams = {disc.team for disc in deliverable.deliverable_type.disciplines}
+    else:
+        teams = {t.strip() for t in (deliverable.teams or '').split(',') if t.strip()}
+    needs_artwork = bool(teams & {'2D', '3D'})
+    needs_technical = 'Technical' in teams
+    return needs_technical, needs_artwork
+
+
 def _post_approval_deliverable_status(deliverable):
     """
     Once design-approved, a deliverable's pill keeps advancing through the
@@ -63,8 +83,16 @@ def _post_approval_deliverable_status(deliverable):
 # ── Shared stage mapping (Tier 2 + the per-channel check Tier 3 uses) ──────
 # Pre-Production / Handed to Production don't have real transitions writing
 # to project_status or ProjectPosmChannel.status yet (M6-M8 work) — mapped
-# here for completeness but won't appear on real data until then. Every
-# existing raw value today falls into 'In Design' or 'Client Approved'.
+# here for completeness but won't appear on real data until then.
+#
+# 'briefed' gets its own real branch (13 Aug 2026) — previously fell through
+# to the default and every fresh Standard project read "In Design" the
+# instant it was created, with no way to show it hadn't actually been
+# started. Standard projects seed at 'briefed' (projects_submission.py) and
+# stay there until the Details tab's "Start Project" button flips
+# project_status to 'in_progress' via record_project_status(). Channel
+# status never uses 'briefed' (channels seed at 'in_queue'), so this branch
+# only ever fires for the Tier 2 project-level call site below.
 def _pipeline_stage_for(raw_status):
     if raw_status == 'approved':
         return ('Client Approved', 'clover')
@@ -72,6 +100,8 @@ def _pipeline_stage_for(raw_status):
         return ('Pre-Production', 'oak')
     if raw_status == 'handed_to_production':   # not yet written anywhere — M8
         return ('Handed to Production', 'clover')
+    if raw_status == 'briefed':
+        return ('Briefed', 'sky')
     return ('In Design', 'coral')
 
 
@@ -92,6 +122,19 @@ def derive_pipeline_status(project):
 # Architecture.md §C: the real per-customer/per-region pipeline lives on
 # ProjectPosmChannel, not ProjectCustomer.status (which is only ever
 # 'briefed' in the real code).
+#
+# "In Progress" renamed to "In Design" (13 Aug 2026) to match Standard's
+# wording — both tiers now use the same label for "actively being
+# designed," per Ezekiel. Also gated on the same manual project_status
+# flag Standard's Start Project button sets: previously this stage was
+# purely channel-derived (only flipped once some individual channel's
+# status moved off 'in_queue'), so a C&CM project could sit reading
+# "Briefed" for a long time even after the design team had genuinely
+# started, just because no one channel had been picked up yet. The
+# project-level flag now takes precedence — one Start Project click on
+# the Details tab moves the whole project to "In Design" regardless of
+# which channel starts first — while a channel moving on its own still
+# flips it too, for projects where no one bothered clicking Start.
 def derive_ccm_aggregate_status(project):
     """Returns (label, css_modifier) for a C&CM project's Status column."""
     if project.cancelled_at is not None:
@@ -100,17 +143,19 @@ def derive_ccm_aggregate_status(project):
         return ('On Hold', 'poppy')
 
     channels = project.posm_channels
-    if not channels:
-        return ('Briefed', 'sky')
 
     # "Design Completed" per the architecture doc means every customer
     # reached Handed to Production — that stage doesn't exist in real
     # channel data yet (M8), so 'approved' (Client Approved) is today's
     # practical stand-in for "this channel's design work is done."
-    if all(c.status == 'approved' for c in channels):
+    if channels and all(c.status == 'approved' for c in channels):
         return ('Design Completed', 'clover')
-    if any(c.status != 'in_queue' for c in channels):
-        return ('In Progress', 'coral')
+
+    started_manually = project.project_status != 'briefed'
+    started_via_channel = any(c.status != 'in_queue' for c in channels) if channels else False
+    if started_manually or started_via_channel:
+        return ('In Design', 'coral')
+
     return ('Briefed', 'sky')
 
 

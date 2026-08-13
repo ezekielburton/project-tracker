@@ -1,4 +1,4 @@
-{% from '_shared_macros.html' import card, tag, status_pill %}
+{% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker %}
 
 {% set focus_toggle_html %}
 {% if can_toggle_focus %}
@@ -63,6 +63,27 @@
         {% if can_manage_deliverables %}
         <button type="button" class="overlay-file-action-btn" id="overlay-edit-deliverables-btn">Edit
             Deliverables</button>
+        {% endif %}
+
+        {% if can_skip_preproduction %}
+        {% set skippable = deliverables | rejectattr('status', 'equalto', 'approved') | list %}
+        {% if skippable %}
+        <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-btn">Skip to
+            Pre-Production</button>
+        <div class="overlay-flag-revision-form is-hidden" id="overlay-skip-preprod-form">
+            {# Deliverable picker's own "Select All" in its popover footer
+            covers Ezekiel's "or click all" case — no separate control
+            needed, selecting everything here is exactly the same request
+            as selecting a subset, just larger. #}
+            {{ deliverable_picker('overlay-skip-preprod-picker', skippable, []) }}
+            <span class="overlay-flag-revision-error hidden" id="overlay-skip-preprod-error"></span>
+            <div class="overlay-flag-revision-form-actions">
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
+                    id="overlay-skip-preprod-confirm">Confirm Skip</button>
+                <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-cancel">Cancel</button>
+            </div>
+        </div>
+        {% endif %}
         {% endif %}
         {% endcall %}
     </div>

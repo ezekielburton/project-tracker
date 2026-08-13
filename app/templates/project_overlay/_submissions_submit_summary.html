@@ -87,6 +87,18 @@ overlay_submissions_submit_to_client. #}
         </div>
         {% endif %}
 
+        {% if has_sent_submission %}
+        {# Escape hatch for a CS-acknowledged resend that isn't a real content
+        revision (wrong file attached, etc.) — bypasses the name-collision
+        gate server-side by reusing the current revision label with an
+        incrementing " (N)" suffix instead of advancing to a new revision.
+        Only shown when there's an existing sent deck to resend against. #}
+        <label class="overlay-submit-summary-keep-revision">
+            <input type="checkbox" id="overlay-submit-summary-keep-revision">
+            Do not increase revision counter — resends this as the same revision (adds a "(2)" suffix so it can't overwrite the file already with the client)
+        </label>
+        {% endif %}
+
         <span class="overlay-submit-summary-error hidden" id="overlay-submit-summary-error"></span>
 
         <div class="modal-actions">

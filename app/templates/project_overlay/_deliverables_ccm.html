@@ -1,47 +1,45 @@
-{% from '_shared_macros.html' import card, tag, status_pill %}
-
-{% set focus_toggle_html %}
-{% if can_toggle_focus %}
-<span class="overlay-focus-toggle" id="overlay-deliverables-focus-toggle">
-    <button type="button" class="overlay-focus-toggle-btn{% if not default_focus %} active{% endif %}"
-        data-scope="all">All</button>
-    <button type="button" class="overlay-focus-toggle-btn{% if default_focus %} active{% endif %}"
-        data-scope="focused">Focused</button>
-</span>
-{% endif %}
-{% endset %}
+{% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker %}
 
 <div class="overlay-details-grid">
     <div class="overlay-card-full">
-        {% call card('Deliverables', header_extra_html=focus_toggle_html) %}
+        {% call card('Deliverables') %}
+        {# Controls row: All/Focused on the left, customer/region scope select
+        on the right — mirrors the Submissions card's controls row (same
+        .overlay-card-controls-row / .overlay-scope-select classes) so the two
+        cards stay visually consistent. Region (Gulf) is folded into the
+        dropdown as optgroups rather than a separate tab-strip, same
+        simplification as Submissions — the customer-panel switch below only
+        ever needs a customer id, region was purely a display grouping. #}
+        <div class="overlay-card-controls-row">
+            {% if can_toggle_focus %}
+            <span class="overlay-focus-toggle" id="overlay-deliverables-focus-toggle">
+                <button type="button" class="overlay-focus-toggle-btn{% if not default_focus %} active{% endif %}"
+                    data-scope="all">All</button>
+                <button type="button" class="overlay-focus-toggle-btn{% if default_focus %} active{% endif %}"
+                    data-scope="focused">Focused</button>
+            </span>
+            {% endif %}
+            <select class="overlay-scope-select" id="overlay-deliverables-scope-select">
+                {% if has_gulf_regions %}
+                {% for region in regions %}
+                <optgroup label="{{ region.name }}">
+                    {% for c in region.customers %}
+                    <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
+                        selected{% endif %}>{{ c.project_customer.customer.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+                {% else %}
+                {% for c in all_customers %}
+                <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
+                    selected{% endif %}>{{ c.project_customer.customer.name }}</option>
+                {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+
         <div class="overlay-deliverables-body{% if default_focus %} is-focused{% endif %}"
             id="overlay-deliverables-body">
-
-            {% if has_gulf_regions %}
-            <div class="tab-strip overlay-deliverables-region-rail" id="overlay-deliverables-region-rail">
-                {% for region in regions %}
-                <button type="button" class="tab-strip-item{% if loop.first %} active{% endif %}"
-                    data-region="{{ region.key }}">{{ region.name }}</button>
-                {% endfor %}
-            </div>
-            {% for region in regions %}
-            <div class="overlay-deliverables-customer-rail{% if not loop.first %} is-hidden{% endif %}"
-                data-region-rail="{{ region.key }}">
-                {% for c in region.customers %}
-                <button type="button" class="overlay-deliverables-customer-pill{% if loop.first %} active{% endif %}"
-                    data-customer-id="{{ c.project_customer.id }}">{{ c.project_customer.customer.name }}</button>
-                {% endfor %}
-            </div>
-            {% endfor %}
-            {% else %}
-            <div class="overlay-deliverables-customer-rail" data-region-rail="flat">
-                {% for c in all_customers %}
-                <button type="button"
-                    class="overlay-deliverables-customer-pill{% if c.project_customer.id == first_customer_id %} active{% endif %}"
-                    data-customer-id="{{ c.project_customer.id }}">{{ c.project_customer.customer.name }}</button>
-                {% endfor %}
-            </div>
-            {% endif %}
 
             <div class="overlay-deliverables-header">
                 <span>Name</span>
@@ -96,6 +94,28 @@
         {% if can_manage_deliverables %}
         <button type="button" class="overlay-file-action-btn" id="overlay-edit-deliverables-btn">Edit
             Deliverables</button>
+        {% endif %}
+
+        {% if can_skip_preproduction %}
+        {# Whole-project picker (every customer, not just the one currently
+        selected in the scope dropdown) — Ezekiel's "select deliverables, or
+        click all" applies at the project level; picking just one
+        customer's items still works, it's just a smaller selection out of
+        the same list. #}
+        {% set skippable = all_deliverables | rejectattr('status', 'equalto', 'approved') | list %}
+        {% if skippable %}
+        <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-btn">Skip to
+            Pre-Production</button>
+        <div class="overlay-flag-revision-form is-hidden" id="overlay-skip-preprod-form">
+            {{ deliverable_picker('overlay-skip-preprod-picker', skippable, []) }}
+            <span class="overlay-flag-revision-error hidden" id="overlay-skip-preprod-error"></span>
+            <div class="overlay-flag-revision-form-actions">
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
+                    id="overlay-skip-preprod-confirm">Confirm Skip</button>
+                <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-cancel">Cancel</button>
+            </div>
+        </div>
+        {% endif %}
         {% endif %}
         {% endcall %}
     </div>

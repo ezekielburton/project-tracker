@@ -31,19 +31,36 @@ window.DeliverablePicker = (function () {
 
         function closeOnScroll() { close(); }
 
+        // Opt-in via data-popover-align="above-center" on the root element
+        // (set by Mark Approved's picker only — see _submissions_draft_card.
+        // html) so this doesn't change the default below/left-aligned
+        // behavior every other picker on the page still uses.
+        var alignAboveCenter = pickerEl.dataset.popoverAlign === 'above-center';
+
         function positionPopover() {
             var rect = trigger.getBoundingClientRect();
             var margin = 8;
             var popoverWidth = popover.offsetWidth;
             var popoverHeight = popover.offsetHeight;
-            var top = rect.bottom + margin;
-            var left = rect.left;
-            if (top + popoverHeight > window.innerHeight && rect.top - popoverHeight - margin > 0) {
-                top = rect.top - popoverHeight - margin;
+            var top, left;
+
+            if (alignAboveCenter) {
+                top = Math.max(rect.top - popoverHeight - margin, margin);
+                left = rect.left + (rect.width / 2) - (popoverWidth / 2);
+                left = Math.min(Math.max(left, margin), window.innerWidth - popoverWidth - margin);
+            } else {
+                // Unchanged default behavior — below the trigger, left-
+                // aligned, only flipping/clamping on overflow.
+                top = rect.bottom + margin;
+                left = rect.left;
+                if (top + popoverHeight > window.innerHeight && rect.top - popoverHeight - margin > 0) {
+                    top = rect.top - popoverHeight - margin;
+                }
+                if (left + popoverWidth > window.innerWidth) {
+                    left = Math.max(margin, window.innerWidth - popoverWidth - margin);
+                }
             }
-            if (left + popoverWidth > window.innerWidth) {
-                left = Math.max(margin, window.innerWidth - popoverWidth - margin);
-            }
+
             popover.style.top = top + 'px';
             popover.style.left = left + 'px';
         }

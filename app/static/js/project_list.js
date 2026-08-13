@@ -64,6 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
             url: (projectId) => `/projects/${projectId}/overlay/submissions`,
             module: () => window.ProjectSubmissionsCard,
         },
+        // Key is 'pre-production' (hyphenated) — matches the rail button's
+        // data-sub-tab value in _overlay.html exactly, since that value is
+        // read straight off the DOM and used as this object's key.
+        'pre-production': {
+            url: (projectId) => `/projects/${projectId}/overlay/preproduction`,
+            module: () => window.ProjectPreproductionCard,
+        },
     };
 
     function loadSubTabContent(projectId, subTabKey) {
@@ -204,7 +211,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const expandCell = e.target.closest('.project-col-expand');
+        // Matches both the outer table's expand slot (.project-col-expand /
+        // .project-row) and the nested C&CM customer sub-table's expand slot
+        // (.expand-customer-col-expand / .expand-customer-row) — the two
+        // tables share the same toggle button class and expand-container
+        // pattern, they just wrap it in different column/row classes.
+        const expandCell = e.target.closest('.project-col-expand, .expand-customer-col-expand');
         if (expandCell) {
             const toggle = expandCell.querySelector('.project-expand-toggle');
             if (!toggle) return;
@@ -212,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             e.stopPropagation();
 
-            const row = toggle.closest('.project-row');
+            const row = toggle.closest('.project-row, .expand-customer-row');
             const container = row.nextElementSibling;
             if (!container || !container.classList.contains('project-expand-container')) return;
 

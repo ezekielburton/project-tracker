@@ -3,44 +3,41 @@
 <div class="overlay-details-grid">
     <div class="overlay-card-full">
         {% call card('Submissions') %}
-        <div class="{{ 'tab-strip' if has_gulf_regions else 'overlay-deliverables-customer-rail' }}"
-            id="overlay-submissions-top-rail">
-            {% if show_ckv %}
-            <button type="button"
-                class="{{ 'tab-strip-item' if has_gulf_regions else 'overlay-deliverables-customer-pill' }}"
-                data-scope="ckv">Concept &amp; KV</button>
-            {% endif %}
-            {% if has_gulf_regions %}
-            {% for region in regions %}
-            <button type="button" class="tab-strip-item" data-scope="region" data-region="{{ region.key }}">{{
-                region.name }}</button>
-            {% endfor %}
-            {% else %}
-            {% for region in regions %}
-            {% for pc in region.customers %}
-            <button type="button" class="overlay-deliverables-customer-pill" data-scope="customer"
-                data-customer-id="{{ pc.id }}">{{ pc.customer.name }}</button>
-            {% endfor %}
-            {% endfor %}
-            {% endif %}
-        </div>
-
-        {% if has_gulf_regions %}
-        {% for region in regions %}
-        <div class="overlay-deliverables-customer-rail is-hidden" data-region-rail="{{ region.key }}">
-            {% for pc in region.customers %}
-            <button type="button" class="overlay-deliverables-customer-pill" data-customer-id="{{ pc.id }}">{{
-                pc.customer.name }}</button>
-            {% endfor %}
-        </div>
-        {% endfor %}
-        {% endif %}
+        {% if has_any_scope %}
+        <div class="overlay-card-controls-row">
+            <div class="overlay-submissions-view-toggle-slot" id="overlay-submissions-toggle-slot"></div>
+            <select class="overlay-scope-select" id="overlay-submissions-scope-select">
+                {% if show_ckv %}
+                <option value="ckv">Concept &amp; KV</option>
+                {% endif %}
+                {% if has_gulf_regions %}
+                {% for region in regions %}
+                <optgroup label="{{ region.name }}">
+                    {% for pc in region.customers %}
+                    <option value="customer:{{ pc.id }}">{{ pc.customer.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+                {% else %}
+                {% for region in regions %}
+                {% for pc in region.customers %}
+                <option value="customer:{{ pc.id }}">{{ pc.customer.name }}</option>
+                {% endfor %}
+                {% endfor %}
+                {% endif %}
+            </select>  </div>
 
         <div id="overlay-submissions-content" class="overlay-submissions-content"
             data-default-region="{{ default_region_key or '' }}"
             data-default-customer-id="{{ default_customer_id or '' }}"
             data-has-gulf-regions="{{ 'true' if has_gulf_regions else 'false' }}"
             data-show-ckv="{{ 'true' if show_ckv else 'false' }}"></div>
+        {% else %}
+        {# No customers added yet and no Concept/KV — nothing for the scope
+        dropdown to offer, so there's nothing Submissions can show. Was
+        rendering as a dead empty dropdown; show guidance instead. #}
+        <p class="overlay-field-empty">Add deliverables to the project to open submissions...</p>
+        {% endif %}
         {% endcall %}
     </div>
 </div>

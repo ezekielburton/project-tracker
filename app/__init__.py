@@ -100,7 +100,8 @@ def create_app():
     from app.routes.projects_transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
     from app.routes.project_list import project_list_bp # Projects page list
     from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
-    
+    from app.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
+
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
@@ -125,6 +126,7 @@ def create_app():
     app.register_blueprint(transfer_bp)
     app.register_blueprint(project_list_bp)
     app.register_blueprint(project_overlay_bp)
+    app.register_blueprint(project_preproduction_bp)
 
     @app.context_processor
     @app.context_processor

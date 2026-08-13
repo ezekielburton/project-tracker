@@ -276,7 +276,7 @@ def _build_draft_card_context(project, actor, resolved):
 
     # The current Sent-to-Client deck for this scope, if any. Computed
     # UNCONDITIONALLY (not only when there's no active draft) so the Current
-    # tab can show it as an "Active with Client" indicator ABOVE the working
+    # tab can show it as a "Submitted to Client" indicator ABOVE the working
     # draft — a designer/CS opening the page sees at a glance that a deck is
     # live with the client, while still working the next draft.
     sent_submission = _get_sent_submission(project, resolved)
@@ -353,6 +353,24 @@ def _build_draft_card_context(project, actor, resolved):
         includes_concept = draft.includes_concept
         includes_kv = draft.includes_kv
 
+    # Client Approval — same gate as Client Revision (a sent deck with no
+    # revision already pending against it); the two are mutually-exclusive
+    # actions on the same indicator. Partial approval: CS picks which of the
+    # sent deck's still-pending deliverables are ready (already-approved ones
+    # aren't offered again — see architecture doc §5, per-deliverable is the
+    # model so some can move to Pre-Production while others stay in design).
+    # C&CM Concept & KV has no deliverable list to pick from — approved as a
+    # pair, so no picker options needed for that scope.
+    can_mark_approved = can_request_client_revision
+    approvable_deliverables = []
+    if can_mark_approved and sent_submission and not is_ckv_toggle_scope:
+        from app.status_vocabulary import derive_deliverable_status
+        approvable_deliverables = [
+            {'deliverable': link.deliverable, 'pill': derive_deliverable_status(link.deliverable)}
+            for link in sent_submission.included_deliverables
+            if link.deliverable and link.deliverable.status != 'approved'
+        ]
+
     return {
         'draft': draft,
         'cached_files': cached_files,
@@ -372,6 +390,8 @@ def _build_draft_card_context(project, actor, resolved):
         'sent_submission': sent_submission,
         'sent_revision_event': sent_revision_event,
         'can_request_client_revision': can_request_client_revision,
+        'can_mark_approved': can_mark_approved,
+        'approvable_deliverables': approvable_deliverables,
         'sent_files': sent_files,
         'history_submissions': history_submissions,
     }
@@ -469,6 +489,16 @@ def _build_details_context(project, actor):
 
     concept_kv_designer = project.concept_designer or project.kv_designer
 
+    # Start Project (13 Aug 2026) — the one manual gate that moves a project
+    # off "Briefed" (status_vocabulary.py's _pipeline_stage_for /
+    # derive_ccm_aggregate_status). Same button, same underlying action for
+    # both brief types: Standard has no other way off Briefed at all; C&CM
+    # already flips its aggregate automatically once some channel starts,
+    # but this lets the design team flag the whole project as started up
+    # front, regardless of which channel gets picked up first. Reuses
+    # can_edit_project's permission tier rather than a new one.
+    can_start_project = can_edit_project and project.project_status == 'briefed'
+
     return dict(
         status_label=status_label,
         status_class=status_class,
@@ -484,6 +514,7 @@ def _build_details_context(project, actor):
         can_manage_concept_kv=can_manage_concept_kv,
         concept_kv_designer_options=concept_kv_designer_options,
         concept_kv_designer=concept_kv_designer,
+        can_start_project=can_start_project,
     )
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay')
@@ -512,6 +543,39 @@ def overlay_details(project_id):
     return render_template(template, project=project, **context)
 
 
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/start', methods=['POST'])
+@login_required
+def overlay_start_project(project_id):
+    """Start Project — the manual gate off "Briefed" (see _build_details_
+    context's can_start_project + status_vocabulary.py's _pipeline_stage_for
+    / derive_ccm_aggregate_status). One button, one action, both brief
+    types: flips project_status from 'briefed' to 'in_progress', which both
+    derivations already treat as "In Design" via their default/manual-gate
+    branch — no brief_type-specific logic needed here."""
+    from flask import jsonify
+    from app import db
+    from app.status_tracking import record_project_status
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    can_edit_project = (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in {a.user_id for a in project.secondary_cs_assignments}
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+    if not can_edit_project:
+        return jsonify({'success': False, 'error': 'You do not have permission to start this project.'}), 403
+
+    if project.project_status != 'briefed':
+        return jsonify({'success': False, 'error': 'This project has already been started.'}), 400
+
+    record_project_status(project, 'in_progress', actor)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables')
 @login_required
 def overlay_deliverables(project_id):
@@ -519,6 +583,12 @@ def overlay_deliverables(project_id):
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     can_manage = _can_manage_deliverables(project, actor)
+    # Skip to Pre-Production (13 Aug 2026): CS/Project Owner/Admin/Management,
+    # same permission set as project_preproduction.py's _can_manage_preproduction.
+    can_skip_preproduction = (
+        actor.role in ('admin', 'management', 'cs')
+        or actor.id == project.project_owner_id
+    )
 
     if project.brief_type == 'ccm':
         regions = _build_ccm_deliverable_sections(project)
@@ -531,9 +601,11 @@ def overlay_deliverables(project_id):
             project=project,
             regions=regions,
             all_customers=all_customers,
+            all_deliverables=all_deliverables,  # flat list — feeds the Skip to Pre-Production picker
             has_gulf_regions=has_gulf_regions,
             first_customer_id=first_customer_id,
             can_manage_deliverables=can_manage,
+            can_skip_preproduction=can_skip_preproduction,
             **_build_deliverable_focus_context(all_deliverables, actor),
         )
 
@@ -545,6 +617,7 @@ def overlay_deliverables(project_id):
         project=project,
         deliverables=deliverables,
         can_manage_deliverables=can_manage,
+        can_skip_preproduction=can_skip_preproduction,
         **_build_deliverable_focus_context(deliverables, actor),
     )
 
@@ -742,6 +815,7 @@ def overlay_submissions(project_id):
 
     has_gulf_regions = any(r['key'] in ('kuwait', 'qatar', 'bahrain', 'oman') for r in regions)
     all_customers = [c for r in regions for c in r['customers']]
+    show_ckv = bool(project.has_concept or project.has_kv)
 
     return render_template(
         'project_overlay/_submissions_ccm.html',
@@ -750,7 +824,11 @@ def overlay_submissions(project_id):
         has_gulf_regions=has_gulf_regions,
         default_region_key=regions[0]['key'] if regions else None,
         default_customer_id=all_customers[0].id if all_customers else None,
-        show_ckv=bool(project.has_concept or project.has_kv),
+        show_ckv=show_ckv,
+        # Nothing to pick from the scope dropdown yet — no customers added
+        # and no Concept/KV — so there's nothing Submissions can show.
+        # Template swaps in an empty-state message instead of a dead dropdown.
+        has_any_scope=bool(show_ckv or all_customers),
     )
 
 
@@ -827,7 +905,7 @@ def overlay_submissions_upload(project_id):
         # Deactivate any previous active DRAFT-cycle submission for this scope
         # (draft / internal_review / internal_revision) — NEVER the sent deck.
         # A Sent-to-Client submission stays is_active so it can coexist with a
-        # new working draft: the sent deck shows as the "Active with Client"
+        # new working draft: the sent deck shows as the "Submitted to Client"
         # indicator on the Current tab while the next draft is worked. Since
         # _get_active_draft already returned None here, this is normally a
         # no-op, but it keeps the "one active draft per scope" invariant for
@@ -1321,6 +1399,7 @@ def overlay_submissions_submit_to_client(project_id):
     Body (JSON): scope, customer_id (carried for the later C&CM/Gulf pass;
     unused for Standard).
     """
+    import re
     from app.models import ProjectSubmissionFile, ProjectSubmissionEvent
     from app.status_tracking import record_project_status, record_deliverable_status
     from app.notifications import notify_of_submission_to_client
@@ -1339,6 +1418,7 @@ def overlay_submissions_submit_to_client(project_id):
     data = request.get_json() or {}
     scope = data.get('scope', 'ckv')
     customer_id = data.get('customer_id')
+    keep_revision_label = bool(data.get('keep_revision_label'))
 
     resolved = _resolve_submission_scope(project, scope, customer_id)
 
@@ -1349,14 +1429,29 @@ def overlay_submissions_submit_to_client(project_id):
         return jsonify({'success': False,
                         'error': 'The deck must be in internal review (not mid-edit) before submitting to client.'}), 400
 
-    # Gate: don't overwrite the deck already with the client. A second send is
-    # allowed only once its canonical name would DIFFER from the sent deck's —
-    # which happens after CS requests a Client Revision (that bumps the scope's
-    # counter, changing the Initial/Revision-N label). Same name → block.
     _sent = _get_sent_submission(project, resolved)
-    if _sent is not None and f'{_canonical_deck_basename(project, resolved)}.zip' == _sent.original_filename:
-        return jsonify({'success': False,
-                        'error': 'A deck is already with the client for this scope — request a Client Revision first.'}), 400
+
+    # "Do not increase revision counter" escape hatch (CS-acknowledged resend,
+    # e.g. wrong file attached — not a real content revision). Instead of the
+    # normal counter-derived name, reuse the currently-sent deck's own label
+    # and tack on an incrementing " (N)" suffix — read off whatever suffix
+    # that deck already carries so repeated resends chain (2) -> (3) -> ...
+    # rather than colliding with each other. This bypasses the name-collision
+    # gate below by construction: the computed name can never match _sent's.
+    if keep_revision_label and _sent is not None:
+        sent_base = _sent.original_filename.rsplit('.', 1)[0]
+        m = re.match(r'^(.*) \((\d+)\)$', sent_base)
+        base_name = f'{m.group(1)} ({int(m.group(2)) + 1})' if m else f'{sent_base} (2)'
+    else:
+        # Gate: don't overwrite the deck already with the client. A second
+        # send is allowed only once its canonical name would DIFFER from the
+        # sent deck's — which happens after CS requests a Client Revision
+        # (that bumps the scope's counter, changing the Initial/Revision-N
+        # label). Same name → block, unless the escape hatch above applied.
+        if _sent is not None and f'{_canonical_deck_basename(project, resolved)}.zip' == _sent.original_filename:
+            return jsonify({'success': False,
+                            'error': 'A deck is already with the client for this scope — request a Client Revision first.'}), 400
+        base_name = _canonical_deck_basename(project, resolved)
 
     cached_files = ProjectSubmissionFile.query.filter_by(
         submission_id=draft.id, storage_location='cache'
@@ -1371,11 +1466,12 @@ def overlay_submissions_submit_to_client(project_id):
     if not main_deck:
         return jsonify({'success': False, 'error': 'Flag a main deck before submitting.'}), 400
 
-    # ── Canonical naming. The zip object on the NAS carries the canonical
-    # name + .zip; INSIDE the zip the main deck takes the canonical name +
-    # its own extension (so member == original_filename after the rename
-    # below), every other file keeps its uploaded name. ──
-    base_name = _canonical_deck_basename(project, resolved)
+    # ── Canonical naming. base_name was resolved above (either the normal
+    # counter-derived name, or the keep-revision-label escape hatch). The
+    # zip object on the NAS carries base_name + .zip; INSIDE the zip the
+    # main deck takes base_name + its own extension (so member ==
+    # original_filename after the rename below), every other file keeps
+    # its uploaded name. ──
     main_ext = (main_deck.file_type or main_deck.original_filename.rsplit('.', 1)[-1]).lower()
     main_deck.original_filename = f'{base_name}.{main_ext}'
     zip_name = f'{base_name}.zip'
@@ -1409,8 +1505,8 @@ def overlay_submissions_submit_to_client(project_id):
     draft.submitted_by_id = actor.id
 
     # Supersede the prior sent deck (if any) for this scope — this new revision
-    # replaces it as the Active-with-Client deck; the old one stays in History.
-    # (_sent was fetched by the gate above.)
+    # replaces it as the Submitted-to-Client deck; the old one stays in History.
+    # (_sent was fetched above, before the naming branch.)
     if _sent is not None:
         _sent.is_active = False
 
@@ -1510,8 +1606,17 @@ def overlay_submissions_submit_summary(project_id):
     if not main_deck:
         return jsonify({'success': False, 'error': 'Flag a main deck before submitting.'}), 400
 
-    # Expected deck filename previewed to CS (the NAS zip object name).
+    # Expected deck filename previewed to CS (the NAS zip object name). This
+    # is the DEFAULT name (current revision counters) — if CS ticks "Do not
+    # increase revision counter" the actual sent name gets a "(N)" suffix
+    # instead (see overlay_submissions_submit_to_client); not recomputed
+    # here to avoid duplicating that naming logic in JS.
     expected_filename = f'{_canonical_deck_basename(project, resolved)}.zip'
+
+    # Whether a deck is already Sent to Client for this scope — the "Do not
+    # increase revision counter" checkbox only makes sense as a resend
+    # against an existing sent deck, so the template only shows it then.
+    has_sent_submission = _get_sent_submission(project, resolved) is not None
 
     # What's going for decision depends on scope. The C&CM concept and KV deck is 
     # concept/KV toggles, not deliverables. Every other scope shows
@@ -1544,6 +1649,7 @@ def overlay_submissions_submit_summary(project_id):
         files=cached_files, included=included, indicators=indicators,
         is_ckv_toggle_scope=is_ckv_toggle_scope,
         includes_concept=draft.includes_concept, includes_kv=draft.includes_kv,
+        has_sent_submission=has_sent_submission,
     )
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/client-revision', methods=['POST'])
 @login_required
@@ -1660,3 +1766,224 @@ def overlay_submissions_client_revision(project_id):
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/approve', methods=['POST'])
+@login_required
+def overlay_submissions_approve(project_id):
+    """
+    CS/admin/management approves some or all of the deck currently Submitted
+    to Client (the same indicator Client Revision acts on — the two are
+    mutually exclusive; see can_mark_approved in _build_draft_card_context).
+
+    Partial approval is the actual point of this route, not an edge case:
+    some deliverables can clear into Pre-Production while others stay in
+    design (architecture doc §5 — per-deliverable is the model, gating at
+    the project level would bottleneck).
+
+    Body (JSON): scope, customer_id, deliverable_ids (optional list —
+    omitted/None = approve everything still pending in this deck; an empty
+    list is treated as "nothing selected" and rejected, not silently read as
+    "approve everything", since the picker defaults to all-selected and an
+    empty array means CS deliberately unchecked every item). C&CM Concept &
+    KV has no deliverable list — always approved as a pair. note (optional
+    string) — CS's freeform note about this approved batch, for the future
+    Pre-Production tab (see ProjectSubmissionEvent/ProjectSubmissionEvent
+    Deliverable below).
+
+    Ports the old projects_approval.py approve_submission's proven cascade
+    logic (channel/project only flips to Client Approved once EVERY
+    deliverable in that channel/project — not just this deck's — is
+    approved) into the overlay's scope-resolved shape, mirroring
+    overlay_submissions_client_revision.
+    """
+    from app.models import Deliverable, ProjectPosmChannel, ProjectSubmissionEvent, ProjectSubmissionEventDeliverable
+    from app.status_tracking import record_project_status, record_deliverable_status
+    from app.status_vocabulary import derive_preproduction_needs
+    from app.notifications import notify_of_project_approved
+    from app.achievements import check_achievements
+    from app.utils import log_activity
+    from app import db
+    from datetime import datetime as dt
+    from flask import jsonify
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role not in ('admin', 'cs', 'management'):
+        return jsonify({'success': False, 'error': 'You do not have permission to approve this submission.'}), 403
+
+    data = request.get_json() or {}
+    scope = data.get('scope', 'ckv')
+    customer_id = data.get('customer_id')
+    deliverable_ids = data.get('deliverable_ids')
+    note = (data.get('note') or '').strip()
+    # None (key omitted) -> approve everything pending. A present-but-empty
+    # list is a deliberate "nothing selected" and gets rejected below, not
+    # folded into the "approve everything" default via truthiness. Cast to
+    # int explicitly — DeliverablePicker.getSelectedIds() reads them off
+    # dataset.deliverableId, so they arrive as strings; comparing those
+    # against Deliverable.id (int) in a plain Python set/`in` check would
+    # silently never match without this (unlike a SQLAlchemy filter_by,
+    # which coerces the type for you at the DB layer).
+    deliverable_id_set = None
+    if deliverable_ids is not None:
+        try:
+            deliverable_id_set = {int(i) for i in deliverable_ids}
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Invalid deliverable selection.'}), 400
+
+    resolved = _resolve_submission_scope(project, scope, customer_id)
+
+    sent = _get_sent_submission(project, resolved)
+    if sent is None:
+        return jsonify({'success': False, 'error': 'There is no deck with the client to approve.'}), 400
+    if any(e.event_type == 'client_revision' for e in sent.events):
+        return jsonify({'success': False,
+                        'error': 'A client revision is already pending on this deck — nothing to approve.'}), 400
+
+    now = dt.utcnow()
+    all_approved = False  # whether this call cascaded all the way to project-approved
+    channel = resolved['channel']
+    approved_deliverables_this_call = []  # feeds the client_approval event's deliverable links below
+
+    if channel is not None:
+        # ── POSM (UAE/Gulf per-customer) ────────────────────────────────
+        if channel.status == 'approved':
+            return jsonify({'success': False, 'error': 'This channel is already approved.'}), 400
+
+        pending = [
+            link.deliverable for link in sent.included_deliverables
+            if link.deliverable and link.deliverable.status != 'approved'
+            and (deliverable_id_set is None or link.deliverable.id in deliverable_id_set)
+        ]
+        if deliverable_id_set is not None and not pending:
+            return jsonify({'success': False, 'error': 'Select at least one deliverable to approve.'}), 400
+        for d in pending:
+            record_deliverable_status(d, 'approved', actor)
+            # Auto-flag Pre-Production streams the moment a deliverable
+            # goes Client Approved — no separate manual step (13 Aug 2026,
+            # see status_vocabulary.py's derive_preproduction_needs).
+            d.needs_technical, d.needs_artwork = derive_preproduction_needs(d)
+        approved_deliverables_this_call = pending
+
+        # Cascade to channel approval only once EVERY deliverable belonging to
+        # this channel's customer(s) is approved — not just this deck's set —
+        # same rule the old approve_submission used. UAE channels track one
+        # specific customer; Gulf channels cover every customer in the region.
+        if channel.posm_customer_id:
+            channel_deliverables = Deliverable.query.filter_by(
+                project_id=project.id, project_customer_id=channel.posm_customer_id
+            ).all()
+        else:
+            region_pc_ids = [
+                pc.id for pc in project.project_customers
+                if pc.customer.region == channel.posm_country and not pc.cancelled
+            ]
+            channel_deliverables = Deliverable.query.filter(
+                Deliverable.project_id == project.id,
+                Deliverable.project_customer_id.in_(region_pc_ids)
+            ).all() if region_pc_ids else []
+
+        if channel_deliverables and all(d.status == 'approved' for d in channel_deliverables):
+            channel.status = 'approved'
+            channel.approved_at = now
+            channel.approved_by_id = actor.id
+
+            # Cascade further: only once EVERY channel + C&KV (if applicable)
+            # is done does the whole project become Client Approved.
+            all_channels = ProjectPosmChannel.query.filter_by(project_id=project.id).all()
+            if all_channels and all(c.status == 'approved' for c in all_channels):
+                ckv_gate = True
+                if project.has_concept and project.concept_status != 'approved':
+                    ckv_gate = False
+                if project.has_kv and project.kv_status != 'approved':
+                    ckv_gate = False
+                if ckv_gate:
+                    record_project_status(project, 'approved', actor)
+                    project.approved_at = now
+                    project.approved_by_id = actor.id
+                    all_approved = True
+
+    elif project.brief_type == 'ccm':
+        # ── C&CM Concept & KV — approved as a pair, no partial split; it
+        # doesn't feed Pre-Production the way deliverables do, so there's
+        # nothing to gain from splitting it. ──
+        if project.concept_status == 'approved' and project.kv_status == 'approved':
+            return jsonify({'success': False, 'error': 'Concept & KV is already approved.'}), 400
+        if project.has_concept:
+            project.concept_status = 'approved'
+        if project.has_kv:
+            project.kv_status = 'approved'
+        project.concept_approved_at = now
+        project.concept_approved_by_id = actor.id
+
+        # Cascade only once customers/channels exist — a C&KV-only brief with
+        # none yet just sits approved (no forced next-step prompt, unlike the
+        # old flow's add-POSM/pause/approve branch; CS adds POSM whenever
+        # it's ready).
+        all_channels = ProjectPosmChannel.query.filter_by(project_id=project.id).all()
+        if all_channels and all(c.status == 'approved' for c in all_channels):
+            record_project_status(project, 'approved', actor)
+            project.approved_at = now
+            project.approved_by_id = actor.id
+            all_approved = True
+
+    else:
+        # ── Standard Brief ─────────────────────────────────────────────
+        if project.project_status == 'approved':
+            return jsonify({'success': False, 'error': 'This project is already approved.'}), 400
+
+        pending = [
+            d for d in project.project_deliverables
+            if d.status != 'approved' and (deliverable_id_set is None or d.id in deliverable_id_set)
+        ]
+        if deliverable_id_set is not None and not pending:
+            return jsonify({'success': False, 'error': 'Select at least one deliverable to approve.'}), 400
+        for d in pending:
+            record_deliverable_status(d, 'approved', actor)
+            # Auto-flag Pre-Production streams the moment a deliverable
+            # goes Client Approved — no separate manual step (13 Aug 2026,
+            # see status_vocabulary.py's derive_preproduction_needs).
+            d.needs_technical, d.needs_artwork = derive_preproduction_needs(d)
+        approved_deliverables_this_call = pending
+
+        if all(d.status == 'approved' for d in project.project_deliverables):
+            record_project_status(project, 'approved', actor)
+            project.approved_at = now
+            project.approved_by_id = actor.id
+            all_approved = True
+            if project.concept_status:
+                project.concept_status = 'approved'
+            if project.kv_status:
+                project.kv_status = 'approved'
+
+    # Batch note (M3 Step 4 sub-step 8, added 13 Aug 2026) — always log an
+    # event for this approval action, even with an empty note, so the deck's
+    # timeline has a complete record of who approved what and when; the
+    # Pre-Production tab reads client_approval events + their deliverable
+    # links to show CS's notes against the deliverables they cover. C&CM
+    # Concept & KV has no deliverable_links (nothing to attach), same as
+    # every other event-deliverable link on the CKV path.
+    approval_event = ProjectSubmissionEvent(
+        submission_id=sent.id, event_type='client_approval',
+        author_id=actor.id, message=note or None,
+    )
+    db.session.add(approval_event)
+    db.session.flush()  # need approval_event.id for the link rows below
+    for d in approved_deliverables_this_call:
+        db.session.add(ProjectSubmissionEventDeliverable(event_id=approval_event.id, deliverable_id=d.id))
+
+    db.session.commit()
+
+    log_activity(
+        'project_approved' if all_approved else 'deliverables_approved',
+        f'"{project.name}" approved by {actor.name}' if all_approved
+        else f'Deliverables partially approved on "{project.name}" by {actor.name}',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
+    )
+
+    if all_approved:
+        notify_of_project_approved(project, triggered_by=actor)
+        check_achievements(actor, 'project_approved')
+
+    return jsonify({'success': True, 'all_approved': all_approved})

@@ -2,10 +2,12 @@ window.ProjectDeliverablesCard = (function () {
     function init(rootEl, projectId, onChanged) {
         if (!rootEl) return null;
         var destroyed = false;
+        var skipPickerHandle = null;
 
         function bindReadOnly() {
             wireDeliverablesRail(rootEl);
             wireFocusToggle(rootEl);
+            wireSkipToPreproduction();
 
             var editBtn = rootEl.querySelector('#overlay-edit-deliverables-btn');
             if (editBtn) {
@@ -16,6 +18,64 @@ window.ProjectDeliverablesCard = (function () {
                             if (destroyed) return;
                             rootEl.innerHTML = html;
                             bindEdit();
+                        });
+                });
+            }
+        }
+
+        // ── Skip to Pre-Production — select deliverables (or Select All in
+        // the picker's own popover) and fast-forward them, bypassing
+        // Submissions/Client Approval entirely. ──
+        function wireSkipToPreproduction() {
+            var btn = rootEl.querySelector('#overlay-skip-preprod-btn');
+            var form = rootEl.querySelector('#overlay-skip-preprod-form');
+            var confirmBtn = rootEl.querySelector('#overlay-skip-preprod-confirm');
+            var cancelBtn = rootEl.querySelector('#overlay-skip-preprod-cancel');
+            var pickerEl = rootEl.querySelector('#overlay-skip-preprod-picker');
+
+            if (pickerEl) skipPickerHandle = window.DeliverablePicker.init(pickerEl);
+
+            if (btn && form) {
+                btn.addEventListener('click', function () {
+                    btn.classList.add('is-hidden');
+                    form.classList.remove('is-hidden');
+                });
+            }
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function () {
+                    form.classList.add('is-hidden');
+                    if (btn) btn.classList.remove('is-hidden');
+                    var errorEl = rootEl.querySelector('#overlay-skip-preprod-error');
+                    if (errorEl) errorEl.classList.add('hidden');
+                });
+            }
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', function () {
+                    var errorEl = rootEl.querySelector('#overlay-skip-preprod-error');
+                    var deliverableIds = skipPickerHandle ? skipPickerHandle.getSelectedIds() : [];
+                    if (!deliverableIds.length) {
+                        if (errorEl) { errorEl.textContent = 'Select at least one deliverable.'; errorEl.classList.remove('hidden'); }
+                        return;
+                    }
+                    confirmBtn.disabled = true;
+                    if (errorEl) errorEl.classList.add('hidden');
+                    fetch(`/projects/${projectId}/preproduction/skip`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ deliverable_ids: deliverableIds }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (!data.success) {
+                                confirmBtn.disabled = false;
+                                if (errorEl) { errorEl.textContent = data.error || 'Could not skip to Pre-Production.'; errorEl.classList.remove('hidden'); }
+                                return;
+                            }
+                            if (onChanged) onChanged();
+                        })
+                        .catch(function () {
+                            confirmBtn.disabled = false;
+                            if (errorEl) { errorEl.textContent = 'Something went wrong. Please try again.'; errorEl.classList.remove('hidden'); }
                         });
                 });
             }
@@ -33,43 +93,18 @@ window.ProjectDeliverablesCard = (function () {
         }
 
         function wireDeliverablesRail(rootEl) {
-            var regionRail = rootEl.querySelector('#overlay-deliverables-region-rail');
-            if (regionRail) {
-                regionRail.querySelectorAll('.tab-strip-item').forEach(function (btn) {
-                    btn.addEventListener('click', function () {
-                        if (btn.classList.contains('active')) return;
-                        regionRail.querySelectorAll('.tab-strip-item').forEach(function (b) {
-                            b.classList.toggle('active', b === btn);
-                        });
-                        var regionKey = btn.dataset.region;
-                        rootEl.querySelectorAll('.overlay-deliverables-customer-rail').forEach(function (rail) {
-                            rail.classList.toggle('is-hidden', rail.dataset.regionRail !== regionKey);
-                        });
-                        var activeRail = rootEl.querySelector(
-                            '.overlay-deliverables-customer-rail[data-region-rail="' + regionKey + '"]'
-                        );
-                        var firstPill = activeRail && activeRail.querySelector('.overlay-deliverables-customer-pill');
-                        if (firstPill) activateCustomerPill(rootEl, firstPill);
-                    });
-                });
-            }
-
-            rootEl.querySelectorAll('.overlay-deliverables-customer-pill').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    activateCustomerPill(rootEl, btn);
-                });
+            // Region is just an <optgroup> label inside the select now (see
+            // _deliverables_ccm.html) — the panel switch only ever needs the
+            // customer id, so one change listener replaces the old region-tab
+            // + customer-pill click chain entirely.
+            var scopeSelect = rootEl.querySelector('#overlay-deliverables-scope-select');
+            if (!scopeSelect) return;
+            scopeSelect.addEventListener('change', function () {
+                activateCustomerPanel(rootEl, scopeSelect.value);
             });
         }
 
-        function activateCustomerPill(rootEl, btn) {
-            if (btn.classList.contains('active')) return;
-            var rail = btn.closest('.overlay-deliverables-customer-rail');
-            if (rail) {
-                rail.querySelectorAll('.overlay-deliverables-customer-pill').forEach(function (b) {
-                    b.classList.toggle('active', b === btn);
-                });
-            }
-            var customerId = btn.dataset.customerId;
+        function activateCustomerPanel(rootEl, customerId) {
             rootEl.querySelectorAll('.overlay-deliverables-panel').forEach(function (panel) {
                 panel.classList.toggle('is-hidden', panel.dataset.customerPanel !== customerId);
             });
@@ -193,7 +228,7 @@ window.ProjectDeliverablesCard = (function () {
             bindReadOnly();
         }
 
-        return { destroy: function () { destroyed = true; } };
+        return { destroy: function () { destroyed = true; if (skipPickerHandle) skipPickerHandle.destroy(); } };
     }
     return { init: init };
 })();

@@ -11,6 +11,7 @@ window.ProjectSubmissionsDraftCard = (function () {
     var _lastCancelCleanup = null;
     var _lastBackdropCleanup = null;
     var _deliverablePickerHandle = null;
+    var _approvePickerHandle = null;
 
     function init(contentEl, projectId, params, refresh) {
         if (!contentEl) return;
@@ -34,6 +35,22 @@ window.ProjectSubmissionsDraftCard = (function () {
         var deliverablePickerEl = contentEl.querySelector('#overlay-submit-review-deliverable-picker');
         if (deliverablePickerEl) {
             _deliverablePickerHandle = window.DeliverablePicker.init(deliverablePickerEl);
+        }
+
+        // Same destroy-before-reinit reasoning, separate handle — this is a
+        // different picker instance (Mark Approved's, not Submit Review's),
+        // deselected by default (CS picks what's ready, not the reverse).
+        if (_approvePickerHandle) {
+            _approvePickerHandle.destroy();
+            _approvePickerHandle = null;
+        }
+        var approvePickerEl = contentEl.querySelector('#overlay-mark-approved-picker');
+        if (approvePickerEl) {
+            // Opens above the trigger, centered — deliverable_picker.js's
+            // opt-in flag, set here rather than in the macro since this is
+            // the only picker on the page that wants it.
+            approvePickerEl.dataset.popoverAlign = 'above-center';
+            _approvePickerHandle = window.DeliverablePicker.init(approvePickerEl);
         }
 
         var ckvToggle = contentEl.querySelector('#overlay-submit-review-ckv-toggle');
@@ -111,6 +128,25 @@ window.ProjectSubmissionsDraftCard = (function () {
                 var open = list.classList.toggle('is-hidden') === false;
                 btn.classList.toggle('is-open', open);
                 btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+        });
+
+        // Deliverables zone (Active-with-Client indicator) — swaps the
+        // middle zone between the count button and a scrollable list with
+        // a Back button, in place. Scoped per zone so it never collides
+        // with the history pills (.overlay-inc-toggle).
+        contentEl.querySelectorAll('.overlay-sent-zone--deliverables').forEach(function (zone) {
+            var btn = zone.querySelector('.overlay-delz-btn');
+            var panel = zone.querySelector('.overlay-delz-panel');
+            var back = zone.querySelector('.overlay-delz-back');
+            if (!btn || !panel || !back) return;
+            btn.addEventListener('click', function () {
+                btn.classList.add('is-hidden');
+                panel.classList.remove('is-hidden');
+            });
+            back.addEventListener('click', function () {
+                panel.classList.add('is-hidden');
+                btn.classList.remove('is-hidden');
             });
         });
         
@@ -238,6 +274,77 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
+        // ── Mark Approved (on the Submitted-to-Client indicator) ──────────
+        // Same inline-reveal pattern as Request Client Revision, sitting next
+        // to it. deliverable_ids omitted from the request entirely when
+        // there's no picker on screen (C&CM Concept & KV scope, or nothing
+        // left pending) — the backend reads that as "approve everything
+        // still pending," which for those cases is correct/a no-op-safe
+        // default. When the picker IS present, its current selection is
+        // sent even if empty — the backend rejects an explicit empty
+        // selection rather than silently approving everything.
+        var maBtn = contentEl.querySelector('#overlay-mark-approved-btn');
+        var maForm = contentEl.querySelector('#overlay-mark-approved-form');
+        var maConfirm = contentEl.querySelector('#overlay-mark-approved-confirm');
+        var maCancel = contentEl.querySelector('#overlay-mark-approved-cancel');
+
+        if (maBtn && maForm) {
+            maBtn.addEventListener('click', function () {
+                maBtn.classList.add('is-hidden');
+                maForm.classList.remove('is-hidden');
+                // Step-by-step focus: only one action live at a time. Cancel
+                // (below) is what brings Request Client Revision back.
+                if (crBtn) crBtn.classList.add('is-hidden');
+            });
+        }
+
+        if (maCancel) {
+            maCancel.addEventListener('click', function () {
+                maForm.classList.add('is-hidden');
+                if (maBtn) maBtn.classList.remove('is-hidden');
+                if (crBtn) crBtn.classList.remove('is-hidden');
+                var errorEl = contentEl.querySelector('#overlay-mark-approved-error');
+                if (errorEl) errorEl.classList.add('hidden');
+            });
+        }
+
+        if (maConfirm) {
+            maConfirm.addEventListener('click', function () {
+                var errorEl = contentEl.querySelector('#overlay-mark-approved-error');
+                var body = { scope: params.scope || 'ckv', customer_id: params.customer_id || null };
+                if (_approvePickerHandle) body.deliverable_ids = _approvePickerHandle.getSelectedIds();
+                var noteEl = contentEl.querySelector('#overlay-mark-approved-note');
+                if (noteEl) body.note = noteEl.value;
+
+                maConfirm.disabled = true;
+                if (errorEl) errorEl.classList.add('hidden');
+                fetch(`/projects/${projectId}/overlay/submissions/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.success) {
+                            maConfirm.disabled = false;
+                            if (errorEl) {
+                                errorEl.textContent = data.error || 'Could not approve this submission.';
+                                errorEl.classList.remove('hidden');
+                            }
+                            return;
+                        }
+                        refresh();
+                    })
+                    .catch(function () {
+                        maConfirm.disabled = false;
+                        if (errorEl) {
+                            errorEl.textContent = 'Something went wrong. Please try again.';
+                            errorEl.classList.remove('hidden');
+                        }
+                    });
+            });
+        }
+
         // ── Request Client Revision (on the Active-with-Client indicator) ──
         // Same inline-reveal + rich-editor pattern as Flag Internal Revision,
         // independent IDs. On success, refresh() re-renders the indicator into
@@ -251,6 +358,8 @@ window.ProjectSubmissionsDraftCard = (function () {
             crBtn.addEventListener('click', function () {
                 crBtn.classList.add('is-hidden');
                 crForm.classList.remove('is-hidden');
+                // Same step-by-step focus as Mark Approved's side of this.
+                if (maBtn) maBtn.classList.add('is-hidden');
             });
         }
 
@@ -258,6 +367,7 @@ window.ProjectSubmissionsDraftCard = (function () {
             crCancel.addEventListener('click', function () {
                 crForm.classList.add('is-hidden');
                 if (crBtn) crBtn.classList.remove('is-hidden');
+                if (maBtn) maBtn.classList.remove('is-hidden');
                 if (window.clearRichContent) window.clearRichContent('overlay-client-revision-message');
                 var errorEl = contentEl.querySelector('#overlay-client-revision-error');
                 if (errorEl) errorEl.classList.add('hidden');
@@ -362,6 +472,7 @@ window.ProjectSubmissionsDraftCard = (function () {
             var cancelBtn = modal.querySelector('#overlay-submit-summary-cancel');
             var confirmBtn = modal.querySelector('#overlay-submit-summary-confirm');
             var errorEl = modal.querySelector('#overlay-submit-summary-error');
+            var keepRevisionEl = modal.querySelector('#overlay-submit-summary-keep-revision');
 
             if (cancelBtn) {
                 cancelBtn.addEventListener('click', function () { closeSubmitSummaryModal(modal); });
@@ -378,7 +489,10 @@ window.ProjectSubmissionsDraftCard = (function () {
                     fetch(`/projects/${projectId}/overlay/submissions/draft/submit-to-client`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ scope: scope, customer_id: customerId || null }),
+                        body: JSON.stringify({
+                            scope: scope, customer_id: customerId || null,
+                            keep_revision_label: !!(keepRevisionEl && keepRevisionEl.checked),
+                        }),
                     })
                         .then(function (r) { return r.json(); })
                         .then(function (data) {

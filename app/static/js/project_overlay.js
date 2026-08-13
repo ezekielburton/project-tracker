@@ -1,25 +1,18 @@
 // app/static/js/project_overlay.js
 //
-// Detail + Briefing overlay — the rail's collapse-in-place section switch
-// (Step 1), plus detecting the three close affordances (X, backdrop
-// click, Esc). This file only knows about the overlay's OWN markup once
-// it exists in the DOM — it does NOT know how the overlay got there or
-// how to remove it. That's project_list.js's job (fetch the /overlay
-// route, inject the HTML, call ProjectOverlay.init(), and on close call
-// the returned destroy() and clear the mount) — kept separate so this
-// stays a self-contained, reusable component, not tied to one page.
-//
-// init() is called explicitly rather than auto-running on
-// DOMContentLoaded, because the overlay's markup is fetched and injected
-// on open — not present in the page at load time — same render-on-demand
-// principle as the rest of this rework (architecture doc §1).
+// Detail + Briefing overlay — sidebar section/sub-tab switching (rebuilt
+// 13 Aug 2026 as a vertical sidebar, replacing the horizontal collapse-
+// in-place rail), plus the three close affordances (X, backdrop click,
+// Esc). Same separation of concerns as before: this file only knows
+// about the overlay's own markup once it exists in the DOM — project_
+// list.js still owns fetching/injecting/tearing down the overlay itself.
 
 window.ProjectOverlay = (function () {
     function init(onCloseRequested, onSubTabSelected, onSectionSelected) {
         var backdrop = document.getElementById('project-overlay-backdrop');
         var closeBtn = document.getElementById('project-overlay-close');
 
-        if (!backdrop) return null;  // nothing was injected — nothing to wire up
+        if (!backdrop) return null;
 
         function requestClose() {
             onCloseRequested();
@@ -38,7 +31,12 @@ window.ProjectOverlay = (function () {
         }
         document.addEventListener('keydown', escHandler);
 
-        // ---- Rail: collapse-in-place section switch (unchanged from Step 1) ----
+        // ---- Sidebar: section + sub-tab switching ----
+        // No squeeze-for-room problem a vertical list, unlike the old
+        // horizontal rail — every section just stays visible all the
+        // time. Switching is only ever: toggle .active, show/hide
+        // whichever section's own sub-tab group applies (today, only
+        // Design has one).
 
         var SECTION_COLORS = {
             design: 'var(--tangerine)',
@@ -47,125 +45,65 @@ window.ProjectOverlay = (function () {
             logistics: 'var(--pine)'
         };
 
-        var SECTIONS_WITH_SUBTABS = ['design'];
-
         var header = document.getElementById('project-overlay-header');
-        var rail = document.getElementById('project-overlay-rail');
-        var backBtn = document.getElementById('project-overlay-back');
-        var subrail = document.getElementById('project-overlay-subrail');
+        var sidebar = document.getElementById('project-overlay-sidebar');
+        var subgroup = document.getElementById('project-overlay-subrail');
 
-        // No-op default — reassigned below only if the rail markup is
-        // actually present, same guard the rest of this block already uses.
         var restoreView = function () { };
 
-        if (header && rail && backBtn && subrail) {
-            var mainTabs = Array.prototype.slice.call(rail.querySelectorAll('.tab-strip-item[data-main-tab]'));
-
-            function measureExpandedWidth(el) {
-                var wasCollapsed = el.classList.contains('is-collapsed');
-                if (wasCollapsed) el.classList.remove('is-collapsed');
-                var width = el.offsetWidth;
-                if (wasCollapsed) el.classList.add('is-collapsed');
-                return width;
-            }
-
-            var naturalWidths = {};
-            mainTabs.forEach(function (btn) {
-                naturalWidths[btn.dataset.mainTab] = measureExpandedWidth(btn);
-            });
-            var backNaturalWidth = measureExpandedWidth(backBtn);
-            var subrailNaturalWidth = measureExpandedWidth(subrail);
-
-            function collapseEl(el) {
-                if (el.classList.contains('is-collapsed')) return;
-                el.style.width = el.offsetWidth + 'px';
-                el.offsetHeight;
-                el.classList.add('is-collapsed');
-                el.style.width = '0px';
-            }
-
-            function expandEl(el, naturalWidth) {
-                if (!el.classList.contains('is-collapsed')) return;
-                el.classList.remove('is-collapsed');
-                el.style.width = naturalWidth + 'px';
-            }
+        if (header && sidebar) {
+            var mainItems = Array.prototype.slice.call(sidebar.querySelectorAll('.project-overlay-sidebar-item[data-main-tab]'));
 
             function enterSection(sectionKey, clickedBtn) {
-                mainTabs.forEach(function (btn) {
+                mainItems.forEach(function (btn) {
                     btn.classList.toggle('active', btn === clickedBtn);
-                    if (btn === clickedBtn) {
-                        expandEl(btn, naturalWidths[sectionKey]);
-                    } else {
-                        collapseEl(btn);
-                    }
                 });
-
-                expandEl(backBtn, backNaturalWidth);
                 header.style.setProperty('--section-color', SECTION_COLORS[sectionKey] || 'var(--tangerine)');
-
-                if (SECTIONS_WITH_SUBTABS.indexOf(sectionKey) !== -1) {
-                    expandEl(subrail, subrailNaturalWidth);
-                } else {
-                    collapseEl(subrail);
+                if (subgroup) {
+                    subgroup.classList.toggle('is-hidden', sectionKey !== 'design');
                 }
             }
 
-            function backToMain() {
-                mainTabs.forEach(function (btn) {
-                    expandEl(btn, naturalWidths[btn.dataset.mainTab]);
+            mainItems.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    if (btn.classList.contains('active')) return;  // already here
+                    enterSection(btn.dataset.mainTab, btn);
+                    if (onSectionSelected) onSectionSelected(btn.dataset.mainTab);
                 });
-                collapseEl(backBtn);
-                collapseEl(subrail);
+            });
+
+            if (subgroup) {
+                subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        if (btn.classList.contains('active')) return;
+                        subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (b) {
+                            b.classList.toggle('active', b === btn);
+                        });
+                        if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
+                    });
+                });
             }
 
-            mainTabs.forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var inSection = !backBtn.classList.contains('is-collapsed');
-                    if (inSection && btn.classList.contains('active')) {
-                        backToMain();
-                    } else {
-                        enterSection(btn.dataset.mainTab, btn);
-                        if (onSectionSelected) onSectionSelected(btn.dataset.mainTab);
-                    }
-                });
-            });
-
-            backBtn.addEventListener('click', backToMain);
-
-            subrail.querySelectorAll('.tab-strip-item').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    if (btn.classList.contains('active')) return;  // already showing this sub-tab
-                    subrail.querySelectorAll('.tab-strip-item').forEach(function (b) {
-                        b.classList.toggle('active', b === btn);
-                    });
-                    if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
-                });
-            });
-
-            // Programmatic equivalent of a real click — drives the same
-            // enterSection()/active-class logic a click would, just called
-            // from outside instead of from a click event. Used on open to
-            // put the rail back where the user last left it.
+            // Programmatic equivalent of a real click — puts the sidebar
+            // back where the user last left it, called from outside on
+            // open rather than from a click event.
             restoreView = function (sectionKey, subTabKey) {
                 var targetBtn = null;
-                mainTabs.forEach(function (btn) {
+                mainItems.forEach(function (btn) {
                     if (btn.dataset.mainTab === sectionKey) targetBtn = btn;
                 });
                 if (!targetBtn) return;
 
                 enterSection(sectionKey, targetBtn);
 
-                if (subTabKey) {
-                    subrail.querySelectorAll('.tab-strip-item').forEach(function (b) {
+                if (subTabKey && subgroup) {
+                    subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (b) {
                         b.classList.toggle('active', b.dataset.subTab === subTabKey);
                     });
                 }
             };
         }
 
-        // Handle for the caller to clean up the document-level Esc
-        // listener — it won't get garbage-collected just because the
-        // overlay's own DOM node was removed.
         return {
             destroy: function () {
                 document.removeEventListener('keydown', escHandler);

@@ -9,7 +9,13 @@
                 </div>
                 <div class="overlay-field">
                     <span class="overlay-field-label">Project Status</span>
-                    {{ status_pill(status_label, status_class) }}
+                    <div class="overlay-status-row">
+                        {{ status_pill(status_label, status_class) }}
+                        {% if can_start_project %}
+                        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
+                            id="overlay-start-project-btn">Start Project</button>
+                        {% endif %}
+                    </div>
                 </div>
                 {% if can_manage_cs %}
                 <div class="overlay-field">

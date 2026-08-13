@@ -1,0 +1,74 @@
+{% from '_shared_macros.html' import card %}
+
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% call card('Pre-Production') %}
+        <div class="overlay-preprod-progress">
+            <span class="overlay-preprod-progress-count">{{ completed_count }} of {{ total_count }}</span>
+            <span class="overlay-field-label">Handed to Production</span>
+        </div>
+
+        {# Same customer/region dropdown pattern as Deliverables + Submissions
+        — one shared scope-select convention across every C&CM card. #}
+        <div class="overlay-card-controls-row">
+            <button type="button" class="overlay-file-action-btn overlay-preprod-history-toggle"
+                id="overlay-preprod-history-toggle">Flag History</button>
+            <select class="overlay-scope-select" id="overlay-preprod-scope-select">
+                {% if has_gulf_regions %}
+                {% for region in regions %}
+                <optgroup label="{{ region.name }}">
+                    {% for c in region.customers %}
+                    <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
+                        selected{% endif %}>{{ c.project_customer.customer.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+                {% else %}
+                {% for c in all_customers %}
+                <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
+                    selected{% endif %}>{{ c.project_customer.customer.name }}</option>
+                {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="overlay-preprod-history-panel is-hidden" id="overlay-preprod-history-panel">
+            <select class="overlay-scope-select" id="overlay-preprod-history-filter">
+                <option value="all">All deliverables</option>
+                {% for c in all_customers %}
+                {% for row in c.rows %}
+                <option value="{{ row.deliverable.id }}">{{ c.project_customer.customer.name }} — {{ row.deliverable.name }}</option>
+                {% endfor %}
+                {% endfor %}
+            </select>
+            <div class="overlay-preprod-history-list" id="overlay-preprod-history-list"></div>
+        </div>
+
+        {% for c in all_customers %}
+        <div class="overlay-preprod-panel{% if c.project_customer.id != first_customer_id %} is-hidden{% endif %}"
+            data-customer-panel="{{ c.project_customer.id }}">
+
+            <div class="overlay-preprod-list">
+                {% for row in c.rows if not row.is_complete %}
+                {% include "project_overlay/_preproduction_row.html" %}
+                {% else %}
+                <p class="overlay-field-empty">Nothing in Pre-Production yet for this customer.</p>
+                {% endfor %}
+            </div>
+
+            {% set completed_rows = c.rows | selectattr('is_complete') | list %}
+            {% if completed_rows %}
+            <button type="button" class="overlay-preprod-completed-toggle" aria-expanded="false">
+                <span class="overlay-inc-chevron">▾</span> {{ completed_rows | length }} Handed to Production
+            </button>
+            <div class="overlay-preprod-list is-hidden">
+                {% for row in completed_rows %}
+                {% include "project_overlay/_preproduction_row.html" %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endcall %}
+    </div>
+</div>

@@ -1,0 +1,96 @@
+{# app/templates/project_overlay/_preproduction_row.html
+One deliverable's Pre-Production card — included from both
+_preproduction_standard.html and _preproduction_ccm.html so the row
+markup can't drift between brief types. Expects `row` (see
+_build_preproduction_row() in project_preproduction.py) and `can_act`
+(whether the viewer is Project Owner/admin/management) in scope. #}
+{% from '_shared_macros.html' import tag, status_pill, person_chip, avatar_picker %}
+
+<div class="overlay-preprod-row{% if row.is_complete %} is-complete{% endif %}"
+    data-deliverable-id="{{ row.deliverable.id }}">
+    <div class="overlay-preprod-row-header">
+        <span class="overlay-preprod-name">{{ row.deliverable.name }}</span>
+        {{ status_pill(row.status_label, row.status_class) }}
+        {% if row.flag_count %}
+        <button type="button" class="overlay-preprod-flag-count-btn"
+            data-deliverable-id="{{ row.deliverable.id }}">{{ row.flag_count }} flag{{ '' if row.flag_count == 1
+            else 's' }}</button>
+        {% endif %}
+    </div>
+
+    {% if row.design_assignments %}
+    {# Read-only — these carried over from Design automatically, nothing to
+    do with them here. #}
+    <div class="overlay-preprod-design-context">
+        <span class="overlay-field-label">From Design</span>
+        <div class="overlay-preprod-design-chips">
+            {% for a in row.design_assignments %}
+            <span class="overlay-preprod-design-chip">{{ tag(a.team, a.team|lower) }}{{ person_chip(a.designer) }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if row.batch_note %}
+    {# CS's note from Client Approval, about the batch this deliverable was
+    part of — context from a prior step, collapsed since it's not
+    actionable here. #}
+    <div class="overlay-preprod-batch-note">
+        <span class="overlay-field-label">CS Note</span>
+        <p class="overlay-notes-text">{{ row.batch_note }}</p>
+    </div>
+    {% endif %}
+
+    <div class="overlay-preprod-streams">
+        {% for stream in row.streams %}
+        <div class="overlay-preprod-stream" data-deliverable-id="{{ row.deliverable.id }}"
+            data-stream="{{ stream.key }}">
+            <div class="overlay-preprod-stream-header">
+                <span class="overlay-field-label">{{ stream.label }}</span>
+                <span class="overlay-preprod-stream-status overlay-preprod-stream-status--{{ stream.status or 'none' }}">
+                    {% if stream.status == 'approved' %}Approved
+                    {% elif stream.status == 'uploaded' %}Uploaded — awaiting review
+                    {% else %}Not started
+                    {% endif %}
+                </span>
+            </div>
+
+            {% if stream.status != 'approved' %}
+            {{ avatar_picker('overlay-preprod-picker-' ~ row.deliverable.id ~ '-' ~ stream.key,
+            stream.assignment.designer if stream.assignment else None, stream.options,
+            missing_label='Assign…') }}
+            {% elif stream.assignment %}
+            {{ person_chip(stream.assignment.designer) }}
+            {% endif %}
+
+            <div class="overlay-preprod-stream-actions">
+                {% if stream.can_mark_done and stream.status not in ('uploaded', 'approved') %}
+                <button type="button" class="overlay-file-action-btn overlay-preprod-markdone-btn">Mark
+                    Done</button>
+                {% endif %}
+                {% if can_act and stream.status == 'uploaded' %}
+                <button type="button"
+                    class="overlay-file-action-btn overlay-file-action-btn--primary overlay-preprod-approve-btn">Approve</button>
+                <button type="button"
+                    class="overlay-file-action-btn overlay-file-action-btn--danger overlay-preprod-flag-btn">Flag
+                    for Reupload</button>
+                {% endif %}
+            </div>
+
+            {% if can_act %}
+            <div class="overlay-flag-revision-form is-hidden overlay-preprod-flag-form">
+                <textarea class="overlay-mark-approved-note overlay-preprod-flag-textarea"
+                    placeholder="Why is this being sent back? (required)"></textarea>
+                <span class="overlay-flag-revision-error hidden"></span>
+                <div class="overlay-flag-revision-form-actions">
+                    <button type="button"
+                        class="overlay-file-action-btn overlay-file-action-btn--danger overlay-preprod-flag-confirm">Confirm
+                        Flag</button>
+                    <button type="button" class="overlay-file-action-btn overlay-preprod-flag-cancel">Cancel</button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>

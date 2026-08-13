@@ -1076,6 +1076,65 @@ class ProjectSubmissionEvent(db.Model):
         return f'<ProjectSubmissionEvent submission={self.submission_id} type={self.event_type}>'
 
 
+class ProjectSubmissionEventDeliverable(db.Model):
+    """Junction table — records which deliverables were part of a given
+    ProjectSubmissionEvent. Currently only used for event_type='client_approval'
+    (Mark Approved): CS's note about that batch lives on the event's own
+    message column, this table just says which deliverables it covered, so a
+    submission approved in several separate batches keeps a distinct note +
+    deliverable list per batch rather than one note being overwritten. Same
+    shape as ProjectSubmissionDeliverable, just pointed at the event instead
+    of the submission itself."""
+    __tablename__ = 'project_submission_event_deliverables'
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('project_submission_events.id'), nullable=False)
+    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
+
+    event = db.relationship('ProjectSubmissionEvent',
+                            backref=db.backref('deliverable_links', cascade='all, delete-orphan'))
+    deliverable = db.relationship('Deliverable', backref=db.backref('approval_event_links', cascade='all, delete-orphan'))
+
+    def __repr__(self):
+        return f'<ProjectSubmissionEventDeliverable event={self.event_id} deliverable={self.deliverable_id}>'
+
+
+class DeliverablePreproductionEvent(db.Model):
+    """Append-only history log for one deliverable's Pre-Production review
+    cycle (Project Owner flags on a technical/artwork release upload).
+
+    Its own table — deliberately NOT ProjectSubmissionEvent — for two
+    reasons: (1) pre-production isn't submission-scoped, a deliverable can
+    land here via Skip to Pre-Production with no ProjectSubmission
+    involved at all, so a submission_id FK wouldn't always have anything
+    to point at; (2) Ezekiel wants this history kept separate from
+    Submissions' own event log, not filtered out of a shared one.
+
+    event_type is 'preprod_flag' for now (Project Owner bounced a stream
+    back for reupload, message required) — its own distinct value so
+    later KPI queries ("average revision rounds") can filter cleanly
+    without guessing from free text. stream distinguishes which release
+    stream ('technical'/'artwork') the flag was about, for KPI breakdowns
+    that need that granularity."""
+    __tablename__ = 'deliverable_preproduction_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
+    event_type = db.Column(db.String(30), nullable=False)
+    stream = db.Column(db.String(20), nullable=True)  # 'technical' | 'artwork'
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    deliverable = db.relationship('Deliverable',
+                                  backref=db.backref('preproduction_events', cascade='all, delete-orphan',
+                                                     order_by='DeliverablePreproductionEvent.created_at'))
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<DeliverablePreproductionEvent deliverable={self.deliverable_id} type={self.event_type}>'
+
+
 class ProjectSubmissionFile(db.Model):
     """Supplementary files attached to a ProjectSubmission.
 

@@ -1,11 +1,10 @@
 {# app/templates/project_overlay/_overlay.html
-The Detail + Briefing overlay — shell + rail. Rail redesigned 31 Jul 2026
-(second pass): main options and Design's sub-tabs now live in ONE fixed
-row. Clicking a main option collapses every OTHER main option to zero
-width (they never move, they just vanish), so the clicked one ends up
-looking first; a back chevron and the sub-tabs expand the same way.
-See project_overlay.js. Real content per section still isn't wired up —
-that's later M3 steps. #}
+The Detail + Briefing overlay — shell + sidebar. Rebuilt as a vertical
+sidebar (13 Aug 2026), replacing the horizontal collapse-in-place rail
+from 31 Jul — a sidebar has room to just show all four sections at once,
+so there's no more squeeze-to-make-room mechanism, and no back button.
+Design's sub-tabs nest directly under it, shown only while Design is the
+active section. See project_overlay.js. #}
 
 <div class="project-overlay-backdrop" id="project-overlay-backdrop">
     <div class="project-overlay-sheet" id="project-overlay-sheet">
@@ -14,34 +13,34 @@ that's later M3 steps. #}
             {% if can_edit_project %}
             <button type="button" class="project-overlay-edit-btn" id="project-overlay-edit-btn">Edit</button>
             {% endif %}
-            <div class="project-overlay-header-divider"></div>
-
-            <div class="project-overlay-rail tab-strip" id="project-overlay-rail">
-                <button type="button" class="project-overlay-back is-collapsed" id="project-overlay-back"
-                    aria-label="Back to main options">&lsaquo;</button>
-                <button type="button" class="tab-strip-item active" data-main-tab="design">Design</button>
-                <button type="button" class="tab-strip-item" data-main-tab="finance">Finance</button>
-                <button type="button" class="tab-strip-item" data-main-tab="production">Production</button>
-                <button type="button" class="tab-strip-item" data-main-tab="logistics">Logistics</button>
-                <div class="project-overlay-subrail is-collapsed" id="project-overlay-subrail">
-                    <button type="button" class="tab-strip-item active" data-sub-tab="details">Details</button>
-                    <button type="button" class="tab-strip-item" data-sub-tab="deliverables">Deliverables</button>
-                    <button type="button" class="tab-strip-item" data-sub-tab="submissions">Submissions</button>
-                    <button type="button" class="tab-strip-item" data-sub-tab="pre-production">Pre-Production</button>
-                </div>
-            </div>
-
-            <div class="project-overlay-header-divider project-overlay-header-divider--push"></div>
-
             <button type="button" class="project-overlay-close" id="project-overlay-close"
                 aria-label="Close">&times;</button>
         </div>
-        <div class="project-overlay-content" id="project-overlay-content">
-            {% if project.brief_type == 'standard' %}
-            {% include "project_overlay/_details_standard.html" %}
-            {% else %}
-            {% include "project_overlay/_details_ccm.html" %}
-            {% endif %}
+        <div class="project-overlay-body">
+            <nav class="project-overlay-sidebar" id="project-overlay-sidebar">
+                <button type="button" class="project-overlay-sidebar-item active" data-main-tab="design">Design</button>
+                <div class="project-overlay-sidebar-subgroup" id="project-overlay-subrail">
+                    <button type="button" class="project-overlay-sidebar-subitem active"
+                        data-sub-tab="details">Details</button>
+                    <button type="button" class="project-overlay-sidebar-subitem"
+                        data-sub-tab="deliverables">Deliverables</button>
+                    <button type="button" class="project-overlay-sidebar-subitem"
+                        data-sub-tab="submissions">Submissions</button>
+                    <button type="button" class="project-overlay-sidebar-subitem"
+                        data-sub-tab="pre-production">Pre-Production</button>
+                </div>
+                <button type="button" class="project-overlay-sidebar-item" data-main-tab="finance">Finance</button>
+                <button type="button" class="project-overlay-sidebar-item"
+                    data-main-tab="production">Production</button>
+                <button type="button" class="project-overlay-sidebar-item" data-main-tab="logistics">Logistics</button>
+            </nav>
+            <div class="project-overlay-content" id="project-overlay-content">
+                {% if project.brief_type == 'standard' %}
+                {% include "project_overlay/_details_standard.html" %}
+                {% else %}
+                {% include "project_overlay/_details_ccm.html" %}
+                {% endif %}
+            </div>
         </div>
     </div>
     </div>
