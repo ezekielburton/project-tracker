@@ -1,0 +1,35 @@
+{# Design Leads — who owns oversight per team. Separate from individual
+deliverable assignment (stays on the Deliverables tab). Right column,
+above Reference Files. #}
+
+{% call card('Design Leads') %}
+<div class="overlay-designer-table">
+    <div class="overlay-designer-table-header">
+        <span>Team</span>
+        <span>Designer</span>
+        <span>Action</span>
+    </div>
+    {% for row in designer_rows %}
+    <div class="overlay-designer-table-row">
+        <span>{{ tag(row.team, row.team|lower) }}</span>
+        <span>
+            {% if row.designer %}
+            {{ person_chip(row.designer) }}
+            {% else %}
+            <span class="overlay-field-empty">Unassigned</span>
+            {% endif %}
+        </span>
+        <span>
+            {% if row.can_manage %}
+            {{ avatar_picker('designer-picker-' ~ row.team|lower, None, row.options,
+            trigger_label=('Reassign' if row.designer else 'Assign'), data_team=row.team) }}
+            {% else %}
+            —
+            {% endif %}
+        </span>
+    </div>
+    {% else %}
+    <p class="overlay-field-empty">No teams requested.</p>
+    {% endfor %}
+</div>
+{% endcall %}

@@ -1,10 +1,12 @@
-{% from '_shared_macros.html' import status_pill, deliverable_picker, person_chip, tag, included_summary %}
-{# ── Scope-level Current / History toggle. Current = the working area (draft
-card or sent-state, which keeps its own internal Draft/History for the live
-submission); History = every deck Sent to Client for this scope (the
-client-facing revision history). Only shown once at least one deck has been
-sent. Distinct class from the internal .overlay-draft-view-toggle-btn so the
-two toggles never cross-fire. ── #}
+{% from '_shared_macros.html' import card, status_pill, deliverable_picker, person_chip, tag, included_summary %}
+{# Two cards inside the working area: Sent to Client (client-facing record +
+CS decision) and Next Draft/Draft (the working area). Current/History
+(client-facing revision history) stays above both, unconditional on
+sent_submission — history can exist with nothing currently sent, so it can't
+live inside the Sent to Client card. Draft/History (internal edit-reason
+trail) lives in the Next Draft card's own header instead — different
+position reads as a different control without relying on the label alone. #}
+
 {% if history_submissions %}
 <div class="overlay-submissions-view-toggle">
     <button type="button" class="overlay-file-action-btn overlay-submissions-view-toggle-btn active"
@@ -21,45 +23,15 @@ longer matches it (workflow_status='sent_to_client'), so _build_draft_card_
 context surfaces it as sent_submission/sent_files instead — read-only:
 the deck is now the permanent client record. Files read from the NAS zip
 via the same Preview/Download routes (see _load_submission_file_bytes). #}
-<div class="overlay-sent-zones">
-    {# Zone 1 — status #}
-    <div class="overlay-sent-zone overlay-sent-zone--status">
-        {% if sent_revision_event %}{{ status_pill('Revision Requested', 'lavender') }}
-        {% else %}{{ status_pill('Submitted to Client', 'sage') }}{% endif %}
-    </div>
-
-    {# Zone 2 — deliverables, swaps in place #}
-    <div class="overlay-sent-zone overlay-sent-zone--deliverables">
-        {% set _names = sent_submission.included_deliverables | map(attribute='deliverable') | select |
-        map(attribute='name') | list %}
-        {% set _count = _names | length + (1 if sent_submission.includes_concept else 0) + (1 if
-        sent_submission.includes_kv else 0) %}
-        {% if _count %}
-        <button type="button" class="overlay-delz-btn">
-            <span class="overlay-inc-chevron">▾</span>
-            <span>{{ _count }} deliverable{{ '' if _count == 1 else 's' }}</span>
-        </button>
-        <div class="overlay-delz-panel is-hidden">
-            <div class="overlay-delz-list">
-                {% if sent_submission.includes_concept %}{{ tag('Concept', 'muted') }}{% endif %}
-                {% if sent_submission.includes_kv %}{{ tag('KV', 'muted') }}{% endif %}
-                {% for name in _names %}{{ tag(name, 'muted') }}{% endfor %}
-            </div>
-            <button type="button" class="overlay-delz-back">← Back</button>
-        </div>
-        {% endif %}
-    </div>
-
-    {# Zone 3 — meta #}
-    <div class="overlay-sent-zone overlay-sent-zone--meta">
-        <span class="overlay-sent-meta-file">{{ sent_submission.original_filename }}</span>
-        {% if sent_submission.submitted_by %}
-        <span>Sent by {{ sent_submission.submitted_by.name }}</span>
-        {% endif %}
-        {% if sent_submission.submitted_to_client_at %}
-        <span>{{ sent_submission.submitted_to_client_at | dubai_time }}</span>
-        {% endif %}
-    </div>
+{% call card('Sent to Client') %}
+<div class="overlay-status-row">
+    {% if sent_revision_event %}{{ status_pill('Revision Requested', 'lavender') }}
+    {% else %}{{ status_pill('Submitted to Client', 'sage') }}{% endif %}
+    <span class="overlay-field-empty">
+        {% if sent_submission.submitted_by %}Sent by {{ sent_submission.submitted_by.name }}{% endif %}
+        {% if sent_submission.submitted_to_client_at %} &middot; {{ sent_submission.submitted_to_client_at |
+        dubai_time }}{% endif %}
+    </span>
 </div>
 
 {% if sent_revision_event %}
@@ -70,13 +42,41 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
 </div>
 {% endif %}
 
+<div class="overlay-submission-section">
+    <div class="overlay-reference-files-header">
+        <span class="overlay-field-empty">{{ sent_files|length }} file{{ 's' if sent_files|length != 1 else '' }} in
+            this submission</span>
+    </div>
+    <div class="overlay-reference-files-list">
+        {% for f in sent_files %}
+        <div class="overlay-reference-file-item{{ ' overlay-draft-file-item--main-deck' if f.is_main_deck else '' }}"
+            data-file-id="{{ f.id }}">
+            <span class="overlay-reference-file-icon">
+                {% if f.file_type in ['jpg', 'jpeg', 'png'] %}🖼
+                {% elif f.file_type == 'pdf' %}📄
+                {% elif f.file_type in ['docx', 'doc'] %}📝
+                {% elif f.file_type == 'pptx' %}📊
+                {% elif f.file_type in ['ai', 'psd'] %}🎨
+                {% else %}📎
+                {% endif %}
+            </span>
+            <span class="overlay-reference-file-name">{{ f.original_filename }}</span>
+            <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
+            <div class="overlay-reference-file-actions">
+                <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
+                    data-preview-url="{{ url_for('submission.preview_submission_file', file_id=f.id) }}"
+                    data-download-url="{{ url_for('submission.download_submission_file', file_id=f.id) }}">Preview</button>
+                <a href="{{ url_for('submission.download_submission_file', file_id=f.id) }}"
+                    class="overlay-file-action-btn">Download</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
 {% if can_mark_approved or can_request_client_revision %}
-{# Mutually-exclusive actions on the Submitted-to-Client indicator — both
-gated by the same can_mark_approved/can_request_client_revision (a sent deck
-with no revision already pending). Buttons share a flex row
-(.overlay-sent-actions); each reveal-form is a normal block below it, not
-part of that row — same inline pattern as before, just two of them now. #}
-<div class="overlay-draft-card-section">
+{# Mutually-exclusive actions — both gated by the same can_mark_approved/
+can_request_client_revision (a sent deck with no revision already pending). #}
+<div class="overlay-submission-section">
     <div class="overlay-sent-actions">
         {% if can_mark_approved %}
         <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
@@ -91,12 +91,6 @@ part of that row — same inline pattern as before, just two of them now. #}
     {% if can_mark_approved %}
     <div class="overlay-flag-revision-form is-hidden" id="overlay-mark-approved-form">
         {% if is_ckv_toggle_scope or approvable_deliverables %}
-        {# Left: what's being approved (picker, or the C&KV no-split note).
-        Right: CS's freeform note about this batch, surfaced later on the
-        Pre-Production tab (ProjectSubmissionEvent event_type='client_
-        approval' + ProjectSubmissionEventDeliverable links — see
-        overlay_submissions_approve). Optional — an empty note still logs
-        the approval event, just with nothing to show later. #}
         <div class="overlay-mark-approved-columns">
             <div class="overlay-mark-approved-col overlay-mark-approved-col--picker">
                 {% if is_ckv_toggle_scope %}
@@ -104,8 +98,6 @@ part of that row — same inline pattern as before, just two of them now. #}
                     list to split.</p>
                 {% else %}
                 {% set approvable_options = approvable_deliverables | map(attribute='deliverable') | list %}
-                {# Deselected by default — CS picks what's actually ready, rather
-                than deselecting what isn't. #}
                 {{ deliverable_picker('overlay-mark-approved-picker', approvable_options, []) }}
                 {% endif %}
             </div>
@@ -144,91 +136,59 @@ part of that row — same inline pattern as before, just two of them now. #}
     {% endif %}
 </div>
 {% endif %}
-
-<div class="overlay-draft-card-section overlay-draft-files-card">
-    <div class="overlay-reference-files-header">
-        <span class="overlay-field-empty">{{ sent_files|length }} file{{ 's' if sent_files|length != 1 else '' }} in
-            this deck</span>
-    </div>
-    <div class="overlay-reference-files-list">
-        {% for f in sent_files %}
-        <div class="overlay-reference-file-item{{ ' overlay-draft-file-item--main-deck' if f.is_main_deck else '' }}"
-            data-file-id="{{ f.id }}">
-            <span class="overlay-reference-file-icon">
-                {% if f.file_type in ['jpg', 'jpeg', 'png'] %}🖼
-                {% elif f.file_type == 'pdf' %}📄
-                {% elif f.file_type in ['docx', 'doc'] %}📝
-                {% elif f.file_type == 'pptx' %}📊
-                {% elif f.file_type in ['ai', 'psd'] %}🎨
-                {% else %}📎
-                {% endif %}
-            </span>
-            <span class="overlay-reference-file-name">{{ f.original_filename }}</span>
-            <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
-            <div class="overlay-reference-file-actions">
-                <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
-                    data-preview-url="{{ url_for('submission.preview_submission_file', file_id=f.id) }}"
-                    data-download-url="{{ url_for('submission.download_submission_file', file_id=f.id) }}">Preview</button>
-                <a href="{{ url_for('submission.download_submission_file', file_id=f.id) }}"
-                    class="overlay-file-action-btn">Download</a>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
+{% endcall %}
 {% endif %}
 
-{% if sent_submission %}
-<div class="overlay-submissions-next-draft-label">Next Draft</div>
-{% endif %}
-
+{% set draft_header_extra %}
 {% if workflow_status != 'draft' %}
-<div class="overlay-draft-card-section overlay-draft-header-card">
-    <div class="overlay-draft-state-row">
-        <span class="overlay-draft-state-badge">
-            {% if workflow_status == 'internal_review' and is_being_edited %}
-            {{ status_pill('Being Edited', 'coral') }}
-            {% elif workflow_status == 'internal_review' %}
-            {{ status_pill('Pending Internal Review', 'canary') }}
-            {% elif workflow_status == 'internal_revision' %}
-            {{ status_pill('Internal Revision', 'lavender') }}
-            {% endif %}
-        </span>
-        <div class="overlay-draft-state-actions">
-            {% if events %}
-            <button type="button" class="overlay-file-action-btn overlay-draft-view-toggle-btn active"
-                data-view="draft">Draft</button>
-            <button type="button" class="overlay-file-action-btn overlay-draft-view-toggle-btn"
-                data-view="history">History</button>
-            {% endif %}
-        
-        </div>
-    </div>
-
-    {% if workflow_status == 'internal_revision' and events and events[-1].message %}
-    <div class="revision-card" id="overlay-draft-revision-spotlight">
-        <p class="detail-label">Revision Request from {{ events[-1].author.name }}</p>
-        <div class="revision-message">{{ events[-1].message | safe }}</div>
-        <p class="revision-meta">{{ events[-1].created_at | dubai_time }}</p>
-    </div>
-    {% elif can_review and is_locked and events and events[-1].message %}
-    <div class="revision-card" id="overlay-draft-note-spotlight">
-        <p class="detail-label">Note from {{ events[-1].author.name }}</p>
-        <div class="revision-message">{{ events[-1].message }}</div>
-        <p class="revision-meta">{{ events[-1].created_at | dubai_time }}</p>
+<div class="overlay-status-row">
+    <span class="overlay-draft-state-badge">
+        {% if workflow_status == 'internal_review' and is_being_edited %}
+        {{ status_pill('Being Edited', 'coral') }}
+        {% elif workflow_status == 'internal_review' %}
+        {{ status_pill('Pending Internal Review', 'canary') }}
+        {% elif workflow_status == 'internal_revision' %}
+        {{ status_pill('Internal Revision', 'lavender') }}
+        {% endif %}
+    </span>
+    {% if events %}
+    <div class="overlay-draft-state-actions">
+        <button type="button" class="overlay-file-action-btn overlay-draft-view-toggle-btn active"
+            data-view="draft">Draft</button>
+        <button type="button" class="overlay-file-action-btn overlay-draft-view-toggle-btn"
+            data-view="history">History</button>
     </div>
     {% endif %}
 </div>
 {% endif %}
+{% endset %}
+
+{% call card(('Next Draft' if sent_submission else 'Draft'), draft_header_extra) %}
+{% if workflow_status != 'draft' %}
+{% if workflow_status == 'internal_revision' and events and events[-1].message %}
+<div class="revision-card" id="overlay-draft-revision-spotlight">
+    <p class="detail-label">Revision Request from {{ events[-1].author.name }}</p>
+    <div class="revision-message">{{ events[-1].message | safe }}</div>
+    <p class="revision-meta">{{ events[-1].created_at | dubai_time }}</p>
+</div>
+{% elif can_review and is_locked and events and events[-1].message %}
+<div class="revision-card" id="overlay-draft-note-spotlight">
+    <p class="detail-label">Note from {{ events[-1].author.name }}</p>
+    <div class="revision-message">{{ events[-1].message }}</div>
+    <p class="revision-meta">{{ events[-1].created_at | dubai_time }}</p>
+</div>
+{% endif %}
+{% endif %}
 
 <div id="overlay-draft-view">
-    <div class="overlay-draft-card-section overlay-draft-files-card">
+    <div class="overlay-submission-section">
         {% if cached_files %}
         <div class="overlay-reference-files-header">
             {% if can_manage_draft and is_locked %}
             <button type="button" class="overlay-file-action-btn" id="overlay-draft-edit-btn">Edit</button>
             {% endif %}
-            <span class="overlay-field-empty">{{ cached_files|length }} file{{ 's' if cached_files|length != 1 else '' }}
+            <span class="overlay-field-empty">{{ cached_files|length }} file{{ 's' if cached_files|length != 1 else
+                '' }}
                 in this draft</span>
         </div>
         {% endif %}
@@ -260,7 +220,8 @@ part of that row — same inline pattern as before, just two of them now. #}
                         data-file-id="{{ f.id }}" {{ 'disabled' if f.is_main_deck else '' }}>
                         {{ 'Main Deck' if f.is_main_deck else 'Set as Main Deck' }}
                     </button>
-                    <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-draft-file-remove"
+                    <button type="button"
+                        class="overlay-file-action-btn overlay-file-action-btn--danger overlay-draft-file-remove"
                         data-file-id="{{ f.id }}">Remove</button>
                     {% endif %}
                 </div>
@@ -283,7 +244,7 @@ part of that row — same inline pattern as before, just two of them now. #}
     </div>
 
     {% if can_manage_draft and not is_locked and cached_files %}
-    <div class="overlay-draft-card-section overlay-submit-review-section">
+    <div class="overlay-submission-section overlay-submit-review-section">
         <div class="overlay-submit-review-columns">
             <div class="overlay-field">
                 <span class="overlay-field-label">Include in this Submission</span>
@@ -312,11 +273,12 @@ part of that row — same inline pattern as before, just two of them now. #}
     {% endif %}
 
     {% if can_review and is_locked %}
-    <div class="overlay-draft-card-section overlay-submit-review-section" id="overlay-cs-review-section">
+    <div class="overlay-submission-section overlay-submit-review-section" id="overlay-cs-review-section">
         <div class="overlay-cs-review-actions">
             <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
                 id="overlay-flag-revision-btn">Flag Internal Revision</button>
-                <button type="button" class="overlay-file-action-btn" id="overlay-submit-to-client-btn">Submit to Client</button>
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-submit-to-client-btn">Submit to Client</button>
         </div>
         <div class="overlay-flag-revision-form is-hidden" id="overlay-flag-revision-form">
             <div id="overlay-flag-revision-message" contenteditable="true" data-rich-editor
@@ -363,6 +325,7 @@ part of that row — same inline pattern as before, just two of them now. #}
     </div>
 </div>
 {% endif %}
+{% endcall %}
 </div>
 
 {% if history_submissions %}
@@ -406,7 +369,6 @@ part of that row — same inline pattern as before, just two of them now. #}
                 {% endfor %}
             </div>
             {% else %}
-            {# Legacy old-flow deck: no ProjectSubmissionFile rows — deck-level download of the parent submission. #}
             <div class="overlay-reference-file-item">
                 <span class="overlay-reference-file-icon">📎</span>
                 <span class="overlay-reference-file-name">{{ h.submission.original_filename }}</span>

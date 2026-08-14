@@ -41,7 +41,8 @@
     --oak: #A07C5A;
     --pine: #63775B;
     --rose: #D9A2A8;
-    --background: #fcf9f5;
+    --background: #f5f1ed;
+    --page-background: #f7f5f5;
 
     --sky: #B9DEFE;
     --coral: #FF8559;
@@ -211,7 +212,7 @@ html {
 
 body {
     font-family: var(--font-body);
-    background-color: var(--background);
+    background-color: var(--page-background);
     color: var(--black);
     min-height: 100vh;
     display: flex;

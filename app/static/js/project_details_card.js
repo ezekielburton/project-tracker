@@ -15,6 +15,9 @@ window.ProjectDetailsCard = (function () {
         var ownerPicker = rootEl.querySelector('#project-owner-picker');
         if (ownerPicker) pickerHandles.push(window.AvatarPicker.init(ownerPicker, function (userId) { postForm(`/projects/${projectId}/set-project-owner`, `user_id=${userId}`); }));
 
+        var conceptKvPicker = rootEl.querySelector('#concept-kv-designer-picker');
+        if (conceptKvPicker) pickerHandles.push(window.AvatarPicker.init(conceptKvPicker, function (userId) { postForm(`/projects/${projectId}/assign-concept-kv`, `concept_designer_id=${userId}&kv_designer_id=${userId}`); }));
+
         rootEl.querySelectorAll('.avatar-picker[data-team]').forEach(function (pickerEl) {
             pickerHandles.push(window.AvatarPicker.init(pickerEl, function (userId) {
                 postJson(`/projects/${projectId}/assign-lead`, { team: pickerEl.dataset.team, new_designer_id: userId });

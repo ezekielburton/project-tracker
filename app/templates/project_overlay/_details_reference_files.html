@@ -1,0 +1,57 @@
+{# Reference Files card. Extracted out of _details_top_cards.html for the
+two-column relayout so it can sit in the right column. Same ids/classes
+as before — project_details_card.js needs no changes. #}
+
+{% call card('Reference Files') %}
+{% if project.reference_files %}
+<div class="overlay-reference-files-header">
+    <button type="button" class="overlay-file-action-btn" id="overlay-download-all-files"
+        data-download-all-url="{{ url_for('project_detail.download_all_reference_files', project_id=project.id) }}">
+        Download All
+    </button>
+</div>
+{% endif %}
+<div class="overlay-reference-files-list" id="overlay-reference-files-list">
+    {% for f in project.reference_files %}
+    <div class="overlay-reference-file-item" data-file-id="{{ f.id }}">
+        <span class="overlay-reference-file-icon">
+            {% if f.file_type in ['jpg', 'jpeg', 'png'] %}🖼
+            {% elif f.file_type == 'pdf' %}📄
+            {% elif f.file_type == 'docx' %}📝
+            {% elif f.file_type == 'xlsx' %}📊
+            {% elif f.file_type in ['mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v'] %}🎬
+            {% else %}📎
+            {% endif %}
+        </span>
+        <span class="overlay-reference-file-name">{{ f.original_filename }}</span>
+        <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
+        <div class="overlay-reference-file-actions">
+            <button type="button" class="overlay-file-action-btn overlay-reference-file-preview"
+                data-preview-url="{{ url_for('project_detail.preview_project_file', file_id=f.id) }}"
+                data-download-url="{{ url_for('project_detail.download_project_file', file_id=f.id) }}">Preview</button>
+            <a href="{{ url_for('project_detail.download_project_file', file_id=f.id) }}"
+                class="overlay-file-action-btn">Download</a>
+            {% if can_manage_reference_files %}
+            <button type="button"
+                class="overlay-file-action-btn overlay-file-action-btn--danger overlay-reference-file-remove"
+                data-file-id="{{ f.id }}">Remove</button>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <p class="overlay-field-empty" id="overlay-no-reference-files">No reference files uploaded yet.</p>
+    {% endfor %}
+</div>
+
+{% if can_manage_reference_files %}
+<div class="overlay-reference-file-upload">
+    <input type="file" id="overlay-reference-file-input" class="hidden"
+        accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.pptx,.zip,.dwg,.mp4,.mov,.avi,.webm,.mkv,.wmv,.m4v">
+    <button type="button" id="overlay-reference-file-btn" class="overlay-file-action-btn"
+        data-project-id="{{ project.id }}">
+        Drop a file or click to attach…
+    </button>
+    <span id="overlay-reference-file-status" class="overlay-reference-file-status"></span>
+</div>
+{% endif %}
+{% endcall %}

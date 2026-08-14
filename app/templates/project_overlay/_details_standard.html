@@ -1,39 +1,53 @@
 {% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
-<div class="overlay-details-grid">
-    {% include "project_overlay/_details_top_cards.html" %}
-
-    <div class="overlay-card-full">
-        {% call card('Brief Overview') %}
-        <div class="overlay-field-grid">
-            <div class="overlay-field-col">
-                <div class="overlay-field"><span class="overlay-field-label">Client</span><span
-                        class="overlay-field-value">{{ project.client_brand.name if project.client_brand else '—'
-                        }}</span></div>
-                <div class="overlay-field"><span class="overlay-field-label">Type of Design</span><span
-                        class="overlay-field-value">{{ project.design_type.name if project.design_type else '—'
-                        }}</span></div>
+<div class="overlay-details-columns">
+    <div class="overlay-details-left">
+        <div class="overlay-properties-heading">Properties</div>
+        <div class="overlay-properties">
+            {% include "project_overlay/_details_top_cards.html" %}
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Client</span>
+                <span class="overlay-property-value">{{ project.client_brand.name if project.client_brand else '—'
+                    }}</span>
             </div>
-            <div class="overlay-field-col">
-                <div class="overlay-field"><span class="overlay-field-label">Initial Deadline</span><span
-                        class="overlay-field-value">{{ project.first_output_deadline.strftime('%d %b %Y') if
-                        project.first_output_deadline else '—' }}</span></div>
-                <div class="overlay-field"><span class="overlay-field-label">Final Deadline</span><span
-                        class="overlay-field-value">{{ project.execution_date.strftime('%d %b %Y') if
-                        project.execution_date else '—' }}</span></div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Type of Design</span>
+                <span class="overlay-property-value">{{ project.design_type.name if project.design_type else '—'
+                    }}</span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Initial Deadline</span>
+                <span class="overlay-property-value">{{ project.first_output_deadline.strftime('%d %b %Y') if
+                    project.first_output_deadline else '—' }}</span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Final Deadline</span>
+                <span class="overlay-property-value">{{ project.execution_date.strftime('%d %b %Y') if
+                    project.execution_date else '—' }}</span>
             </div>
         </div>
-        {% if project.client_expectation %}<div class="overlay-notes"><span class="overlay-field-label">Client
-                Expectation</span>
+    </div>
+    <div class="overlay-details-right">
+        {% include "project_overlay/_details_design_leads.html" %}
+        {% include "project_overlay/_details_reference_files.html" %}
+        {% if project.client_expectation or project.what_to_avoid or project.additional_information %}
+        {% call card('Requirements') %}
+        {% if project.client_expectation %}
+        <div class="overlay-notes"><span class="overlay-field-label">Client Expectation</span>
             <p class="overlay-notes-text">{{ project.client_expectation }}</p>
-        </div>{% endif %}
-        {% if project.what_to_avoid %}<div class="overlay-notes"><span class="overlay-field-label">What to Avoid</span>
+        </div>
+        {% endif %}
+        {% if project.what_to_avoid %}
+        <div class="overlay-notes"><span class="overlay-field-label">What to Avoid</span>
             <p class="overlay-notes-text">{{ project.what_to_avoid }}</p>
-        </div>{% endif %}
-        {% if project.additional_information %}<div class="overlay-notes"><span class="overlay-field-label">Additional
-                Information</span>
+        </div>
+        {% endif %}
+        {% if project.additional_information %}
+        <div class="overlay-notes"><span class="overlay-field-label">Additional Information</span>
             <p class="overlay-notes-text">{{ project.additional_information }}</p>
-        </div>{% endif %}
+        </div>
+        {% endif %}
         {% endcall %}
+        {% endif %}
     </div>
 </div>
