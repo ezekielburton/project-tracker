@@ -8,7 +8,6 @@
 window.ProjectPreproductionCard = (function () {
     function init(rootEl, projectId, onChanged) {
         if (!rootEl) return null;
-        var pickerHandles = [];
 
         function postJson(url, body) {
             return fetch(url, {
@@ -23,7 +22,7 @@ window.ProjectPreproductionCard = (function () {
         var scopeSelect = rootEl.querySelector('#overlay-preprod-scope-select');
         if (scopeSelect) {
             scopeSelect.addEventListener('change', function () {
-                rootEl.querySelectorAll('.overlay-preprod-panel').forEach(function (panel) {
+                rootEl.querySelectorAll('.overlay-preprod-panel, .overlay-preprod-attention-panel').forEach(function (panel) {
                     panel.classList.toggle('is-hidden', panel.dataset.customerPanel !== scopeSelect.value);
                 });
             });
@@ -38,21 +37,6 @@ window.ProjectPreproductionCard = (function () {
                 var open = list.classList.toggle('is-hidden') === false;
                 btn.setAttribute('aria-expanded', open ? 'true' : 'false');
             });
-        });
-
-        // ── Stream assignment / transfer — one AvatarPicker per stream. ──
-        rootEl.querySelectorAll('.overlay-preprod-stream .avatar-picker').forEach(function (pickerEl) {
-            pickerHandles.push(window.AvatarPicker.init(pickerEl, function (userId) {
-                var streamEl = pickerEl.closest('.overlay-preprod-stream');
-                if (!streamEl) return;
-                postJson(`/deliverables/${streamEl.dataset.deliverableId}/preproduction/assign`, {
-                    stream: streamEl.dataset.stream,
-                    designer_id: userId,
-                }).then(function (data) {
-                    if (!data.success) { alert(data.error || 'Could not assign.'); return; }
-                    onChanged();
-                });
-            }));
         });
 
         // ── Mark Done (the assignee marking their own upload ready). ──
@@ -131,12 +115,14 @@ window.ProjectPreproductionCard = (function () {
             });
         });
 
-        // ── Flag/comment history panel — fetched once on first open, then
-        // filtered client-side by the deliverable dropdown (no re-fetch per
-        // filter change — the whole project's history is small enough to
-        // hold in memory at once). ──
-        var historyToggle = rootEl.querySelector('#overlay-preprod-history-toggle');
-        var historyPanel = rootEl.querySelector('#overlay-preprod-history-panel');
+        // ── Active / History view toggle — swaps the whole view, same
+        // pattern as Submissions' Current/History toggle, not a reveal-a-
+        // panel-underneath button. Flag history is fetched once on first
+        // switch into it, then filtered client-side by the deliverable
+        // dropdown (no re-fetch per filter change). ──
+        var viewToggleBtns = rootEl.querySelectorAll('.overlay-submissions-view-toggle-btn');
+        var activeView = rootEl.querySelector('#overlay-preprod-active-view');
+        var historyView = rootEl.querySelector('#overlay-preprod-history-view');
         var historyFilter = rootEl.querySelector('#overlay-preprod-history-filter');
         var historyList = rootEl.querySelector('#overlay-preprod-history-list');
         var historyEvents = null;  // cached after first fetch
@@ -165,11 +151,13 @@ window.ProjectPreproductionCard = (function () {
             }).join('');
         }
 
-        if (historyToggle && historyPanel) {
-            historyToggle.addEventListener('click', function () {
-                var opening = historyPanel.classList.contains('is-hidden');
-                historyPanel.classList.toggle('is-hidden');
-                if (opening && historyEvents === null) {
+        viewToggleBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                viewToggleBtns.forEach(function (b) { b.classList.toggle('active', b === btn); });
+                var showHistory = btn.dataset.view === 'history';
+                if (activeView) activeView.classList.toggle('is-hidden', showHistory);
+                if (historyView) historyView.classList.toggle('is-hidden', !showHistory);
+                if (showHistory && historyEvents === null) {
                     fetch(`/projects/${projectId}/preproduction/events`)
                         .then(function (r) { return r.json(); })
                         .then(function (data) {
@@ -182,15 +170,13 @@ window.ProjectPreproductionCard = (function () {
                         });
                 }
             });
-        }
+        });
         if (historyFilter) {
             historyFilter.addEventListener('change', renderHistory);
         }
 
         return {
-            destroy: function () {
-                pickerHandles.forEach(function (h) { if (h) h.destroy(); });
-            }
+            destroy: function () { }
         };
     }
 

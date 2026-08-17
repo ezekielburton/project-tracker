@@ -1,50 +1,104 @@
 {% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
-<div class="overlay-details-columns">
+<div class="overlay-details-columns" data-edit-snapshot="{{ edit_snapshot_at }}">
     <div class="overlay-details-left">
         <div class="overlay-properties-heading">Properties</div>
         <div class="overlay-properties">
             {% include "project_overlay/_details_top_cards.html" %}
-            <div class="overlay-property-row">
+            <div class="overlay-property-row"{% if can_edit_project %} data-field="client_id"
+                data-field-type="select"{% endif %}>
                 <span class="overlay-property-label">Client</span>
-                <span class="overlay-property-value">{{ project.client_brand.name if project.client_brand else '—'
-                    }}</span>
+                <span class="overlay-property-value">
+                    <span class="overlay-edit-view">{{ project.client_brand.name if project.client_brand else '—'
+                        }}</span>
+                    {% if can_edit_project %}
+                    <select class="overlay-edit-input is-hidden">
+                        <option value="">—</option>
+                        {% for c in client_options %}
+                        <option value="{{ c.id }}" {% if project.client_id==c.id %}selected{% endif %}>{{ c.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                </span>
             </div>
-            <div class="overlay-property-row">
+            <div class="overlay-property-row"{% if can_edit_project %} data-field="design_type_id"
+                data-field-type="select"{% endif %}>
                 <span class="overlay-property-label">Type of Design</span>
-                <span class="overlay-property-value">{{ project.design_type.name if project.design_type else '—'
-                    }}</span>
+                <span class="overlay-property-value">
+                    <span class="overlay-edit-view">{{ project.design_type.name if project.design_type else '—'
+                        }}</span>
+                    {% if can_edit_project %}
+                    <select class="overlay-edit-input is-hidden">
+                        <option value="">—</option>
+                        {% for dt in design_type_options %}
+                        <option value="{{ dt.id }}" {% if project.design_type_id==dt.id %}selected{% endif %}>{{
+                            dt.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                </span>
             </div>
-            <div class="overlay-property-row">
+            <div class="overlay-property-row"{% if can_edit_project %} data-field="first_output_deadline"
+                data-field-type="date"{% endif %}>
                 <span class="overlay-property-label">Initial Deadline</span>
-                <span class="overlay-property-value">{{ project.first_output_deadline.strftime('%d %b %Y') if
-                    project.first_output_deadline else '—' }}</span>
+                <span class="overlay-property-value">
+                    <span class="overlay-edit-view">{{ project.first_output_deadline.strftime('%d %b %Y') if
+                        project.first_output_deadline else '—' }}</span>
+                    {% if can_edit_project %}
+                    <input type="date" class="overlay-edit-input is-hidden"
+                        value="{{ project.first_output_deadline.strftime('%Y-%m-%d') if project.first_output_deadline else '' }}">
+                    {% endif %}
+                </span>
             </div>
-            <div class="overlay-property-row">
+            <div class="overlay-property-row"{% if can_edit_project %} data-field="execution_date"
+                data-field-type="date"{% endif %}>
                 <span class="overlay-property-label">Final Deadline</span>
-                <span class="overlay-property-value">{{ project.execution_date.strftime('%d %b %Y') if
-                    project.execution_date else '—' }}</span>
+                <span class="overlay-property-value">
+                    <span class="overlay-edit-view">{{ project.execution_date.strftime('%d %b %Y') if
+                        project.execution_date else '—' }}</span>
+                    {% if can_edit_project %}
+                    <input type="date" class="overlay-edit-input is-hidden"
+                        value="{{ project.execution_date.strftime('%Y-%m-%d') if project.execution_date else '' }}">
+                    {% endif %}
+                </span>
             </div>
         </div>
     </div>
     <div class="overlay-details-right">
         {% include "project_overlay/_details_design_leads.html" %}
         {% include "project_overlay/_details_reference_files.html" %}
-        {% if project.client_expectation or project.what_to_avoid or project.additional_information %}
+        {% if project.client_expectation or project.what_to_avoid or project.additional_information or
+        can_edit_project %}
         {% call card('Requirements') %}
-        {% if project.client_expectation %}
-        <div class="overlay-notes"><span class="overlay-field-label">Client Expectation</span>
-            <p class="overlay-notes-text">{{ project.client_expectation }}</p>
+        {% if project.client_expectation or can_edit_project %}
+        <div class="overlay-notes"{% if can_edit_project %} data-field="client_expectation"
+            data-field-type="textarea"{% endif %}>
+            <span class="overlay-field-label">Client Expectation</span>
+            <p class="overlay-notes-text overlay-edit-view">{{ project.client_expectation or '—' }}</p>
+            {% if can_edit_project %}
+            <textarea class="overlay-edit-input is-hidden">{{ project.client_expectation or '' }}</textarea>
+            {% endif %}
         </div>
         {% endif %}
-        {% if project.what_to_avoid %}
-        <div class="overlay-notes"><span class="overlay-field-label">What to Avoid</span>
-            <p class="overlay-notes-text">{{ project.what_to_avoid }}</p>
+        {% if project.what_to_avoid or can_edit_project %}
+        <div class="overlay-notes"{% if can_edit_project %} data-field="what_to_avoid"
+            data-field-type="textarea"{% endif %}>
+            <span class="overlay-field-label">What to Avoid</span>
+            <p class="overlay-notes-text overlay-edit-view">{{ project.what_to_avoid or '—' }}</p>
+            {% if can_edit_project %}
+            <textarea class="overlay-edit-input is-hidden">{{ project.what_to_avoid or '' }}</textarea>
+            {% endif %}
         </div>
         {% endif %}
-        {% if project.additional_information %}
-        <div class="overlay-notes"><span class="overlay-field-label">Additional Information</span>
-            <p class="overlay-notes-text">{{ project.additional_information }}</p>
+        {% if project.additional_information or can_edit_project %}
+        <div class="overlay-notes"{% if can_edit_project %} data-field="additional_information"
+            data-field-type="textarea"{% endif %}>
+            <span class="overlay-field-label">Additional Information</span>
+            <p class="overlay-notes-text overlay-edit-view">{{ project.additional_information or '—' }}</p>
+            {% if can_edit_project %}
+            <textarea class="overlay-edit-input is-hidden">{{ project.additional_information or '' }}</textarea>
+            {% endif %}
         </div>
         {% endif %}
         {% endcall %}

@@ -53,6 +53,26 @@
    user.role, not the management/admin view-switcher preview" reasoning
    flaggable_projects and the old link-gate already used. Colour (oak) and
    the "HRS" label are unchanged from the original tile.
+
+   LAZY-LOADED 18 Jul 2026 — real perf fix, not a redesign. The row list
+   below used to be rendered inline from a `time_tracking_rows` context
+   var that index() computed EAGERLY on every admin/management dashboard
+   page load via build_time_tracking_rows() — a full company-wide scan
+   (every project, every deliverable, every status log) that ran whether
+   or not this tab was ever opened, and was the dominant cost behind a 3+
+   second dashboard load. This template no longer takes a
+   time_tracking_rows kwarg at all — the header/subtitle/Expand All/
+   Collapse All buttons still render immediately (cheap, no query needed),
+   but `#dash-time-tracking-list` starts as an empty "Loading…" placeholder
+   and is only filled in by dashboard.js on the FIRST time this tab is
+   opened, via GET /dashboard/api/time-tracking-rows (renders the exact
+   same row markup server-side, now in its own partial —
+   _stat_avg_time_rows.html — so nothing had to be duplicated in JS).
+   Deliberately kept the Expand All/Collapse All buttons OUTSIDE the lazy-
+   loaded region: time_tracking.js binds click listeners to them once, at
+   script-execution time — if the buttons themselves were part of the
+   lazy-fetched HTML, they wouldn't exist yet when that one-time binding
+   ran, and would silently do nothing when clicked.
 #}
 {% from 'dashboard/_dashboard_macros.html' import dash_card %}
 
@@ -70,74 +90,16 @@
     expanded=(initial_expanded_card == 'stat_avg_time'), muted=(not is_openable), mode=dash_render_mode) %}
 
     {% if is_openable %}
-        {% if time_tracking_rows %}
-        <div class="tt-header">
-            <p class="tt-subtitle">Business hours (Mon–Fri, 10AM–6PM Dubai time) per project and deliverable, broken down by status. Weekend hours only count when a status actually changed over that weekend. Company-wide — same table as <a href="{{ url_for('time_tracking.index') }}">/time-tracking</a>.</p>
-            <div class="tt-header-actions">
-                <button type="button" class="tt-btn" data-action="expand-all">Expand All</button>
-                <button type="button" class="tt-btn" data-action="collapse-all">Collapse All</button>
-            </div>
+    <div class="tt-header">
+        <p class="tt-subtitle">Business hours (Mon–Fri, 10AM–6PM Dubai time) per project and deliverable, broken down by status. Weekend hours only count when a status actually changed over that weekend. Company-wide — same table as <a href="{{ url_for('time_tracking.index') }}">/time-tracking</a>.</p>
+        <div class="tt-header-actions">
+            <button type="button" class="tt-btn" data-action="expand-all">Expand All</button>
+            <button type="button" class="tt-btn" data-action="collapse-all">Collapse All</button>
         </div>
-        <div class="tt-project-list">
-            {% for row in time_tracking_rows %}
-            <div class="tt-project">
-                <div class="tt-project-main">
-                    <a class="tt-project-name" href="{{ url_for('project_detail.detail', project_id=row.id) }}?from=dashboard">{{ row.name }}</a>
-                    <span class="tt-overall">
-                        <span class="tt-overall-value">{{ row.overall }}</span>
-                        <span class="tt-overall-label">HRS OVERALL</span>
-                    </span>
-                </div>
-
-                {% if row.by_status %}
-                <div class="tt-status-chips">
-                    {% for status, hours in row.by_status.items() %}
-                    <span class="tt-status-chip">
-                        <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
-                        <span class="tt-status-chip-value">{{ hours }}h</span>
-                    </span>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <p class="tt-empty">No status history yet.</p>
-                {% endif %}
-
-                {% if row.deliverables %}
-                <details class="tt-deliverables">
-                    <summary>{{ row.deliverables | length }} deliverable{{ 's' if row.deliverables | length != 1 }}</summary>
-                    <div class="tt-deliverable-list">
-                        {% for d in row.deliverables %}
-                        <div class="tt-deliverable">
-                            <div class="tt-deliverable-main">
-                                <span class="tt-deliverable-name">{{ d.name }}</span>
-                                <span class="tt-overall tt-overall--small">
-                                    <span class="tt-overall-value">{{ d.overall }}</span>
-                                    <span class="tt-overall-label">HRS OVERALL</span>
-                                </span>
-                            </div>
-                            {% if d.by_status %}
-                            <div class="tt-status-chips">
-                                {% for status, hours in d.by_status.items() %}
-                                <span class="tt-status-chip">
-                                    <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
-                                    <span class="tt-status-chip-value">{{ hours }}h</span>
-                                </span>
-                                {% endfor %}
-                            </div>
-                            {% else %}
-                            <p class="tt-empty">No status history yet.</p>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                </details>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p class="tt-empty">No projects to show.</p>
-        {% endif %}
+    </div>
+    <div class="tt-project-list" id="dash-time-tracking-list" data-lazy-loaded="0">
+        <p class="tt-empty">Loading…</p>
+    </div>
     {% endif %}
 
 {% endcall %}

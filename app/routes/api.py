@@ -30,7 +30,7 @@ def zip_download(zip_id):
         abort(404)
     return response
 
-@api_bp.route('/api/version')
+@api_bp.route('/version')
 def app_version():
     return jsonify(version=current_app.config['STATIC_VERSION'])
 

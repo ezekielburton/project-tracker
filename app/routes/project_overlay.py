@@ -3,7 +3,7 @@ Project Details Overlay Route File.
 New blueprint for file hygiene, easier to work on chunks rather than one long file.
 """
 
-from flask import Blueprint, render_template, abort, request
+from flask import Blueprint, render_template, abort, request, jsonify
 from flask_login import login_required, current_user
 
 from app.models import Project
@@ -371,6 +371,25 @@ def _build_draft_card_context(project, actor, resolved):
             if link.deliverable and link.deliverable.status != 'approved'
         ]
 
+    if is_ckv_toggle_scope:
+        all_deliverables_approved = (
+            (not project.has_concept or project.concept_status == 'approved')
+            and (not project.has_kv or project.kv_status == 'approved')
+        )
+    else:
+        all_deliverables_approved = bool(deliverable_options) and all(
+            d.status == 'approved' for d in deliverable_options
+        )
+
+    revisable_deliverables = []
+    if can_request_client_revision and sent_submission and not is_ckv_toggle_scope:
+        from app.status_vocabulary import derive_deliverable_status
+        revisable_deliverables = [
+            {'deliverable': link.deliverable, 'pill': derive_deliverable_status(link.deliverable)}
+            for link in sent_submission.included_deliverables
+            if link.deliverable
+        ]
+
     return {
         'draft': draft,
         'cached_files': cached_files,
@@ -391,7 +410,9 @@ def _build_draft_card_context(project, actor, resolved):
         'sent_revision_event': sent_revision_event,
         'can_request_client_revision': can_request_client_revision,
         'can_mark_approved': can_mark_approved,
+        'all_deliverables_approved': all_deliverables_approved,
         'approvable_deliverables': approvable_deliverables,
+        'revisable_deliverables': revisable_deliverables,
         'sent_files': sent_files,
         'history_submissions': history_submissions,
     }
@@ -405,6 +426,25 @@ DESIGN_DEADLINE_TIME_OPTIONS = [
     (f'{h:02d}:00', f'{((h - 1) % 12) + 1}:00 {"AM" if h < 12 else "PM"}')
     for h in range(8, 23)
 ]
+
+_DESIGN_DEADLINE_TIME_VALUES = {v for v, _ in DESIGN_DEADLINE_TIME_OPTIONS}
+
+
+def _annotate_offhour_time(deliverables):
+    """The Design Deadline time dropdown only offers on-the-hour slots
+    (DESIGN_DEADLINE_TIME_OPTIONS) — a deliverable whose stored time isn't
+    one of those (from an older flow, or set some other way) would
+    otherwise render as blank in Edit Deliverables, and an unrelated Save
+    would then silently wipe the real time. Tags each such row with
+    d.edit_time_extra = (value, label) so the template can inject a
+    matching selected <option> and round-trip the real value untouched."""
+    for d in deliverables:
+        d.edit_time_extra = None
+        t = d.design_deadline_time
+        if t and t.strftime('%H:%M') not in _DESIGN_DEADLINE_TIME_VALUES:
+            hour12 = ((t.hour - 1) % 12) + 1
+            period = 'AM' if t.hour < 12 else 'PM'
+            d.edit_time_extra = (t.strftime('%H:%M'), f'{hour12}:{t.minute:02d} {period}')
 
 
 def _build_details_context(project, actor):
@@ -499,6 +539,30 @@ def _build_details_context(project, actor):
     # can_edit_project's permission tier rather than a new one.
     can_start_project = can_edit_project and project.project_status == 'briefed'
 
+    # Edit mode (M4, task #33) — Client/Type of Design are FKs, not free
+    # text, so the edit-mode dropdown needs the full option list, same
+    # shape as cs_lead_options/owner_options above. Only fetched for
+    # someone who can actually edit — no point loading these for a
+    # read-only viewer.
+    from app.models import Client, DesignType
+    client_options = Client.query.order_by(Client.name).all() if can_edit_project else []
+    design_type_options = DesignType.query.order_by(DesignType.name).all() if can_edit_project else []
+
+    # Edit mode (task #34) — concurrent-edit check reuses the latest
+    # ActivityLog row for this project as a "last modified" signal rather
+    # than a new updated_at column (Project doesn't have one). Snapshotted
+    # here when the section loads, sent back with Save, compared server-
+    # side — if someone else's write logged a newer entry in between, the
+    # save is rejected as a conflict instead of silently overwriting it.
+    from app.models import ActivityLog
+    latest_activity = (
+        ActivityLog.query
+        .filter_by(entity_type='project', entity_id=project.id)
+        .order_by(ActivityLog.created_at.desc())
+        .first()
+    )
+    edit_snapshot_at = latest_activity.created_at.isoformat() if latest_activity else ''
+
     return dict(
         status_label=status_label,
         status_class=status_class,
@@ -515,7 +579,13 @@ def _build_details_context(project, actor):
         concept_kv_designer_options=concept_kv_designer_options,
         concept_kv_designer=concept_kv_designer,
         can_start_project=can_start_project,
+        client_options=client_options,
+        design_type_options=design_type_options,
+        edit_snapshot_at=edit_snapshot_at,
     )
+
+
+
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay')
 @login_required
@@ -541,6 +611,103 @@ def overlay_details(project_id):
         else 'project_overlay/_details_ccm.html'
     )
     return render_template(template, project=project, **context)
+
+def _parse_edit_date(raw):
+    """'YYYY-MM-DD' from <input type=date> -> a date object; '' -> None.
+    Shared by every date field the edit-mode Save route accepts."""
+    from datetime import datetime as _dt
+    if not raw:
+        return None
+    return _dt.strptime(raw, '%Y-%m-%d').date()
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/details/save', methods=['POST'])
+@login_required
+def overlay_details_save(project_id):
+    """Edit mode Save (task #34). Whitelisted field-by-field update, not a
+    generic setattr — every accepted field is named explicitly so this
+    route can never be tricked into writing a column the frontend didn't
+    actually render an editable row for. Field-level diff logging (task
+    #36) and the SSE push (task #35) aren't wired yet — this chunk is
+    just the concurrent-edit check + commit."""
+    from app import db
+    from app.models import ActivityLog
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    can_edit_project = (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+    if not can_edit_project:
+        return jsonify({'success': False, 'error': 'You do not have permission to edit this project.'}), 403
+
+    data = request.get_json() or {}
+    fields = data.get('fields') or {}
+    snapshot_at = data.get('edit_snapshot_at') or ''
+
+    latest_activity = (
+        ActivityLog.query
+        .filter_by(entity_type='project', entity_id=project.id)
+        .order_by(ActivityLog.created_at.desc())
+        .first()
+    )
+    current_snapshot = latest_activity.created_at.isoformat() if latest_activity else ''
+    if snapshot_at and current_snapshot and snapshot_at != current_snapshot:
+        return jsonify({
+            'success': False,
+            'conflict': True,
+            'error': 'This project was changed by someone else while you were editing. Reload and try again.',
+        }), 409
+
+    # field name (matches the templates' data-field) -> (Project attr, parser)
+    FIELD_MAP = {
+        'client_id': ('client_id', lambda v: int(v) if v else None),
+        'design_type_id': ('design_type_id', lambda v: int(v) if v else None),
+        'first_output_deadline': ('first_output_deadline', _parse_edit_date),
+        'execution_date': ('execution_date', _parse_edit_date),
+        'client_expectation': ('client_expectation', lambda v: v.strip() or None),
+        'what_to_avoid': ('what_to_avoid', lambda v: v.strip() or None),
+        'additional_information': ('additional_information', lambda v: v.strip() or None),
+        'briefing_date': ('briefing_date', _parse_edit_date),
+        'concept_deadline': ('concept_deadline', _parse_edit_date),
+        'concept_options_required': ('concept_options_required', lambda v: int(v) if v else None),
+        'campaign_notes': ('campaign_notes', lambda v: v.strip() or None),
+    }
+
+    changes = []
+    for field_name, raw_value in fields.items():
+        if field_name not in FIELD_MAP:
+            continue
+        attr_name, parser = FIELD_MAP[field_name]
+        try:
+            new_value = parser(raw_value)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': f'Invalid value for {field_name}.'}), 400
+        old_value = getattr(project, attr_name)
+        if old_value != new_value:
+            changes.append({'field': field_name, 'old': old_value, 'new': new_value})
+            setattr(project, attr_name, new_value)
+
+    if not changes:
+        return jsonify({'success': True, 'changed': False})
+
+    db.session.commit()
+
+    # Field-level diff (changes= JSONB) lands in task #36 — this is the
+    # flat-message version so Save is fully functional in the meantime.
+    log_activity(
+        'project_edited',
+        f'{actor.name} edited {len(changes)} field(s) on "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+
+    return jsonify({'success': True, 'changed': True, 'changes': [c['field'] for c in changes]})
 
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/start', methods=['POST'])
@@ -630,9 +797,31 @@ def overlay_deliverables_edit(project_id):
     actor = _get_actor()
     if not _can_manage_deliverables(project, actor):
         abort(403)
+
+    if project.brief_type == 'ccm':
+        # Same Region -> Customer grouping as the view mode (overlay_deliverables
+        # above) — reusing _build_ccm_deliverable_sections keeps the customer
+        # picker's options identical between view and edit, so switching
+        # between them never reshuffles which customer is "first".
+        regions = _build_ccm_deliverable_sections(project)
+        has_gulf_regions = any(r['key'] in ('kuwait', 'qatar', 'bahrain', 'oman') for r in regions)
+        all_customers = [c for r in regions for c in r['customers']]
+        first_customer_id = all_customers[0]['project_customer'].id if all_customers else None
+        _annotate_offhour_time([d for c in all_customers for d in c['deliverables']])
+        return render_template(
+            'project_overlay/_deliverables_ccm_edit.html',
+            project=project,
+            regions=regions,
+            all_customers=all_customers,
+            has_gulf_regions=has_gulf_regions,
+            first_customer_id=first_customer_id,
+            time_options=DESIGN_DEADLINE_TIME_OPTIONS,
+        )
+
     deliverables = Deliverable.query.filter_by(
         project_id=project_id, project_customer_id=None
     ).order_by(Deliverable.id).all()
+    _annotate_offhour_time(deliverables)
     return render_template(
         'project_overlay/_deliverables_standard_edit.html',
         project=project,
@@ -644,9 +833,13 @@ def overlay_deliverables_edit(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/save', methods=['POST'])
 @login_required
 def save_standard_deliverables(project_id):
-    """Bulk create/update/delete for the Standard Brief Deliverables
-    editable table — one request from Save Deliverables covers every
-    change made since Edit Deliverables was opened, committed once.
+    """Bulk create/update/delete for the Deliverables editable table — one
+    request from Save Deliverables covers every change made since Edit
+    Deliverables was opened, committed once. Handles both brief types:
+    Standard rows carry no project_customer_id (None); C&CM rows carry one
+    per customer panel, and collectAllRows() in project_deliverables_card.js
+    gathers every panel's rows into a single payload, so Save always covers
+    every customer at once — never just the one selected in the picker.
     Shape borrowed from assign_standard_deliverables_bulk in
     projects_detail.py (loop, single commit, log after) — but this route
     creates/updates/deletes rows rather than assigning designers, so it's
@@ -665,6 +858,11 @@ def save_standard_deliverables(project_id):
     data = request.get_json(silent=True) or {}
     rows = data.get('deliverables') or []
 
+    # Valid customer ids for this project — a row claiming a
+    # project_customer_id that isn't actually one of this project's
+    # customers falls back to None rather than being trusted outright.
+    valid_customer_ids = {pc.id for pc in project.project_customers}
+
     def parse_date(val):
         if not val:
             return None
@@ -680,6 +878,13 @@ def save_standard_deliverables(project_id):
             return dt.strptime(val, '%H:%M').time()
         except ValueError:
             return None
+
+    def parse_customer_id(val):
+        try:
+            val = int(val)
+        except (TypeError, ValueError):
+            return None
+        return val if val in valid_customer_ids else None
 
     created, updated, deleted = [], [], []
 
@@ -713,7 +918,7 @@ def save_standard_deliverables(project_id):
         else:
             deliverable = Deliverable(
                 project_id=project_id,
-                project_customer_id=None,
+                project_customer_id=parse_customer_id(row.get('project_customer_id')),
                 deliverable_type_id=None,
                 name=name,
                 design_deadline=design_deadline,
@@ -728,13 +933,13 @@ def save_standard_deliverables(project_id):
     db.session.commit()
 
     for name in created:
-        log_activity('deliverable_created', f'Standard deliverable "{name}" added to "{project.name}"',
+        log_activity('deliverable_created', f'Deliverable "{name}" added to "{project.name}"',
                      user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
     for name in updated:
-        log_activity('deliverable_updated', f'Standard deliverable "{name}" updated on "{project.name}"',
+        log_activity('deliverable_updated', f'Deliverable "{name}" updated on "{project.name}"',
                      user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
     for name in deleted:
-        log_activity('deliverable_deleted', f'Standard deliverable "{name}" removed from "{project.name}"',
+        log_activity('deliverable_deleted', f'Deliverable "{name}" removed from "{project.name}"',
                      user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})
@@ -1863,7 +2068,7 @@ def overlay_submissions_approve(project_id):
             # Auto-flag Pre-Production streams the moment a deliverable
             # goes Client Approved — no separate manual step (13 Aug 2026,
             # see status_vocabulary.py's derive_preproduction_needs).
-            d.needs_technical, d.needs_artwork = derive_preproduction_needs(d)
+            d.needs_2d, d.needs_3d, d.needs_technical = derive_preproduction_needs(d)
         approved_deliverables_this_call = pending
 
         # Cascade to channel approval only once EVERY deliverable belonging to
@@ -1944,7 +2149,7 @@ def overlay_submissions_approve(project_id):
             # Auto-flag Pre-Production streams the moment a deliverable
             # goes Client Approved — no separate manual step (13 Aug 2026,
             # see status_vocabulary.py's derive_preproduction_needs).
-            d.needs_technical, d.needs_artwork = derive_preproduction_needs(d)
+            d.needs_2d, d.needs_3d, d.needs_technical = derive_preproduction_needs(d)
         approved_deliverables_this_call = pending
 
         if all(d.status == 'approved' for d in project.project_deliverables):

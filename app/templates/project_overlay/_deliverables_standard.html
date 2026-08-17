@@ -1,19 +1,31 @@
 {% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker %}
 
-{% set focus_toggle_html %}
-{% if can_toggle_focus %}
-<span class="overlay-focus-toggle" id="overlay-deliverables-focus-toggle">
-    <button type="button" class="overlay-focus-toggle-btn{% if not default_focus %} active{% endif %}"
-        data-scope="all">All</button>
-    <button type="button" class="overlay-focus-toggle-btn{% if default_focus %} active{% endif %}"
-        data-scope="focused">Focused</button>
-</span>
-{% endif %}
-{% endset %}
+{% set skippable = (deliverables | rejectattr('status', 'equalto', 'approved') | list) if can_skip_preproduction else [] %}
 
 <div class="overlay-details-grid">
     <div class="overlay-card-full">
-        {% call card('Deliverables', header_extra_html=focus_toggle_html) %}
+        {% call card('Deliverables') %}
+        <div class="overlay-card-controls-row">
+            {% if can_toggle_focus %}
+            <span class="overlay-focus-toggle" id="overlay-deliverables-focus-toggle">
+                <button type="button" class="overlay-focus-toggle-btn{% if not default_focus %} active{% endif %}"
+                    data-scope="all">All</button>
+                <button type="button" class="overlay-focus-toggle-btn{% if default_focus %} active{% endif %}"
+                    data-scope="focused">Focused</button>
+            </span>
+            {% endif %}
+            <div class="overlay-deliverables-controls-right">
+                {% if can_manage_deliverables %}
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-edit-deliverables-btn">Edit Deliverables</button>
+                {% endif %}
+                {% if can_skip_preproduction and skippable %}
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-skip-preprod-btn">Skip to Pre-Production</button>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="overlay-deliverables-body{% if default_focus %} is-focused{% endif %}"
             id="overlay-deliverables-body">
             <div class="overlay-deliverables-header">
@@ -44,7 +56,7 @@
                             {% for t in d.teams.split(',') if t %}{{ tag(t, t|lower) }}{% endfor %}
                         {% else %}
                             <span class="overlay-field-empty">—</span>
-                        {% endif %}             
+                        {% endif %}
                     </span>
                     <span class="overlay-deliverables-deadline">
                         {{ d.design_deadline.strftime('%d %b %Y') if d.design_deadline else '—' }}{% if
@@ -60,16 +72,8 @@
                 {% endfor %}
             </div>
         </div>
-        {% if can_manage_deliverables %}
-        <button type="button" class="overlay-file-action-btn" id="overlay-edit-deliverables-btn">Edit
-            Deliverables</button>
-        {% endif %}
 
-        {% if can_skip_preproduction %}
-        {% set skippable = deliverables | rejectattr('status', 'equalto', 'approved') | list %}
-        {% if skippable %}
-        <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-btn">Skip to
-            Pre-Production</button>
+        {% if can_skip_preproduction and skippable %}
         <div class="overlay-flag-revision-form is-hidden" id="overlay-skip-preprod-form">
             {# Deliverable picker's own "Select All" in its popover footer
             covers Ezekiel's "or click all" case — no separate control
@@ -83,7 +87,6 @@
                 <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-cancel">Cancel</button>
             </div>
         </div>
-        {% endif %}
         {% endif %}
         {% endcall %}
     </div>

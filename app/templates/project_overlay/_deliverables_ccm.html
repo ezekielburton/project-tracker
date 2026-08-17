@@ -1,10 +1,13 @@
 {% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker %}
 
+{% set skippable = (all_deliverables | rejectattr('status', 'equalto', 'approved') | list) if can_skip_preproduction else [] %}
+
 <div class="overlay-details-grid">
     <div class="overlay-card-full">
         {% call card('Deliverables') %}
-        {# Controls row: All/Focused on the left, customer/region scope select
-        on the right — mirrors the Submissions card's controls row (same
+        {# Controls row: All/Focused on the left, Edit Deliverables / Skip to
+        Pre-Production / customer-region scope select grouped on the right —
+        mirrors the Submissions card's controls row (same
         .overlay-card-controls-row / .overlay-scope-select classes) so the two
         cards stay visually consistent. Region (Gulf) is folded into the
         dropdown as optgroups rather than a separate tab-strip, same
@@ -19,23 +22,33 @@
                     data-scope="focused">Focused</button>
             </span>
             {% endif %}
-            <select class="overlay-scope-select" id="overlay-deliverables-scope-select">
-                {% if has_gulf_regions %}
-                {% for region in regions %}
-                <optgroup label="{{ region.name }}">
-                    {% for c in region.customers %}
+            <div class="overlay-deliverables-controls-right">
+                {% if can_manage_deliverables %}
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-edit-deliverables-btn">Edit Deliverables</button>
+                {% endif %}
+                {% if can_skip_preproduction and skippable %}
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-skip-preprod-btn">Skip to Pre-Production</button>
+                {% endif %}
+                <select class="overlay-scope-select" id="overlay-deliverables-scope-select">
+                    {% if has_gulf_regions %}
+                    {% for region in regions %}
+                    <optgroup label="{{ region.name }}">
+                        {% for c in region.customers %}
+                        <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
+                            selected{% endif %}>{{ c.project_customer.customer.name }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                    {% else %}
+                    {% for c in all_customers %}
                     <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
                         selected{% endif %}>{{ c.project_customer.customer.name }}</option>
                     {% endfor %}
-                </optgroup>
-                {% endfor %}
-                {% else %}
-                {% for c in all_customers %}
-                <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
-                    selected{% endif %}>{{ c.project_customer.customer.name }}</option>
-                {% endfor %}
-                {% endif %}
-            </select>
+                    {% endif %}
+                </select>
+            </div>
         </div>
 
         <div class="overlay-deliverables-body{% if default_focus %} is-focused{% endif %}"
@@ -91,21 +104,13 @@
             </div>
             {% endfor %}
         </div>
-        {% if can_manage_deliverables %}
-        <button type="button" class="overlay-file-action-btn" id="overlay-edit-deliverables-btn">Edit
-            Deliverables</button>
-        {% endif %}
 
-        {% if can_skip_preproduction %}
+        {% if can_skip_preproduction and skippable %}
         {# Whole-project picker (every customer, not just the one currently
         selected in the scope dropdown) — Ezekiel's "select deliverables, or
         click all" applies at the project level; picking just one
         customer's items still works, it's just a smaller selection out of
         the same list. #}
-        {% set skippable = all_deliverables | rejectattr('status', 'equalto', 'approved') | list %}
-        {% if skippable %}
-        <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-btn">Skip to
-            Pre-Production</button>
         <div class="overlay-flag-revision-form is-hidden" id="overlay-skip-preprod-form">
             {{ deliverable_picker('overlay-skip-preprod-picker', skippable, []) }}
             <span class="overlay-flag-revision-error hidden" id="overlay-skip-preprod-error"></span>
@@ -115,7 +120,6 @@
                 <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-cancel">Cancel</button>
             </div>
         </div>
-        {% endif %}
         {% endif %}
         {% endcall %}
     </div>

@@ -42,7 +42,7 @@
     --pine: #63775B;
     --rose: #D9A2A8;
     --background: #f5f1ed;
-    --page-background: #f7f5f5;
+    --page-background: #F5F0E8;
 
     --sky: #B9DEFE;
     --coral: #FF8559;
@@ -4398,7 +4398,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     background: var(--white);
     border-right: 1px solid var(--border-subtle);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
-    z-index: 200;
+    z-index: 5000;
     display: flex;
     flex-direction: column;
     transform: translateX(0);
@@ -4507,7 +4507,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     position: fixed;
     bottom: 1rem;
     right: 1.25rem;
-    z-index: 300;
+    z-index: 5000;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -4562,7 +4562,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 .emulation-badge-dropdown {
     position: absolute;
-    top: calc(100% + 0.5rem);
+    bottom: calc(100% + 0.5rem);
     right: 0;
     width: 240px;
     background: var(--white);

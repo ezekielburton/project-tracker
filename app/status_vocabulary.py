@@ -42,40 +42,40 @@ def derive_deliverable_status(deliverable):
 def derive_preproduction_needs(deliverable):
     """Auto-determines which Pre-Production release streams a deliverable
     needs, from whichever design teams were already attached to it — no
-    manual Project Owner flagging step (locked with Ezekiel 13 Aug 2026,
-    superseding the earlier "Owner selects" note in the architecture doc's
-    §7): 2D/3D release artwork, Technical releases technical files. Same
-    disciplines-then-teams-string fallback the Deliverables card template
-    already uses for showing team tags, so this can't disagree with what's
-    displayed there. Pure function — called at the moment a deliverable
+    manual Project Owner flagging step. 2D/3D/Technical are three fully
+    independent streams (each with its own assignment/status/flag cycle),
+    matching how Design already treats them as three separate teams — 2D
+    and 3D used to collapse into one combined "artwork" stream; that
+    collapse is gone. Pure function — called at the moment a deliverable
     reaches 'approved' (Client Approval or Skip to Pre-Production), not
-    stored as its own status."""
+    stored as its own status.
+    Returns (needs_2d, needs_3d, needs_technical)."""
     if deliverable.deliverable_type and deliverable.deliverable_type.disciplines:
         teams = {disc.team for disc in deliverable.deliverable_type.disciplines}
     else:
         teams = {t.strip() for t in (deliverable.teams or '').split(',') if t.strip()}
-    needs_artwork = bool(teams & {'2D', '3D'})
-    needs_technical = 'Technical' in teams
-    return needs_technical, needs_artwork
+    return '2D' in teams, '3D' in teams, 'Technical' in teams
 
 
 def _post_approval_deliverable_status(deliverable):
     """
     Once design-approved, a deliverable's pill keeps advancing through the
-    pre-production layer (needs_technical/needs_artwork + their own
-    technical_status/artwork_status — Projects Redesign Architecture.md §5).
-    Placeholder vocabulary for those two columns (locked 30 Jul 2026, to be
-    refined when M8 designs the real Pre-Production submission flow): NULL/
-    anything else = still in progress, 'approved' = that stream is done.
+    pre-production layer — 2D/3D/Technical are three independent streams
+    now, each with its own needs_*/*_status pair (2D and 3D used to share
+    one combined needs_artwork/artwork_status pair; that collapse is gone).
+    NULL/anything else = still in progress, 'approved' = that stream is
+    done — a deliverable only reaches Handed to Production once every
+    stream it actually needs is approved.
     """
-    needs_any = deliverable.needs_technical or deliverable.needs_artwork
+    needs_any = deliverable.needs_2d or deliverable.needs_3d or deliverable.needs_technical
     if not needs_any:
         return ('Client Approved', 'clover')
 
-    technical_done = (not deliverable.needs_technical) or deliverable.technical_status == 'approved'
-    artwork_done = (not deliverable.needs_artwork) or deliverable.artwork_status == 'approved'
+    done_2d = (not deliverable.needs_2d) or deliverable.status_2d == 'approved'
+    done_3d = (not deliverable.needs_3d) or deliverable.status_3d == 'approved'
+    done_technical = (not deliverable.needs_technical) or deliverable.technical_status == 'approved'
 
-    if technical_done and artwork_done:
+    if done_2d and done_3d and done_technical:
         return ('Handed to Production', 'clover')
     return ('Pre-Production', 'oak')
 

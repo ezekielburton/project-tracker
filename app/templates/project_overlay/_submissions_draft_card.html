@@ -23,9 +23,10 @@ longer matches it (workflow_status='sent_to_client'), so _build_draft_card_
 context surfaces it as sent_submission/sent_files instead — read-only:
 the deck is now the permanent client record. Files read from the NAS zip
 via the same Preview/Download routes (see _load_submission_file_bytes). #}
-{% call card('Sent to Client') %}
+{% call card('Client Submission') %}
 <div class="overlay-status-row">
     {% if sent_revision_event %}{{ status_pill('Revision Requested', 'lavender') }}
+    {% elif all_deliverables_approved %}{{ status_pill('Approved', 'clover') }}
     {% else %}{{ status_pill('Submitted to Client', 'sage') }}{% endif %}
     <span class="overlay-field-empty">
         {% if sent_submission.submitted_by %}Sent by {{ sent_submission.submitted_by.name }}{% endif %}
@@ -78,13 +79,13 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
 can_request_client_revision (a sent deck with no revision already pending). #}
 <div class="overlay-submission-section">
     <div class="overlay-sent-actions">
-        {% if can_mark_approved %}
-        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
-            id="overlay-mark-approved-btn">Mark Approved</button>
-        {% endif %}
         {% if can_request_client_revision %}
         <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"
             id="overlay-client-revision-btn">Request Client Revision</button>
+        {% endif %}
+        {% if can_mark_approved %}
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary"
+            id="overlay-mark-approved-btn">Mark Approved</button>
         {% endif %}
     </div>
 
@@ -123,9 +124,22 @@ can_request_client_revision (a sent deck with no revision already pending). #}
 
     {% if can_request_client_revision %}
     <div class="overlay-flag-revision-form is-hidden" id="overlay-client-revision-form">
-        <div id="overlay-client-revision-message" contenteditable="true" data-rich-editor
-            data-project-id="{{ project.id }}" class="form-input rich-editor overlay-flag-revision-input"
-            data-placeholder="Describe the revision the client requested…"></div>
+        {% if is_ckv_toggle_scope %}
+        <p class="overlay-field-empty">Revision applies to Concept &amp; KV together — this scope has no deliverable
+            list to split.</p>
+        {% else %}
+        <div class="overlay-mark-approved-columns">
+            <div class="overlay-mark-approved-col overlay-mark-approved-col--picker">
+                {% set revisable_options = revisable_deliverables | map(attribute='deliverable') | list %}
+                {{ deliverable_picker('overlay-client-revision-picker', revisable_options, []) }}
+            </div>
+            <div class="overlay-mark-approved-col overlay-mark-approved-col--note">
+                <div id="overlay-client-revision-message" contenteditable="true" data-rich-editor
+                    data-project-id="{{ project.id }}" class="form-input rich-editor overlay-flag-revision-input"
+                    data-placeholder="Describe the revision the client requested…"></div>
+            </div>
+        </div>
+        {% endif %}
         <span class="overlay-flag-revision-error hidden" id="overlay-client-revision-error"></span>
         <div class="overlay-flag-revision-form-actions">
             <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger"

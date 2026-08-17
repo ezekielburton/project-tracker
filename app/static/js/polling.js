@@ -41,6 +41,16 @@
     // being torn down, and matches this file's existing one-variable-per-
     // page-type convention (_dashboardStream / _detailStream).
     var _roleDashboardStream = null;
+    // New project overlay (task #35) — separate from _detailStream above on
+    // purpose: _detailStream/pollDetail are scoped to the OLD /projects/<id>
+    // detail page's #section-assignments fingerprint + a full-page reload,
+    // neither of which apply here (the overlay is injected into the
+    // Projects list page, not its own page nav, and refreshes via
+    // loadSubTabContent rather than window.location.reload()). Started/
+    // stopped explicitly by project_list.js around overlay open/close,
+    // since there's no page-navigation event to hook it off of like init()
+    // uses for everything else in this file.
+    var _overlayStream = null;
 
     // How often the fallback interval polls, when SSE isn't available or
     // has dropped — matches the cadence the old setInterval-only design used.
@@ -311,6 +321,18 @@
         }
     }
 
+    function stopOverlayStream() {
+        if (_overlayStream !== null) {
+            _overlayStream.close();
+            _overlayStream = null;
+        }
+    }
+
+    function startOverlayStream(projectId, onChange) {
+        stopOverlayStream();
+        _overlayStream = _connectLiveStream('/sse/projects/' + projectId, onChange, _FALLBACK_INTERVAL_MS);
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // INIT — detect which page is showing and start the right live stream
@@ -391,8 +413,10 @@
 
     // Expose pause/resume so modals can stop polling while they're open
     window.helixPolling = {
-        pause:  teardown,
-        resume: init
+        pause: teardown,
+        resume: init,
+        startOverlayStream: startOverlayStream,
+        stopOverlayStream: stopOverlayStream
     };
 
     // Run on the initial full page load

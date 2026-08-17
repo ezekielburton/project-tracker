@@ -23,12 +23,9 @@ if (!window._expandRowsWired) {
     });
 }
 
-// ── Deliverable image hover preview ──────────────────────────────────────────
-// Shows a full-viewport overlay when hovering .deliverable-row-thumb images.
-// mouseover/mouseout are the bubbling equivalents of mouseenter/mouseleave, so
-// normal event delegation works. The overlay and backdrop have pointer-events:none
-// so they never block the page; only the large image is interactive — mouseleave
-// on IT is the signal to dismiss.
+// ── Deliverable image click-to-maximize preview ──────────────────────────────
+// Shows a full-viewport overlay when clicking a .deliverable-row-thumb image.
+// Click the backdrop, or press Escape, to close.
 (function () {
     if (window._delivImgOverlayWired) return;
     window._delivImgOverlayWired = true;
@@ -36,14 +33,12 @@ if (!window._expandRowsWired) {
     var overlay = document.createElement('div');
     overlay.id = 'deliv-img-overlay';
     overlay.innerHTML = '<div class="deliv-img-backdrop"></div>' +
-                        '<img class="deliv-img-large" src="" alt="">';
+        '<img class="deliv-img-large" src="" alt="">';
     document.body.appendChild(overlay);
 
     var large = overlay.querySelector('.deliv-img-large');
-    var hideTimer = null;
 
     function show(src, alt) {
-        clearTimeout(hideTimer);
         large.src = src;
         large.alt = alt || '';
         overlay.classList.add('visible');
@@ -54,22 +49,15 @@ if (!window._expandRowsWired) {
         large.src = '';
     }
 
-    function scheduleHide() {
-        hideTimer = setTimeout(hide, 120);
-    }
-
-    document.addEventListener('mouseover', function (e) {
+    document.addEventListener('click', function (e) {
         var thumb = e.target.closest('.deliverable-row-thumb');
-        if (thumb) show(thumb.src, thumb.alt);
+        if (thumb) { show(thumb.src, thumb.alt); return; }
+        if (overlay.classList.contains('visible') && e.target !== large) hide();
     });
 
-    document.addEventListener('mouseout', function (e) {
-        var thumb = e.target.closest('.deliverable-row-thumb');
-        if (thumb) scheduleHide();
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') hide();
     });
-
-    large.addEventListener('mouseenter', function () { clearTimeout(hideTimer); });
-    large.addEventListener('mouseleave', function () { hide(); });
 }());
 
 // ── "Download All" zip download ───────────────────────────────────────────────

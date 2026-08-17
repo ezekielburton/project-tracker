@@ -554,6 +554,15 @@ class Deliverable(db.Model):
     needs_artwork = db.Column(db.Boolean, default=False, nullable=False)
     technical_status = db.Column(db.String(50), nullable=True)
     artwork_status = db.Column(db.String(50), nullable=True)
+    # 2D/3D split out from the old combined needs_artwork/artwork_status pair
+    # (17 Aug 2026) — each is now its own independent Pre-Production stream,
+    # matching how Design already treats 2D/3D/Technical as three separate
+    # teams. needs_artwork/artwork_status stay in place, unused going
+    # forward — additive migration, nothing dropped.
+    needs_2d = db.Column(db.Boolean, default=False, nullable=False)
+    needs_3d = db.Column(db.Boolean, default=False, nullable=False)
+    status_2d = db.Column(db.String(50), nullable=True)
+    status_3d = db.Column(db.String(50), nullable=True)
 
     # overlaps= tells SQLAlchemy these relationships intentionally share the same
     # foreign key — project_deliverables and project_ref are the other side of this mapping

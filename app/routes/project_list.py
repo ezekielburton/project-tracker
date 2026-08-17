@@ -280,7 +280,7 @@ def _base_query_for_view(view, user):
         view = saved_view.base_view if saved_view else 'my'
 
     if view == 'all':
-        if user.role in ('cs', 'admin', 'management'):
+        if user.role in ('cs', 'admin', 'management', 'project_owner'):
             query = Project.query.filter(
                 Project.project_status != 'draft',
                 Project.project_status != 'approved'
@@ -299,7 +299,7 @@ def _base_query_for_view(view, user):
         order_by = Project.approved_at.desc()
 
     else:  # 'my' - default
-        if user.role in ('cs', 'admin', 'management'):
+        if user.role in ('cs', 'admin', 'management', 'project_owner'):
             if user.role == 'admin':
                 query = Project.query.filter(
                     Project.project_status != 'draft',
@@ -312,7 +312,8 @@ def _base_query_for_view(view, user):
                 query = Project.query.filter(
                     db.or_(
                         Project.cs_lead_id == user.id,
-                        Project.id.in_(secondary_project_ids)
+                        Project.id.in_(secondary_project_ids),
+                        Project.project_owner_id == user.id
                     ),
                     Project.project_status != 'draft',
                     Project.project_status != 'approved'

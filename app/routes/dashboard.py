@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, abort
 from flask_login import login_required
 from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import nullslast
@@ -308,27 +308,23 @@ def index():
     else:
         layout_role = user.role
 
-    # Average Project Time's inline body (admin/management only — see the
-    # big comment above CARD_ORDER) reuses the EXACT SAME row-building
-    # function the standalone /time-tracking page calls, so the two never
-    # drift apart. Imported inside the function (not at module level) to
-    # avoid a circular import, same convention CLAUDE.md documents for
-    # activity logging — app.routes.time_tracking doesn't import from
-    # dashboard.py, but importing Flask route modules at module level
-    # tends to create import-order footguns in this codebase regardless.
-    # Skipped entirely (not just hidden) for every other role — same
-    # "don't run a query nobody can see the result of" reasoning
-    # flaggable_projects below already follows, and matches the tile's
-    # `muted` state, which is also keyed on the REAL user.role, not
-    # layout_role/scope (an admin previewing a CS lead's tab still gets
-    # the real company-wide table, not a blocked one — this card was never
-    # part of the scope-preview system to begin with, see its own
-    # docstring in stat_avg_time.html).
-    time_tracking_rows = []
-    if user.role in ('admin', 'management'):
-        from app.routes.time_tracking import build_time_tracking_rows
-        time_tracking_rows = build_time_tracking_rows()
-
+    # Average Project Time's inline body used to eagerly call
+    # build_time_tracking_rows() right here, on EVERY dashboard page load
+    # for admin/management — REMOVED 18 Jul 2026, real perf bug, not a
+    # style choice. That function does a full company-wide scan (every
+    # non-draft project, then for EACH one, its own project_deliverables
+    # lazy relationship, then for EACH deliverable, its own status_logs
+    # lazy relationship, plus a business-hours calculation per project and
+    # per deliverable) — an N+1 storm that ran whether or not the user
+    # ever opened this tab, and was the dominant cost behind a 3+ second
+    # dashboard load reported by Ezekiel (screenshot showed the main HTML
+    # request alone taking 3.27s). Now computed lazily, only when the tab
+    # is actually clicked, via GET /dashboard/api/time-tracking-rows (see
+    # that route further down + stat_avg_time.html/dashboard.js for the
+    # fetch-on-first-open wiring). stat_avg_time.html no longer takes a
+    # time_tracking_rows kwarg at all — it only needs `is_openable`
+    # (effective_role in ('admin','management')), computed inside the
+    # template itself, unchanged.
     card_order = CARD_ORDER.get(layout_role, CARD_ORDER['management'])
 
     # ── CS-only redesigned dashboard branch (16 Jul 2026) ─────────────────
@@ -390,15 +386,6 @@ def index():
             pending_approval_projects=_compute_pending_approval_projects(scope_user),
             due_default=_compute_due(scope_user, 'overdue'),
             clashes=_compute_clashes_response(scope_user),
-            # stat_avg_time.html's body is admin/management-only (muted for
-            # every other role via dash_card()'s own muted= mechanic, keyed
-            # on the REAL user.role) — a CS viewer can never open it, so
-            # there's no real table to fetch here. Passed as an empty list
-            # (not omitted) so the partial's Jinja doesn't hit an undefined
-            # variable on the 'body' render pass, same defensive reasoning
-            # dashboard.html's own time_tracking_rows=[] fallback uses for
-            # every non-admin/management role below.
-            time_tracking_rows=[],
             flaggable_projects=_compute_flaggable_projects(user),
         )
 
@@ -477,7 +464,6 @@ def index():
             pending_approval_projects=_compute_pending_approval_projects(scope_user),
             due_default=_compute_due(scope_user, 'overdue'),
             clashes=_compute_clashes_response(scope_user),
-            time_tracking_rows=time_tracking_rows,
         )
 
     # ── Designer / Team Lead dashboard branch (16 Jul 2026) ───────────────
@@ -543,7 +529,6 @@ def index():
         # total active projects also."
         your_active_projects=_compute_your_active_projects(scope_user),
         pending_approval_projects=_compute_pending_approval_projects(scope_user),
-        time_tracking_rows=time_tracking_rows,
         summary=_compute_summary(scope_user),
         what_changed=_compute_what_changed(scope_user),
         # Due card narrowed 12 Jul 2026 (fourth follow-up) to show ONLY
@@ -1084,8 +1069,10 @@ def _compute_project_stats(user):
     queries rather than reshaping this function's output, matching the
     "each card independently re-queries _scoped_projects()" convention
     every other card on this page already follows. Average Project Time's
-    body (admin/management only) comes from build_time_tracking_rows(),
-    fetched separately in index() — see that function's own docstring.
+    body (admin/management only) comes from build_time_tracking_rows() —
+    NOT fetched in index() anymore (18 Jul 2026 perf fix, see the big
+    comment there) — now lazy-loaded client-side via GET /dashboard/api/
+    time-tracking-rows only when the tab is actually opened.
     This function still feeds both the initial page load and the SSE
     live-refresh's /api/project-stats fetch (badges only, never bodies —
     see dashboard.js).
@@ -2599,6 +2586,30 @@ def api_escalation_history():
     # follow (see the big comment on _compute_risk_overdue()) — so there's
     # no scope to resolve here.
     return jsonify(_compute_escalation_history())
+
+
+# Added 18 Jul 2026 — real perf fix, not a new feature. build_time_tracking_
+# rows() used to be called unconditionally in index() on EVERY admin/
+# management dashboard page load, regardless of whether the Average
+# Project Time tab was ever opened — a full company-wide scan (every
+# non-draft project, then EACH one's project_deliverables relationship,
+# then EACH deliverable's status_logs relationship, plus a business-hours
+# calculation per project and per deliverable) that was the dominant cost
+# behind a 3+ second dashboard load Ezekiel reported (screenshot showed the
+# main HTML request alone taking 3.27s). Moved here so it only runs when a
+# user actually clicks the tab — see stat_avg_time.html/dashboard.js for
+# the fetch-on-first-open wiring. Returns a rendered HTML fragment (not
+# JSON) — the row markup is non-trivial (nested project/deliverable/
+# status-chip structure with <details> breakdowns), so reusing the exact
+# same Jinja partial server-side avoids duplicating that structure in JS.
+@dashboard_bp.route('/api/time-tracking-rows')
+@login_required
+def api_time_tracking_rows():
+    actor = get_actor()
+    if actor.role not in ('admin', 'management'):
+        abort(403)
+    from app.routes.time_tracking import build_time_tracking_rows
+    return render_template('dashboard/cards/_stat_avg_time_rows.html', time_tracking_rows=build_time_tracking_rows())
 
 
 # The deep-dive zone (Projects/Deliverables tabs at the bottom of the

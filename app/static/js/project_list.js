@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlayMount = document.getElementById('project-overlay-mount');
     let activeOverlay = null;
     let activeSubTabCard = null;   // whichever sub-tab's card module is currently mounted (Details, Deliverables, ...)
+    let activeOverlayEdit = null;  // M4 edit-mode handle — reset (not destroyed) on every sub-tab switch, see loadSubTabContent
 
     // ---- Detail + Briefing overlay: remember last section + sub-tab ----
     // Per-project localStorage, same kebab-case-plus-projectId key shape
@@ -80,6 +81,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const contentEl = document.getElementById('project-overlay-content');
         if (!contentEl) return;
 
+        // Any sub-tab switch invalidates edit mode — the DOM it was
+        // editing is about to be torn out from under it either way. Reset
+        // now so the header (Edit/Save/Cancel) can't end up stuck showing
+        // Save/Cancel over content that isn't actually in edit state
+        // (e.g. Edit clicked on Deliverables, then navigate back to
+        // Details). No confirm here — that's task #37's job once there's
+        // a real "unsaved changes" guard to build.
+        if (activeOverlayEdit) {
+            activeOverlayEdit.exitEditMode();
+        }
+
+        // Edit module (M4) is scoped to Details only (17 Aug 2026) —
+        // Deliverables already has its own separate structural edit mode
+        // (Step 3), Submissions/Pre-Production don't need field editing.
+        // Hide the header's Edit control outside Details.
+        const overlayHeader = document.getElementById('project-overlay-header');
+        if (overlayHeader) {
+            const editBtn = overlayHeader.querySelector('#project-overlay-edit-btn');
+            if (editBtn) editBtn.classList.toggle('is-hidden', subTabKey !== 'details');
+        }
+
         fetch(loader.url(projectId))
             .then((res) => res.text())
             .then((html) => {
@@ -124,6 +146,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 );
 
+                // Edit mode (M4) — header (name/Edit/Save/Cancel) is part of
+                // the outer shell rendered once here, not re-injected per
+                // sub-tab like contentEl is, so it only needs initializing
+                // once per overlay open, same as ProjectOverlay itself.
+                const overlayHeader = document.getElementById('project-overlay-header');
+                if (overlayHeader && window.ProjectOverlayEdit) {
+                    activeOverlayEdit = window.ProjectOverlayEdit.init(overlayHeader, contentEl, projectId, function () {
+                        loadSubTabContent(projectId, 'details');
+                    });
+                }
+
+                // Live updates (task #35) — someone else saving an edit to
+                // this same project (or any other watched change — see
+                // live_events.py's _PROJECT_ID_GETTERS) pings this stream.
+                // Skipped while THIS viewer is mid-edit, so an incoming
+                // refresh can never wipe out fields they're actively
+                // typing into — the concurrent-edit check from task #34
+                // already covers that case safely at Save time instead.
+                if (window.helixPolling) {
+                    window.helixPolling.startOverlayStream(projectId, function () {
+                        if (activeOverlayEdit && activeOverlayEdit.isEditing()) return;
+                        const lastView = getLastView(projectId);
+                        const subTab = (lastView && lastView.section === 'design') ? (lastView.subTab || 'details') : null;
+                        if (subTab) loadSubTabContent(projectId, subTab);
+                    });
+                }
+
                 const lastView = getLastView(projectId);
                 if (lastView && lastView.section === 'design' && lastView.subTab && lastView.subTab !== 'details' && SUBTAB_LOADERS[lastView.subTab]) {
                     // Remembered a real sub-tab other than the default —
@@ -162,6 +211,8 @@ document.addEventListener('DOMContentLoaded', () => {
             activeSubTabCard.destroy();
             activeSubTabCard = null;
         }
+        activeOverlayEdit = null;
+        if (window.helixPolling) window.helixPolling.stopOverlayStream();
         overlayMount.innerHTML = '';
 
         if (pushHistory) {

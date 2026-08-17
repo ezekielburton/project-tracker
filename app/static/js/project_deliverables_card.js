@@ -142,6 +142,31 @@ window.ProjectDeliverablesCard = (function () {
             });
         }
 
+        // Standard has one edit list; C&CM has one per customer panel (only
+        // one visible at a time — see _deliverables_ccm_edit.html). Save
+        // always gathers every list so switching the customer picker never
+        // drops unsaved edits in a panel you're not currently looking at.
+        function collectAllRows(rootEl) {
+            var out = [];
+            rootEl.querySelectorAll('.overlay-deliverables-edit-list').forEach(function (listEl) {
+                var customerId = listEl.dataset.customerId || null;
+                collectRows(listEl).forEach(function (row) {
+                    row.project_customer_id = customerId;
+                    out.push(row);
+                });
+            });
+            return out;
+        }
+
+        // The list Add Deliverable / Apply Deadline to All should target:
+        // the visible customer panel's list on C&CM, or the only list on
+        // Standard (no panels there at all).
+        function activeEditList(rootEl) {
+            var visiblePanel = rootEl.querySelector('.overlay-deliverables-edit-panel:not(.is-hidden)');
+            if (visiblePanel) return visiblePanel.querySelector('.overlay-deliverables-edit-list');
+            return rootEl.querySelector('.overlay-deliverables-edit-list');
+        }
+
         function wireRow(row) {
             row.querySelectorAll('.overlay-deliverables-edit-toggle').forEach(function (btn) {
                 btn.addEventListener('click', function () { btn.classList.toggle('is-active'); });
@@ -160,16 +185,27 @@ window.ProjectDeliverablesCard = (function () {
         }
 
         function bindEdit() {
-            var listEl = rootEl.querySelector('#overlay-deliverables-edit-list');
             var template = rootEl.querySelector('#overlay-deliverable-row-template');
             var addBtn = rootEl.querySelector('#overlay-add-deliverable-btn');
             var applyAllBtn = rootEl.querySelector('#overlay-apply-deadline-all-btn');
             var saveBtn = rootEl.querySelector('#overlay-save-deliverables-btn');
+            var scopeSelect = rootEl.querySelector('#overlay-deliverables-edit-scope-select');
 
-            if (listEl) { listEl.querySelectorAll('.overlay-deliverables-edit-row').forEach(wireRow); }
+            rootEl.querySelectorAll('.overlay-deliverables-edit-row').forEach(wireRow);
 
-            if (addBtn && template && listEl) {
+            // C&CM only — Standard has no panels/select, so this is a no-op there.
+            if (scopeSelect) {
+                scopeSelect.addEventListener('change', function () {
+                    rootEl.querySelectorAll('.overlay-deliverables-edit-panel').forEach(function (panel) {
+                        panel.classList.toggle('is-hidden', panel.dataset.customerPanel !== scopeSelect.value);
+                    });
+                });
+            }
+
+            if (addBtn && template) {
                 addBtn.addEventListener('click', function () {
+                    var listEl = activeEditList(rootEl);
+                    if (!listEl) return;
                     var clone = template.content.cloneNode(true);
                     var row = clone.querySelector('.overlay-deliverables-edit-row');
                     listEl.appendChild(clone);
@@ -178,8 +214,13 @@ window.ProjectDeliverablesCard = (function () {
                 });
             }
 
-            if (applyAllBtn && listEl) {
+            if (applyAllBtn) {
                 applyAllBtn.addEventListener('click', function () {
+                    // Scoped to the visible customer panel on C&CM — "all"
+                    // means every row you're currently looking at, not
+                    // every deliverable across every customer.
+                    var listEl = activeEditList(rootEl);
+                    if (!listEl) return;
                     var rows = listEl.querySelectorAll('.overlay-deliverables-edit-row');
                     if (!rows.length) return;
                     var sourceDate = rows[0].querySelector('.overlay-deliverables-edit-date').value;
@@ -192,9 +233,9 @@ window.ProjectDeliverablesCard = (function () {
                 });
             }
 
-            if (saveBtn && listEl) {
+            if (saveBtn) {
                 saveBtn.addEventListener('click', function () {
-                    var deliverables = collectRows(listEl);
+                    var deliverables = collectAllRows(rootEl);
                     saveBtn.disabled = true;
                     var originalText = saveBtn.textContent;
                     saveBtn.textContent = 'Saving…';

@@ -12,6 +12,9 @@ active section. See project_overlay.js. #}
             <div class="project-overlay-name">{{ project.name }}</div>
             {% if can_edit_project %}
             <button type="button" class="project-overlay-edit-btn" id="project-overlay-edit-btn">Edit</button>
+            <button type="button" class="project-overlay-cancel-btn is-hidden"
+                id="project-overlay-cancel-btn">Cancel</button>
+            <button type="button" class="project-overlay-save-btn is-hidden" id="project-overlay-save-btn">Save</button>
             {% endif %}
             <button type="button" class="project-overlay-close" id="project-overlay-close"
                 aria-label="Close">&times;</button>

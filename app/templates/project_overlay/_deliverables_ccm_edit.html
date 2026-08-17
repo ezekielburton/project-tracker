@@ -1,0 +1,112 @@
+{% from '_shared_macros.html' import card %}
+
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% call card('Deliverables') %}
+        {# Same controls-row pattern as _deliverables_ccm.html's view mode:
+        Add Deliverable on the left, commit actions + customer picker
+        grouped on the right. One customer panel is visible at a time, but
+        Save always posts every panel's rows in one request (see
+        collectAllRows in project_deliverables_card.js) — switching the
+        picker never risks losing unsaved edits in another panel. #}
+        <div class="overlay-card-controls-row">
+            <button type="button" class="overlay-file-action-btn" id="overlay-add-deliverable-btn">Add Deliverable</button>
+            <div class="overlay-deliverables-controls-right">
+                <button type="button" class="overlay-file-action-btn" id="overlay-apply-deadline-all-btn">Apply
+                    Deadline to All</button>
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-save-deliverables-btn">Save Deliverables</button>
+                <select class="overlay-scope-select" id="overlay-deliverables-edit-scope-select">
+                    {% if has_gulf_regions %}
+                    {% for region in regions %}
+                    <optgroup label="{{ region.name }}">
+                        {% for c in region.customers %}
+                        <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
+                            selected{% endif %}>{{ c.project_customer.customer.name }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                    {% else %}
+                    {% for c in all_customers %}
+                    <option value="{{ c.project_customer.id }}"{% if c.project_customer.id == first_customer_id %}
+                        selected{% endif %}>{{ c.project_customer.customer.name }}</option>
+                    {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+        </div>
+
+        <div class="overlay-deliverables-edit-header">
+            <span>Deliverable Name</span>
+            <span class="overlay-deliverables-edit-header-deadline">Design Deadline</span>
+            <span>2D</span>
+            <span>3D</span>
+            <span>Technical</span>
+            <span></span>
+        </div>
+
+        {% for c in all_customers %}
+        <div class="overlay-deliverables-edit-panel{% if c.project_customer.id != first_customer_id %} is-hidden{% endif %}"
+            data-customer-panel="{{ c.project_customer.id }}">
+            <div class="overlay-deliverables-edit-list" data-customer-id="{{ c.project_customer.id }}">
+                {% for d in c.deliverables %}
+                {# Same source priority as the view mode's team tags (see
+                _deliverables_ccm.html): a catalog deliverable type's fixed
+                disciplines win over the freeform .teams column, so a typed
+                deliverable's toggles open already showing what's actually
+                displayed rather than always blank. #}
+                {% if d.deliverable_type and d.deliverable_type.disciplines %}
+                {% set current_teams = d.deliverable_type.disciplines | map(attribute='team') | list %}
+                {% else %}
+                {% set current_teams = (d.teams or '').split(',') %}
+                {% endif %}
+                <div class="overlay-deliverables-edit-row" data-deliverable-id="{{ d.id }}">
+                    <input type="text" class="overlay-deliverables-edit-name" value="{{ d.name }}"
+                        placeholder="Deliverable Name">
+                    <input type="date" class="overlay-deliverables-edit-date"
+                        value="{{ d.design_deadline.isoformat() if d.design_deadline else '' }}">
+                    <select class="overlay-deliverables-edit-time">
+                        <option value="">Time…</option>
+                        {% if d.edit_time_extra %}
+                        <option value="{{ d.edit_time_extra[0] }}" selected>{{ d.edit_time_extra[1] }}</option>
+                        {% endif %}
+                        {% for value, label in time_options %}
+                        <option value="{{ value }}" {% if d.design_deadline_time and
+                            d.design_deadline_time.strftime('%H:%M')==value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button"
+                        class="overlay-deliverables-edit-toggle {% if '2D' in current_teams %}is-active{% endif %}"
+                        data-team="2D">2D</button>
+                    <button type="button"
+                        class="overlay-deliverables-edit-toggle {% if '3D' in current_teams %}is-active{% endif %}"
+                        data-team="3D">3D</button>
+                    <button type="button"
+                        class="overlay-deliverables-edit-toggle {% if 'Technical' in current_teams %}is-active{% endif %}"
+                        data-team="Technical">Technical</button>
+                    <button type="button" class="overlay-deliverables-edit-delete" aria-label="Delete">Delete</button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <template id="overlay-deliverable-row-template">
+            <div class="overlay-deliverables-edit-row">
+                <input type="text" class="overlay-deliverables-edit-name" placeholder="Deliverable Name">
+                <input type="date" class="overlay-deliverables-edit-date">
+                <select class="overlay-deliverables-edit-time">
+                    <option value="">Time…</option>
+                    {% for value, label in time_options %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="overlay-deliverables-edit-toggle" data-team="2D">2D</button>
+                <button type="button" class="overlay-deliverables-edit-toggle" data-team="3D">3D</button>
+                <button type="button" class="overlay-deliverables-edit-toggle" data-team="Technical">Technical</button>
+                <button type="button" class="overlay-deliverables-edit-delete" aria-label="Delete">Delete</button>
+            </div>
+        </template>
+        {% endcall %}
+    </div>
+</div>

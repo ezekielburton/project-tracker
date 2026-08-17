@@ -12,16 +12,16 @@ overlay_submissions_submit_to_client. #}
         <h3 class="modal-title">Submit to Client</h3>
 
         <p class="overlay-submit-summary-intro">
-            This deck becomes the permanent client record. Review the full scope, then confirm.
+            Review the full scope, then confirm.
         </p>
 
         <div class="overlay-submit-summary-filename">
-            <span class="overlay-field-label">Deck file</span>
+            <span class="overlay-field-label">Submission file</span>
             <span class="overlay-submit-summary-filename-value">{{ expected_filename }}</span>
         </div>
 
         <div class="overlay-submit-summary-section">
-            <span class="overlay-field-label">Files in this deck ({{ files|length }})</span>
+            <span class="overlay-field-label">Files in this submission ({{ files|length }})</span>
             <ul class="overlay-submit-summary-files">
                 {% for f in files %}
                 <li class="overlay-submit-summary-file">
@@ -38,7 +38,7 @@ overlay_submissions_submit_to_client. #}
         {# C&CM Concept & KV deck — no deliverables; the "going for decision"
         set is whichever of Concept / KV this draft included. #}
         <div class="overlay-submit-summary-section">
-            <span class="overlay-field-label">Going for decision</span>
+            <span class="overlay-field-label">Deliverables</span>
             <ul class="overlay-submit-summary-deliverables">
                 {% if includes_concept %}
                 <li class="overlay-submit-summary-deliverable">
@@ -54,7 +54,7 @@ overlay_submissions_submit_to_client. #}
         </div>
         {% else %}
         <div class="overlay-submit-summary-section">
-            <span class="overlay-field-label">Going for decision ({{ included|length }})</span>
+            <span class="overlay-field-label">Deliverables ({{ included|length }})</span>
             {% if included %}
             <ul class="overlay-submit-summary-deliverables">
                 {% for item in included %}
@@ -72,7 +72,7 @@ overlay_submissions_submit_to_client. #}
 
         {% if indicators %}
         <div class="overlay-submit-summary-section overlay-submit-summary-section--readonly">
-            <span class="overlay-field-label">Already approved — included for completeness</span>
+            <span class="overlay-field-label">Already approved</span>
             <ul class="overlay-submit-summary-deliverables">
                 {% for item in indicators %}
                 <li class="overlay-submit-summary-deliverable">
@@ -82,7 +82,7 @@ overlay_submissions_submit_to_client. #}
                 {% endfor %}
             </ul>
             <p class="overlay-submit-summary-note">
-                These stay as they are — this submission doesn't change their status.
+                These stay as they are
             </p>
         </div>
         {% endif %}
@@ -95,7 +95,7 @@ overlay_submissions_submit_to_client. #}
         Only shown when there's an existing sent deck to resend against. #}
         <label class="overlay-submit-summary-keep-revision">
             <input type="checkbox" id="overlay-submit-summary-keep-revision">
-            Do not increase revision counter — resends this as the same revision (adds a "(2)" suffix so it can't overwrite the file already with the client)
+            Do not increase revision counter
         </label>
         {% endif %}
 

@@ -12,6 +12,7 @@ window.ProjectSubmissionsDraftCard = (function () {
     var _lastBackdropCleanup = null;
     var _deliverablePickerHandle = null;
     var _approvePickerHandle = null;
+    var _revisionPickerHandle = null;
 
     function init(contentEl, projectId, params, refresh) {
         if (!contentEl) return;
@@ -52,6 +53,17 @@ window.ProjectSubmissionsDraftCard = (function () {
             approvePickerEl.dataset.popoverAlign = 'above-center';
             _approvePickerHandle = window.DeliverablePicker.init(approvePickerEl);
         }
+
+        if (_revisionPickerHandle) {
+            _revisionPickerHandle.destroy();
+            _revisionPickerHandle = null;
+        }
+        var revisionPickerEl = contentEl.querySelector('#overlay-client-revision-picker');
+        if (revisionPickerEl) {
+            revisionPickerEl.dataset.popoverAlign = 'above-center';
+            _revisionPickerHandle = window.DeliverablePicker.init(revisionPickerEl);
+        }
+        
 
         var ckvToggle = contentEl.querySelector('#overlay-submit-review-ckv-toggle');
         if (ckvToggle) {
@@ -385,16 +397,19 @@ window.ProjectSubmissionsDraftCard = (function () {
                     }
                     return;
                 }
+                var body = {
+                    scope: params.scope || 'ckv',
+                    customer_id: params.customer_id || null,
+                    message: message,
+                };
+                if (_revisionPickerHandle) body.deliverable_ids = _revisionPickerHandle.getSelectedIds();
+
                 crConfirm.disabled = true;
                 if (errorEl) errorEl.classList.add('hidden');
                 fetch(`/projects/${projectId}/overlay/submissions/client-revision`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        scope: params.scope || 'ckv',
-                        customer_id: params.customer_id || null,
-                        message: message,
-                    }),
+                    body: JSON.stringify(body),
                 })
                     .then(function (r) { return r.json(); })
                     .then(function (data) {

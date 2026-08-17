@@ -1,36 +1,45 @@
 """
 Project Pre-Production Route File.
 
-New blueprint — own file per the standing rule that any brand-new feature
-gets its own JS/route file. Write-side backend only, built 13 Aug 2026
-ahead of the Figma-gated Pre-Production tab: stream assignment (technical/
-artwork), mark-done/approve/flag on a stream, Skip to Pre-Production, and
-the Handed to Production cascade. The actual tab UI + its render/fetch
-routes are NOT part of this pass — Ezekiel builds those once the wireframe
-is ready, calling into these routes.
+Own file per the standing rule that any brand-new feature gets its own
+JS/route file. Stream assignment (2D/3D/Technical — three fully
+independent streams, each with its own assignee/status/flag cycle), mark-
+done/approve/flag on a stream, Skip to Pre-Production, and the Handed to
+Production cascade.
 
-Design recap (locked with Ezekiel 13 Aug 2026):
+Design recap (locked with Ezekiel, 13 Aug 2026, extended 17 Aug 2026):
 - No new "gate" between Client Approved and Pre-Production — a deliverable
-  reaching status='approved' with needs_technical/needs_artwork set is
-  already effectively in Pre-Production; DeliverableStatusLog already
+  reaching status='approved' with any needs_2d/needs_3d/needs_technical set
+  is already effectively in Pre-Production; DeliverableStatusLog already
   timestamps that moment for free (see record_deliverable_status).
-- technical_status/artwork_status get a 3-state vocabulary: None (not
-  started) -> 'uploaded' (releaser marked their upload done) ->
-  'approved' (Project Owner signed off — the ONLY thing that advances a
-  stream to done; _post_approval_deliverable_status already reads this).
-  A flag resets the stream back to None and logs why.
-- Handed to Production (deliverable pill) is purely derived, already
-  built. What's NEW here is the CASCADE: once every deliverable in a
-  channel/project has both required streams approved, the channel/
-  project itself advances to 'handed_to_production' — same "only advance
-  once EVERY deliverable in scope is done" rule Client Approval already
-  uses, one stage further down.
+- status_2d/status_3d/technical_status each get a 3-state vocabulary: None
+  (not started, or flagged and waiting on reupload) -> 'uploaded' (releaser
+  marked their upload done) -> 'approved' (Project Owner signed off — the
+  ONLY thing that advances a stream to done; _post_approval_deliverable_
+  status already reads this). A flag resets the stream back to None and
+  logs why.
+- 2D/3D/Technical are three fully independent streams (17 Aug 2026,
+  supersedes the original two-stream "technical"/"artwork" split) —
+  Design already treats 2D/3D/Technical as three separate teams a
+  deliverable can simultaneously need, each with its own assignee; Pre-
+  Production now matches that instead of collapsing 2D+3D into one
+  combined "artwork" bucket. Each stream reuses the SAME DeliverableAssignment
+  team value Design already uses ('2D'/'3D'/'Technical') rather than a
+  separate pseudo-team — a designer already on a deliverable's 2D/3D/
+  Technical team during Design carries straight into that same stream
+  here for free, no separate row needed.
+- Handed to Production (deliverable pill) is purely derived. The CASCADE:
+  once every deliverable in a channel/project has every stream it needs
+  approved, the channel/project itself advances to 'handed_to_production'
+  automatically — no manual "Handed to Production" button anywhere; same
+  "only advance once EVERY deliverable in scope is done" rule Client
+  Approval already uses, one stage further down. Minimizing admin work is
+  the explicit point (17 Aug 2026) — the Project Owner's job is entirely
+  upload-review-approve/flag per stream; the project/customer-level status
+  update is a side effect of that, never its own action.
 - Skip to Pre-Production reuses the exact same cascade rule as real
   Client Approval — it's just a second way for deliverables to reach
-  'approved', not a different completion rule. Selecting every deliverable
-  in scope naturally completes the cascade; a partial selection naturally
-  doesn't, so the project stays In Design. No separate "whole project"
-  code path needed.
+  'approved', not a different completion rule.
 """
 
 from flask import Blueprint, request, jsonify, render_template
@@ -41,16 +50,19 @@ from app.models import Project, Deliverable
 
 project_preproduction_bp = Blueprint('project_preproduction', __name__)
 
-# Wire-format stream key ('technical'/'artwork', used in routes/JSON) ->
-# the actual DeliverableAssignment.team value it's stored under. Technical
-# reuses the SAME 'Technical' team already used by TEAM_KEYS (project_list.
-# py) — real design-phase work never uses that team (technical files only
-# exist from Pre-Production on, per the architecture doc), so there's no
-# collision, and it means a Technical person already on the deliverable
-# for any reason carries straight over rather than needing a second row.
-# 'Artwork' isn't an existing team (2D/3D cover that during Design), so
-# it's a genuinely new value, kept lowercase to match the wire format.
-_TEAM_FOR_STREAM = {'technical': 'Technical', 'artwork': 'artwork'}
+# Single source of truth for the three Pre-Production streams — every
+# function below reads this instead of hardcoding technical/2d/3d
+# branches, so adding/renaming a stream is a one-line change here.
+# 'team' is the DeliverableAssignment.team value the stream's assignment
+# is stored under — reuses Design's own '2D'/'3D'/'Technical' values
+# directly (see module docstring), not a separate pseudo-team.
+# 'needs'/'status' are the Deliverable column names read via getattr/
+# setattr. Order here is display order everywhere this dict is iterated.
+_STREAM_FIELDS = {
+    '2d':        {'team': '2D',        'label': '2D',        'needs': 'needs_2d',        'status': 'status_2d'},
+    '3d':        {'team': '3D',        'label': '3D',        'needs': 'needs_3d',        'status': 'status_3d'},
+    'technical': {'team': 'Technical', 'label': 'Technical', 'needs': 'needs_technical', 'status': 'technical_status'},
+}
 
 
 def _get_actor():
@@ -86,13 +98,14 @@ def _stream_done(deliverable):
 
 
 def _cascade_handed_to_production(project, actor, now):
-    """Once every deliverable in a channel/project now has both required
-    streams approved, advances the channel/project itself to
-    'handed_to_production'. Standard: checks project.project_deliverables
-    directly. C&CM: per-channel first (same UAE/Gulf-region matching the
-    Client Approval cascade uses), then the whole project once every
-    channel has reached it. Safe to call after every single stream
-    approval — it just no-ops until the last one lands."""
+    """Once every deliverable in a channel/project now has every stream it
+    needs approved, advances the channel/project itself to
+    'handed_to_production' — automatically, no manual confirmation step
+    (17 Aug 2026: minimizing admin work is the point). Standard: checks
+    project.project_deliverables directly. C&CM: per-channel first (same
+    UAE/Gulf-region matching the Client Approval cascade uses), then the
+    whole project once every channel has reached it. Safe to call after
+    every single stream approval — it just no-ops until the last one lands."""
     from app.models import ProjectPosmChannel
     from app.status_tracking import record_project_status
 
@@ -185,25 +198,44 @@ def _build_preproduction_row(d, actor):
     carried over from Design (read-only here — nothing to do, they just
     already exist), the CS batch note from Client Approval, and the
     flag-history count. Shared by Standard + C&CM so the two branches in
-    overlay_preproduction() can't drift on this."""
+    overlay_preproduction() can't drift on this.
+
+    is_flagged (per stream and rolled up per row) is True when a stream's
+    status is currently None AND it has at least one logged flag event —
+    that's what distinguishes "flagged, waiting on the designer to
+    reupload" from "never started yet," since both look identical as a
+    bare None status. Existence alone is enough: status only ever resets
+    to None via flag_stream (or the column's initial default), so if any
+    flag event has ever been logged for a stream that's currently None,
+    the flag is why it's None."""
     from app.status_vocabulary import derive_deliverable_status
     from app.models import ProjectSubmissionEvent, ProjectSubmissionEventDeliverable, DeliverablePreproductionEvent
 
+    flag_events = DeliverablePreproductionEvent.query.filter_by(
+        deliverable_id=d.id, event_type='preprod_flag'
+    ).all()
+    flag_count = len(flag_events)
+    flagged_streams = {e.stream for e in flag_events}
+
     streams = []
-    for stream_key, needed, status_val in (
-        ('technical', d.needs_technical, d.technical_status),
-        ('artwork', d.needs_artwork, d.artwork_status),
-    ):
+    for stream_key, cfg in _STREAM_FIELDS.items():
+        needed = getattr(d, cfg['needs'])
         if not needed:
             continue
-        assignment = next((a for a in d.disciplines if a.team == _TEAM_FOR_STREAM[stream_key]), None)
+        status_val = getattr(d, cfg['status'])
+        is_flagged = status_val is None and stream_key in flagged_streams
+        # Read-only context — whoever Design put on this team, shown for
+        # info only. No longer gates who can act (17 Aug 2026: assignment
+        # step removed — any designer can pick up any stream and mark it
+        # done, see mark_stream_done).
+        assignment = next((a for a in d.disciplines if a.team == cfg['team']), None)
         streams.append({
             'key': stream_key,
-            'label': 'Technical' if stream_key == 'technical' else 'Artwork',
+            'label': cfg['label'],
             'assignment': assignment,
             'status': status_val,  # None | 'uploaded' | 'approved'
-            'options': _assignable_users_for_stream(stream_key),
-            'can_mark_done': bool(assignment and assignment.designer_id == actor.id),
+            'is_flagged': is_flagged,
+            'can_mark_done': actor.role in ('designer', 'team_lead', 'admin', 'management'),
         })
 
     design_assignments = [a for a in d.disciplines if a.team in ('2D', '3D')]
@@ -223,11 +255,8 @@ def _build_preproduction_row(d, actor):
         .first()
     )
 
-    flag_count = DeliverablePreproductionEvent.query.filter_by(
-        deliverable_id=d.id, event_type='preprod_flag'
-    ).count()
-
     label, css_class = derive_deliverable_status(d)
+    is_flagged = any(s['is_flagged'] for s in streams)
 
     return {
         'deliverable': d,
@@ -235,24 +264,12 @@ def _build_preproduction_row(d, actor):
         'design_assignments': design_assignments,
         'batch_note': batch_note_row.message if batch_note_row else None,
         'flag_count': flag_count,
+        'is_flagged': is_flagged,
         'status_label': label,
         'status_class': css_class,
         'is_complete': label == 'Handed to Production',
     }
 
-
-def _assignable_users_for_stream(stream_key):
-    """Candidate pool for a stream's assign picker — Technical team for
-    the technical stream, 2D/3D for artwork, with 3D deliberately included
-    on BOTH per Ezekiel's flexibility call (3D sometimes releases artwork,
-    sometimes technical). The assign route itself doesn't hard-enforce
-    this — any actor with permission can assign anyone — this only shapes
-    which names the picker offers."""
-    from app.models import User
-    teams = ['Technical', '3D'] if stream_key == 'technical' else ['2D', '3D']
-    return User.query.filter(
-        User.team.in_(teams), User.role.in_(['designer', 'team_lead'])
-    ).order_by(User.name).all()
 
 
 def _in_preproduction_scope(d):
@@ -260,7 +277,7 @@ def _in_preproduction_scope(d):
     client-approved (or skipped there) AND at least one stream is flagged
     as needed. Same filter both brief-type branches below use, so the tab
     can't disagree with itself about what counts as "in scope"."""
-    return d.status == 'approved' and (d.needs_technical or d.needs_artwork)
+    return d.status == 'approved' and any(getattr(d, cfg['needs']) for cfg in _STREAM_FIELDS.values())
 
 
 @project_preproduction_bp.route('/projects/<int:project_id>/overlay/preproduction')
@@ -286,9 +303,12 @@ def overlay_preproduction(project_id):
         for c in all_customers:
             in_scope = [d for d in c['deliverables'] if _in_preproduction_scope(d)]
             c['rows'] = [_build_preproduction_row(d, actor) for d in in_scope]
-
-        total = sum(len(c['rows']) for c in all_customers)
-        completed = sum(1 for c in all_customers for r in c['rows'] if r['is_complete'])
+            # Per-customer, not project-wide — the header count lives inside
+            # each panel, toggling with the rows via the same is-hidden
+            # mechanism instead of showing one project-wide total that never
+            # matched whichever customer was selected.
+            c['total_count'] = len(c['rows'])
+            c['completed_count'] = sum(1 for r in c['rows'] if r['is_complete'])
 
         return render_template(
             'project_overlay/_preproduction_ccm.html',
@@ -298,8 +318,6 @@ def overlay_preproduction(project_id):
             has_gulf_regions=has_gulf_regions,
             first_customer_id=first_customer_id,
             can_act=can_act,
-            total_count=total,
-            completed_count=completed,
         )
 
     deliverables = [
@@ -331,8 +349,8 @@ def skip_to_preproduction(project_id):
 
     Body (JSON): deliverable_ids (required, non-empty list).
 
-    needs_technical / needs_artwork are auto-derived from whichever teams
-    are already on the deliverable (status_vocabulary.derive_
+    needs_2d/needs_3d/needs_technical are auto-derived from whichever
+    teams are already on the deliverable (status_vocabulary.derive_
     preproduction_needs) — same rule real Client Approval uses, so a
     skipped deliverable ends up in exactly the same state one that went
     through the normal flow would.
@@ -341,6 +359,7 @@ def skip_to_preproduction(project_id):
     from app.models import ProjectPosmChannel
     from app.status_tracking import record_deliverable_status
     from app.status_vocabulary import derive_preproduction_needs
+    from app.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -370,7 +389,7 @@ def skip_to_preproduction(project_id):
         # Same auto-derivation real Client Approval uses (project_overlay.
         # py's overlay_submissions_approve) — skip is just a second way to
         # reach 'approved', not a different rule for what a deliverable needs.
-        d.needs_technical, d.needs_artwork = derive_preproduction_needs(d)
+        d.needs_2d, d.needs_3d, d.needs_technical = derive_preproduction_needs(d)
 
     # Cascade — same rule as real Client Approval, just entered a
     # different way. Standard: one check against the whole project.
@@ -397,61 +416,16 @@ def skip_to_preproduction(project_id):
         _cascade_client_approval(project, None, actor, now)
 
     db.session.commit()
+
+    log_activity('preprod_skipped',
+                 f'{actor.name} skipped {len(deliverables)} deliverable(s) straight to Pre-Production on "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
     return jsonify({'success': True})
 
 
-# ── Stream assignment (technical / artwork) ─────────────────────────────
 
-@project_preproduction_bp.route('/deliverables/<int:deliverable_id>/preproduction/assign', methods=['POST'])
-@login_required
-def assign_stream(deliverable_id):
-    """Assign or reassign ("transfer ownership") a technical/artwork
-    release stream. Reuses DeliverableAssignment — the same table the
-    Design-phase roster's team-tag assign already writes to — stream just
-    becomes two more team values ('technical'/'artwork') alongside the
-    existing '2D'/'3D' rows. Those 2D/3D rows are untouched, so they carry
-    over into Pre-Production automatically, with nothing to migrate.
 
-    Body (JSON): stream ('technical'|'artwork'), designer_id.
-
-    Permission: admin/management always; otherwise self-assign only, or
-    the CURRENT holder of that stream transferring it to someone else
-    (the "transfer ownership" case).
-    """
-    from app import db
-    from app.models import DeliverableAssignment, User
-
-    deliverable = Deliverable.query.get_or_404(deliverable_id)
-    actor = _get_actor()
-
-    data = request.get_json() or {}
-    stream = data.get('stream')
-    designer_id = data.get('designer_id')
-    if stream not in ('technical', 'artwork'):
-        return jsonify({'success': False, 'error': 'Invalid stream.'}), 400
-    if not designer_id:
-        return jsonify({'success': False, 'error': 'Select someone to assign.'}), 400
-    designer_id = int(designer_id)
-    designer = User.query.get_or_404(designer_id)
-
-    existing = DeliverableAssignment.query.filter_by(deliverable_id=deliverable.id, team=_TEAM_FOR_STREAM[stream]).first()
-
-    is_self_assign = actor.id == designer_id
-    is_transfer = existing and existing.designer_id == actor.id
-    if not (actor.role in ('admin', 'management') or is_self_assign or is_transfer):
-        return jsonify({'success': False, 'error': 'You do not have permission to assign this stream.'}), 403
-
-    if existing:
-        existing.designer_id = designer.id
-        existing.assigned_by_id = actor.id
-        existing.assigned_at = datetime.utcnow()
-    else:
-        db.session.add(DeliverableAssignment(
-            deliverable_id=deliverable.id, designer_id=designer.id,
-            team=_TEAM_FOR_STREAM[stream], assigned_by_id=actor.id,
-        ))
-    db.session.commit()
-    return jsonify({'success': True, 'designer_name': designer.name})
 
 
 # ── Stream lifecycle: mark done / approve / flag ────────────────────────
@@ -459,30 +433,36 @@ def assign_stream(deliverable_id):
 @project_preproduction_bp.route('/deliverables/<int:deliverable_id>/preproduction/mark-done', methods=['POST'])
 @login_required
 def mark_stream_done(deliverable_id):
-    """The assigned releaser marks their upload ready for review.
+    """Any designer/team lead (or admin/management) marks a stream's
+    upload ready for review — no assignment step (17 Aug 2026: removed,
+    "just allow any designer to upload/mark something as done"). Not
+    scoped to the stream's own team either — fully open by design.
     deliverable.status is untouched (stays 'approved' from Client
-    Approval/Skip) — only the stream-specific column advances, so one
-    stream can be done while the other is still in progress."""
+    Approval/Skip) — only the stream-specific column advances, so each
+    stream can be done while the others are still in progress."""
     from app import db
+    from app.utils import log_activity
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
+    project = deliverable.project
     actor = _get_actor()
+    if deliverable.status != 'approved':
+        return jsonify({'success': False, 'error': 'This deliverable is no longer in Pre-Production.'}), 400
 
     data = request.get_json() or {}
     stream = data.get('stream')
-    if stream not in ('technical', 'artwork'):
+    if stream not in _STREAM_FIELDS:
         return jsonify({'success': False, 'error': 'Invalid stream.'}), 400
+    if actor.role not in ('designer', 'team_lead', 'admin', 'management'):
+        return jsonify({'success': False, 'error': 'You do not have permission to mark this done.'}), 403
 
-    from app.models import DeliverableAssignment
-    assignment = DeliverableAssignment.query.filter_by(deliverable_id=deliverable.id, team=_TEAM_FOR_STREAM[stream]).first()
-    if not (actor.role in ('admin', 'management') or (assignment and assignment.designer_id == actor.id)):
-        return jsonify({'success': False, 'error': 'You are not assigned to this stream.'}), 403
-
-    if stream == 'technical':
-        deliverable.technical_status = 'uploaded'
-    else:
-        deliverable.artwork_status = 'uploaded'
+    setattr(deliverable, _STREAM_FIELDS[stream]['status'], 'uploaded')
     db.session.commit()
+
+    log_activity('preprod_stream_marked_done',
+                 f'{actor.name} marked {_STREAM_FIELDS[stream]["label"]} uploaded for "{deliverable.name}" on "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
     return jsonify({'success': True})
 
 
@@ -490,30 +470,37 @@ def mark_stream_done(deliverable_id):
 @login_required
 def approve_stream(deliverable_id):
     """Project Owner (or admin/management) signs off a stream — the only
-    thing that advances technical_status/artwork_status to 'approved',
-    which is what _post_approval_deliverable_status() reads to show
-    Handed to Production. Checks the channel/project cascade afterward."""
+    thing that advances a stream's status to 'approved', which is what
+    _post_approval_deliverable_status() reads to show Handed to
+    Production. Checks the channel/project cascade afterward — this is
+    the ONLY place that cascade fires from; there is no separate manual
+    "Handed to Production" action anywhere."""
     from app import db
+    from app.utils import log_activity
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
     actor = _get_actor()
+    if deliverable.status != 'approved':
+        return jsonify({'success': False, 'error': 'This deliverable is no longer in Pre-Production.'}), 400
     if not _can_manage_preproduction(project, actor):
         return jsonify({'success': False, 'error': 'You do not have permission to approve this stream.'}), 403
 
     data = request.get_json() or {}
     stream = data.get('stream')
-    if stream not in ('technical', 'artwork'):
+    if stream not in _STREAM_FIELDS:
         return jsonify({'success': False, 'error': 'Invalid stream.'}), 400
 
-    if stream == 'technical':
-        deliverable.technical_status = 'approved'
-    else:
-        deliverable.artwork_status = 'approved'
+    setattr(deliverable, _STREAM_FIELDS[stream]['status'], 'approved')
 
     now = datetime.utcnow()
     _cascade_handed_to_production(project, actor, now)
     db.session.commit()
+
+    log_activity('preprod_stream_approved',
+                 f'{actor.name} approved {_STREAM_FIELDS[stream]["label"]} for "{deliverable.name}" on "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
     return jsonify({'success': True})
 
 
@@ -524,34 +511,41 @@ def flag_stream(deliverable_id):
     stream's status to None (back in progress) and logs a preprod_flag
     event with the required comment — this is the row later KPI queries
     (average revision rounds, per project/deliverable/owner/month/
-    quarter) will count and filter on."""
+    quarter) will count and filter on, and it's also what
+    _build_preproduction_row reads to tell "flagged, waiting on the
+    designer" apart from "never started" for the Needs Attention section."""
     from app import db
     from app.models import DeliverablePreproductionEvent
+    from app.utils import log_activity
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
     actor = _get_actor()
+    if deliverable.status != 'approved':
+        return jsonify({'success': False, 'error': 'This deliverable is no longer in Pre-Production.'}), 400
     if not _can_manage_preproduction(project, actor):
         return jsonify({'success': False, 'error': 'You do not have permission to flag this stream.'}), 403
 
     data = request.get_json() or {}
     stream = data.get('stream')
     message = (data.get('message') or '').strip()
-    if stream not in ('technical', 'artwork'):
+    if stream not in _STREAM_FIELDS:
         return jsonify({'success': False, 'error': 'Invalid stream.'}), 400
     if not message:
         return jsonify({'success': False, 'error': 'A comment is required to flag for reupload.'}), 400
 
-    if stream == 'technical':
-        deliverable.technical_status = None
-    else:
-        deliverable.artwork_status = None
+    setattr(deliverable, _STREAM_FIELDS[stream]['status'], None)
 
     db.session.add(DeliverablePreproductionEvent(
         deliverable_id=deliverable.id, event_type='preprod_flag', stream=stream,
         author_id=actor.id, message=message,
     ))
     db.session.commit()
+
+    log_activity('preprod_stream_flagged',
+                 f'{actor.name} flagged {_STREAM_FIELDS[stream]["label"]} on "{deliverable.name}" for reupload on "{project.name}": {message[:100]}',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
     return jsonify({'success': True})
 
 
@@ -562,9 +556,8 @@ def flag_stream(deliverable_id):
 def preproduction_events(project_id):
     """Flat JSON list of every preprod_flag event across the project's
     deliverables, newest first — the data behind the "All" + per-
-    deliverable dropdown history view (UI not built yet). Its own
-    endpoint/table per Ezekiel: doesn't touch or return anything from
-    Submissions' event log."""
+    deliverable dropdown history view. Its own endpoint/table per
+    Ezekiel: doesn't touch or return anything from Submissions' event log."""
     from app.models import DeliverablePreproductionEvent
 
     project = Project.query.get_or_404(project_id)
