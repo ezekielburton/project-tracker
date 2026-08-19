@@ -1,5 +1,15 @@
 {% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
+{# Flags — own div, sitting above the Properties/Design Leads block
+entirely (per Ezekiel, 18 Aug 2026), sized to its own content. #}
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% set flag_scope = 'project' %}
+        {% set flags = project_open_flags %}
+        {% include "project_overlay/_flag_project_panel.html" %}
+    </div>
+</div>
+
 <div class="overlay-details-columns" data-edit-snapshot="{{ edit_snapshot_at }}">
     <div class="overlay-details-left">
         <div class="overlay-properties-heading">Properties</div>

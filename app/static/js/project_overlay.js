@@ -8,14 +8,20 @@
 // list.js still owns fetching/injecting/tearing down the overlay itself.
 
 window.ProjectOverlay = (function () {
-    function init(onCloseRequested, onSubTabSelected, onSectionSelected) {
+    // onBeforeNavigate(proceed) — task #37's unsaved-edit guard, injected
+    // from project_list.js (only it knows about activeOverlayEdit). Optional:
+    // when omitted, every navigation just proceeds immediately, same as
+    // before this existed. Wraps close (X/backdrop/Esc) and sub-tab clicks
+    // only — switching top-level sections doesn't touch #project-overlay-
+    // content today (see enterSection below), so there's nothing to lose yet.
+    function init(onCloseRequested, onSubTabSelected, onSectionSelected, onBeforeNavigate) {
         var backdrop = document.getElementById('project-overlay-backdrop');
         var closeBtn = document.getElementById('project-overlay-close');
 
         if (!backdrop) return null;
 
         function requestClose() {
-            onCloseRequested();
+            if (onBeforeNavigate) { onBeforeNavigate(onCloseRequested); } else { onCloseRequested(); }
         }
 
         if (closeBtn) {
@@ -76,10 +82,17 @@ window.ProjectOverlay = (function () {
                 subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (btn) {
                     btn.addEventListener('click', function () {
                         if (btn.classList.contains('active')) return;
-                        subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (b) {
-                            b.classList.toggle('active', b === btn);
-                        });
-                        if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
+                        // The .active flip and the actual content swap both
+                        // live inside proceed() — gated behind the guard so a
+                        // cancelled switch never leaves the sidebar pointing
+                        // at a tab whose content didn't actually load.
+                        var proceed = function () {
+                            subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (b) {
+                                b.classList.toggle('active', b === btn);
+                            });
+                            if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
+                        };
+                        if (onBeforeNavigate) { onBeforeNavigate(proceed); } else { proceed(); }
                     });
                 });
             }

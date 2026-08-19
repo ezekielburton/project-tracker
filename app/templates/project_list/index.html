@@ -109,8 +109,8 @@ everywhere at once, same as a single real table would. #}
                 class="tab-strip-item{% if view == 'all' %} active{% endif %}">
                 {% if effective_role in ('cs', 'admin', 'management') %}All Projects{% else %}Team Projects{% endif %}
             </a>
-            <a href="{{ url_for('project_list.index', view='approved') }}"
-                class="tab-strip-item{% if view == 'approved' %} active{% endif %}">Approved</a>
+            <a href="{{ url_for('project_list.index', view='design_complete') }}"
+                class="tab-strip-item{% if view == 'design_complete' %} active{% endif %}">Design Completed</a>
 
             {% for sv in saved_views %}
             <div class="project-list-tab-wrap{% if view == 'view-' ~ sv.id %} active{% endif %}"
@@ -130,7 +130,11 @@ everywhere at once, same as a single real table would. #}
         </div>
 
         <div class="project-list-toolbar">
+            {# Role set here must match project_overlay.py's _can_create_project() —
+            the button is just UI, that route function is the real gate. #}
+            {% if effective_role in ('admin', 'cs', 'management', 'project_owner') %}
             <button type="button" class="project-toolbar-new-item" id="new-project-btn">+ New Project</button>
+            {% endif %}
 
             <div class="project-toolbar-search-wrap">
                 <button type="button" id="search-toggle" class="project-toolbar-icon-btn"
@@ -319,6 +323,17 @@ everywhere at once, same as a single real table would. #}
                 </div>
             </div>
 
+            {# Show Cancelled — a shortcut for "status filter = Cancelled only"
+            (see _show_cancelled() in project_list.py), not a separate on/off
+            flag. is-active here just mirrors whether Cancelled happens to be
+            the active status filter right now — same state the Cancelled
+            chip in the filter panel reflects, since they're driven by the
+            exact same query param. #}
+            <button type="button" id="show-cancelled-toggle"
+                class="project-toolbar-sort-btn{% if show_cancelled %} is-active{% endif %}">
+                Show Cancelled
+            </button>
+
             <div class="project-sort-wrap">
                 <button type="button" id="sort-toggle"
                     class="project-toolbar-sort-btn{% if sort_field or group_field %} is-active{% endif %}">
@@ -429,6 +444,11 @@ everywhere at once, same as a single real table would. #}
 </div>
 <div class="project-resize-drag-indicator" id="resize-drag-indicator" hidden></div>
 <div id="project-overlay-mount"></div>
+{# Add Company / Add Contact modals (task #61) — shared partial, see its
+own docstring. Needed here now that "+ New Project" opens the create-mode
+overlay's Client/Contact selects directly on this page instead of on the
+old separate create.html page. #}
+{% include "partials/client_directory_modals.html" %}
 {% endblock %}
 
 {% block extra_js %}
@@ -437,16 +457,22 @@ everywhere at once, same as a single real table would. #}
     window.__savedDeliverableTableLayout = {{ saved_deliverable_layout | tojson }};
     window.__currentBaseView = {{ current_base_view | tojson }};
 </script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/air-datepicker@3/air-datepicker.css">
+<script src="https://cdn.jsdelivr.net/npm/air-datepicker@3/air-datepicker.js"></script>
 <script src="{{ url_for('static', filename='js/project_list_layout.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/client_directory.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_overlay_create.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_list.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_overlay.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_overlay_edit.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/avatar_picker.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/deliverable_picker.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_flags.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_details_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_deliverables_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_submissions_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_submissions_draft_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_preproduction_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_notes_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
 
 {% endblock %}

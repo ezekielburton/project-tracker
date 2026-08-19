@@ -1,0 +1,261 @@
+{% from '_shared_macros.html' import card %}
+{# app/templates/project_overlay/_details_create.html
+   Create-mode Details step (task #61) — every field here is always a live
+   input, not the view/edit-toggle pattern _details_standard.html uses
+   post-creation (there's nothing to "view" yet on a blank draft). Wired by
+   project_overlay_create.js, which debounce-autosaves each field via
+   POST /projects/overlay/new as it changes. Restyled to the overlay's own
+   visual system (overlay-property-row/-label, card(), .overlay-notes) per
+   Ezekiel's 18 Aug 2026 instruction — not a copy of the old create.html's
+   layout. #}
+
+<div class="overlay-create-brieftype-row">
+    <span class="overlay-property-label">Brief Type</span>
+    <div class="overlay-create-brieftype-buttons">
+        <button type="button" class="overlay-create-brieftype-btn{% if project.brief_type == 'standard' %} active{% endif %}"
+            data-brief-type="standard">Standard</button>
+        <button type="button" class="overlay-create-brieftype-btn{% if project.brief_type == 'ccm' %} active{% endif %}"
+            data-brief-type="ccm">C&amp;CM</button>
+    </div>
+</div>
+
+<div class="overlay-details-columns">
+    <div class="overlay-details-left">
+        <div class="overlay-properties-heading">Project Basics</div>
+        <div class="overlay-properties">
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Project Name</span>
+                <span class="overlay-property-value">
+                    <input type="text" class="overlay-create-input" data-create-field="name"
+                        value="{{ project.name if project.name != 'Untitled Draft' else '' }}"
+                        placeholder="Untitled Draft">
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Job Number</span>
+                <span class="overlay-property-value">
+                    <input type="text" class="overlay-create-input" id="overlay-create-job-number"
+                        data-create-field="job_number" value="{{ project.job_number or '' }}" placeholder="FOC-001">
+                    <button type="button" class="overlay-file-action-btn" id="overlay-create-generate-job-number-btn">Generate
+                        FOC</button>
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Client</span>
+                <span class="overlay-property-value">
+                    <select class="overlay-create-input" id="client_id" data-create-field="client_id">
+                        <option value="">— Select Client —</option>
+                        {% for c in client_options %}
+                        <option value="{{ c.id }}" {% if project.client_id==c.id %}selected{% endif %}>{{ c.name }}</option>
+                        {% endfor %}
+                        <option value="__add_new__">+ Add new company…</option>
+                    </select>
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Contact</span>
+                <span class="overlay-property-value">
+                    {# Known gap, closed by #65 (resumable drafts): a draft
+                    resumed after already having a contact_id set won't show
+                    it pre-selected here yet — client_directory.js's cascade
+                    only populates options once a Client is (re)selected. #}
+                    <select class="overlay-create-input" id="contact_id" data-create-field="contact_id">
+                        <option value="">— Select Contact —</option>
+                        <option value="__add_new__">+ Add new contact…</option>
+                    </select>
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">CS Lead</span>
+                <span class="overlay-property-value">
+                    <select class="overlay-create-input" data-create-field="cs_lead_id">
+                        <option value="">— Select CS Lead —</option>
+                        {% for u in cs_lead_options %}
+                        <option value="{{ u.id }}" {% if project.cs_lead_id==u.id %}selected{% endif %}>{{ u.name }}</option>
+                        {% endfor %}
+                    </select>
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Project Owner</span>
+                <span class="overlay-property-value">
+                    <select class="overlay-create-input" data-create-field="project_owner_id">
+                        <option value="">— None —</option>
+                        {% for u in project_owner_options %}
+                        <option value="{{ u.id }}" {% if project.project_owner_id==u.id %}selected{% endif %}>{{ u.name }}</option>
+                        {% endfor %}
+                    </select>
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Teams Required</span>
+                <span class="overlay-property-value">
+                    {% set requested_teams = (project.design_teams_requested or '').split(',') %}
+                    <label class="overlay-create-checkbox-inline"><input type="checkbox" data-create-team="2D"
+                            {% if '2D' in requested_teams %}checked{% endif %}> 2D</label>
+                    <label class="overlay-create-checkbox-inline"><input type="checkbox" data-create-team="3D"
+                            {% if '3D' in requested_teams %}checked{% endif %}> 3D</label>
+                    <label class="overlay-create-checkbox-inline"><input type="checkbox" data-create-team="Technical"
+                            {% if 'Technical' in requested_teams %}checked{% endif %}> Technical</label>
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Initial Deadline</span>
+                <span class="overlay-property-value">
+                    {# Auto-computed (18 Aug 2026, per Ezekiel), not directly
+                    editable — see _recompute_initial_deadline() in
+                    project_overlay.py. C&CM: matches the Concept & KV
+                    deadline when that's needed, else the earliest deliverable
+                    deadline; Standard: always the earliest deliverable
+                    deadline. Kept in sync live by bindDetailsStep's autosave
+                    handler (project_overlay_create.js) whenever a field that
+                    could move it changes. #}
+                    <span id="overlay-create-initial-deadline-value">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else 'Auto - Based on earliest deadline added' }}</span>
+                </span>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Final Deadline</span>
+                <span class="overlay-property-value">
+                    <input type="date" class="overlay-create-input" data-create-field="execution_date"
+                        value="{{ project.execution_date.strftime('%Y-%m-%d') if project.execution_date else '' }}">
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay-details-right">
+        {% if can_manage_reference_files %}
+        {# Reuses the exact same partial + JS (project_details_card.js) the
+        live overlay's Details tab uses — task #63, per Ezekiel's "remember
+        our current conventions" instruction from the Deliverables step.
+        _details_reference_files.html wraps itself in its own card() call
+        already, so no extra wrapping needed here. Not brief-type-scoped,
+        so it lives outside both scope divs below. #}
+        {% include "project_overlay/_details_reference_files.html" %}
+        {% endif %}
+
+        {# ---- Standard-only fields ---- #}
+        <div class="overlay-create-scope{% if project.brief_type != 'standard' %} is-hidden{% endif %}"
+            data-create-scope="standard">
+            {% call card('Standard Brief') %}
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Type of Design</span>
+                <span class="overlay-property-value">
+                    <select class="overlay-create-input" data-create-field="design_type_id">
+                        <option value="">— Select —</option>
+                        {% for dt in design_type_options %}
+                        <option value="{{ dt.id }}" {% if project.design_type_id==dt.id %}selected{% endif %}>{{ dt.name }}</option>
+                        {% endfor %}
+                    </select>
+                </span>
+            </div>
+            <div class="overlay-notes">
+                <span class="overlay-field-label">Client Expectation</span>
+                <textarea class="overlay-create-input overlay-create-textarea"
+                    data-create-field="client_expectation">{{ project.client_expectation or '' }}</textarea>
+            </div>
+            <div class="overlay-notes">
+                <span class="overlay-field-label">What to Avoid</span>
+                <textarea class="overlay-create-input overlay-create-textarea"
+                    data-create-field="what_to_avoid">{{ project.what_to_avoid or '' }}</textarea>
+            </div>
+            <div class="overlay-notes">
+                <span class="overlay-field-label">Additional Information</span>
+                <textarea class="overlay-create-input overlay-create-textarea"
+                    data-create-field="additional_information">{{ project.additional_information or '' }}</textarea>
+            </div>
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Production Only</span>
+                <span class="overlay-property-value">
+                    <label class="overlay-create-checkbox-inline">
+                        <input type="checkbox" id="overlay-create-production-only" data-create-field="is_production_only"
+                            {% if project.is_production_only %}checked{% endif %}>
+                        Skip straight to Pre-Production
+                    </label>
+                </span>
+            </div>
+            <div class="overlay-notes{% if not project.is_production_only %} is-hidden{% endif %}"
+                id="overlay-create-production-only-requirements">
+                <span class="overlay-field-label">Pre-Production Requirements</span>
+                <textarea class="overlay-create-input overlay-create-textarea"
+                    data-create-field="preproduction_requirements"
+                    placeholder="What does Pre-Production need to know? Add at least one deliverable before continuing.">{{ project.preproduction_requirements or '' }}</textarea>
+            </div>
+            {% endcall %}
+        </div>
+
+        {# ---- C&CM-only fields ---- #}
+        <div class="overlay-create-scope{% if project.brief_type != 'ccm' %} is-hidden{% endif %}"
+            data-create-scope="ccm">
+            {% call card('Concept & KV') %}
+            {# Urgency removed from create mode (18 Aug 2026, per Ezekiel —
+            "ripping this out, will rework later after we deploy this
+            update"). Left as a real, harmless-if-unsent field on the model
+            and in overlay_create_draft()'s per-field handling — nothing
+            currently posts 'urgency', so it just never gets set. #}
+            {# Concept & KV merged into one tickbox/deadline/requirements/
+            options set (18 Aug 2026, per Ezekiel — "they are always
+            together"). See overlay_create_draft()'s comment for how this
+            maps onto the model's still-separate concept_*/kv_* columns. #}
+            <div class="overlay-property-row">
+                <span class="overlay-property-label">Concept &amp; KV Needed</span>
+                <span class="overlay-property-value">
+                    <label class="overlay-create-checkbox-inline">
+                        <input type="checkbox" id="overlay-create-has-concept-kv" data-create-field="has_concept_kv"
+                            {% if project.has_concept %}checked{% endif %}> Yes
+                    </label>
+                </span>
+            </div>
+            <div class="overlay-create-subfields{% if not project.has_concept %} is-hidden{% endif %}"
+                id="overlay-create-concept-kv-fields">
+                <div class="overlay-property-row">
+                    <span class="overlay-property-label">Deadline</span>
+                    <span class="overlay-property-value">
+                        <input type="date" class="overlay-create-input" data-create-field="concept_kv_deadline"
+                            value="{{ project.concept_deadline.strftime('%Y-%m-%d') if project.concept_deadline else '' }}">
+                    </span>
+                </div>
+                <div class="overlay-notes">
+                    <span class="overlay-field-label">Requirements</span>
+                    <textarea class="overlay-create-input overlay-create-textarea"
+                        data-create-field="concept_kv_requirements">{{ project.kv_requirements or '' }}</textarea>
+                </div>
+                <div class="overlay-property-row">
+                    <span class="overlay-property-label">Options Required</span>
+                    <span class="overlay-property-value">
+                        <input type="number" min="0" class="overlay-create-input"
+                            data-create-field="concept_kv_options_required"
+                            value="{{ project.concept_options_required or '' }}">
+                    </span>
+                </div>
+            </div>
+            {% endcall %}
+
+            {% call card('Customers') %}
+            <div class="overlay-create-customer-picker">
+                {% for region_key in ['uae', 'kuwait', 'qatar', 'bahrain', 'oman'] %}
+                {% set customers = customers_by_region.get(region_key, []) %}
+                {% if customers %}
+                <div class="overlay-create-customer-region">
+                    <div class="overlay-create-customer-region-heading">
+                        <span>{{ region_names[region_key] }}</span>
+                        <button type="button" class="overlay-create-select-all" data-create-region="{{ region_key }}">Select
+                            All</button>
+                    </div>
+                    <div class="overlay-create-customer-grid">
+                        {% for c in customers %}
+                        <label class="overlay-create-checkbox-inline">
+                            <input type="checkbox" data-create-customer-id="{{ c.id }}" data-create-region="{{ region_key }}"
+                                {% if c.id in selected_customer_ids %}checked{% endif %}>
+                            {{ c.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endcall %}
+        </div>
+    </div>
+</div>

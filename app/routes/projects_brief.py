@@ -25,57 +25,6 @@ from app.status_tracking import record_project_status, record_customer_status, r
 
 brief_bp = Blueprint('brief', __name__)
 
-@brief_bp.route('/projects/create', methods=['GET'])
-@login_required
-@role_required('admin', 'cs', 'management')
-def create():
-    cs_users = User.query.filter(
-        User.role.in_(['cs', 'admin', 'management'])
-    ).order_by(User.name).all()
-
-    clients = Client.query.order_by(Client.name).all()
-
-    customers_raw = {
-    'uae': Customer.query.filter_by(region='uae').order_by(Customer.name).all(),
-    'kuwait': Customer.query.filter_by(region='kuwait').order_by(Customer.name).all(),
-    'qatar': Customer.query.filter_by(region='qatar').order_by(Customer.name).all(),
-    'bahrain': Customer.query.filter_by(region='bahrain').order_by(Customer.name).all(),
-    'oman': Customer.query.filter_by(region='oman').order_by(Customer.name).all(),
-    }
-
-    customers_by_region = {
-    region: [{'id': c.id, 'name': c.name} for c in customers]
-    for region, customers in customers_raw.items()
-    }
-
-    draft = None
-    draft_id = request.args.get('draft_id')
-    if draft_id:
-        candidate = Project.query.get(int(draft_id))
-        if candidate and candidate.created_by_id == current_user.id and candidate.project_status == 'draft':
-            draft = candidate
-    
-    has_other_drafts = Project.query.filter_by(
-         created_by_id=current_user.id,
-         project_status='draft'
-    ).count() > 0
-
-    from app.models import DesignType, DesignDirection
-    design_types = DesignType.query.order_by(DesignType.name).all()
-    design_directions = DesignDirection.query.order_by(DesignDirection.name).all()
-
-    return render_template(
-        'projects/create.html',
-        cs_users=cs_users,
-        clients=clients,
-        customers_by_region=customers_by_region,
-        draft=draft,
-        has_other_drafts=has_other_drafts,
-        design_types=design_types,
-        design_directions=design_directions,
-        today=date.today().isoformat(),
-    )
-
 @brief_bp.route('/projects/<int:project_id>/edit', methods=['GET'])
 @login_required
 @role_required('admin', 'cs', 'management')
@@ -540,153 +489,15 @@ def update_project(project_id):
         return jsonify({'error': 'Something went wrong. Please try again.'}), 500
 
 
-@brief_bp.route('/projects/autosave', methods=['POST'])
-@login_required
-@role_required('admin', 'cs', 'management')
-def autosave():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No data provided'}), 400
-
-        draft_id = data.get('draft_id')
-        draft = None
-
-        if draft_id:
-            candidate = Project.query.get(int(draft_id))
-            if candidate and candidate.created_by_id == current_user.id and candidate.project_status == 'draft':
-                draft = candidate
-            elif candidate and candidate.project_status != 'draft':
-                return jsonify({'success': False, 'error': 'Project already submitted'}), 400
-
-        default_scope = Scope.query.filter_by(active=True).first()
-
-        if not draft:
-            draft = Project(
-                name=data.get('name', '').strip() or 'Untitled Draft',
-                client='TBD',
-                cs_lead_id=int(data['cs_lead_id']) if data.get('cs_lead_id') else current_user.id,
-                creator=current_user,
-                project_status='draft',
-                scope_id=default_scope.id if default_scope else 1
-            )
-            db.session.add(draft)
-            db.session.flush()
-            record_project_status(draft, 'draft', current_user)
-
-        draft.name = data.get('name', '').strip() or 'Untitled Draft'
-
-        if data.get('cs_lead_id'):
-            draft.cs_lead_id = int(data['cs_lead_id'])
-
-        if data.get('client_id'):
-            draft.client_id = int(data['client_id'])
-
-        # contact_id is optional (Project.contact_id is nullable=True) - unlike
-        # client_id above, we also need to handle it being explicitly cleared:
-        # if the frontend sends contact_id: null (e.g. the user picked a contact,
-        # then switched Client and never repicked a new one), this branch runs
-        # the "falsy" path and sets draft.contact_id back to None, rather than
-        # silently leaving a contact_id from the PREVIOUS client sitting there.
-        if data.get('contact_id'):
-            draft.contact_id = int(data['contact_id'])
-        else:
-            draft.contact_id = None
-
-        if data.get('job_number'):
-            job_num = data['job_number'].strip()
-            conflict = Project.query.filter(
-                Project.job_number == job_num,
-                Project.id != draft.id
-            ).first()
-            if not conflict:
-                draft.job_number = job_num or None
-
-        if data.get('design_teams'):
-            draft.design_teams_requested = ', '.join(data['design_teams'])
-
-        if data.get('brief_type'):
-            draft.brief_type = data['brief_type']
-
-        if data.get('urgency'):
-            draft.urgency = data['urgency']
-
-        if data.get('required_output'):
-            draft.required_output = data['required_output']
-
-        if data.get('concept_deadline'):
-            draft.concept_deadline = date.fromisoformat(data['concept_deadline'])
-        raw_cdt = data.get('concept_deadline_time')
-        draft.concept_deadline_time = datetime.strptime(raw_cdt, '%H:%M').time() if raw_cdt else None
-
-        if data.get('concept_requirements') is not None:
-            draft.campaign_notes = data['concept_requirements']
-
-        if 'has_concept' in data:
-            draft.has_concept = bool(data['has_concept'])
-
-        if data.get('concept_options_required') is not None:
-            draft.concept_options_required = data['concept_options_required']
-
-        if 'has_kv' in data:
-            draft.has_kv = bool(data['has_kv'])
-
-        if data.get('kv_requirements') is not None:
-            draft.kv_requirements = data['kv_requirements']
-
-        if data.get('kv_deadline'):
-            draft.kv_deadline = date.fromisoformat(data['kv_deadline'])
-
-        if data.get('kv_options_required') is not None:
-            draft.kv_options_required = data['kv_options_required']
-
-        if data.get('briefing_date'):
-            draft.briefing_date = date.fromisoformat(data['briefing_date'])
-
-        if data.get('first_output_deadline'):
-            draft.first_output_deadline = date.fromisoformat(data['first_output_deadline'])
-
-        if data.get('final_deadline'):
-            draft.execution_date = date.fromisoformat(data['final_deadline'])
-
-        if data.get('installation_date'):
-            draft.installation_date = date.fromisoformat(data['installation_date'])
-
-        # Standard brief fields
-        if data.get('design_type_id'):
-            draft.design_type_id = int(data['design_type_id'])
-        elif data.get('design_type_id') is None and 'design_type_id' in data:
-            draft.design_type_id = None
-
-        if data.get('design_direction_id'):
-            draft.design_direction_id = int(data['design_direction_id'])
-        elif data.get('design_direction_id') is None and 'design_direction_id' in data:
-            draft.design_direction_id = None
-
-        if data.get('client_expectation') is not None:
-            draft.client_expectation = data['client_expectation']
-
-        if data.get('what_to_avoid') is not None:
-            draft.what_to_avoid = data['what_to_avoid']
-
-        if data.get('additional_information') is not None:
-            draft.additional_information = data['additional_information']
-
-        draft.last_autosaved_at = datetime.now()
-        db.session.commit()
-
-        return jsonify({'success': True, 'draft_id': draft.id})
-
-    except Exception as e:
-        db.session.rollback()
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': 'Autosave failed'}), 500
-
 @brief_bp.route('/projects/generate-job-number', methods=['GET'])
 @login_required
-@role_required('admin', 'cs', 'management')
+@role_required('admin', 'cs', 'management', 'project_owner')
 def generate_job_number():
+    # project_owner added 18 Aug 2026 — only real consumer of this route is
+    # project creation (grep confirms: legacy create.html and the new
+    # create-mode overlay, project_overlay_create.js task #63), and Project
+    # Owner can create projects now too (see _can_create_project). Stateless
+    # GET with no side effects, so broadening this gate carries no real risk.
     FOC_PAD = 3 # Digits: 3 -> FOC-001 ... FOC-999. Change to 4 for FOC-1000+
 
     #Pull all existing FOC job numbers from the DB
@@ -711,16 +522,6 @@ def generate_job_number():
 # Transitions project_status from Briefed to In Progress.
 # Accessible to designers who team is requested on the project, and admins.
 # Guard against double start: if aleady past Briefed stage, return an error.
-@brief_bp.route('/projects/<int:project_id>/download-brief')
-@login_required
-def download_brief(project_id):
-    project = Project.query.get_or_404(project_id)
-    return send_from_directory(
-        current_app.config['UPLOAD_FOLDER'],
-        project.brief_file,
-        as_attachment=True
-    )
-
 @brief_bp.route('/<int:project_id>/delete', methods=['POST'])
 @login_required
 def delete_project(project_id):
@@ -750,38 +551,6 @@ def delete_project(project_id):
     return redirect(url_for('main.index'))
 
 
-@brief_bp.route('/projects/drafts')
-@login_required
-@role_required('admin', 'cs', 'management')
-def drafts():
-    user_drafts = Project.query.filter_by(
-        created_by_id=current_user.id,
-        project_status='draft'
-    ).order_by(Project.last_autosaved_at.desc()).all()
-
-    if not user_drafts:
-        return redirect(url_for('brief.create'))
-
-    return render_template('projects/drafts.html', drafts=user_drafts)
-
-
-@brief_bp.route('/projects/drafts/<int:draft_id>/delete', methods=['POST'])
-@login_required
-@role_required('admin', 'cs', 'management')
-def delete_draft(draft_id):
-    draft = Project.query.get_or_404(draft_id)
-
-    if draft.created_by_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Unauthorised'}), 403
-
-    if draft.project_status != 'draft':
-        return jsonify({'success': False, 'error': 'This project is not a draft'}), 400
-
-    db.session.delete(draft)
-    db.session.commit()
-
-    return jsonify({'success': True})
-
 @brief_bp.route('/projects/deliverable-types/<int:customer_id>')
 @login_required
 def get_deliverable_types(customer_id):
@@ -802,35 +571,6 @@ def get_deliverable_types(customer_id):
     } for dt in types])
 
 
-@brief_bp.route('/clients/add', methods=['POST'])
-@login_required
-@role_required('admin', 'cs', 'management')
-def add_client():
-    data = request.get_json()
-    if not data or not data.get('name'):
-        return jsonify({'success': False, 'error': 'Client name is required'}), 400
-
-    try:
-        name = data['name'].strip()
-
-        existing = Client.query.filter_by(name=name).first()
-        if existing:
-            return jsonify({'success': False, 'error': 'A client with this name already exists'}), 400
-
-        client = Client(name=name, created_by=current_user)
-        db.session.add(client)
-        db.session.commit()
-
-        return jsonify({
-            'success': True,
-            'client': {'id': client.id, 'name': client.name}
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f'Add client failed: {str(e)}')
-        return jsonify({'success': False, 'error': 'Something went wrong. Please try again.'}), 500
-    
 @brief_bp.route('/projects/deliverable-types/add', methods=['POST'])
 @login_required
 @role_required('cs', 'admin', 'management')

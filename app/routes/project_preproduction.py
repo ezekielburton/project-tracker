@@ -76,10 +76,9 @@ def _get_actor():
 
 
 def _can_manage_preproduction(project, actor):
-    """Who can assign/approve/flag/skip in Pre-Production: admin,
-    management, this project's Project Owner, or its CS Lead (CS still
-    needs to be able to Skip to Pre-Production per Ezekiel's spec, even
-    though day-to-day review is the Owner's job)."""
+    """Who can approve/flag in Pre-Production: admin, management, this
+    project's Project Owner, or its CS Lead. Skip to Pre-Production has
+    its own, separately-scoped gate — see _can_skip_preproduction."""
     return (
         actor.role in ('admin', 'management')
         or actor.id == project.project_owner_id
@@ -87,14 +86,37 @@ def _can_manage_preproduction(project, actor):
     )
 
 
+def _can_skip_preproduction(project, actor):
+    """Who can use Skip to Pre-Production — CS Lead, Secondary CS,
+    Management, Admin, or the assigned Project Owner (per Ezekiel, 18 Aug
+    2026 — replaces an earlier "any cs-role user" broadening that let
+    someone with no relationship to this specific project skip it).
+    Duplicated in project_overlay.py (not cross-imported), matching this
+    codebase's existing one-helper-per-route-file convention — keep the
+    two in sync if this ever changes."""
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    return (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+
+
 def _stream_done(deliverable):
-    """True once a deliverable's required streams are all signed off —
-    mirrors _post_approval_deliverable_status()'s own "done" check exactly
-    (imported, not re-derived) so the cascade below can never disagree
-    with what the pill is showing."""
+    """True once a deliverable is no longer blocking the "handed to
+    production" cascade below — either every stream it needed is approved
+    ('Handed to Production'), or it never needed any Pre-Production
+    stream in the first place ('Client Approved' with needs_2d/3d/
+    technical all False, so it never really entered Pre-Production at
+    all). Bug fix, 18 Aug 2026: this used to check only for 'Handed to
+    Production', which meant a single no-needs deliverable in a project/
+    channel silently blocked the whole cascade forever, since
+    _post_approval_deliverable_status() never reports that case as
+    'Handed to Production' — it has nothing to hand off."""
     from app.status_vocabulary import _post_approval_deliverable_status
     label, _ = _post_approval_deliverable_status(deliverable)
-    return label == 'Handed to Production'
+    return label in ('Handed to Production', 'Client Approved')
 
 
 def _cascade_handed_to_production(project, actor, now):
@@ -337,50 +359,19 @@ def overlay_preproduction(project_id):
 
 # ── Skip to Pre-Production ──────────────────────────────────────────────
 
-@project_preproduction_bp.route('/projects/<int:project_id>/preproduction/skip', methods=['POST'])
-@login_required
-def skip_to_preproduction(project_id):
-    """Fast-forwards selected deliverables straight to Pre-Production —
-    no Submissions/Client Approval involved. Select specific deliverables,
-    or every one of them (the frontend just sends the full ID list for
-    "All" — no separate whole-project code path needed here, the existing
-    cascade rule naturally completes the project once every deliverable is
-    covered, same as it does for real client approval).
-
-    Body (JSON): deliverable_ids (required, non-empty list).
-
-    needs_2d/needs_3d/needs_technical are auto-derived from whichever
-    teams are already on the deliverable (status_vocabulary.derive_
-    preproduction_needs) — same rule real Client Approval uses, so a
-    skipped deliverable ends up in exactly the same state one that went
-    through the normal flow would.
+def _apply_skip_to_preproduction(project, deliverables, actor):
+    """Core mutation shared by skip_to_preproduction() (manual, per-
+    deliverable-selection) and the create flow's Production Only finalize
+    (project_overlay.py's overlay_create_finalize(), task #64) — moves
+    every given deliverable straight to Pre-Production, bypassing
+    Submissions/Client Approval, functionally identical to a real Client
+    Approval. Extracted 18 Aug 2026 so the two call sites can't drift on
+    this logic. Caller handles permission checks, request parsing, and the
+    commit/response — this only mutates and cascades, doesn't commit.
     """
-    from app import db
     from app.models import ProjectPosmChannel
     from app.status_tracking import record_deliverable_status
     from app.status_vocabulary import derive_preproduction_needs
-    from app.utils import log_activity
-
-    project = Project.query.get_or_404(project_id)
-    actor = _get_actor()
-    if not _can_manage_preproduction(project, actor) and actor.role != 'cs':
-        return jsonify({'success': False, 'error': 'You do not have permission to skip to Pre-Production.'}), 403
-
-    data = request.get_json() or {}
-    deliverable_ids = data.get('deliverable_ids')
-    if not deliverable_ids:
-        return jsonify({'success': False, 'error': 'Select at least one deliverable to skip.'}), 400
-    try:
-        deliverable_id_set = {int(i) for i in deliverable_ids}
-    except (TypeError, ValueError):
-        return jsonify({'success': False, 'error': 'Invalid deliverable selection.'}), 400
-
-    deliverables = Deliverable.query.filter(
-        Deliverable.project_id == project.id,
-        Deliverable.id.in_(deliverable_id_set)
-    ).all()
-    if not deliverables:
-        return jsonify({'success': False, 'error': 'No matching deliverables found.'}), 400
 
     now = datetime.utcnow()
     for d in deliverables:
@@ -415,6 +406,53 @@ def skip_to_preproduction(project_id):
     else:
         _cascade_client_approval(project, None, actor, now)
 
+
+@project_preproduction_bp.route('/projects/<int:project_id>/preproduction/skip', methods=['POST'])
+@login_required
+def skip_to_preproduction(project_id):
+    """Fast-forwards selected deliverables straight to Pre-Production —
+    no Submissions/Client Approval involved. Select specific deliverables,
+    or every one of them (the frontend just sends the full ID list for
+    "All" — no separate whole-project code path needed here, the existing
+    cascade rule naturally completes the project once every deliverable is
+    covered, same as it does for real client approval).
+
+    Body (JSON): deliverable_ids (required, non-empty list).
+
+    needs_2d/needs_3d/needs_technical are auto-derived from whichever
+    teams are already on the deliverable (status_vocabulary.derive_
+    preproduction_needs) — same rule real Client Approval uses, so a
+    skipped deliverable ends up in exactly the same state one that went
+    through the normal flow would.
+    """
+    from app import db
+    from app.models import ProjectPosmChannel
+    from app.status_tracking import record_deliverable_status
+    from app.status_vocabulary import derive_preproduction_needs
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if not _can_skip_preproduction(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to skip to Pre-Production.'}), 403
+
+    data = request.get_json() or {}
+    deliverable_ids = data.get('deliverable_ids')
+    if not deliverable_ids:
+        return jsonify({'success': False, 'error': 'Select at least one deliverable to skip.'}), 400
+    try:
+        deliverable_id_set = {int(i) for i in deliverable_ids}
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Invalid deliverable selection.'}), 400
+
+    deliverables = Deliverable.query.filter(
+        Deliverable.project_id == project.id,
+        Deliverable.id.in_(deliverable_id_set)
+    ).all()
+    if not deliverables:
+        return jsonify({'success': False, 'error': 'No matching deliverables found.'}), 400
+
+    _apply_skip_to_preproduction(project, deliverables, actor)
     db.session.commit()
 
     log_activity('preprod_skipped',
@@ -507,8 +545,8 @@ def approve_stream(deliverable_id):
 @project_preproduction_bp.route('/deliverables/<int:deliverable_id>/preproduction/flag', methods=['POST'])
 @login_required
 def flag_stream(deliverable_id):
-    """Project Owner bounces a stream back for reupload. Resets that
-    stream's status to None (back in progress) and logs a preprod_flag
+    """Bounces a stream back for reupload (see _can_manage_preproduction
+    for who).Resets that stream's status to None (back in progress) and logs a preprod_flag
     event with the required comment — this is the row later KPI queries
     (average revision rounds, per project/deliverable/owner/month/
     quarter) will count and filter on, and it's also what

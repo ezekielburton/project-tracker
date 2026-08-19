@@ -101,6 +101,7 @@ def create_app():
     from app.routes.project_list import project_list_bp # Projects page list
     from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
     from app.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
+    from app.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
 
 
     app.register_blueprint(notifications_bp)
@@ -127,6 +128,7 @@ def create_app():
     app.register_blueprint(project_list_bp)
     app.register_blueprint(project_overlay_bp)
     app.register_blueprint(project_preproduction_bp)
+    app.register_blueprint(project_notes_bp)
 
     @app.context_processor
     @app.context_processor
@@ -272,6 +274,33 @@ def create_app():
                 f'&launchParam={launch_param}')
 
     app.jinja_env.globals['nas_deliverable_url'] = _nas_deliverable_url
+
+    def _nas_project_url(project):
+        """Returns the DSM 7 File Station deep-link URL for a project's root
+        folder, or None if NAS_WEB_URL is not configured. Same launchParam
+        double-encoding as _nas_deliverable_url()/get_nas_link() — kept as
+        its own function rather than calling _nas_deliverable_url with no
+        deliverable, since the two produce genuinely different paths (this
+        one has no 'Design Files/...' suffix at all).
+        """
+        from urllib.parse import quote
+
+        base = (app.config.get('NAS_WEB_URL') or
+                f"https://{app.config.get('NAS_HOST', '')}:{app.config.get('NAS_PORT', '5001')}")
+
+        root      = app.config.get('NAS_PROJECT_ROOT', '/Projects')
+        year      = project.created_at.year
+        client    = project.client_brand.name if project.client_brand else 'Unknown Client'
+        proj_name = project.name
+        folder_path = f'{root}/{year}/{client}/{proj_name}'
+
+        path_encoded = quote(folder_path, safe='/')
+        launch_param = quote(f'opendir={path_encoded}', safe='/')
+        return (f'{base.rstrip("/")}/index.cgi'
+                f'?launchApp=SYNO.SDS.App.FileStation3.Instance'
+                f'&launchParam={launch_param}')
+
+    app.jinja_env.globals['nas_project_url'] = _nas_project_url
 
     @app.context_processor
     def inject_effective_user():

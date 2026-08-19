@@ -74,6 +74,27 @@ document.addEventListener('DOMContentLoaded', () => {
         },
     };
 
+    // Task #37 — the guard passed into ProjectOverlay.init as onBeforeNavigate.
+    // Only project_list.js knows about activeOverlayEdit, so this is where
+    // the check has to live; project_overlay.js just calls it before any
+    // navigation that would tear out the edit-mode DOM (close, sub-tab
+    // switch) and trusts it to call proceed() when it's actually safe to go.
+    function guardUnsavedEdit(proceed) {
+        if (activeOverlayEdit && activeOverlayEdit.isEditing() && activeOverlayEdit.hasUnsavedChanges()) {
+            if (window.showConfirm) {
+                window.showConfirm(
+                    'You have unsaved changes on Details. Discard them?',
+                    proceed,
+                    'Discard unsaved changes?'
+                );
+            } else if (window.confirm('You have unsaved changes on Details. Discard them?')) {
+                proceed();
+            }
+            return;
+        }
+        proceed();
+    }
+
     function loadSubTabContent(projectId, subTabKey) {
         const loader = SUBTAB_LOADERS[subTabKey];
         if (!loader) return;
@@ -118,6 +139,186 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
     }
+    
+    function loadNotesSection(projectId) {
+        const contentEl = document.getElementById('project-overlay-content');
+        if (!contentEl) return;
+
+        if (activeOverlayEdit) activeOverlayEdit.exitEditMode();
+        if (activeSubTabCard) {
+            activeSubTabCard.destroy();
+            activeSubTabCard = null;
+        }
+
+        // Edit button only makes sense on Details — hide it here too, same as
+        // every non-Details sub-tab already does.
+        const overlayHeader = document.getElementById('project-overlay-header');
+        if (overlayHeader) {
+            const editBtn = overlayHeader.querySelector('#project-overlay-edit-btn');
+            if (editBtn) editBtn.classList.add('is-hidden');
+        }
+
+        fetch(`/projects/${projectId}/overlay/notes`)
+            .then((res) => res.text())
+            .then((html) => {
+                contentEl.innerHTML = html;
+                if (window.ProjectNotesCard) {
+                    activeSubTabCard = window.ProjectNotesCard.init(contentEl, projectId);
+                }
+            });
+    }
+
+    // Cancel / Reactivate + Put on Hold / Resume — wired once per overlay
+    // open (the sidebar isn't re-rendered on sub-tab switches, so this
+    // can't live in a per-sub-tab card module like project_details_card.js).
+    // Each button pair is dual-rendered (both states in the DOM, one
+    // hidden) and toggled directly on success — cheaper than refetching
+    // the whole sidebar, and mirrors the header's Edit/Save/Cancel pattern.
+    function wireProjectLifecycleActions(sidebarEl, projectId) {
+        if (!sidebarEl) return;
+
+        function postJson(url, body, onSuccess, onError) {
+            fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+                .then((r) => r.json())
+                .then((data) => {
+                    if (!data.success) { if (onError) onError(data.error); return; }
+                    if (onSuccess) onSuccess();
+                })
+                .catch(() => { if (onError) onError('Something went wrong. Please try again.'); });
+        }
+
+        // After any lifecycle change, refresh Details content if that's
+        // the tab currently showing — it's the only sub-tab with a status
+        // pill / cancellation banner to keep in sync.
+        function refreshDetailsIfActive() {
+            const lastView = getLastView(projectId);
+            if (lastView && lastView.section === 'design' && (lastView.subTab || 'details') === 'details') {
+                loadSubTabContent(projectId, 'details');
+            }
+        }
+
+        // ── Flag Issue (project-level) — same inline reveal-form pattern
+        // as Cancel Project. Raising is the only action here; replying/
+        // resolving/history still happen on the Details tab itself (see
+        // project_flags.js), since those need the full flag list to work with. ──
+        const flagBtn = sidebarEl.querySelector('#overlay-flag-issue-btn');
+        const flagForm = sidebarEl.querySelector('#overlay-flag-issue-form');
+        const flagMessageInput = sidebarEl.querySelector('#overlay-flag-issue-message');
+        const flagErrorEl = sidebarEl.querySelector('#overlay-flag-issue-error');
+        const flagConfirmBtn = sidebarEl.querySelector('#overlay-flag-issue-confirm');
+        const flagCancelBtn = sidebarEl.querySelector('#overlay-flag-issue-cancel');
+
+        if (flagBtn && flagForm) {
+            flagBtn.addEventListener('click', () => {
+                flagBtn.classList.add('is-hidden');
+                flagForm.classList.remove('is-hidden');
+                if (flagMessageInput) flagMessageInput.focus();
+            });
+        }
+        if (flagCancelBtn) {
+            flagCancelBtn.addEventListener('click', () => {
+                flagForm.classList.add('is-hidden');
+                if (flagBtn) flagBtn.classList.remove('is-hidden');
+                if (flagErrorEl) flagErrorEl.classList.add('hidden');
+            });
+        }
+        if (flagConfirmBtn) {
+            flagConfirmBtn.addEventListener('click', () => {
+                const message = flagMessageInput ? flagMessageInput.value.trim() : '';
+                if (!message) {
+                    if (flagErrorEl) { flagErrorEl.textContent = 'A message is required.'; flagErrorEl.classList.remove('hidden'); }
+                    return;
+                }
+                flagConfirmBtn.disabled = true;
+                if (flagErrorEl) flagErrorEl.classList.add('hidden');
+                postJson(`/projects/${projectId}/overlay/flags/create`, { flag_type: 'project', message: message }, () => {
+                    flagConfirmBtn.disabled = false;
+                    if (flagMessageInput) flagMessageInput.value = '';
+                    flagForm.classList.add('is-hidden');
+                    if (flagBtn) flagBtn.classList.remove('is-hidden');
+                    refreshDetailsIfActive();
+                }, (err) => {
+                    flagConfirmBtn.disabled = false;
+                    if (flagErrorEl) { flagErrorEl.textContent = err || 'Could not raise this flag.'; flagErrorEl.classList.remove('hidden'); }
+                });
+            });
+        }
+
+        const holdBtn = sidebarEl.querySelector('#overlay-hold-project-btn');
+        const resumeBtn = sidebarEl.querySelector('#overlay-resume-project-btn');
+        if (holdBtn) {
+            holdBtn.addEventListener('click', () => {
+                const go = () => postJson(`/projects/${projectId}/overlay/toggle-hold`, {}, () => {
+                    holdBtn.classList.add('is-hidden');
+                    if (resumeBtn) resumeBtn.classList.remove('is-hidden');
+                    refreshDetailsIfActive();
+                }, (err) => alert(err || 'Could not put this project on hold.'));
+                if (window.showConfirm) window.showConfirm('Put this project on hold?', go);
+                else if (window.confirm('Put this project on hold?')) go();
+            });
+        }
+        if (resumeBtn) {
+            resumeBtn.addEventListener('click', () => {
+                postJson(`/projects/${projectId}/overlay/toggle-hold`, {}, () => {
+                    resumeBtn.classList.add('is-hidden');
+                    if (holdBtn) holdBtn.classList.remove('is-hidden');
+                    refreshDetailsIfActive();
+                }, (err) => alert(err || 'Could not resume this project.'));
+            });
+        }
+
+        const cancelBtn = sidebarEl.querySelector('#overlay-cancel-project-btn');
+        const uncancelBtn = sidebarEl.querySelector('#overlay-uncancel-project-btn');
+        const cancelForm = sidebarEl.querySelector('#overlay-cancel-project-form');
+        const cancelReasonInput = sidebarEl.querySelector('#overlay-cancel-project-reason');
+        const cancelErrorEl = sidebarEl.querySelector('#overlay-cancel-project-error');
+        const cancelConfirmBtn = sidebarEl.querySelector('#overlay-cancel-project-confirm');
+        const cancelCancelBtn = sidebarEl.querySelector('#overlay-cancel-project-cancel');
+
+        if (cancelBtn && cancelForm) {
+            cancelBtn.addEventListener('click', () => {
+                cancelBtn.classList.add('is-hidden');
+                cancelForm.classList.remove('is-hidden');
+            });
+        }
+        if (cancelCancelBtn) {
+            cancelCancelBtn.addEventListener('click', () => {
+                cancelForm.classList.add('is-hidden');
+                if (cancelBtn) cancelBtn.classList.remove('is-hidden');
+                if (cancelErrorEl) cancelErrorEl.classList.add('hidden');
+            });
+        }
+        if (cancelConfirmBtn) {
+            cancelConfirmBtn.addEventListener('click', () => {
+                const reason = cancelReasonInput ? cancelReasonInput.value.trim() : '';
+                if (!reason) {
+                    if (cancelErrorEl) { cancelErrorEl.textContent = 'A reason is required.'; cancelErrorEl.classList.remove('hidden'); }
+                    return;
+                }
+                cancelConfirmBtn.disabled = true;
+                if (cancelErrorEl) cancelErrorEl.classList.add('hidden');
+                postJson(`/projects/${projectId}/overlay/cancel`, { reason: reason }, () => {
+                    cancelConfirmBtn.disabled = false;
+                    cancelForm.classList.add('is-hidden');
+                    cancelBtn.classList.add('is-hidden');
+                    if (uncancelBtn) uncancelBtn.classList.remove('is-hidden');
+                    refreshDetailsIfActive();
+                }, (err) => {
+                    cancelConfirmBtn.disabled = false;
+                    if (cancelErrorEl) { cancelErrorEl.textContent = err || 'Could not cancel this project.'; cancelErrorEl.classList.remove('hidden'); }
+                });
+            });
+        }
+        if (uncancelBtn) {
+            uncancelBtn.addEventListener('click', () => {
+                postJson(`/projects/${projectId}/overlay/uncancel`, {}, () => {
+                    uncancelBtn.classList.add('is-hidden');
+                    if (cancelBtn) cancelBtn.classList.remove('is-hidden');
+                    refreshDetailsIfActive();
+                }, (err) => alert(err || 'Could not reactivate this project.'));
+            });
+        }
+    }
 
     function openProjectOverlay(projectId, pushHistory = true) {
         fetch(`/projects/${projectId}/overlay`)
@@ -132,18 +333,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         saveLastView(projectId, 'design', subTabKey);
                         loadSubTabContent(projectId, subTabKey);
                     },
+                    // in project_list.js, openProjectOverlay()'s onSectionSelected callback:
                     function (sectionKey) {
-                        // Re-entering Design alone (no sub-tab click) shouldn't
-                        // wipe out a previously remembered sub-tab — only a
-                        // genuine section change, or a real sub-tab click
-                        // (handled above), should overwrite it.
                         if (sectionKey === 'design') {
                             const existing = getLastView(projectId);
                             saveLastView(projectId, 'design', existing && existing.section === 'design' ? existing.subTab : null);
                         } else {
                             saveLastView(projectId, sectionKey, null);
+                            if (sectionKey === 'notes') {
+                                loadNotesSection(projectId);
+                            }
                         }
-                    }
+                    },
+                    guardUnsavedEdit
                 );
 
                 // Edit mode (M4) — header (name/Edit/Save/Cancel) is part of
@@ -156,6 +358,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         loadSubTabContent(projectId, 'details');
                     });
                 }
+
+                // Cancel/Hold sidebar actions (task #56) — lives in the
+                // persistent shell alongside the header, so wire it once
+                // here too, not per sub-tab load.
+                const sidebarEl = document.getElementById('project-overlay-sidebar');
+                wireProjectLifecycleActions(sidebarEl, projectId);
 
                 // Live updates (task #35) — someone else saving an edit to
                 // this same project (or any other watched change — see
@@ -179,13 +387,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     // fetch its content fresh and sync the rail to match.
                     activeOverlay.restoreView('design', lastView.subTab);
                     loadSubTabContent(projectId, lastView.subTab);
+                } else if (lastView && lastView.section === 'notes') {
+                    // Notes has real content behind it (unlike Finance/Production/
+                    // Logistics, still placeholders) — sync the rail AND actually fetch
+                    // it, same shape as the Design-sub-tab branch above.
+                    activeOverlay.restoreView('notes', null);
+                    loadNotesSection(projectId);
                 } else {
-                    // Nothing remembered, remembered view was already
-                    // 'details', or it's a non-Design section (Finance/
-                    // Production/Logistics have no real content yet, so
-                    // there's nothing to load — just sync the rail's
-                    // visual state and fall back to the embedded Details
-                    // content underneath).
+                    // Nothing remembered, remembered view was already 'details', or
+                    // it's a still-placeholder section (Finance/Production/Logistics —
+                    // no real content yet) — just sync the rail's visual state and fall
+                    // back to the embedded Details content underneath.
                     if (lastView && lastView.section && lastView.section !== 'design') {
                         activeOverlay.restoreView(lastView.section, null);
                     }
@@ -200,6 +412,138 @@ document.addEventListener('DOMContentLoaded', () => {
                     history.pushState({ projectId }, '', `${window.location.pathname}?${params.toString()}`);
                 }
             });
+    }
+
+    // Create-mode overlay (task #61) — deliberately its own pair of
+    // open/close functions rather than reusing openProjectOverlay/
+    // closeProjectOverlay above: those wire up ProjectOverlay.init's
+    // sub-tab rail, SSE live-updates stream, and the edit-mode header,
+    // none of which exist in the create-mode shell (no sub-tabs, no
+    // Cancel/Hold sidebar, no lifecycle actions yet — see
+    // _overlay_create.html). Keeping the two paths separate means neither
+    // has to guard against the other's DOM not being there.
+    function openCreateShellForDraft(projectId) {
+        return fetch(`/projects/${projectId}/overlay/create`)
+            .then((res) => res.text())
+            .then((html) => {
+                overlayMount.innerHTML = html;
+                if (window.ProjectOverlayCreate) {
+                    // onFinalized: after a successful Confirm on the create
+                    // summary modal, open the newly-created project straight
+                    // into the full live overlay.
+                    window.ProjectOverlayCreate.init(projectId, closeNewProjectOverlay, openProjectOverlay);
+                }
+            });
+    }
+
+    function startFreshDraft() {
+        fetch('/projects/overlay/new', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (!data.success) {
+                    alert(data.error || 'Could not start a new project.');
+                    return;
+                }
+                return openCreateShellForDraft(data.project_id);
+            })
+            .catch(() => alert('Could not start a new project.'));
+    }
+
+    // Resumable drafts (task #65) — "+ New Project" checks for any open
+    // drafts first (the creator's own, or — for admin/management —
+    // anyone's) and, if there are some, shows a picker instead of
+    // immediately starting a fresh one. Mirrors the confirm-summary
+    // modal's append-to-body/remove-on-close pattern in
+    // project_overlay_create.js rather than reusing overlayMount, since
+    // this picker has to exist BEFORE any create-mode shell is loaded.
+    function openDraftsPicker(html) {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        const modal = wrapper.firstElementChild;
+        document.body.appendChild(modal);
+        if (window.helixPolling) window.helixPolling.pause();
+
+        function closeModal() {
+            modal.remove();
+            if (window.helixPolling) window.helixPolling.resume();
+        }
+
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+        const cancelBtn = document.getElementById('overlay-create-drafts-cancel');
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+        const startNewBtn = document.getElementById('overlay-create-drafts-start-new');
+        if (startNewBtn) {
+            startNewBtn.addEventListener('click', () => {
+                closeModal();
+                startFreshDraft();
+            });
+        }
+
+        modal.querySelectorAll('.overlay-create-draft-resume').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const draftId = btn.getAttribute('data-draft-id');
+                closeModal();
+                openCreateShellForDraft(draftId);
+            });
+        });
+
+        modal.querySelectorAll('.overlay-create-draft-delete').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!window.confirm('Delete this draft? This cannot be undone.')) return;
+                const draftId = btn.getAttribute('data-draft-id');
+                btn.disabled = true;
+                fetch(`/projects/${draftId}/draft`, { method: 'DELETE' })
+                    .then((res) => res.json())
+                    .then((result) => {
+                        if (!result.success) {
+                            btn.disabled = false;
+                            alert(result.error || 'Could not delete this draft.');
+                            return;
+                        }
+                        const row = modal.querySelector(`.overlay-create-draft-row[data-draft-id="${draftId}"]`);
+                        if (row) row.remove();
+                        if (!modal.querySelector('.overlay-create-draft-row')) {
+                            // Last one just got deleted — leave the picker
+                            // open (don't presume they want a new project
+                            // right now just because they cleaned up an old
+                            // one) with just Cancel / Start New left to
+                            // choose from.
+                            const list = modal.querySelector('.overlay-create-drafts-list');
+                            if (list) list.remove();
+                            const intro = modal.querySelector('.overlay-submit-summary-intro');
+                            if (intro) intro.textContent = 'No drafts left. Start a new project, or cancel below.';
+                        }
+                    })
+                    .catch(() => {
+                        btn.disabled = false;
+                        alert('Could not delete this draft.');
+                    });
+            });
+        });
+    }
+
+    function openNewProjectOverlay() {
+        fetch('/projects/overlay/drafts')
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.has_drafts) {
+                    openDraftsPicker(data.html);
+                } else {
+                    startFreshDraft();
+                }
+            })
+            .catch(() => startFreshDraft());
+    }
+
+    function closeNewProjectOverlay() {
+        overlayMount.innerHTML = '';
     }
 
     function closeProjectOverlay(pushHistory = true) {
@@ -428,6 +772,31 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // ---- Show Cancelled toggle ----
+        // Shortcut for "set the status filter to exactly Cancelled" — same
+        // effect as picking the Cancelled chip in the filter panel by hand,
+        // just one click instead of opening the panel. Filters to cancelled
+        // projects ONLY (replaces whatever status selection was active,
+        // rather than adding to it) — every OTHER filter dimension (client,
+        // designers, etc.) still combines on top normally, and clicking
+        // again clears status back out. Reads current URL and reloads, same
+        // "read, mutate one thing, reload" pattern as the Sort panel below,
+        // so everything else active (filters, sort, group) survives.
+        const showCancelledToggle = document.getElementById('show-cancelled-toggle');
+        if (showCancelledToggle) {
+            showCancelledToggle.addEventListener('click', () => {
+                const params = new URLSearchParams(window.location.search);
+                const currentStatus = (params.get('status') || '').split(',').filter(Boolean);
+                const isCancelledOnly = currentStatus.length === 1 && currentStatus[0] === 'Cancelled';
+                if (isCancelledOnly) {
+                    params.delete('status');
+                } else {
+                    params.set('status', 'Cancelled');
+                }
+                window.location.href = `${window.location.pathname}?${params.toString()}`;
+            });
+        }
+
         // ---- Save current filters/sort/group as a new tab ----
         const saveNewViewBtn = document.getElementById('save-new-view-btn');
         if (saveNewViewBtn) {
@@ -615,8 +984,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newProjectBtn = document.getElementById('new-project-btn');
         if (newProjectBtn) {
             newProjectBtn.addEventListener('click', () => {
-                // TODO: wire up once the New Project flow (per your planning doc) is built.
-                console.log('New Project — not wired up yet.');
+                openNewProjectOverlay();
             });
         }
 

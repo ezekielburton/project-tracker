@@ -10,12 +10,14 @@
         collectAllRows in project_deliverables_card.js) — switching the
         picker never risks losing unsaved edits in another panel. #}
         <div class="overlay-card-controls-row">
-            <button type="button" class="overlay-file-action-btn" id="overlay-add-deliverable-btn">Add Deliverable</button>
+            <button type="button" class="overlay-file-action-btn" id="overlay-add-deliverable-btn"
+                {% if not all_customers %}disabled{% endif %}>Add Deliverable</button>
             <div class="overlay-deliverables-controls-right">
                 <button type="button" class="overlay-file-action-btn" id="overlay-apply-deadline-all-btn">Apply
                     Deadline to All</button>
                 <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
                     id="overlay-save-deliverables-btn">Save Deliverables</button>
+                {% if all_customers %}
                 <select class="overlay-scope-select" id="overlay-deliverables-edit-scope-select">
                     {% if has_gulf_regions %}
                     {% for region in regions %}
@@ -33,9 +35,17 @@
                     {% endfor %}
                     {% endif %}
                 </select>
+                {% endif %}
             </div>
         </div>
 
+        {% if not all_customers %}
+        {# Only reachable from the create-mode flow today (task #62) — a
+        live project always has at least one customer by the time it
+        exists at all. Points back at the step that's actually missing
+        rather than just showing an empty, inert table. #}
+        <p class="overlay-field-empty">No customers selected yet — go back to Details and pick at least one first.</p>
+        {% else %}
         <div class="overlay-deliverables-edit-header">
             <span>Deliverable Name</span>
             <span class="overlay-deliverables-edit-header-deadline">Design Deadline</span>
@@ -44,6 +54,7 @@
             <span>Technical</span>
             <span></span>
         </div>
+        {% endif %}
 
         {% for c in all_customers %}
         <div class="overlay-deliverables-edit-panel{% if c.project_customer.id != first_customer_id %} is-hidden{% endif %}"

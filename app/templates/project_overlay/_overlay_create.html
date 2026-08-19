@@ -1,0 +1,46 @@
+{# app/templates/project_overlay/_overlay_create.html
+   Create-mode overlay shell (task #61) — the "+ New Project" flow's Details
+   step lands here, followed by Deliverables (#62), then a confirm summary
+   (#64). Deliberately its own shell rather than reusing _overlay.html: the
+   tab set (Details/Deliverables only — no Submissions/Pre-Production/
+   Finance/Production/Logistics, none of which make sense before the
+   project is confirmed) and the footer (a forward-moving step rail +
+   eventual "Add New Project" action, no lifecycle sidebar — Cancel/Hold/
+   Flag don't apply to something that isn't a real project yet) differ too
+   much from the live overlay to share markup usefully. Same outer wrapper
+   classes as _overlay.html though (project-overlay-backdrop/-sheet/
+   -header/-body/-content), so it reads as the same surface, not a
+   different UI bolted on. #}
+
+<div class="project-overlay-backdrop" id="project-overlay-backdrop">
+    <div class="project-overlay-sheet" id="project-overlay-sheet">
+        <div class="project-overlay-header" id="project-overlay-header">
+            <div class="project-overlay-name" id="project-overlay-create-name">{{ project.name }}</div>
+            <button type="button" class="project-overlay-close" id="project-overlay-close"
+                aria-label="Close">&times;</button>
+        </div>
+        <div class="project-overlay-body">
+            <nav class="project-overlay-sidebar project-overlay-create-rail" id="project-overlay-create-rail">
+                <button type="button" class="project-overlay-create-step active" data-create-step="details">
+                    <span class="project-overlay-create-step-num">1</span> Details
+                </button>
+                <button type="button" class="project-overlay-create-step" data-create-step="deliverables">
+                    <span class="project-overlay-create-step-num">2</span> Deliverables
+                </button>
+            </nav>
+            <div class="project-overlay-content" id="project-overlay-content" data-create-project-id="{{ project.id }}"
+                data-create-brief-type="{{ project.brief_type or '' }}">
+                {% include "project_overlay/_details_create.html" %}
+            </div>
+        </div>
+        <div class="project-overlay-create-footer" id="project-overlay-create-footer">
+            <span class="project-overlay-create-autosave-status" id="project-overlay-create-autosave-status">Draft
+                saved</span>
+            {# Wired fully in #64 — for now this just advances the step rail
+            to a Deliverables placeholder (built for real in #62). #}
+            <button type="button" class="project-toolbar-new-item" id="project-overlay-create-continue">
+                Continue to Deliverables →
+            </button>
+        </div>
+    </div>
+</div>

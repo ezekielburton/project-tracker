@@ -30,6 +30,7 @@
     padding-bottom: var(--space-3);
     margin-bottom: var(--space-4); 
     border-bottom: 2px solid var(--grey-mid);
+    color: var(--tangerine);
 }
 
 /*  ---- Person Chip

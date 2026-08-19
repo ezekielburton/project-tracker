@@ -36,6 +36,68 @@ active section. See project_overlay.js. #}
                 <button type="button" class="project-overlay-sidebar-item"
                     data-main-tab="production">Production</button>
                 <button type="button" class="project-overlay-sidebar-item" data-main-tab="logistics">Logistics</button>
+                <button type="button" class="project-overlay-sidebar-item" data-main-tab="notes">Notes & Visits</button>
+
+                {% set _project_folder_url = nas_project_url(project) %}
+                {% if _project_folder_url or can_manage_flags or can_toggle_hold or can_cancel_project %}
+                <div class="project-overlay-sidebar-lifecycle">
+                    {% if _project_folder_url %}
+                    <a href="{{ _project_folder_url }}" target="_blank" rel="noopener"
+                        class="project-overlay-sidebar-action-btn" id="overlay-open-folder-btn">Open Project
+                        Folder</a>
+                    {% endif %}
+
+                    {% if can_manage_flags %}
+                    {# Flag Issue (task #42 follow-up, 18 Aug 2026) — raising a
+                    project flag moved here from the Details tab so it's
+                    reachable from anywhere, same reasoning as Cancel/Hold.
+                    Details still shows any open flag (always) plus a Flag
+                    History toggle — it just doesn't raise them anymore. #}
+                    <button type="button"
+                        class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--danger"
+                        id="overlay-flag-issue-btn">⚑ Flag Issue</button>
+                    <div class="project-overlay-sidebar-cancel-form is-hidden" id="overlay-flag-issue-form">
+                        <textarea id="overlay-flag-issue-message" placeholder="Describe the issue…"></textarea>
+                        <span class="overlay-flag-revision-error hidden" id="overlay-flag-issue-error"></span>
+                        <div class="project-overlay-sidebar-cancel-form-actions">
+                            <button type="button"
+                                class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--danger"
+                                id="overlay-flag-issue-confirm">Send Flag</button>
+                            <button type="button" class="project-overlay-sidebar-action-btn"
+                                id="overlay-flag-issue-cancel">Cancel</button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if can_toggle_hold %}
+                    <button type="button"
+                        class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--action{% if project.project_status == 'on_hold' %} is-hidden{% endif %}"
+                        id="overlay-hold-project-btn">Put on Hold</button>
+                    <button type="button"
+                        class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--action{% if project.project_status != 'on_hold' %} is-hidden{% endif %}"
+                        id="overlay-resume-project-btn">Resume Project</button>
+                    {% endif %}
+                    {% if can_cancel_project %}
+                    <button type="button"
+                        class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--danger{% if project.cancelled_at %} is-hidden{% endif %}"
+                        id="overlay-cancel-project-btn">Cancel Project</button>
+                    <button type="button"
+                        class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--action{% if not project.cancelled_at %} is-hidden{% endif %}"
+                        id="overlay-uncancel-project-btn">Reactivate Project</button>
+                    <div class="project-overlay-sidebar-cancel-form is-hidden" id="overlay-cancel-project-form">
+                        <textarea id="overlay-cancel-project-reason"
+                            placeholder="Why is this project being cancelled?"></textarea>
+                        <span class="overlay-flag-revision-error hidden" id="overlay-cancel-project-error"></span>
+                        <div class="project-overlay-sidebar-cancel-form-actions">
+                            <button type="button"
+                                class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--danger"
+                                id="overlay-cancel-project-confirm">Confirm Cancel</button>
+                            <button type="button" class="project-overlay-sidebar-action-btn"
+                                id="overlay-cancel-project-cancel">Cancel</button>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
             </nav>
             <div class="project-overlay-content" id="project-overlay-content">
                 {% if project.brief_type == 'standard' %}

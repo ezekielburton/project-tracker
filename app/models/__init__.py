@@ -193,7 +193,7 @@ class ProjectTableView(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    base_view = db.Column(db.String(20), nullable=False) # my / all / approved
+    base_view = db.Column(db.String(20), nullable=False) # my / all / design_complete (renamed from 'approved' 18 Aug 2026 — see migrations/_backfill_project_table_view_base_view.py)
     filters = db.Column(db.JSON, nullable=True) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -1110,7 +1110,8 @@ class ProjectSubmissionEventDeliverable(db.Model):
 
 class DeliverablePreproductionEvent(db.Model):
     """Append-only history log for one deliverable's Pre-Production review
-    cycle (Project Owner flags on a technical/artwork release upload).
+    cycle (admin/management/CS Lead/Project Owner flagging a technical/
+    artwork release upload for reupload — see _can_manage_preproduction).
 
     Its own table — deliberately NOT ProjectSubmissionEvent — for two
     reasons: (1) pre-production isn't submission-scoped, a deliverable can
@@ -1119,8 +1120,7 @@ class DeliverablePreproductionEvent(db.Model):
     to point at; (2) Ezekiel wants this history kept separate from
     Submissions' own event log, not filtered out of a shared one.
 
-    event_type is 'preprod_flag' for now (Project Owner bounced a stream
-    back for reupload, message required) — its own distinct value so
+    event_type is 'preprod_flag' for now (a stream got bounced back for reupload, message required) — its own distinct value so
     later KPI queries ("average revision rounds") can filter cleanly
     without guessing from free text. stream distinguishes which release
     stream ('technical'/'artwork') the flag was about, for KPI breakdowns

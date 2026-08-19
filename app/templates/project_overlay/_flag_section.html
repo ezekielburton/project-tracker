@@ -1,0 +1,61 @@
+{# app/templates/project_overlay/_flag_section.html
+UNUSED as of 18 Aug 2026 — both flag scopes (project on Details,
+deliverable on Deliverables) now use the compact single-toggle layout in
+_flag_project_panel.html instead of this file's exclusive Active/History
+tabs. Nothing includes this template anymore; kept only as a reference
+for the old layout in case it's wanted again, safe to delete outright
+next time this area gets touched. See project_flags.js's
+data-flag-toggle-style branch for the two toggle behaviors this used to
+straddle. #}
+
+<div class="overlay-flag-section" data-flag-scope="{{ flag_scope }}"{% if flag_customer_id %}
+    data-customer-id="{{ flag_customer_id }}"{% endif %}>
+    <div class="overlay-card-controls-row">
+        <div class="overlay-submissions-view-toggle">
+            <button type="button" class="overlay-file-action-btn overlay-submissions-view-toggle-btn active"
+                data-view="active">Active</button>
+            <button type="button" class="overlay-file-action-btn overlay-submissions-view-toggle-btn"
+                data-view="history">History</button>
+        </div>
+        {% if can_manage_flags and flag_scope == 'project' %}
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-flag-issue-btn">⚑
+            Flag Issue</button>
+        {% endif %}
+    </div>
+
+    {% if can_manage_flags %}
+    <div class="overlay-flag-compose-form is-hidden">
+        <span class="overlay-flag-compose-target is-hidden"></span>
+        <textarea class="overlay-flag-compose-input" placeholder="Describe the issue…"></textarea>
+        <span class="overlay-flag-revision-error hidden"></span>
+        <div class="overlay-flag-compose-form-actions">
+            <button type="button"
+                class="overlay-file-action-btn overlay-file-action-btn--danger overlay-flag-compose-confirm">Send
+                Flag</button>
+            <button type="button" class="overlay-file-action-btn overlay-flag-compose-cancel">Cancel</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="overlay-flag-view" data-view="active">
+        {% if flags %}
+        <div class="overlay-flag-attention-card">
+            <div class="overlay-flag-attention-heading">
+                <span class="overlay-flag-attention-label">⚑ Needs Attention</span>
+                <span class="overlay-flag-attention-count">{{ flags|length }}</span>
+            </div>
+            <div class="overlay-flag-list">
+                {% for flag in flags %}
+                {% include "project_overlay/_flag_card.html" %}
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <p class="overlay-field-empty">No open flags.</p>
+        {% endif %}
+    </div>
+
+    <div class="overlay-flag-view is-hidden" data-view="history">
+        <div class="overlay-flag-list overlay-flag-history-list"></div>
+    </div>
+</div>

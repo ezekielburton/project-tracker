@@ -127,6 +127,12 @@ window.ProjectPreproductionCard = (function () {
         var historyList = rootEl.querySelector('#overlay-preprod-history-list');
         var historyEvents = null;  // cached after first fetch
 
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
+        }
+
         function renderHistory() {
             if (!historyList) return;
             var filterId = historyFilter ? historyFilter.value : 'all';
@@ -142,11 +148,11 @@ window.ProjectPreproductionCard = (function () {
                 var when = e.created_at ? new Date(e.created_at).toLocaleString() : '';
                 return '<div class="overlay-preprod-history-item">' +
                     '<div class="overlay-preprod-history-item-header">' +
-                    '<strong>' + e.deliverable_name + '</strong>' +
-                    '<span class="overlay-field-label">' + e.stream + '</span>' +
+                    '<strong>' + escapeHtml(e.deliverable_name) + '</strong>' +
+                    '<span class="overlay-field-label">' + escapeHtml(e.stream) + '</span>' +
                     '</div>' +
-                    '<p class="overlay-notes-text">' + e.message + '</p>' +
-                    '<span class="overlay-preprod-history-item-meta">' + e.author_name + ' · ' + when + '</span>' +
+                    '<p class="overlay-notes-text">' + escapeHtml(e.message) + '</p>' +
+                    '<span class="overlay-preprod-history-item-meta">' + escapeHtml(e.author_name) + ' · ' + escapeHtml(when) + '</span>' +
                     '</div>';
             }).join('');
         }

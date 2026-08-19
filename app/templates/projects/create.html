@@ -38,7 +38,11 @@
             <span class="completion-label" id="completionLabel">0% Complete</span>
         </div>
         <div class="create-subheader-right">
-            <a href="{{ url_for('project_detail.detail', project_id=edit_project_id) if edit_mode else (url_for('brief.drafts') if has_other_drafts else url_for('main.index')) }}"
+            {# This page is now only ever reached via the Edit Project route
+               (task #67 retired the old create-mode entry point, its
+               drafts list, and the "no other drafts" fallback this ternary
+               used to branch to — edit_mode is always true here now). #}
+            <a href="{{ url_for('project_detail.detail', project_id=edit_project_id) }}"
                 class="btn-secondary" style="font-size:0.72rem;padding:0.45rem 1rem;">Back</a>
         </div>
     </div>

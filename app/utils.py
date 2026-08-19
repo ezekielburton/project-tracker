@@ -68,7 +68,12 @@ def work_hours_between(start, end):
     return (end - start).total_seconds() / 3600.0
 
 
-def log_activity(action, description, user=None, entity_type=None, entity_name=None, entity_id=None):
+def log_activity(action, description, user=None, entity_type=None, entity_name=None, entity_id=None, changes=None):
+    """description stays the free-text sentence shown everywhere (dashboard's
+    What Changed card renders it as-is, deliberately no diff UI there — see
+    what_changed.html). changes is an optional structured old/new diff,
+    stored on the side for callers that want it later (e.g. an audit view);
+    must already be JSON-safe (dates as ISO strings, etc.) before calling."""
     from app import db
     from app.models import ActivityLog
     try:
@@ -78,7 +83,8 @@ def log_activity(action, description, user=None, entity_type=None, entity_name=N
             description=description,
             entity_type=entity_type,
             entity_name=entity_name,
-            entity_id=entity_id
+            entity_id=entity_id,
+            changes=changes
         )
         db.session.add(entry)
         db.session.commit()

@@ -16,7 +16,10 @@
                 <button type="button" id="btn-all-projects" class="toggle-btn">All Projects</button>
                 <button type="button" id="btn-approved-projects" class="toggle-btn">Approved Projects</button>
             </div>
-            <a href="{{ url_for('brief.drafts') }}" class="btn-primary">Add New Project</a>
+            {# Repointed 18 Aug 2026 — was url_for('brief.drafts'), the old
+               create-flow's entry page, now retired (task #67). The new
+               create flow lives on the Projects list page itself. #}
+            <a href="{{ url_for('project_list.index') }}" class="btn-primary">Add New Project</a>
         </div>
     </div>
 

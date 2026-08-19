@@ -81,9 +81,16 @@ def _post_approval_deliverable_status(deliverable):
 
 
 # ── Shared stage mapping (Tier 2 + the per-channel check Tier 3 uses) ──────
-# Pre-Production / Handed to Production don't have real transitions writing
-# to project_status or ProjectPosmChannel.status yet (M6-M8 work) — mapped
-# here for completeness but won't appear on real data until then.
+# 'handed_to_production' is written for real now (18 Aug 2026) by
+# project_preproduction.py's _cascade_handed_to_production, both here at
+# the Standard project_status level and via ProjectPosmChannel.status for
+# C&CM (see derive_ccm_aggregate_status's own explicit branch for that
+# case — this shared function only covers the raw-status-string mapping).
+# 'pre_production' itself is still never written as its own project_status
+# value — Standard projects read 'Pre-Production' through
+# _post_approval_deliverable_status's per-deliverable pill instead, not
+# through this project-level branch — kept here for completeness in case
+# that changes.
 #
 # 'briefed' gets its own real branch (13 Aug 2026) — previously fell through
 # to the default and every fresh Standard project read "In Design" the
@@ -96,9 +103,9 @@ def _post_approval_deliverable_status(deliverable):
 def _pipeline_stage_for(raw_status):
     if raw_status == 'approved':
         return ('Client Approved', 'clover')
-    if raw_status == 'pre_production':        # not yet written anywhere — M8
+    if raw_status == 'pre_production':
         return ('Pre-Production', 'oak')
-    if raw_status == 'handed_to_production':   # not yet written anywhere — M8
+    if raw_status == 'handed_to_production':
         return ('Handed to Production', 'clover')
     if raw_status == 'briefed':
         return ('Briefed', 'sky')
@@ -144,11 +151,24 @@ def derive_ccm_aggregate_status(project):
 
     channels = project.posm_channels
 
-    # "Design Completed" per the architecture doc means every customer
-    # reached Handed to Production — that stage doesn't exist in real
-    # channel data yet (M8), so 'approved' (Client Approved) is today's
-    # practical stand-in for "this channel's design work is done."
-    if channels and all(c.status == 'approved' for c in channels):
+    # Handed to Production (bug fix, 18 Aug 2026) — every channel fully
+    # released via Pre-Production's cascade (see project_preproduction.py's
+    # _cascade_handed_to_production). Checked ahead of "Design Completed"
+    # below since it's the later stage — without this branch, a channel
+    # reaching 'handed_to_production' no longer matched the all-'approved'
+    # check either, so a fully handed-off project fell through to the
+    # started_manually/started_via_channel check further down and
+    # regressed to showing "In Design".
+    if channels and all(c.status == 'handed_to_production' for c in channels):
+        return ('Handed to Production', 'clover')
+
+    # "Design Completed" originally meant every customer reached Handed
+    # to Production, back when that stage didn't exist in real channel
+    # data — 'approved' was the practical stand-in. Now that
+    # handed_to_production is real (see above, which catches it first),
+    # this means "every channel is at least Client Approved" — a channel
+    # already handed to production also satisfies 'approved' in spirit.
+    if channels and all(c.status in ('approved', 'handed_to_production') for c in channels):
         return ('Design Completed', 'clover')
 
     started_manually = project.project_status != 'briefed'

@@ -15,10 +15,24 @@ window.ProjectOverlayEdit = (function () {
         var restoreFns = [];
         var editSnapshotAt = '';
         var isEditingNow = false;
+        var isDirty = false;
+
+        // Delegated once (not per-field) so any current or future editable
+        // field marks the form dirty just by existing under contentEl — no
+        // per-row wiring to keep in sync as fields get added later. Ignored
+        // outside edit mode so page-load's initial input values (there
+        // aren't any today, but future-proof) can't false-positive this.
+        contentEl.addEventListener('input', markDirtyIfEditing);
+        contentEl.addEventListener('change', markDirtyIfEditing);
+
+        function markDirtyIfEditing(e) {
+            if (isEditingNow && e.target.classList.contains('overlay-edit-input')) isDirty = true;
+        }
 
         function enterEditMode() {
             restoreFns = [];
             isEditingNow = true;
+            isDirty = false;
 
             var snapshotEl = contentEl.querySelector('[data-edit-snapshot]');
             editSnapshotAt = snapshotEl ? snapshotEl.dataset.editSnapshot : '';
@@ -46,8 +60,7 @@ window.ProjectOverlayEdit = (function () {
             restoreFns.forEach(function (restore) { restore(); });
             restoreFns = [];
             isEditingNow = false;
-
-
+            isDirty = false;
 
             editBtn.classList.remove('is-hidden');
             saveBtn.classList.add('is-hidden');
@@ -96,7 +109,8 @@ window.ProjectOverlayEdit = (function () {
                 // rest of the overlay shell on close.
             },
             exitEditMode: exitEditMode,
-            isEditing: function () { return isEditingNow; }
+            isEditing: function () { return isEditingNow; },
+            hasUnsavedChanges: function () { return isEditingNow && isDirty; }
         };
     }
 

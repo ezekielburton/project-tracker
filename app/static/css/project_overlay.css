@@ -11,14 +11,16 @@
     bottom: 0;
     left: var(--sidebar-min);
     z-index: 1000;
-    transition: left var(--sidebar-transition);;
+    transition: left var(--sidebar-transition);
+    ;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    /* align-items: center; justify-content: center; — removed, replaced
+       by margin: auto on the sheet itself below */
     padding: var(--space-6);
     background: rgba(26, 26, 26, 0.25);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
+    overflow: auto;
 }
 
 body:has(.sidebar.sidebar--expanded) .project-overlay-backdrop,
@@ -30,6 +32,10 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     width: 85%;
     height: 85%;
     max-width: 1600px;
+    min-width: 900px;
+    margin: auto;
+    /* NEW — centers in both axes; collapses to 0 instead
+                       of clipping once the sheet overflows the backdrop */
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
@@ -240,6 +246,96 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     display: none;
 }
 
+/* Lifecycle actions (Put on Hold / Resume, Cancel / Reactivate) — pinned
+to the bottom of the sidebar via margin-top:auto on the flex column, so
+they stay put regardless of how many nav items sit above them. */
+.project-overlay-sidebar-lifecycle {
+    margin-top: auto;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.project-overlay-sidebar-action-btn {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--grey-dark);
+    background: var(--sandstone);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    text-align: center;
+    display: inline-block;
+    text-decoration: none;
+}
+
+.project-overlay-sidebar-action-btn.is-hidden {
+    display: none;
+}
+
+/* Blue action tier (Resume, Reactivate, and — per Ezekiel, 18 Aug 2026 —
+Put on Hold too, so all "confirm-gated but not destructive" lifecycle
+moves read as the same color). */
+.project-overlay-sidebar-action-btn--action {
+    color: var(--black);
+    background: var(--sky);
+    border-color: var(--sky);
+}
+
+.project-overlay-sidebar-action-btn--action:hover {
+    filter: brightness(0.94);
+}
+
+/* Danger tier — Cancel Project only. */
+.project-overlay-sidebar-action-btn--danger {
+    color: var(--salmon);
+    background: var(--white);
+    border-color: var(--salmon);
+}
+
+.project-overlay-sidebar-action-btn--danger:hover {
+    color: var(--white);
+    background: var(--salmon);
+}
+
+/* Inline cancel-reason form — same expand-on-click pattern as
+.overlay-flag-revision-form elsewhere, just narrowed to fit the
+200px sidebar rather than a full-width card. */
+.project-overlay-sidebar-cancel-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.project-overlay-sidebar-cancel-form.is-hidden {
+    display: none;
+}
+
+.project-overlay-sidebar-cancel-form textarea {
+    width: 100%;
+    min-height: 4.5rem;
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--black);
+    border: 1px solid var(--sky);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.project-overlay-sidebar-cancel-form-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+
 .project-overlay-content {
     flex: 1 1 auto;
     overflow-y: auto;
@@ -254,6 +350,7 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-5);
+    margin-bottom: var(--space-4);
 }
 
 
@@ -292,6 +389,18 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     align-items: flex-start;
 }
 
+@media (max-width: 1380px) {
+    .overlay-details-columns {
+        flex-direction: column;
+    }
+
+    .overlay-details-left {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: var(--space-4);
+    }
+}
+
 .overlay-details-left {
     flex: 0 0 34%;
     min-width: 0;
@@ -314,7 +423,7 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     font-family: var(--font-body);
     font-size: var(--text-xs);
     font-weight: 600;
-    color: var(--grey-mid);
+    color: var(--tangerine);
     text-transform: uppercase;
     letter-spacing: 0.02em;
     margin-bottom: var(--space-2);
@@ -380,7 +489,7 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     font-family: var(--font-body);
     font-size: var(--text-xs);
     font-weight: 600;
-    color: var(--grey-mid);
+    color: var(--tangerine);
     text-transform: uppercase;
     letter-spacing: 0.02em;
     align-self: flex-start;
@@ -490,7 +599,7 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     font-family: var(--font-body);
     font-size: var(--text-xs);
     font-weight: 600;
-    color: var(--grey-mid);
+    color: var(--grey-dark);
     text-transform: uppercase;
     letter-spacing: 0.02em;
     padding-bottom: var(--space-2);
@@ -1141,6 +1250,27 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     gap: var(--space-2);
 }
 
+/* Skip to Pre-Production's picker — same "full-width, taller trigger"
+   treatment as #overlay-mark-approved-form's picker above, so the picker
+   and the Confirm/Cancel row below it read as one column instead of a
+   narrow pill sitting on top of a full-width row. flex:1 on the actions
+   matches the picker's width against the two buttons combined. */
+#overlay-skip-preprod-form .deliverable-picker {
+    display: block;
+    width: 100%;
+    margin-bottom: var(--space-2);
+}
+
+#overlay-skip-preprod-form .deliverable-picker-trigger {
+    width: 100%;
+    min-height: 3rem;
+    font-size: var(--text-sm);
+}
+
+#overlay-skip-preprod-form .overlay-flag-revision-form-actions .overlay-file-action-btn {
+    flex: 1;
+}
+
 /* ------- Deliverables (Standard Brief): read-only rows ------- */
 
 .overlay-deliverables-list {
@@ -1161,7 +1291,7 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     font-family: var(--font-body);
     font-size: var(--text-xs);
     font-weight: 600;
-    color: var(--grey-mid);
+    color: var(--grey-dark);
     text-transform: uppercase;
     letter-spacing: 0.02em;
     padding-bottom: var(--space-2);
@@ -1483,9 +1613,8 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
 
 .overlay-submit-summary-note {
     margin: var(--space-2) 0 0;
-    font-size: var(--text-xs);
-    color: var(--grey-mid);
-    font-style: italic;
+    font-size: var(--text-sm);
+    color: var(--grey-dark);
 }
 
 .overlay-submit-summary-keep-revision {
@@ -1512,6 +1641,51 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     margin: var(--space-1) 0 var(--space-3);
     color: var(--rose);
     font-size: var(--text-sm);
+}
+
+/* Resume-a-draft picker (task #65) — rows reuse
+   .overlay-submit-summary-deliverable's bordered/spaced-between shape,
+   but the row itself isn't clickable; the left side is its own button
+   (Resume) so the Delete button on the right can sit beside it without
+   nested-click ambiguity. */
+.overlay-create-drafts-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.overlay-create-draft-row {
+    padding: 0;
+    align-items: stretch;
+}
+
+.overlay-create-draft-resume {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+    font-family: var(--font-body);
+    color: inherit;
+}
+
+.overlay-create-draft-resume:hover .overlay-submit-summary-deliverable-name {
+    text-decoration: underline;
+}
+
+.overlay-create-draft-meta {
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+}
+
+.overlay-create-draft-delete {
+    flex-shrink: 0;
+    align-self: center;
+    margin: 0 var(--space-3) 0 0;
 }
 
 /* Forward/positive step (sends the deck onward), same tier as Mark
@@ -1947,6 +2121,282 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     margin-bottom: var(--space-2);
 }
 
+/* ------- Brief Flags (task #42) -------
+Generic "needs attention" + card/thread/reply/history component, reused
+identically for both Details (project/concept/kv-scoped) and Deliverables
+(deliverable-scoped, per customer for CCM). Deliberately separate class
+names from .overlay-preprod-* even though the attention-card look is
+copied from it — this way Pre-Production's markup/JS stays untouched, and
+this component stays reusable across both flag scopes without either
+feature accidentally coupling to the other's internals. */
+
+.overlay-flag-attention-card {
+    background: var(--white);
+    border: 1px solid var(--salmon);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--space-5);
+    margin-top: var(--space-3);
+}
+
+.overlay-flag-attention-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.overlay-flag-attention-label {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--salmon);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.overlay-flag-attention-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 var(--space-1);
+    border-radius: 999px;
+    background: var(--salmon);
+    color: var(--white);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 700;
+}
+
+.overlay-flag-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.overlay-flag-card {
+    padding: var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--white);
+}
+
+.overlay-flag-card-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.overlay-flag-type-badge {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--salmon);
+    border: 1px solid var(--salmon);
+    border-radius: var(--radius-sm);
+    padding: 2px var(--space-2);
+}
+
+.overlay-flag-card.is-resolved .overlay-flag-type-badge {
+    color: var(--grey-mid);
+    border-color: var(--border-subtle);
+}
+
+.overlay-flag-subject {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--black);
+}
+
+.overlay-flag-meta {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+}
+
+.overlay-flag-resolved-badge {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--clover);
+}
+
+.overlay-flag-card-header .overlay-flag-resolve-btn {
+    margin-left: auto;
+}
+
+.overlay-flag-thread {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.overlay-flag-message {
+    padding: var(--space-2);
+    background: var(--grey-light);
+    border-radius: var(--radius-sm);
+}
+
+.overlay-flag-message-header {
+    display: flex;
+    gap: var(--space-2);
+    margin-bottom: 2px;
+}
+
+.overlay-flag-message-author {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--black);
+}
+
+.overlay-flag-message-time {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+}
+
+.overlay-flag-message-text {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--black);
+    white-space: pre-wrap;
+}
+
+.overlay-flag-reply-form {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.overlay-flag-reply-input {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    resize: vertical;
+    min-height: 2.4rem;
+    box-sizing: border-box;
+}
+
+/* Raise-flag compose form — same inline-reveal convention as Cancel
+Project (.overlay-flag-revision-form), scoped fresh here so a flag
+section's own is-hidden toggle can't collide with unrelated forms
+reusing that class elsewhere on the same page. */
+.overlay-flag-compose-form {
+    margin-top: var(--space-3);
+}
+
+.overlay-flag-compose-form.is-hidden {
+    display: none;
+}
+
+.overlay-flag-compose-target {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+    margin-bottom: var(--space-2);
+    display: block;
+}
+
+.overlay-flag-compose-input {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    border: 1px solid var(--salmon);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    resize: vertical;
+    min-height: 4rem;
+    box-sizing: border-box;
+}
+
+.overlay-flag-compose-form-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+/* Row-level trigger — sits inline in the deliverable Name cell rather
+than as its own grid column, so it doesn't disturb the fixed 6-column
+deliverables grid. Badge count only renders when the row has open flags. */
+.overlay-flag-row-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: var(--space-2);
+    padding: 1px var(--space-1);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--grey-mid);
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.overlay-flag-row-trigger:hover {
+    color: var(--salmon);
+    border-color: var(--salmon);
+}
+
+.overlay-flag-row-trigger.has-flags {
+    color: var(--salmon);
+    border-color: var(--salmon);
+    background: rgba(233, 30, 99, 0.06);
+}
+
+.overlay-flag-section {
+    margin-bottom: var(--space-4);
+}
+
+/* Compact variant (18 Aug 2026) — no card chrome, lives in its own
+.overlay-card-full above whatever it's flagging (Properties, Deliverables)
+so it only takes up as much height as its own content — the surrounding
+.overlay-details-grid's gap handles spacing to the block below, not a
+margin here, so an empty panel (just the History button) stays tiny. */
+.overlay-flag-section--compact {
+    margin-bottom: 0;
+}
+
+.overlay-flag-panel-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.overlay-flag-section--compact .overlay-flag-attention-card {
+    margin-top: var(--space-3);
+}
+
+.overlay-flag-section--compact .overlay-flag-view {
+    margin-top: var(--space-3);
+}
+
+.overlay-flag-view.is-hidden {
+    display: none;
+}
+
+.overlay-flag-history-item {
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.overlay-flag-history-item:last-child {
+    border-bottom: none;
+}
+
 .overlay-preprod-name {
     font-family: var(--font-heading);
     font-weight: 600;
@@ -2100,4 +2550,390 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
 
 .overlay-preprod-panel.is-hidden {
     display: none;
+}
+
+/* ------- Create-mode overlay (task #61, 18 Aug 2026) -------
+   The "+ New Project" flow's own shell/step-rail/footer + the Details
+   step's always-editable form fields. Deliberately its own namespace
+   (overlay-create-*) rather than reusing .overlay-edit-input etc. — those
+   are built around the view/edit TOGGLE (a hidden input revealed by
+   clicking Edit); every field here is just permanently an input, so it
+   needs its own simpler visual treatment, not the toggle machinery's CSS. */
+
+.project-overlay-create-rail {
+    width: 180px;
+}
+
+.project-overlay-create-step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-left: 3px solid transparent;
+    padding: var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--grey-mid);
+    cursor: pointer;
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.project-overlay-create-step.active {
+    color: var(--section-color, var(--sky));
+    border-left-color: var(--section-color, var(--sky));
+    background: var(--grey-light);
+}
+
+.project-overlay-create-step:disabled {
+    color: var(--grey-light);
+    cursor: default;
+}
+
+.project-overlay-create-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--grey-light);
+    color: var(--grey-dark);
+    font-size: var(--text-xs);
+    flex-shrink: 0;
+}
+
+.project-overlay-create-step.active .project-overlay-create-step-num {
+    background: var(--sky);
+    color: var(--white);
+}
+
+.project-overlay-create-footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-5);
+    border-top: 1px solid var(--border-subtle);
+    background: var(--white);
+}
+
+.project-overlay-create-autosave-status {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+    margin-right: auto;
+}
+
+.overlay-create-brieftype-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.overlay-create-brieftype-buttons {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.overlay-create-brieftype-btn {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--grey-dark);
+    cursor: pointer;
+}
+
+.overlay-create-brieftype-btn.active {
+    background: var(--sky);
+    border-color: var(--sky);
+    color: var(--white);
+}
+
+/* Every field in create mode is permanently "live" (no view/edit toggle to
+   unhide it), so the input itself carries the sky border that
+   .overlay-edit-input only shows once edit mode is entered elsewhere. */
+.overlay-create-input {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--black);
+    border: 1px solid var(--sky);
+    border-radius: var(--radius-sm);
+    padding: 4px var(--space-2);
+    width: 200px;
+    background: var(--white);
+}
+
+.overlay-create-textarea {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-height: 48px;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-top: 4px;
+}
+
+.overlay-create-checkbox-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--black);
+    cursor: pointer;
+}
+
+.overlay-create-subfields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-left: var(--space-4);
+    border-left: 2px solid var(--grey-light);
+    margin: var(--space-2) 0;
+}
+
+.overlay-create-subfields.is-hidden {
+    display: none;
+}
+
+/* Standard vs C&CM field blocks — only one shown at a time, driven by the
+   brief-type buttons above (project_overlay_create.js). Flex+gap here (not
+   just on the parent .overlay-details-right) because that parent's gap
+   only separates the standard/ccm scope divs from EACH OTHER — the C&CM
+   scope holds two separate cards (Concept & KV, Customers) that need their
+   own spacing between them too. */
+.overlay-create-scope {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.overlay-create-scope.is-hidden {
+    display: none;
+}
+
+.overlay-create-customer-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.overlay-create-customer-region-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--grey-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: var(--space-2);
+}
+
+.overlay-create-select-all {
+    background: none;
+    border: none;
+    color: var(--sky);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+
+.overlay-create-customer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-2) var(--space-4);
+}
+
+/* ── Notes + Site Visits (task #52/M9, 18 Aug 2026) ──────────────────────
+   Two cards, same fragment, same row shape reused for both (a note and a
+   site visit are both "an attributed, timestamped thing that happened").
+   .overlay-notes-text (the quoted-body look) and .overlay-file-action-btn
+   are both reused as-is — only the row/list/form scaffolding is new. */
+
+.overlay-note-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.overlay-note-item:last-child {
+    border-bottom: none;
+}
+
+.overlay-note-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.overlay-note-author {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--black);
+}
+
+.overlay-note-date {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+    flex-shrink: 0;
+}
+
+.overlay-note-link {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--pine);
+    word-break: break-word;
+}
+
+.overlay-note-item .overlay-file-action-btn {
+    align-self: flex-start;
+}
+
+.overlay-note-add {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.overlay-note-add .overlay-file-action-btn {
+    align-self: flex-start;
+}
+
+.overlay-notes-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.air-datepicker-global-container {
+    z-index: 2000;
+}
+
+/* Designer picker restyled as "our usual blue action button" (18 Aug 2026)
+   — scoped to THIS instance only, not avatar_picker generally. Every other
+   avatar_picker on the page (CS Lead reassign, Project Owner, etc.) keeps
+   its neutral-at-rest/black-on-hover look on purpose (see the comment on
+   .avatar-picker-action-label in shared.css) — this one's an initial
+   "start a new site visit" action, not a plain reassignment, so it borrows
+   .overlay-file-action-btn--action's sky treatment instead. */
+#overlay-visit-designer-picker .avatar-picker-action-label {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--black);
+    background: var(--sky);
+    border: 1px solid var(--sky);
+    border-radius: var(--radius);
+}
+
+#overlay-visit-designer-picker .avatar-picker-trigger:hover .avatar-picker-action-label {
+    background: var(--sky);
+    border-color: var(--sky);
+    filter: brightness(0.94);
+    color: var(--black);
+}
+
+.overlay-visit-range-display {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+}
+
+/* Merged Notes/Site-Visits feed (18 Aug 2026) — a logged visit gets a
+   left-border accent so it reads as distinct from a freeform note at a
+   glance, same visual language as .overlay-notes-text's own left-border
+   quote treatment elsewhere. Sky, not black, to match the rest of the
+   site-visit-flavored UI (the designer picker and date button above). */
+.overlay-note-item--visit {
+    border-left: 3px solid var(--sky);
+    padding-left: var(--space-3);
+}
+
+/* Compact Site Visits form — Date/Time picker and its optional Notes
+   field sit side by side instead of stacked, so the whole card takes up
+   less vertical space now that logged visits no longer render their own
+   list underneath it. */
+.overlay-visit-compact-row {
+    display: flex;
+    gap: var(--space-4);
+    align-items: flex-start;
+}
+
+.overlay-visit-compact-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    flex: 1;
+    min-width: 0;
+}
+
+/* The picker column's actual content (button + a line of text) is much
+   narrower than an even 50/50 split would give it — the calendar itself
+   doesn't count, since Air Datepicker's popover is position:fixed and
+   floats independently rather than sizing this column. Pin it to a
+   sensible fixed width instead of flex:1, and let the fields column (now
+   holding Location above Notes) take the rest — closes up the dead gap
+   that used to sit between them. */
+/* Air Datepicker's popover renders at a fixed 246px content width plus a
+   1px border each side (~248px total, per its own bundled CSS variable
+   --adp-width) — it's a position:absolute overlay anchored to the button,
+   so it is NOT clipped by this column's flex-basis, only visually offset
+   from it. 220px left ~28px of calendar hanging past the column edge,
+   which is what was leaking into the Location/Notes fields column next
+   to it. 300px gives enough clearance that the calendar's right edge
+   lands safely inside the picker column's own space. */
+.overlay-visit-compact-col--picker {
+    flex: 0 0 300px;
+}
+
+.overlay-visit-compact-col--fields {
+    flex: 1;
+    min-width: 0;
+}
+
+/* .overlay-create-input's own width:200px is a fixed override elsewhere
+   (create-mode overlay fields) — same specificity, so this wins purely by
+   being declared later in the cascade. Scoped to this one field only. */
+.overlay-visit-location-input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.overlay-visit-notes-textarea {
+    min-height: 96px;
+}
+
+/* Log Site Visit is a final, committing action — same clover tier as Mark
+   Approved (.overlay-file-action-btn--primary), bumped up in size beyond
+   that class's own default so it visually reads as "the" decisive button
+   on this form, not just another action alongside Select Date and Time. */
+.overlay-visit-log-btn {
+    align-self: flex-start;
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--text-med);
+    font-weight: 700;
 }

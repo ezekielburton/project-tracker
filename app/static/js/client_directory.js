@@ -155,7 +155,13 @@
         openAddCompanyModal: openAddCompanyModal,
         closeAddCompanyModal: closeAddCompanyModal,
         openAddContactModal: openAddContactModal,
-        closeAddContactModal: closeAddContactModal
+        closeAddContactModal: closeAddContactModal,
+        // Exposed so the create-mode overlay (project_overlay_create.js,
+        // task #61) can re-run this against #client_id/#contact_id after
+        // fetching that fragment in dynamically — this file's own call at
+        // the bottom only ever sees the DOM present at real page load,
+        // before that fragment exists.
+        initBriefFormIntegration: initBriefFormIntegration
     };
 
     function wireSharedModalButtons() {

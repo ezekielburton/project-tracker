@@ -580,14 +580,20 @@ def index():
 
 def _scoped_projects(user, active_only=True):
     """
-    Drafts are always excluded. Approved projects are excluded too when
-    active_only=True (matches the existing dashboards' "active work" lists)
-    — some endpoints (what-changed) want the full history including
-    approved projects, so active_only=False is available for those.
+    Drafts are always excluded. Approved AND Handed to Production projects
+    are excluded too when active_only=True (matches the existing
+    dashboards' "active work" lists) — some endpoints (what-changed) want
+    the full history including completed projects, so active_only=False
+    is available for those. handed_to_production added 18 Aug 2026 — it's
+    a later, more-complete stage than approved (design has actually left
+    the building), so it belongs in the same "no longer active work"
+    bucket; before this fix it fell through every active-work filter here
+    and kept showing up in Due/At Risk/Next Actions/Priority Actions as if
+    it still needed attention.
     """
     base = Project.query.filter(Project.project_status != 'draft')
     if active_only:
-        base = base.filter(Project.project_status != 'approved')
+        base = base.filter(Project.project_status.notin_(['approved', 'handed_to_production']))
 
     if user.role in ('admin', 'management'):
         return base
@@ -595,6 +601,15 @@ def _scoped_projects(user, active_only=True):
     if user.role == 'cs':
         secondary_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(user_id=user.id).subquery()
         return base.filter(db.or_(Project.cs_lead_id == user.id, Project.id.in_(secondary_ids)))
+
+    if user.role == 'project_owner':
+        # Bug fix, 18 Aug 2026: this branch didn't exist — a project_owner
+        # user fell through to the designer/team_lead branch below, which
+        # checks ProjectDesigner assignments a Project Owner never has, so
+        # their dashboard silently returned zero projects. Mirrors
+        # project_list.py's _base_query_for_view() 'my' view, which already
+        # matches Project.project_owner_id == user.id correctly.
+        return base.filter(Project.project_owner_id == user.id)
 
     # designer / team_lead
     assigned_ids = db.session.query(ProjectDesigner.project_id).filter_by(user_id=user.id).subquery()
@@ -1100,7 +1115,7 @@ def _compute_project_stats(user):
         Project.project_status == 'submitted_to_client'
     ).count()
     total_active = Project.query.filter(
-        Project.project_status.notin_(['draft', 'approved'])
+        Project.project_status.notin_(['draft', 'approved', 'handed_to_production'])
     ).count()
 
     # "Average Time" tile (added 13 Jul 2026, per Ezekiel: "add a card that
@@ -1302,7 +1317,9 @@ def _compute_due(user, filter_type):
 
         if p.brief_type == 'ccm':
             for pc in p.project_customers:
-                if pc.cancelled or pc.status == 'approved':
+                # handed_to_production added 18 Aug 2026 alongside approved —
+                # same "this channel is done, stop surfacing it" logic.
+                if pc.cancelled or pc.status in ('approved', 'handed_to_production'):
                     continue
                 if is_overdue_filter and _customer_is_submitted_stage(pc):
                     continue
@@ -2207,7 +2224,9 @@ def _compute_risk_overdue(user):
         if is_ccm:
             any_overdue_customer = False
             for pc in p.project_customers:
-                if pc.cancelled or pc.status == 'approved':
+                # handed_to_production added 18 Aug 2026 alongside approved —
+                # same "this channel is done, stop surfacing it" logic.
+                if pc.cancelled or pc.status in ('approved', 'handed_to_production'):
                     continue
                 if _customer_is_submitted_stage(pc):
                     continue
@@ -2397,7 +2416,9 @@ def _compute_role_snapshot():
     "Designer Row" split by team, and a team lead IS on one of the three
     design teams, same as any designer.
     """
-    all_projects = Project.query.filter(Project.project_status != 'draft', Project.project_status != 'approved').all()
+    all_projects = Project.query.filter(
+        Project.project_status.notin_(['draft', 'approved', 'handed_to_production'])
+    ).all()
     clashes = compute_clashes(all_projects)
     clash_designer_ids = set()
     for c in clashes['by_deliverable']:
@@ -2718,7 +2739,7 @@ def _designer_relevant_entries(user):
                    .join(Deliverable, DeliverableAssignment.deliverable_id == Deliverable.id)
                    .join(Project, Deliverable.project_id == Project.id)
                    .filter(DeliverableAssignment.designer_id == user.id)
-                   .filter(Project.project_status.notin_(['draft', 'approved']))
+                   .filter(Project.project_status.notin_(['draft', 'approved', 'handed_to_production']))
                    .all())
 
     entries = {}  # dedupe key -> entry dict
@@ -2727,7 +2748,9 @@ def _designer_relevant_entries(user):
         p = d.project
         if d.project_customer_id:
             pc = d.project_customer
-            if pc is None or pc.cancelled or pc.status == 'approved':
+            # handed_to_production added 18 Aug 2026 alongside approved —
+            # same "this channel is done, stop surfacing it" logic.
+            if pc is None or pc.cancelled or pc.status in ('approved', 'handed_to_production'):
                 continue
             key = ('customer', pc.id)
             if key in entries:

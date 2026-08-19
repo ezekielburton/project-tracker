@@ -14,8 +14,24 @@ rows in one .overlay-properties list, so it reads as continuous. #}
         <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
             id="overlay-start-project-btn">Start Project</button>
         {% endif %}
+        {# Put on Hold / Resume / Cancel / Reactivate now live in the
+        overlay sidebar (see _overlay.html) — pinned to the bottom so
+        they're reachable from every sub-tab, not just Details. #}
     </span>
 </div>
+{% if project.cancelled_at %}
+{# Visible to anyone who can see Details at all, not just can_cancel_project
+— cancellation is project-wide information, not a restricted action.
+Dashboard visibility (admin + management) is separate, later work. #}
+<div class="overlay-property-row">
+    <span class="overlay-property-label">Cancellation Reason</span>
+    <span class="overlay-property-value">
+        {{ project.cancel_reason }}
+        <span class="overlay-field-empty">— {{ project.cancelled_by.name if project.cancelled_by else 'Unknown' }},
+            {{ project.cancelled_at.strftime('%d %b %Y') }}</span>
+    </span>
+</div>
+{% endif %}
 <div class="overlay-property-row">
     <span class="overlay-property-label">CS Lead</span>
     <span class="overlay-property-value">

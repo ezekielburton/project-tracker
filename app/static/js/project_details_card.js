@@ -108,6 +108,11 @@ window.ProjectDetailsCard = (function () {
             });
         }
 
+        // Cancel / Reactivate and Put on Hold / Resume now live in the
+        // overlay sidebar, wired once per overlay-open in project_list.js
+        // (see wireProjectLifecycleActions) — not here, since this init()
+        // reruns on every Details sub-tab load and the sidebar isn't.
+
         var downloadAllBtn = rootEl.querySelector('#overlay-download-all-files');
         if (downloadAllBtn) {
             downloadAllBtn.addEventListener('click', function () {
@@ -129,6 +134,12 @@ window.ProjectDetailsCard = (function () {
                     });
             });
         }
+
+        // Flags (task #42) — Details' Flags card (project/concept/kv scope).
+        // Reruns every load same as everything else in this file, since
+        // project_flags.js just re-wires whatever .overlay-flag-section
+        // elements are in the fresh HTML.
+        if (window.ProjectFlags) window.ProjectFlags.init(rootEl, projectId, onChanged);
 
         return { destroy: function () { pickerHandles.forEach(function (h) { if (h) h.destroy(); }); } };
     }

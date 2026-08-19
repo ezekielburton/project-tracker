@@ -34,6 +34,105 @@ def _can_manage_deliverables(project, actor):
         or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
     )
 
+
+def _can_cancel_project(project, actor):
+    """Cancel/Reactivate — CS Lead, Secondary CS, assigned Project Owner,
+    Management, Admin (per Ezekiel, 18 Aug 2026). Same shape as
+    _can_manage_deliverables — identical today, kept separate since Cancel
+    is a bigger action and the two may diverge later."""
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    return (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+
+
+def _can_toggle_hold(project, actor):
+    """Straight port of the permission check already live in
+    projects_detail.py's toggle_hold — admin, this project's CS Lead, or
+    Secondary CS. Deliberately NOT extended to Management or Project Owner
+    like _can_cancel_project was — On Hold is a port of a working feature,
+    not a new design, so it keeps exactly the gate the existing route has
+    rather than "fixing" it unasked. Worth revisiting if that was actually
+    an oversight in the original."""
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    return (
+        actor.role == 'admin'
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+    )
+
+def _can_skip_preproduction(project, actor):
+    """Who can use Skip to Pre-Production — CS Lead, Secondary CS,
+    Management, Admin, or the assigned Project Owner (per Ezekiel, 18 Aug
+    2026 — replaces an earlier "any cs-role user" broadening that let
+    someone with no relationship to this specific project skip it). Same
+    shape as _can_cancel_project. Kept as its own function rather than
+    widening _can_manage_preproduction over in project_preproduction.py —
+    Mark Done/Approve/Flag keep their existing, narrower gate. Duplicated
+    there too (not cross-imported) matching this codebase's existing
+    one-helper-per-route-file convention."""
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    return (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+
+
+def _can_create_project(actor):
+    """Who can start a new project — admin/cs/management (same as the old
+    /projects/create page's role_required) plus Project Owner (per Ezekiel,
+    18 Aug 2026 — Project Owner is a first-class role in this rework, not
+    just something a project gets assigned after the fact). Role-only, not
+    project-scoped — there's no project yet to scope against."""
+    return actor.role in ('admin', 'cs', 'management', 'project_owner')
+
+
+def _can_manage_flags(actor):
+    """Raise/reply to a Brief Flag — straight port of the old page's role
+    gate (projects_detail.py create_flag/reply_flag). Role-only, not
+    project-scoped: any designer/CS/team_lead/management could always
+    flag or reply on any project they can see."""
+    return actor.role in ('admin', 'cs', 'designer', 'team_lead', 'management')
+
+
+def _can_resolve_flag(flag, actor):
+    """Only the flag's creator, or admin/management oversight — ported
+    verbatim from the old resolve_flag route's check."""
+    return flag.created_by_id == actor.id or actor.role in ('admin', 'management')
+
+
+def _serialize_flag(flag, actor):
+    """JSON shape for the History view's lazy fetch — same fields the
+    Active view's server-rendered _flag_card.html shows, so history items
+    and active items look identical even though one's Jinja and the other's
+    built client-side from this JSON."""
+    return {
+        'id': flag.id,
+        'flag_type': flag.flag_type,
+        'deliverable_id': flag.deliverable_id,
+        'deliverable_name': flag.deliverable.name if flag.deliverable else None,
+        'is_resolved': flag.is_resolved,
+        'can_resolve': (not flag.is_resolved) and _can_resolve_flag(flag, actor),
+        'created_by_name': flag.created_by.name if flag.created_by else 'Unknown',
+        'created_at': flag.created_at.isoformat() if flag.created_at else None,
+        'resolved_by_name': flag.resolved_by.name if flag.resolved_by else None,
+        'resolved_at': flag.resolved_at.isoformat() if flag.resolved_at else None,
+        'messages': [
+            {
+                'author_name': m.author.name if m.author else 'Unknown',
+                'message': m.message,
+                'created_at': m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in flag.messages
+        ],
+    }
+
+
 def _build_deliverable_focus_context(deliverables, actor):
     """Computes the per-deliverable status pill + Focused/All eligibility data
     that both the Standard and C&CM Deliverables views need, so the two
@@ -539,6 +638,34 @@ def _build_details_context(project, actor):
     # can_edit_project's permission tier rather than a new one.
     can_start_project = can_edit_project and project.project_status == 'briefed'
 
+    # Cancel/Reactivate (18 Aug 2026) — see _can_cancel_project. Project
+    # Status row shows Cancel Project when active, Reactivate Project once
+    # project.cancelled_at is set — the template branches on that column
+    # directly rather than a second flag, so there's only one source of truth.
+    can_cancel_project = _can_cancel_project(project, actor)
+
+    # On Hold (18 Aug 2026) — see _can_toggle_hold. Same branch-on-the-
+    # column-directly approach as Cancel: the template checks
+    # project.project_status == 'on_hold' itself rather than a second flag.
+    can_toggle_hold = _can_toggle_hold(project, actor)
+
+    # Brief Flags (task #42) — Details' Flags card covers 'project' plus
+    # the old page's separate 'concept'/'kv' flag types (folded in here
+    # per Ezekiel, 18 Aug 2026, rather than a third toggle location —
+    # Concept & KV is project-level info in the new system, not its own
+    # flaggable entity like a deliverable is).
+    from app.models import BriefFlag
+    project_open_flags = (
+        BriefFlag.query
+        .filter_by(project_id=project.id, is_resolved=False)
+        .filter(BriefFlag.flag_type.in_(['project', 'concept', 'kv']))
+        .order_by(BriefFlag.created_at)
+        .all()
+    )
+    for f in project_open_flags:
+        f.can_resolve = _can_resolve_flag(f, actor)
+    can_manage_flags = _can_manage_flags(actor)
+
     # Edit mode (M4, task #33) — Client/Type of Design are FKs, not free
     # text, so the edit-mode dropdown needs the full option list, same
     # shape as cs_lead_options/owner_options above. Only fetched for
@@ -579,12 +706,519 @@ def _build_details_context(project, actor):
         concept_kv_designer_options=concept_kv_designer_options,
         concept_kv_designer=concept_kv_designer,
         can_start_project=can_start_project,
+        can_cancel_project=can_cancel_project,
+        can_toggle_hold=can_toggle_hold,
+        project_open_flags=project_open_flags,
+        can_manage_flags=can_manage_flags,
         client_options=client_options,
         design_type_options=design_type_options,
         edit_snapshot_at=edit_snapshot_at,
     )
 
 
+
+
+def _recompute_initial_deadline(project):
+    if project.brief_type == 'ccm' and project.has_concept and project.concept_deadline:
+        project.first_output_deadline = project.concept_deadline
+        return
+    deadlines = [d.design_deadline for d in _scoped_deliverables_query(project).all() if d.design_deadline]
+    project.first_output_deadline = min(deadlines) if deadlines else None
+
+def _scoped_deliverables_query(project):
+    """Deliverables that actually belong to project.brief_type's data —
+    Standard deliverables always carry project_customer_id=None, C&CM ones
+    always carry one. Shared by _recompute_initial_deadline,
+    _validate_for_finalize, and overlay_create_summary so "what counts as
+    this project's real deliverables" can't drift between them — data for
+    the OTHER brief type can coexist on a draft right up until finalize
+    (see _drop_unselected_brief_data), so all three need to agree on what
+    to ignore."""
+    from app.models import Deliverable
+    query = Deliverable.query.filter_by(project_id=project.id)
+    if project.brief_type == 'ccm':
+        return query.filter(Deliverable.project_customer_id.isnot(None))
+    return query.filter(Deliverable.project_customer_id.is_(None))
+
+
+def _drop_unselected_brief_data(project):
+    """At finalize, only the SELECTED brief type's data survives — anything
+    entered for the other type while trying it out gets dropped. Both types
+    coexist freely up to this point (see overlay_create_draft()) precisely
+    so switching back and forth never loses work; this is the one place
+    that actually commits to one side."""
+    from app import db
+    if project.brief_type == 'standard':
+        # ProjectCustomer.deliverables cascades ('all, delete-orphan'), so
+        # deleting the ProjectCustomer rows takes their C&CM deliverables
+        # with them.
+        for pc in list(project.project_customers):
+            db.session.delete(pc)
+        project.has_concept = False
+        project.has_kv = False
+        project.concept_deadline = None
+        project.kv_deadline = None
+        project.concept_options_required = None
+        project.kv_options_required = None
+        project.kv_requirements = None
+        project.urgency = None
+    else:  # ccm
+        from app.models import Deliverable
+        Deliverable.query.filter_by(project_id=project.id, project_customer_id=None).delete()
+        project.design_type_id = None
+        project.client_expectation = None
+        project.what_to_avoid = None
+        project.additional_information = None
+        project.is_production_only = False
+        project.preproduction_requirements = None
+
+
+_CREATE_REGION_NAMES = {
+    'uae': 'UAE', 'kuwait': 'Kuwait', 'qatar': 'Qatar', 'bahrain': 'Bahrain', 'oman': 'Oman',
+}
+_CREATE_REGION_ORDER = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman']
+
+
+def _create_mode_context(project, actor):
+    """Shared by the shell GET and (once #62/#64 exist) whatever re-renders
+    the create-mode Details step after an autosave — the picklists/options a
+    blank project needs are the same regardless of how it got here.
+    """
+    from app.models import User, Client, Customer, DesignType, DesignDirection
+
+    customers_by_region = {
+        region: Customer.query.filter_by(region=region).order_by(Customer.name).all()
+        for region in _CREATE_REGION_ORDER
+    }
+    selected_customer_ids = {pc.customer_id for pc in project.project_customers if not pc.cancelled}
+
+    # Same shape as _build_details_context()'s can_manage_reference_files —
+    # duplicated rather than shared since the live version also folds in
+    # can_edit_project/can_reassign_cs_lead/etc. that don't apply here.
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    can_manage_reference_files = (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+
+    return {
+        'cs_lead_options': User.query.filter(User.role.in_(['cs', 'admin', 'management'])).order_by(User.name).all(),
+        'project_owner_options': User.query.filter_by(role='project_owner').order_by(User.name).all(),
+        'client_options': Client.query.order_by(Client.name).all(),
+        'design_type_options': DesignType.query.order_by(DesignType.name).all(),
+        'design_direction_options': DesignDirection.query.order_by(DesignDirection.name).all(),
+        'customers_by_region': customers_by_region,
+        'region_names': _CREATE_REGION_NAMES,
+        'selected_customer_ids': selected_customer_ids,
+        'can_create_project': _can_create_project(actor),
+        'can_manage_reference_files': can_manage_reference_files,
+    }
+
+
+@project_overlay_bp.route('/projects/overlay/new', methods=['POST'])
+@login_required
+def overlay_create_draft():
+    """Creates (or, given an existing draft's project_id, patches) the
+    minimal Project row the create-mode overlay operates against. One
+    endpoint doing both per legacy autosave()'s pattern (projects_brief.py)
+    — the frontend doesn't need to know or care whether this is the first
+    call or the hundredth, it just posts "here's what I know so far" and
+    gets a project_id back. See _details_create.html's data-field wiring in
+    project_overlay_create.js for what keys this actually receives.
+    """
+    from datetime import datetime as _dt
+    from app import db
+    from app.models import Scope, ProjectCustomer, Customer
+    from app.status_tracking import record_project_status
+
+    actor = _get_actor()
+    if not _can_create_project(actor):
+        abort(403)
+
+    data = request.get_json(silent=True) or {}
+    project_id = data.get('project_id')
+
+    draft = None
+    if project_id:
+        candidate = Project.query.get(project_id)
+        if candidate and candidate.project_status == 'draft' and (
+            candidate.created_by_id == actor.id or actor.role in ('admin', 'management')
+        ):
+            draft = candidate
+        elif candidate and candidate.project_status != 'draft':
+            return jsonify({'error': 'This project has already been created — refresh and open it normally.'}), 400
+
+    if not draft:
+        default_scope = Scope.query.filter_by(active=True).first()
+        draft = Project(
+            name=(data.get('name') or '').strip() or 'Untitled Draft',
+            client='TBD',
+            # cs_lead_id is NOT NULL on Project — defaults to the actor
+            # themselves regardless of role (same as legacy autosave()),
+            # even for a Project Owner/admin/management creator who isn't
+            # actually a valid CS Lead pick; the CS Lead select in
+            # _details_create.html lets them immediately change it to a
+            # real cs_lead_options entry before finalizing.
+            cs_lead_id=int(data['cs_lead_id']) if data.get('cs_lead_id') else actor.id,
+            creator=actor,
+            project_status='draft',
+            scope_id=default_scope.id if default_scope else 1,
+            briefing_date=_dt.utcnow().date(),
+        )
+        db.session.add(draft)
+        db.session.flush()
+        record_project_status(draft, 'draft', actor)
+
+    # Every field below is optional per call — the frontend only ever sends
+    # the one field that just changed (see project_overlay_create.js's
+    # debounced per-field autosave), so a call with none of these keys still
+    # succeeds and just touches last_autosaved_at.
+    if 'name' in data:
+        draft.name = (data.get('name') or '').strip() or 'Untitled Draft'
+    if 'job_number' in data:
+        # job_number is unique — checked here rather than letting a
+        # duplicate hit the DB's unique constraint as an IntegrityError
+        # (which would 500 the whole request instead of a clean message).
+        # Same check projects_submission.py's finalize does today.
+        job_number = (data.get('job_number') or '').strip() or None
+        if job_number and Project.query.filter(Project.job_number == job_number, Project.id != draft.id).first():
+            return jsonify({'error': f'Job number "{job_number}" is already in use.'}), 400
+        draft.job_number = job_number
+    if 'brief_type' in data and data['brief_type'] in ('standard', 'ccm'):
+        draft.brief_type = data['brief_type']
+    if data.get('cs_lead_id'):
+        # cs_lead_id is NOT NULL — unlike client_id/contact_id below, an
+        # empty selection is ignored rather than nulling it out, same guard
+        # legacy autosave() used.
+        draft.cs_lead_id = int(data['cs_lead_id'])
+    if 'project_owner_id' in data:
+        draft.project_owner_id = int(data['project_owner_id']) if data.get('project_owner_id') else None
+    if 'client_id' in data:
+        draft.client_id = int(data['client_id']) if data.get('client_id') else None
+    if 'contact_id' in data:
+        draft.contact_id = int(data['contact_id']) if data.get('contact_id') else None
+    if 'design_teams' in data:
+        draft.design_teams_requested = ','.join(data.get('design_teams') or [])
+    # first_output_deadline (Initial Deadline) is no longer a directly-set
+    # field (per Ezekiel, 18 Aug 2026) — see _recompute_initial_deadline()
+    # below, called unconditionally at the end of this route instead.
+    if 'execution_date' in data:
+        draft.execution_date = _parse_edit_date(data.get('execution_date'))
+    if 'is_production_only' in data:
+        draft.is_production_only = bool(data.get('is_production_only'))
+    if 'preproduction_requirements' in data:
+        draft.preproduction_requirements = data.get('preproduction_requirements') or None
+
+    # Standard-only fields
+    if 'design_type_id' in data:
+        draft.design_type_id = int(data['design_type_id']) if data.get('design_type_id') else None
+    if 'design_direction_id' in data:
+        draft.design_direction_id = int(data['design_direction_id']) if data.get('design_direction_id') else None
+    if 'client_expectation' in data:
+        draft.client_expectation = data.get('client_expectation') or None
+    if 'what_to_avoid' in data:
+        draft.what_to_avoid = data.get('what_to_avoid') or None
+    if 'additional_information' in data:
+        draft.additional_information = data.get('additional_information') or None
+
+    # C&CM-only fields. Concept and KV collapsed into ONE tickbox/deadline/
+    # requirements/options set in create mode (18 Aug 2026, per Ezekiel —
+    # "they are always together"). The model still has two separate sets of
+    # columns (has_concept/concept_deadline/concept_options_required vs.
+    # has_kv/kv_deadline/kv_requirements/kv_options_required — kv_requirements
+    # is the only one of the two with a free-text field at all) — rather than
+    # a migration to merge them for real, this just mirrors one write onto
+    # both sides so anything downstream still reading either half sees the
+    # same values. concept_kv_requirements is stored on kv_requirements,
+    # the one column that actually exists for that purpose.
+    if 'urgency' in data:
+        draft.urgency = data.get('urgency') or None
+    if 'has_concept_kv' in data:
+        needed = bool(data.get('has_concept_kv'))
+        draft.has_concept = needed
+        draft.has_kv = needed
+    if 'concept_kv_deadline' in data:
+        parsed = _parse_edit_date(data.get('concept_kv_deadline'))
+        draft.concept_deadline = parsed
+        draft.kv_deadline = parsed
+    if 'concept_kv_requirements' in data:
+        draft.kv_requirements = data.get('concept_kv_requirements') or None
+    if 'concept_kv_options_required' in data:
+        value = data.get('concept_kv_options_required')
+        draft.concept_options_required = value or None
+        draft.kv_options_required = value or None
+
+    # C&CM customer picker — sent as the FULL currently-checked set each
+    # time (not a single add/remove), simplest thing that can't drift out
+    # of sync with a checkbox grid. Existing rows for customers no longer
+    # checked are removed rather than soft-cancelled — nothing downstream
+    # can reference them yet, this is still an unfinished draft.
+    if 'customer_ids' in data:
+        wanted_ids = {int(cid) for cid in (data.get('customer_ids') or [])}
+        existing = {pc.customer_id: pc for pc in draft.project_customers}
+        for customer_id, pc in existing.items():
+            if customer_id not in wanted_ids:
+                db.session.delete(pc)
+        for customer_id in wanted_ids:
+            if customer_id not in existing and Customer.query.get(customer_id):
+                db.session.add(ProjectCustomer(project_id=draft.id, customer_id=customer_id))
+
+    if 'customer_ids' in data:
+        wanted_ids = {int(cid) for cid in (data.get('customer_ids') or [])}
+        existing = {pc.customer_id: pc for pc in draft.project_customers}
+        for customer_id, pc in existing.items():
+            if customer_id not in wanted_ids:
+                db.session.delete(pc)
+        for customer_id in wanted_ids:
+            if customer_id not in existing and Customer.query.get(customer_id):
+                db.session.add(ProjectCustomer(project_id=draft.id, customer_id=customer_id))
+
+        # Keep ProjectRegion synced to the selected customers' regions —
+        # _build_ccm_design_folders() (app/nas.py) drives its Region/
+        # Customer folder tree off ProjectRegion, not off project_customers
+        # directly, same as the old flow's picker always did. This flow
+        # never wrote ProjectRegion at all until now, so C&CM folder trees
+        # came out region-less. Full replace, same pattern as the customer
+        # set above.
+        from app.models import ProjectRegion
+        wanted_regions = {
+            c.region for c in Customer.query.filter(Customer.id.in_(wanted_ids)).all() if c.region
+        }
+        ProjectRegion.query.filter_by(project_id=draft.id).delete()
+        for region in wanted_regions:
+            db.session.add(ProjectRegion(project_id=draft.id, region=region))        
+
+    draft.last_autosaved_at = _dt.utcnow()
+    _recompute_initial_deadline(draft)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'project_id': draft.id,
+        'first_output_deadline': draft.first_output_deadline.strftime('%d %b %Y') if draft.first_output_deadline else None,
+    })
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/create')
+@login_required
+def overlay_create_shell(project_id):
+    """The create-mode overlay shell — Details then Deliverables only, no
+    lifecycle sidebar (Cancel/Hold/Flag don't apply to a project that
+    doesn't exist yet), opened by the "+ New Project" button per task #61.
+    Only reachable for the draft's own creator (or admin/management), and
+    only while it's still actually a draft — once finalized (#64), the
+    normal /overlay route takes over and this one no longer applies.
+    """
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if project.project_status != 'draft' or not (
+        project.created_by_id == actor.id or actor.role in ('admin', 'management')
+    ):
+        abort(403)
+
+    context = _create_mode_context(project, actor)
+    return render_template('project_overlay/_overlay_create.html', project=project, **context)
+
+
+def _can_finalize_create(project, actor):
+    """Same reachability rule as overlay_create_shell() — the draft's own
+    creator, or admin/management. Duplicated as its own check (rather than
+    calling overlay_create_shell's inline condition) since that one also
+    checks project_status == 'draft', which the two finalize routes below
+    need to check separately anyway (with their own error message)."""
+    return project.created_by_id == actor.id or actor.role in ('admin', 'management')
+
+
+def _validate_for_finalize(project):
+    """Returns an error string, or None if the project is ready to become a
+    real project. Task #64, per Ezekiel: Standard needs at least one
+    deliverable; C&CM needs EITHER Concept & KV info with a deadline OR at
+    least one deliverable — "C&CM doesn't need deliverables to submit, only
+    concept & KV info and dates" reads as an alternative path, not a ban on
+    C&CM projects that only have real deliverables and no concept/KV need.
+    Mirrors _recompute_initial_deadline()'s same two-source-of-truth
+    reasoning for what counts as "this project has real work queued up."
+    """
+    if not project.name or not project.client_id or not project.cs_lead_id or not project.brief_type:
+        return 'Fill in Name, Client, CS Lead, and Brief Type before creating this project.'
+
+    from app.models import Deliverable
+    has_deliverables = _scoped_deliverables_query(project).first() is not None
+
+    if project.brief_type == 'standard':
+        if not has_deliverables:
+            return 'Add at least one deliverable before creating this project.'
+        return None
+
+    # C&CM
+    has_concept_kv = bool(project.has_concept and project.concept_deadline)
+    if not has_concept_kv and not has_deliverables:
+        return 'Add Concept & KV info with a deadline, or at least one deliverable, before creating this project.'
+    return None
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/create/summary')
+@login_required
+def overlay_create_summary(project_id):
+    """Renders the confirm-and-create modal (task #64) — "Add New Project"
+    calls this first; a validation failure here comes back as JSON so the
+    frontend can show it as a toast instead of opening a modal at all (per
+    Ezekiel: Standard's missing-deliverables case specifically should be "a
+    toast saying to add deliverables before they can submit", not a modal
+    with an error inside it).
+    """
+    from app.models import Deliverable
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if project.project_status != 'draft' or not _can_finalize_create(project, actor):
+        abort(403)
+
+    error = _validate_for_finalize(project)
+    if error:
+        return jsonify({'success': False, 'error': error})
+
+    deliverables = _scoped_deliverables_query(project).order_by(Deliverable.id).all()
+    customers = [pc for pc in project.project_customers if not pc.cancelled] if project.brief_type == 'ccm' else []
+
+    html = render_template(
+        'project_overlay/_overlay_create_summary.html',
+        project=project, deliverables=deliverables, customers=customers,
+    )
+    return jsonify({'success': True, 'html': html})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/create/finalize', methods=['POST'])
+@login_required
+def overlay_create_finalize(project_id):
+    """Confirm button on the summary modal — turns the draft into a real
+    project (task #64). Re-validates server-side (the summary render and
+    this click can be minutes apart; someone could've deleted the one
+    deliverable that made this valid in between) rather than trusting the
+    client got this far honestly.
+    """
+    from app import db
+    from app.models import Deliverable
+    from app.status_tracking import record_project_status
+    from app.routes.project_preproduction import _apply_skip_to_preproduction
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if project.project_status != 'draft' or not _can_finalize_create(project, actor):
+        abort(403)
+
+    error = _validate_for_finalize(project)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
+
+    record_project_status(project, 'briefed', actor)
+
+    _drop_unselected_brief_data(project)   # NEW
+
+    # Production Only (Standard-only — see _details_create.html's toggle,
+    # scoped to the Standard card) — every deliverable this project has
+    # right now skips straight to Pre-Production, same as manually using
+    # Skip to Pre-Production on all of them right after creating it.
+    if project.is_production_only:
+        deliverables = Deliverable.query.filter_by(project_id=project.id).all()
+        if deliverables:
+            _apply_skip_to_preproduction(project, deliverables, actor)
+
+    db.session.commit()
+
+    log_activity('project_created', f'"{project.name}" was created',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+
+    from flask import current_app as _app
+    from app.nas import _run_in_background, create_project_folders
+    _pid = project.id
+    _app_obj = _app._get_current_object()
+    _run_in_background(_app_obj, lambda: create_project_folders(
+        Project.query.get(_pid)
+    ))
+
+    return jsonify({'success': True, 'project_id': project.id})
+
+
+@project_overlay_bp.route('/projects/overlay/drafts')
+@login_required
+def list_drafts():
+    """Resumable-drafts entry point (task #65). "+ New Project" calls this
+    first — if it comes back with any drafts, the frontend shows a picker
+    instead of immediately starting a fresh one. Creators always see their
+    own drafts; admin/management additionally see everyone's, per
+    Ezekiel, so abandoned ones can be found and discarded rather than
+    piling up invisibly.
+
+    Deliberately NOT '/projects/drafts' — projects_brief.py's brief_bp
+    (still live, pre-dates this new create flow) already owns that exact
+    path for the old drafts list page. Namespacing under '/projects/
+    overlay/...' matches this route's sibling '/projects/overlay/new' and
+    sidesteps the collision entirely rather than touching legacy code
+    that's slated for removal in task #67 anyway.
+    """
+    actor = _get_actor()
+    query = Project.query.filter_by(project_status='draft')
+    if actor.role not in ('admin', 'management'):
+        query = query.filter_by(created_by_id=actor.id)
+    # Most-recently-worked-on first, not most-recently-started — same
+    # ordering legacy's drafts() route used (projects_old.py), since the
+    # one they just stepped away from is the one they're most likely to
+    # want back.
+    drafts = query.order_by(Project.last_autosaved_at.desc()).all()
+
+    if not drafts:
+        return jsonify({'has_drafts': False})
+
+    html = render_template(
+        'project_overlay/_overlay_create_drafts_picker.html',
+        drafts=drafts, actor=actor,
+    )
+    return jsonify({'has_drafts': True, 'html': html})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/draft', methods=['DELETE'])
+@login_required
+def delete_draft(project_id):
+    """Discards an abandoned draft (task #65) — creator or admin/management
+    only, and only while it's still actually a draft (a project that's
+    since been finalized should go through Cancel, not this). Cleans up
+    any reference files it accumulated from NAS storage before deleting
+    the row, same as delete_project_file() in projects_detail.py (the
+    live route backing this create flow's reused Reference Files card) —
+    cascade='all, delete-orphan' on Project.reference_files only removes
+    the DB rows, not the actual files on the NAS.
+    """
+    from app import db
+    from app.utils import log_activity
+    from app.nas import delete_app_file, build_file_path
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if project.project_status != 'draft':
+        abort(404)
+    if not (project.created_by_id == actor.id or actor.role in ('admin', 'management')):
+        abort(403)
+
+    # delete_app_file() swallows and logs its own NAS failures rather than
+    # raising (see app/nas.py) — same as delete_project_file()'s call to
+    # it in projects_detail.py, so no try/except needed here either.
+    for f in list(project.reference_files):
+        nas_path = build_file_path(project, 'Reference Files', f.original_filename)
+        delete_app_file(nas_path)
+
+    project_name = project.name
+    db.session.delete(project)
+    db.session.commit()
+
+    log_activity('project_draft_deleted', f'Draft "{project_name}" was discarded',
+                 user=actor, entity_type='project', entity_name=project_name, entity_id=project_id)
+
+    return jsonify({'success': True})
 
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay')
@@ -621,15 +1255,54 @@ def _parse_edit_date(raw):
     return _dt.strptime(raw, '%Y-%m-%d').date()
 
 
+# field name (matches the templates' data-field) -> the label the field is
+# rendered under in Details, reused for both the Save log's field list and
+# the structured diff — if a field's label on screen ever changes, update
+# it here too so the activity log keeps matching what's actually shown.
+_DETAILS_FIELD_LABELS = {
+    'client_id': 'Client',
+    'design_type_id': 'Type of Design',
+    'first_output_deadline': 'Initial Deadline',
+    'execution_date': 'Final Deadline',
+    'client_expectation': 'Client Expectation',
+    'what_to_avoid': 'What to Avoid',
+    'additional_information': 'Additional Information',
+    'briefing_date': 'Briefing Date',
+    'concept_deadline': 'Concept & KV Deadline',
+    'concept_options_required': 'Options Required',
+    'campaign_notes': 'Campaign Notes',
+    'kv_requirements': 'Concept & KV Details',
+}
+
+
+def _display_value_for_log(field_name, value):
+    """JSON-safe, human-readable form of one field's old/new value for
+    ActivityLog.changes. client_id/design_type_id resolve to a name (a
+    diff full of raw ids isn't useful to read later); dates become ISO
+    strings; everything else already round-trips through json.dumps."""
+    if value is None:
+        return None
+    if field_name == 'client_id':
+        from app.models import Client
+        c = Client.query.get(value)
+        return c.name if c else value
+    if field_name == 'design_type_id':
+        from app.models import DesignType
+        dt = DesignType.query.get(value)
+        return dt.name if dt else value
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return value
+
+
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/details/save', methods=['POST'])
 @login_required
 def overlay_details_save(project_id):
     """Edit mode Save (task #34). Whitelisted field-by-field update, not a
     generic setattr — every accepted field is named explicitly so this
     route can never be tricked into writing a column the frontend didn't
-    actually render an editable row for. Field-level diff logging (task
-    #36) and the SSE push (task #35) aren't wired yet — this chunk is
-    just the concurrent-edit check + commit."""
+    actually render an editable row for. Logs which fields changed by name
+    (task #36) plus a structured old/new diff in ActivityLog.changes."""
     from app import db
     from app.models import ActivityLog
     from app.utils import log_activity
@@ -678,6 +1351,7 @@ def overlay_details_save(project_id):
         'concept_deadline': ('concept_deadline', _parse_edit_date),
         'concept_options_required': ('concept_options_required', lambda v: int(v) if v else None),
         'campaign_notes': ('campaign_notes', lambda v: v.strip() or None),
+        'kv_requirements': ('kv_requirements', lambda v: v.strip() or None),
     }
 
     changes = []
@@ -699,12 +1373,22 @@ def overlay_details_save(project_id):
 
     db.session.commit()
 
-    # Field-level diff (changes= JSONB) lands in task #36 — this is the
-    # flat-message version so Save is fully functional in the meantime.
+    field_labels = [_DETAILS_FIELD_LABELS.get(c['field'], c['field']) for c in changes]
+    logged_changes = [
+        {
+            'field': c['field'],
+            'label': _DETAILS_FIELD_LABELS.get(c['field'], c['field']),
+            'old': _display_value_for_log(c['field'], c['old']),
+            'new': _display_value_for_log(c['field'], c['new']),
+        }
+        for c in changes
+    ]
+
     log_activity(
         'project_edited',
-        f'{actor.name} edited {len(changes)} field(s) on "{project.name}"',
+        f'{actor.name} edited {", ".join(field_labels)} on "{project.name}"',
         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+        changes=logged_changes,
     )
 
     return jsonify({'success': True, 'changed': True, 'changes': [c['field'] for c in changes]})
@@ -743,19 +1427,290 @@ def overlay_start_project(project_id):
     return jsonify({'success': True})
 
 
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/cancel', methods=['POST'])
+@login_required
+def overlay_cancel_project(project_id):
+    """Cancel Project (§9 of the architecture doc, finally wired up 18 Aug
+    2026) — cancel_reason/cancelled_at/cancelled_by_id already existed on
+    the model unused. Deliberately doesn't touch project_status at all:
+    status_vocabulary.py's derive_pipeline_status/derive_ccm_aggregate_
+    status both check cancelled_at first, ahead of the underlying pipeline
+    stage, so cancelling never overwrites (and reactivating never needs to
+    restore) whatever stage the project was actually in."""
+    from datetime import datetime as dt
+    from app import db
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if not _can_cancel_project(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to cancel this project.'}), 403
+    if project.cancelled_at is not None:
+        return jsonify({'success': False, 'error': 'This project is already cancelled.'}), 400
+
+    reason = ((request.get_json(silent=True) or {}).get('reason') or '').strip()
+    if not reason:
+        return jsonify({'success': False, 'error': 'A reason is required to cancel a project.'}), 400
+
+    project.cancel_reason = reason
+    project.cancelled_at = dt.utcnow()
+    project.cancelled_by_id = actor.id
+    db.session.commit()
+
+    log_activity(
+        'project_cancelled',
+        f'{actor.name} cancelled "{project.name}": {reason}',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/uncancel', methods=['POST'])
+@login_required
+def overlay_uncancel_project(project_id):
+    """Reactivate — clears the three cancel columns. No reason required,
+    same asymmetry as On Hold's Resume (no confirm/note either): reversing
+    a cancellation is the safe direction, only cancelling itself needs the
+    reason and the confirm gate."""
+    from app import db
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if not _can_cancel_project(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to reactivate this project.'}), 403
+    if project.cancelled_at is None:
+        return jsonify({'success': False, 'error': 'This project is not cancelled.'}), 400
+
+    project.cancel_reason = None
+    project.cancelled_at = None
+    project.cancelled_by_id = None
+    db.session.commit()
+
+    log_activity(
+        'project_reactivated',
+        f'{actor.name} reactivated "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/toggle-hold', methods=['POST'])
+@login_required
+def overlay_toggle_hold(project_id):
+    """Put on Hold / Resume — straight port of projects_detail.py's
+    toggle_hold (JSON instead of a full-page redirect+flash). Same
+    held_from_status bracket/restore logic and permission set (see
+    _can_toggle_hold) as the route this replaces for overlay use."""
+    from app import db
+    from app.utils import log_activity
+    from app.status_tracking import record_project_status
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if not _can_toggle_hold(project, actor):
+        return jsonify({'success': False, 'error': "You do not have permission to change this project's hold status."}), 403
+
+    if project.project_status == 'on_hold':
+        restore_to = project.held_from_status or 'briefed'
+        record_project_status(project, restore_to, actor)
+        project.held_from_status = None
+        log_activity(
+            'project_resumed', f'Project "{project.name}" resumed (status: {restore_to})',
+            user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+        )
+    else:
+        project.held_from_status = project.project_status
+        record_project_status(project, 'on_hold', actor)
+        log_activity(
+            'project_on_hold', f'Project "{project.name}" put on hold',
+            user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+        )
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# ── Brief Flags (task #42) — port of projects_detail.py's create_flag /
+# reply_flag / resolve_flag, JSON instead of form-post+redirect, plus a
+# new history endpoint the old full-page detail view didn't need (it just
+# rendered every flag inline). ─────────────────────────────────────────
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/flags/create', methods=['POST'])
+@login_required
+def overlay_create_flag(project_id):
+    from app import db
+    from app.models import BriefFlag, BriefFlagMessage
+    from app.notifications import notify_cs_of_brief_flag
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if not _can_manage_flags(actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to raise a flag.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    flag_type = data.get('flag_type')
+    deliverable_id = data.get('deliverable_id')
+    message_text = (data.get('message') or '').strip()
+    if flag_type not in ('project', 'deliverable', 'concept', 'kv') or not message_text:
+        return jsonify({'success': False, 'error': 'A message is required.'}), 400
+
+    # A 'deliverable' flag with no target (or a target from a different
+    # project) would render invisibly in both scopes — Details filters it
+    # out (not project/concept/kv) and Deliverables would never match it to
+    # a row. Guard server-side rather than trusting the client-side check.
+    if flag_type == 'deliverable':
+        from app.models import Deliverable
+        deliverable = Deliverable.query.get(deliverable_id) if deliverable_id else None
+        if not deliverable or deliverable.project_id != project_id:
+            return jsonify({'success': False, 'error': 'Pick a deliverable to flag first.'}), 400
+
+    flag = BriefFlag(
+        project_id=project_id,
+        deliverable_id=deliverable_id or None,
+        flag_type=flag_type,
+        created_by_id=actor.id,
+    )
+    db.session.add(flag)
+    db.session.flush()
+    db.session.add(BriefFlagMessage(flag_id=flag.id, author_id=actor.id, message=message_text))
+    db.session.commit()
+
+    notify_cs_of_brief_flag(flag, project, triggered_by=actor)
+    log_activity(
+        'brief_flag_created', f'{actor.name} raised a {flag_type} flag on "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/flags/<int:flag_id>/reply', methods=['POST'])
+@login_required
+def overlay_reply_flag(project_id, flag_id):
+    from app import db
+    from app.models import BriefFlag, BriefFlagMessage
+    from app.notifications import notify_flag_reply
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    flag = BriefFlag.query.get_or_404(flag_id)
+    if flag.project_id != project_id:
+        abort(404)
+    actor = _get_actor()
+    if not _can_manage_flags(actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to reply to this flag.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    message_text = (data.get('message') or '').strip()
+    if not message_text:
+        return jsonify({'success': False, 'error': 'A message is required.'}), 400
+
+    db.session.add(BriefFlagMessage(flag_id=flag_id, author_id=actor.id, message=message_text))
+    db.session.commit()
+
+    notify_flag_reply(flag, project, triggered_by=actor)
+    log_activity(
+        'brief_flag_reply', f'{actor.name} replied to a flag on "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/flags/<int:flag_id>/resolve', methods=['POST'])
+@login_required
+def overlay_resolve_flag(project_id, flag_id):
+    from datetime import datetime as dt
+    from app import db
+    from app.models import BriefFlag
+    from app.notifications import notify_cs_of_flag_resolved
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    flag = BriefFlag.query.get_or_404(flag_id)
+    if flag.project_id != project_id:
+        abort(404)
+    actor = _get_actor()
+    if not _can_resolve_flag(flag, actor):
+        return jsonify({'success': False, 'error': 'Only the person who raised this flag can resolve it.'}), 403
+    if flag.is_resolved:
+        return jsonify({'success': False, 'error': 'This flag is already resolved.'}), 400
+
+    flag.is_resolved = True
+    flag.resolved_at = dt.utcnow()
+    flag.resolved_by_id = actor.id
+    db.session.commit()
+
+    notify_cs_of_flag_resolved(flag, project, triggered_by=actor)
+    log_activity(
+        'brief_flag_resolved', f'{actor.name} resolved a {flag.flag_type} flag on "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/flags/history')
+@login_required
+def overlay_flags_history(project_id):
+    """Lazy-fetched by the History toggle (see project_flags.js) — every
+    flag for the requested scope, open and resolved, newest first. scope
+    'project' folds in concept/kv too (Details' Flags card is the one home
+    for all project-wide flag types); scope 'deliverable' takes an
+    optional customer_id so C&CM's per-customer panels only ever see their
+    own customer's history, matching the Active view's same scoping."""
+    from app.models import BriefFlag, Deliverable
+
+    project = Project.query.get_or_404(project_id)
+    scope = request.args.get('scope', 'project')
+
+    query = BriefFlag.query.filter_by(project_id=project_id)
+    if scope == 'deliverable':
+        query = query.filter(BriefFlag.flag_type == 'deliverable')
+        customer_id = request.args.get('customer_id', type=int)
+        if customer_id:
+            deliverable_ids = [
+                d.id for d in Deliverable.query.filter_by(
+                    project_id=project_id, project_customer_id=customer_id
+                ).all()
+            ]
+            query = query.filter(BriefFlag.deliverable_id.in_(deliverable_ids))
+    else:
+        query = query.filter(BriefFlag.flag_type.in_(['project', 'concept', 'kv']))
+
+    actor = _get_actor()
+    flags = query.order_by(BriefFlag.created_at.desc()).all()
+    return jsonify({'flags': [_serialize_flag(f, actor) for f in flags]})
+
+
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables')
 @login_required
 def overlay_deliverables(project_id):
-    from app.models import Deliverable
+    from app.models import BriefFlag, Deliverable
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     can_manage = _can_manage_deliverables(project, actor)
-    # Skip to Pre-Production (13 Aug 2026): CS/Project Owner/Admin/Management,
-    # same permission set as project_preproduction.py's _can_manage_preproduction.
-    can_skip_preproduction = (
-        actor.role in ('admin', 'management', 'cs')
-        or actor.id == project.project_owner_id
+    can_manage_flags = _can_manage_flags(actor)
+    can_skip_preproduction = _can_skip_preproduction(project, actor)
+
+    # Brief Flags (task #42) — one query for every open deliverable-scoped
+    # flag on the project, then grouped by deliverable_id so both branches
+    # below can attach "does this row/customer have open flags" without a
+    # query per row. Kept as a plain dict (not a defaultdict) so Jinja's
+    # `d.id in open_flags_by_deliverable_id` check works the same way
+    # assigned_ids/status_by_id already do elsewhere in this file.
+    open_flags = (
+        BriefFlag.query
+        .filter_by(project_id=project_id, flag_type='deliverable', is_resolved=False)
+        .order_by(BriefFlag.created_at)
+        .all()
     )
+    open_flags_by_deliverable_id = {}
+    for f in open_flags:
+        f.can_resolve = _can_resolve_flag(f, actor)
+        open_flags_by_deliverable_id.setdefault(f.deliverable_id, []).append(f)
 
     if project.brief_type == 'ccm':
         regions = _build_ccm_deliverable_sections(project)
@@ -763,6 +1718,12 @@ def overlay_deliverables(project_id):
         all_customers = [c for r in regions for c in r['customers']]
         first_customer_id = all_customers[0]['project_customer'].id if all_customers else None
         all_deliverables = [d for c in all_customers for d in c['deliverables']]
+        # Needs Attention is scoped per customer (per Ezekiel, 18 Aug 2026) —
+        # each customer only sees flags on its own deliverables, computed
+        # here rather than in the template so the CCM and Standard branches
+        # can't drift on how "which flags belong to this customer" is worked out.
+        for c in all_customers:
+            c['open_flags'] = [f for d in c['deliverables'] for f in open_flags_by_deliverable_id.get(d.id, [])]
         return render_template(
             'project_overlay/_deliverables_ccm.html',
             project=project,
@@ -773,6 +1734,8 @@ def overlay_deliverables(project_id):
             first_customer_id=first_customer_id,
             can_manage_deliverables=can_manage,
             can_skip_preproduction=can_skip_preproduction,
+            can_manage_flags=can_manage_flags,
+            open_flags_by_deliverable_id=open_flags_by_deliverable_id,
             **_build_deliverable_focus_context(all_deliverables, actor),
         )
 
@@ -785,6 +1748,9 @@ def overlay_deliverables(project_id):
         deliverables=deliverables,
         can_manage_deliverables=can_manage,
         can_skip_preproduction=can_skip_preproduction,
+        can_manage_flags=can_manage_flags,
+        open_flags=open_flags,
+        open_flags_by_deliverable_id=open_flags_by_deliverable_id,
         **_build_deliverable_focus_context(deliverables, actor),
     )
 
@@ -930,6 +1896,15 @@ def save_standard_deliverables(project_id):
             db.session.add(deliverable)
             created.append(name)
 
+    # Initial Deadline auto-follows deliverable dates in CREATE MODE only
+    # (task #62 follow-up, 18 Aug 2026) — this same route also backs the
+    # LIVE overlay's Save Deliverables (task #44), where Initial Deadline
+    # may have been deliberately set to something a CS Lead communicated
+    # externally and isn't necessarily "whatever the deliverables say" —
+    # scoped to project_status == 'draft' so a live project's Save
+    # Deliverables keeps behaving exactly as it always has.
+    if project.project_status == 'draft':
+        _recompute_initial_deadline(project)
     db.session.commit()
 
     for name in created:

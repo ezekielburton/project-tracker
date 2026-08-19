@@ -628,7 +628,12 @@
                     <div id="pt-customers-list" class="accounts-user-list"></div>
                 </div>
                 <div class="pt-panel hidden" id="pt-panel-projects">
-                    <a href="{{ url_for('brief.drafts') }}" class="accounts-add-btn pt-add-link">+ Add Project</a>
+                    {# Repointed 18 Aug 2026 — was url_for('brief.drafts'), the old
+                       create-flow's drafts/entry page, now retired (task #67). The
+                       new create flow lives entirely on the Projects list page
+                       itself (its own "+ New Project" button), so this just sends
+                       admins there instead of trying to deep-link into it. #}
+                    <a href="{{ url_for('project_list.index') }}" class="accounts-add-btn pt-add-link">+ Add Project</a>
                     <div id="pt-projects-list" class="accounts-user-list"></div>
                 </div>
                 <div class="pt-panel hidden" id="pt-panel-drafts">

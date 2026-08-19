@@ -8,7 +8,7 @@ from flask import Blueprint, render_template, session, request, jsonify, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import nullslast
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog
 from app.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
@@ -270,7 +270,7 @@ def _base_query_for_view(view, user):
     # A saved custom view ("view-<id>") isn't itself a base query — it's a
     # name + a remembered filter selection layered on top of one of the
     # three fixed presets. Resolve it down to that preset here so every
-    # other branch below only ever has to know about 'my'/'all'/'approved'.
+    # other branch below only ever has to know about 'my'/'all'/'design_complete'.
     if view.startswith('view-'):
         try:
             view_id = int(view.split('-', 1)[1])
@@ -279,31 +279,61 @@ def _base_query_for_view(view, user):
         saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
         view = saved_view.base_view if saved_view else 'my'
 
+    # 'approved' (the raw status value) is a transient in-flight status now
+    # (M8 added Pre-Production/Handed to Production after it), not a finish
+    # line — so as of 18 Aug 2026 it's no longer excluded from My/All. Only
+    # 'handed_to_production' (the real terminal state) is excluded, matching
+    # dashboard.py's _scoped_projects(). A user who wants a "Client Approved
+    # only" list can now build it themselves: My or All + Status filter =
+    # "Client Approved", saved as a custom view — see the 'design_complete'
+    # branch below for the one fixed tab that still hardcodes a status. That
+    # VIEW KEY was renamed from 'approved' to 'design_complete' on 18 Aug
+    # 2026 too (was confusing next to the now-unrelated 'approved' status
+    # value) — see migrations/_backfill_project_table_view_base_view.py for
+    # the one-time rename of any already-saved views built on top of it.
     if view == 'all':
         if user.role in ('cs', 'admin', 'management', 'project_owner'):
             query = Project.query.filter(
                 Project.project_status != 'draft',
-                Project.project_status != 'approved'
+                Project.project_status != 'handed_to_production'
             )
         elif user.team:
             query = Project.query.filter(
                 Project.design_teams_requested.contains(user.team),
                 Project.project_status != 'draft',
-                Project.project_status != 'approved'
+                Project.project_status != 'handed_to_production'
             )
         else:
             query = None
 
-    elif view == 'approved':
-        query = Project.query.filter_by(project_status='approved')
-        order_by = Project.approved_at.desc()
+    elif view == 'design_complete':
+        # Fixed tab relabeled "Design Complete" in the UI, and its view key
+        # renamed from 'approved' to 'design_complete' to match (18 Aug 2026,
+        # per Ezekiel — "approved" the raw status is temporary/in-flight now,
+        # "handed to production" is the real finish line, and keeping the
+        # view key as 'approved' next to that was confusing). Ordered by
+        # when each project most recently logged 'handed_to_production'
+        # (Project has no dedicated timestamp column for this stage, unlike
+        # approved_at) — most recently completed first, same intent as the
+        # old approved_at.desc().
+        handed_at = (
+            db.session.query(db.func.max(ProjectStatusLog.started_at))
+            .filter(
+                ProjectStatusLog.project_id == Project.id,
+                ProjectStatusLog.status == 'handed_to_production'
+            )
+            .correlate(Project)
+            .scalar_subquery()
+        )
+        query = Project.query.filter_by(project_status='handed_to_production')
+        order_by = handed_at.desc()
 
     else:  # 'my' - default
         if user.role in ('cs', 'admin', 'management', 'project_owner'):
             if user.role == 'admin':
                 query = Project.query.filter(
                     Project.project_status != 'draft',
-                    Project.project_status != 'approved'
+                    Project.project_status != 'handed_to_production'
                 )
             else:
                 secondary_project_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(
@@ -316,7 +346,7 @@ def _base_query_for_view(view, user):
                         Project.project_owner_id == user.id
                     ),
                     Project.project_status != 'draft',
-                    Project.project_status != 'approved'
+                    Project.project_status != 'handed_to_production'
                 )
         else:
             assigned_project_ids = db.session.query(ProjectDesigner.project_id).filter_by(
@@ -325,8 +355,17 @@ def _base_query_for_view(view, user):
             query = Project.query.filter(
                 Project.id.in_(assigned_project_ids),
                 Project.project_status != 'draft',
-                Project.project_status != 'approved'
+                Project.project_status != 'handed_to_production'
             )
+
+    # Cancelled projects are hidden from every view by default (they still
+    # exist, still show up on refresh, just not by default) — the toolbar
+    # toggle or the Cancelled status chip (_show_cancelled()) opts back in.
+    # Applied once here rather than per-branch so all three presets, the
+    # filter-count recompute, and the view-total count can never disagree
+    # on whether cancelled projects are in scope.
+    if query is not None and not _show_cancelled():
+        query = query.filter(Project.cancelled_at.is_(None))
 
     return query, order_by
 
@@ -381,6 +420,19 @@ def _count_by_value(rows, key):
         if value is not None:
             counts[value] = counts.get(value, 0) + 1
     return counts
+
+def _show_cancelled():
+    """True if the Cancelled status filter is active. Cancelled projects
+    are excluded from every view by default (see the exclusion in
+    _base_query_for_view) — this is the only way back in. There's no
+    separate "show cancelled" query param: the Show Cancelled toolbar
+    button is just a shortcut that sets ?status=Cancelled (same as picking
+    the Cancelled chip in the filter panel by hand), so it composes with
+    every other filter dimension for free, and doubles as "cancelled
+    projects ONLY" rather than "cancelled mixed in with everything else" —
+    the row-level status filter (_apply_row_filters) already narrows to
+    exactly the selected status value(s)."""
+    return 'Cancelled' in _parse_values('status')
 
 def _has_undefined(param_name):
     """
@@ -627,7 +679,7 @@ def index():
                        saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout, is_admin=(user.role == 'admin'),
                        sort_options=SORT_OPTIONS, sort_field=sort_field, sort_dir=sort_dir,
                        saved_views=saved_views, current_base_view=current_base_view, is_dirty=is_dirty,
-                       group_options=GROUP_FIELDS, group_field=group_field, groups=groups, )
+                       group_options=GROUP_FIELDS, group_field=group_field, groups=groups, show_cancelled=_show_cancelled(), )
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required
@@ -860,7 +912,7 @@ def create_view():
 
     if not name:
         return jsonify({'error': 'name is required'}), 400
-    if base_view not in ('my', 'all', 'approved'):
+    if base_view not in ('my', 'all', 'design_complete'):
         base_view = 'my'
 
     view = ProjectTableView(user_id=user.id, name=name, base_view=base_view, filters=filters)

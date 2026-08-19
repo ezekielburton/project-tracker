@@ -591,8 +591,14 @@ body.is-resizing-column * {
 .expand-deliverable-table {
     position: relative;
     display: grid;
+    /* Status wrapped in minmax(min-content, ...) — same fix as
+    .project-table's tracks (see its own long comment above) — so the
+    column can never shrink narrower than the status pill's own intrinsic
+    width. Bug fix, 18 Aug 2026: was a bare 1fr, so the pill (white-space:
+    nowrap) would push past the column edge instead of the column
+    growing to fit it. */
     grid-template-columns:
-        var(--dtrack-name, 2fr) var(--dtrack-deadline, 1fr) var(--dtrack-deadline-time, 1fr) var(--dtrack-2d, 1.3fr) var(--dtrack-3d, 1.3fr) var(--dtrack-technical, 1.3fr) var(--dtrack-status, 1fr);
+        var(--dtrack-name, 2fr) var(--dtrack-deadline, 1fr) var(--dtrack-deadline-time, 1fr) var(--dtrack-2d, 1.3fr) var(--dtrack-3d, 1.3fr) var(--dtrack-technical, 1.3fr) minmax(min-content, var(--dtrack-status, 1fr));
     margin-top: var(--space-2);
     width: fit-content;
     max-width: 100%;
@@ -706,8 +712,13 @@ body.is-resizing-column * {
 .expand-customer-table {
     position: relative;
     display: grid;
+    /* Status wrapped in minmax(min-content, ...) — same fix as
+    .project-table's tracks. Bug fix, 18 Aug 2026: was a bare 1fr with no
+    JS-driven minimum at all (the resize-handle markup exists but was
+    never wired up for this table), so the status pill could overflow the
+    column outright. */
     grid-template-columns:
-        2.5rem var(--ctrack-name, 2fr) var(--ctrack-design-deadline, 1fr) var(--ctrack-installation-date, 1fr) var(--ctrack-deliverable-count, 1fr) var(--ctrack-revision-count, 1fr) var(--ctrack-status, 1fr);
+        2.5rem var(--ctrack-name, 2fr) var(--ctrack-design-deadline, 1fr) var(--ctrack-installation-date, 1fr) var(--ctrack-deliverable-count, 1fr) var(--ctrack-revision-count, 1fr) minmax(min-content, var(--ctrack-status, 1fr));
     grid-auto-rows: auto;
     margin-top: var(--space-2);
     width: fit-content;

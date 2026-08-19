@@ -82,6 +82,15 @@ def get_next_action_owner(project):
     # kept here with their original guidance since they're still reachable
     # that way and a project sitting in one shouldn't fall back to the
     # generic default either.
+    #
+    # 'handed_to_production' added 18 Aug 2026 — a real status now (see
+    # project_preproduction.py's _cascade_handed_to_production), and was
+    # falling through to the generic default same as the four above before
+    # this rebuild did. Dashboard bug fix same day: this status is now
+    # also excluded from every "active work" list (_scoped_projects et al
+    # in dashboard.py) same as 'approved', so in practice this entry only
+    # matters for the active_only=False call sites (e.g. what-changed)
+    # that still look a handed-off project's guidance up.
     status_map = {
         'briefed':               ('designer', 'Start the project'),  # start-project route requires 'briefed' + a requested-team designer/team_lead (or admin) to fire it
         'in_queue':              ('designer', 'Check brief and start work, or raise a flag'),
@@ -93,6 +102,7 @@ def get_next_action_owner(project):
         'revision_in_queue':     ('designer', 'Check client revision request and start work, or raise a flag'),
         'revision_in_progress':  ('designer', 'Submit revised work'),
         'approved':              ('cs', 'Release files and start production if applicable'),
+        'handed_to_production':  ('cs', 'No action needed — handed to production'),
         'on_hold':               ('cs', 'Unblock project'),
         'awaiting_posm_details': ('cs', 'Add POSM details when available'),
     }

@@ -9,6 +9,15 @@ window.ProjectDeliverablesCard = (function () {
             wireFocusToggle(rootEl);
             wireSkipToPreproduction();
 
+            // Flags (task #42) — deliverable-scoped flag sections (one per
+            // C&CM customer panel, one for Standard's flat list) plus every
+            // row's ⚑ trigger. Reuses the same onChanged the rest of this
+            // card uses (loadSubTabContent re-fetch via project_list.js) so
+            // a flag action refreshes the whole tab exactly like every
+            // other action here. Edit mode has no flag UI, so this only
+            // runs here, not in bindEdit().
+            if (window.ProjectFlags) window.ProjectFlags.init(rootEl, projectId, onChanged);
+
             var editBtn = rootEl.querySelector('#overlay-edit-deliverables-btn');
             if (editBtn) {
                 editBtn.addEventListener('click', function () {
@@ -35,8 +44,18 @@ window.ProjectDeliverablesCard = (function () {
 
             if (pickerEl) skipPickerHandle = window.DeliverablePicker.init(pickerEl);
 
-            if (btn && form) {
+            // Button always renders (see _deliverables_standard.html /
+            // _deliverables_ccm.html) so it doesn't just vanish unexplained
+            // — data-skippable-count is 0 whenever the picker form (and its
+            // deliverable list) weren't rendered at all, so a toast explains
+            // why instead of nothing happening.
+            if (btn) {
                 btn.addEventListener('click', function () {
+                    if (btn.dataset.skippableCount === '0') {
+                        showToast('Add at least one deliverable before skipping to Pre-Production.', 'error');
+                        return;
+                    }
+                    if (!form) return;
                     btn.classList.add('is-hidden');
                     form.classList.remove('is-hidden');
                 });
@@ -105,7 +124,12 @@ window.ProjectDeliverablesCard = (function () {
         }
 
         function activateCustomerPanel(rootEl, customerId) {
-            rootEl.querySelectorAll('.overlay-deliverables-panel').forEach(function (panel) {
+            // Generic [data-customer-panel] selector rather than
+            // .overlay-deliverables-panel specifically — the per-customer
+            // flag panel (see _deliverables_ccm.html) sits outside the
+            // Deliverables card entirely now but still needs to toggle in
+            // lockstep with the same customer switch.
+            rootEl.querySelectorAll('[data-customer-panel]').forEach(function (panel) {
                 panel.classList.toggle('is-hidden', panel.dataset.customerPanel !== customerId);
             });
         }

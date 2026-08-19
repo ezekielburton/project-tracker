@@ -1,6 +1,16 @@
 {% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
-<div class="overlay-details-columns" data-edit-snapshot="{{ edit_snapshot_at }}"> 
+{# Flags — own div, sitting above the Properties/Design Leads block
+entirely (per Ezekiel, 18 Aug 2026), sized to its own content. #}
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% set flag_scope = 'project' %}
+        {% set flags = project_open_flags %}
+        {% include "project_overlay/_flag_project_panel.html" %}
+    </div>
+</div>
+
+<div class="overlay-details-columns" data-edit-snapshot="{{ edit_snapshot_at }}">
     <div class="overlay-details-left">
         <div class="overlay-properties-heading">Properties</div>
         <div class="overlay-properties">
@@ -98,12 +108,11 @@
         {% include "project_overlay/_details_design_leads.html" %}
         {% include "project_overlay/_details_reference_files.html" %}
         {% if project.campaign_notes or can_edit_project %}
-        {% call card('Requirements') %}
-        <div class="overlay-notes"{% if can_edit_project %} data-field="campaign_notes"
-            data-field-type="textarea"{% endif %}>
-            <p class="overlay-notes-text overlay-edit-view">{{ project.campaign_notes or '—' }}</p>
+        {% call card('Concept & KV Details') %}
+        <div class="overlay-notes" {% if can_edit_project %} data-field="kv_requirements" data-field-type="textarea" {% endif %}>
+            <p class="overlay-notes-text overlay-edit-view">{{ project.kv_requirements or '—' }}</p>
             {% if can_edit_project %}
-            <textarea class="overlay-edit-input is-hidden">{{ project.campaign_notes or '' }}</textarea>
+            <textarea class="overlay-edit-input is-hidden">{{ project.kv_requirements or '' }}</textarea>
             {% endif %}
         </div>
         {% endcall %}
