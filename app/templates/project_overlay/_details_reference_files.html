@@ -6,7 +6,7 @@ as before — project_details_card.js needs no changes. #}
 {% if project.reference_files %}
 <div class="overlay-reference-files-header">
     <button type="button" class="overlay-file-action-btn" id="overlay-download-all-files"
-        data-download-all-url="{{ url_for('project_detail.download_all_reference_files', project_id=project.id) }}">
+        data-download-all-url="{{ url_for('project_overlay.download_all_reference_files', project_id=project.id) }}">
         Download All
     </button>
 </div>
@@ -27,9 +27,9 @@ as before — project_details_card.js needs no changes. #}
         <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
         <div class="overlay-reference-file-actions">
             <button type="button" class="overlay-file-action-btn overlay-reference-file-preview"
-                data-preview-url="{{ url_for('project_detail.preview_project_file', file_id=f.id) }}"
-                data-download-url="{{ url_for('project_detail.download_project_file', file_id=f.id) }}">Preview</button>
-            <a href="{{ url_for('project_detail.download_project_file', file_id=f.id) }}"
+                data-preview-url="{{ url_for('project_overlay.preview_project_file', file_id=f.id) }}"
+                data-download-url="{{ url_for('project_overlay.download_project_file', file_id=f.id) }}">Preview</button>
+            <a href="{{ url_for('project_overlay.download_project_file', file_id=f.id) }}"
                 class="overlay-file-action-btn">Download</a>
             {% if can_manage_reference_files %}
             <button type="button"

@@ -7,6 +7,7 @@ from flask import Blueprint, render_template, abort, request, jsonify
 from flask_login import login_required, current_user
 
 from app.models import Project
+from app.decorators import role_required
 
 project_overlay_bp = Blueprint('project_overlay', __name__)
 
@@ -33,6 +34,63 @@ def _can_manage_deliverables(project, actor):
         or actor.id in secondary_cs_ids
         or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
     )
+
+
+def ensure_posm_channels(project, brief_sections):
+    """Self-healing: creates any ProjectPosmChannel rows a C&CM project's
+    current customer roster needs but doesn't have yet — one channel per
+    UAE *and* Gulf customer (never per-region-only anymore). The one
+    deliberate exception: Oman's handful of pre-migration legacy
+    region-level channels (posm_customer_id IS NULL) are frozen read-only
+    history per the 4 Aug 2026 Gulf-per-customer migration — this function
+    must never delete or touch those, only ever add genuinely new
+    per-customer channels alongside them.
+    Commits if it adds anything. Returns True if it added any channels.
+
+    Relocated from projects_detail.py (M10) — this was the old detail
+    page's own helper, but the overlay's Submissions tab (overlay_submissions
+    below) was already the only live caller by the time of the move.
+    """
+    from app import db
+    from app.models import ProjectPosmChannel
+
+    GULF_REGION_KEYS = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman']
+
+    # UAE-only orphan cleanup: a deleted-then-recreated ProjectCustomer leaves
+    # its old UAE channel with posm_customer_id=NULL (ON DELETE SET NULL) —
+    # delete it so it gets recreated below with the new ProjectCustomer ID.
+    # Deliberately scoped to UAE only — a NULL-customer_id Gulf channel is
+    # Oman's frozen legacy history, not an orphan.
+    orphaned = [ch for ch in project.posm_channels
+                if ch.posm_country == 'uae' and ch.posm_customer_id is None]
+    if orphaned:
+        for ch in orphaned:
+            db.session.delete(ch)
+        db.session.flush()
+
+    existing_channel_keys = {
+        (ch.posm_country, ch.posm_customer_id) for ch in project.posm_channels
+    }
+
+    new_channels_added = False
+    for region_key in GULF_REGION_KEYS:
+        if region_key not in brief_sections:
+            continue
+        for pc in brief_sections[region_key]:
+            if pc.cancelled:
+                continue
+            if (region_key, pc.id) not in existing_channel_keys:
+                db.session.add(ProjectPosmChannel(
+                    project_id=project.id,
+                    posm_country=region_key,
+                    posm_customer_id=pc.id,
+                    status='in_queue',
+                ))
+                new_channels_added = True
+
+    if new_channels_added:
+        db.session.commit()
+    return new_channels_added
 
 
 def _can_cancel_project(project, actor):
@@ -1988,7 +2046,6 @@ def overlay_submissions(project_id):
             **draft_context
         )
 
-    from app.routes.projects_detail import ensure_posm_channels
     regions = _build_submission_regions(project)
     brief_sections = {r['key']: r['customers'] for r in regions}
     ensure_posm_channels(project, brief_sections)
@@ -3167,3 +3224,270 @@ def overlay_submissions_approve(project_id):
         check_achievements(actor, 'project_approved')
 
     return jsonify({'success': True, 'all_approved': all_approved})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reference Files — upload / download / preview / delete (relocated for M10)
+#
+# WHAT: these five routes originally lived on the old /projects/<id> detail
+# page's blueprint (detail_bp, projects_detail.py). The overlay's own
+# Reference Files card (_details_reference_files.html + project_details_card.js)
+# has depended on them since the overlay shipped — project_details_card.js's
+# upload/delete fetch() calls hardcode these exact URL paths, and the
+# template's preview/download/download-all buttons use url_for() against
+# them — so they were never actually dead code, just misplaced on the page
+# that's being deleted at M10 cutover (see Projects Rework Workflow.md, M10).
+#
+# HOW: moved verbatim — same URL paths, same function bodies, same
+# permission checks — onto project_overlay_bp instead of detail_bp. Because
+# the URL paths are unchanged, project_details_card.js's hardcoded fetch()
+# calls need zero changes. Only _details_reference_files.html's three
+# url_for('project_detail.X', ...) calls needed repointing to
+# url_for('project_overlay.X', ...), since the blueprint/endpoint name
+# changed even though the path didn't.
+#
+# WHY here, not a new file: Reference Files is part of the Details tab,
+# which already lives entirely in this blueprint — keeping the file-serving
+# routes next to the rest of Details avoids a fourth blueprint for five
+# routes that only ever serve this one card.
+# ─────────────────────────────────────────────────────────────────────────
+
+@project_overlay_bp.route('/projects/<int:project_id>/upload-file', methods=['POST'])
+@login_required
+@role_required('admin', 'cs', 'management')
+def upload_project_file(project_id):
+    """Handle reference file uploads for a project. CS and admin only."""
+    from app.models import ProjectFile, User
+    from flask import session, current_app
+
+    project = Project.query.get_or_404(project_id)
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    can_manage_files = (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in {a.user_id for a in project.secondary_cs_assignments}
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+    if not can_manage_files:
+        return jsonify({'success': False, 'error': 'You are lacking permissions to perform this action.'}), 403
+
+    # Check a file was actually included in the request
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+    # Only allow safe file types
+    allowed_extensions = {'jpg', 'jpeg', 'png', 'pdf', 'docx', 'xlsx', 'pptx', 'zip', 'dwg',
+                          'mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v'}
+    original_filename = file.filename
+    ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
+
+    if ext not in allowed_extensions:
+        return jsonify({'success': False, 'error': f'File type .{ext} not allowed'}), 400
+
+    # Read file bytes before anything else (file stream can only be read once)
+    file_bytes = file.read()
+
+    # Upload directly to NAS - synchronous, user waits for confirmation
+    from app.nas import upload_app_file, build_file_path
+    nas_file_path = build_file_path(project, 'Reference Files', original_filename)
+    nas_folder = nas_file_path.rsplit('/',1)[0]
+    try:
+        upload_app_file(file_bytes, nas_folder, original_filename)
+    except RuntimeError as e:
+        current_app.logger.error(f'Reference file upload failed for project {project_id}: {e}')
+        return jsonify({'success': False, 'error': 'File could not be saved to storage. Please try again.'}), 502
+
+    # Save record - Filename column stores the NAS filename (Same as original)
+    project_file = ProjectFile(
+        project_id=project_id,
+        filename=original_filename,
+        original_filename=original_filename,
+        file_type=ext,
+        uploaded_by_id=actor.id
+    )
+
+    from app import db
+    from app.utils import log_activity, file_type_label
+    db.session.add(project_file)
+    db.session.commit()
+
+    log_activity('file_uploaded', f'{current_user.name} added {file_type_label(ext)} as a reference file to "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({
+        'success': True,
+        'file': {
+            'id': project_file.id,
+            'original_filename': original_filename,
+            'file_type': ext,
+            'uploaded_by': actor.name
+        }
+    })
+
+
+@project_overlay_bp.route('/projects/files/<int:file_id>/download')
+@login_required
+def download_project_file(file_id):
+    """Serve a reference file for download. All authenticated users can download. Download is served from the NAS"""
+    from app.models import ProjectFile
+    from app.nas import download_app_file, build_file_path
+    import io
+    from flask import send_file, current_app
+
+    project_file = ProjectFile.query.get_or_404(file_id)
+    project = Project.query.get(project_file.project_id)
+
+    nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Reference file download failed (file_id={file_id}): {e}')
+        return ('File could not be retrieved from storage. '
+                'Please try again or contact support.', 502)
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        as_attachment=True,
+        download_name=project_file.original_filename
+    )
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/reference-files/download-all')
+@login_required
+def download_all_reference_files(project_id):
+    """Zips every reference file for this project and returns a download link."""
+    from app.zip_utils import build_zip
+    from app.nas import download_app_file, build_file_path
+    from flask import url_for as _url_for
+
+    project = Project.query.get_or_404(project_id)
+    files = project.reference_files
+    if not files:
+        return jsonify({'success': False, 'error': 'No reference files to download.'}), 400
+
+    zip_files = []
+    seen_names = {}
+    for f in files:
+        nas_path = build_file_path(project, 'Reference Files', f.original_filename)
+        try:
+            content = download_app_file(nas_path)
+        except RuntimeError:
+            continue  # skip a file that failed to fetch rather than failing the whole zip
+
+        # Disambiguate if two files happen to share a filename — zipfile
+        # allows duplicate entry names, but most extractors handle that badly.
+        name = f.original_filename
+        if name in seen_names:
+            seen_names[name] += 1
+            base, dot, ext = name.rpartition('.')
+            name = f'{base} ({seen_names[name]}).{ext}' if dot else f'{name} ({seen_names[name]})'
+        else:
+            seen_names[name] = 0
+
+        zip_files.append((name, content))
+
+    if not zip_files:
+        return jsonify({'success': False, 'error': 'Could not fetch any files from the NAS.'}), 502
+
+    zip_id = build_zip(zip_files, f'{project.name} - Reference Files.zip')
+    return jsonify({'success': True, 'download_url': _url_for('api.zip_download', zip_id=zip_id)})
+
+
+@project_overlay_bp.route('/projects/files/<int:file_id>/preview')
+@login_required
+def preview_project_file(file_id):
+    """Serve a reference file for inline browser preview. Only file types a
+    browser can actually render natively are supported — PDFs and common
+    image formats. Anything else (.ai, .psd, .docx, etc.) returns a clear
+    'no preview available' response so the frontend can fall back to
+    download-only, rather than trying to force something that can't work."""
+    from app.models import ProjectFile
+    from app.nas import download_app_file, build_file_path
+    from flask import send_file, jsonify, current_app
+    import io
+
+    # Maps a stored file extension to the mimetype the browser needs to
+    # render it inline. Anything not in here just isn't previewable.
+    PREVIEWABLE_TYPES = {
+        'pdf':  'application/pdf',
+        'jpg':  'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png':  'image/png',
+        'gif':  'image/gif',
+        'webp': 'image/webp',
+    }
+
+    project_file = ProjectFile.query.get_or_404(file_id)
+
+    mimetype = PREVIEWABLE_TYPES.get((project_file.file_type or '').lower())
+    if not mimetype:
+        # Check the type BEFORE touching the NAS at all — no point paying
+        # for a network round-trip to fetch a .psd we already know we can't
+        # render.
+        return jsonify({
+            'success': False,
+            'error': 'No preview available for this file type — download instead.'
+        }), 415  # Unsupported Media Type
+
+    project = Project.query.get(project_file.project_id)
+    nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Reference file preview failed (file_id={file_id}): {e}')
+        return jsonify({
+            'success': False,
+            'error': 'File could not be retrieved from storage. Try downloading it instead.'
+        }), 502
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        mimetype=mimetype,
+        as_attachment=False,
+        download_name=project_file.original_filename
+    )
+
+
+@project_overlay_bp.route('/projects/files/<int:file_id>/delete', methods=['POST'])
+@login_required
+def delete_project_file(file_id):
+    """Delete a reference file. Admin/Management (any project), this project's CS lead/secondary CS, or this projects project owner"""
+    from app.models import ProjectFile, User
+    from flask import session
+
+    project_file = ProjectFile.query.get_or_404(file_id)
+    project = Project.query.get(project_file.project_id)
+
+    emulating_id = session.get('emulating_user_id')
+    actor = User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
+
+    can_manage_files = (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in {a.user_id for a in project.secondary_cs_assignments}
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
+    if not can_manage_files:
+        return jsonify({'success': False, 'error': 'You are lacking permissions to perform this action.'}), 403
+
+    # Delete from NAS
+    from app.nas import delete_app_file, build_file_path
+    nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
+    delete_app_file(nas_path)
+
+    from app import db
+    from app.utils import log_activity
+    log_activity('file_deleted', f'{actor.name} removed a reference file from "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    db.session.delete(project_file)
+    db.session.commit()
+
+    return jsonify({'success': True})

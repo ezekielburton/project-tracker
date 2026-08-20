@@ -78,7 +78,6 @@ def create_app():
     from app.routes import main
     from app.routes.auth import auth
     from app.routes.projects_brief import brief_bp
-    from app.routes.projects_detail import detail_bp
     from app.routes.projects_submission import submission_bp
     from app.routes.projects_approval import approval_bp
     from app.routes.notifications import notifications_bp
@@ -108,7 +107,6 @@ def create_app():
     app.register_blueprint(main)
     app.register_blueprint(auth)
     app.register_blueprint(brief_bp)
-    app.register_blueprint(detail_bp)
     app.register_blueprint(submission_bp)
     app.register_blueprint(approval_bp)
     app.register_blueprint(admin_bp)

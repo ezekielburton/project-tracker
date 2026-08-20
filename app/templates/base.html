@@ -24,7 +24,37 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}?v={{ config.STATIC_VERSION }}">
     {% block extra_css %}{% endblock %}
-    
+
+    {# Local-dev safety net (found 20 Aug 2026, Ezekiel): the Werkzeug
+       reloader restarting mid-session (a code edit while someone's browsing)
+       leaves a split-second window where the old process has died and the
+       new one isn't listening yet. If a stylesheet <link> request races
+       that window it fails outright, and browsers don't retry a failed
+       stylesheet load on their own - the page renders with fully correct
+       HTML but zero CSS applied, which reads as "the whole page broke" even
+       though it's just a transient timing miss. Doesn't meaningfully apply
+       in production (systemd-managed gunicorn restarts aren't tied to live
+       edits the way the dev reloader is), but costs nothing to have there.
+       Scoped to same-origin /static/ stylesheets only - a flaky CDN hiccup
+       on the Quill/Cropper <link>s above shouldn't trigger a full reload.
+       Time-windowed (not a one-shot flag) so it keeps protecting across
+       multiple restarts in one browsing session, but won't reload-loop if
+       a stylesheet is genuinely broken rather than just racing a restart. #}
+    <script>
+        (function () {
+            var FLAG = 'helix_css_reload_at';
+            var last = parseInt(sessionStorage.getItem(FLAG) || '0', 10);
+            document.querySelectorAll('link[rel="stylesheet"][href^="/static/"]').forEach(function (link) {
+                link.addEventListener('error', function () {
+                    var now = Date.now();
+                    if (now - last < 5000) return; // already tried a reload for this in the last 5s - avoid a loop
+                    sessionStorage.setItem(FLAG, String(now));
+                    location.reload();
+                });
+            });
+        })();
+    </script>
+
 </head>
 
 <script>
