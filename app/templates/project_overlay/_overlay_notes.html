@@ -66,8 +66,8 @@ separate read-only list of its own. Both share one route
 {% call card('Site Visits') %}
 {% if can_log_site_visit %}
 <div class="overlay-note-add">
-    <label class="overlay-field-label">Technical Designer</label>
-    {{ avatar_picker('overlay-visit-designer-picker', None, technical_designers, trigger_label='Select Designer') }}
+    <label class="overlay-field-label">Designer</label>
+    {{ avatar_picker('overlay-visit-designer-picker', None, designers, trigger_label='Select Designer') }}
 
     <div class="overlay-visit-compact-row">
         <div class="overlay-visit-compact-col overlay-visit-compact-col--picker">
@@ -75,6 +75,72 @@ separate read-only list of its own. Both share one route
             <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
                 id="overlay-visit-range-btn">Select Date and Time</button>
             <span class="overlay-visit-range-display" id="overlay-visit-range-display"></span>
+
+            <div class="visit-datetime-picker" id="visit-datetime-picker" hidden>
+                <div class="visit-datetime-picker-body">
+                    <div class="visit-datetime-picker-calendar">
+                        <div class="date-range-picker-nav">
+                            <button type="button" class="date-range-picker-arrow" id="visit-date-prev"
+                                aria-label="Previous month">&larr;</button>
+                            <div class="date-range-picker-months">
+                                <div class="date-range-picker-month">
+                                    <div class="date-range-picker-month-label" data-visit-month-label="0"></div>
+                                    <div class="date-range-picker-weekdays">
+                                        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                                    </div>
+                                    <div class="date-range-picker-days" data-visit-days="0"></div>
+                                </div>
+                                <div class="date-range-picker-month">
+                                    <div class="date-range-picker-month-label" data-visit-month-label="1"></div>
+                                    <div class="date-range-picker-weekdays">
+                                        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                                    </div>
+                                    <div class="date-range-picker-days" data-visit-days="1"></div>
+                                </div>
+                            </div>
+                            <button type="button" class="date-range-picker-arrow" id="visit-date-next"
+                                aria-label="Next month">&rarr;</button>
+                        </div>
+                    </div>
+
+                    <div class="visit-datetime-picker-times">
+                        <div class="visit-time-row">
+                            <span class="visit-time-row-label">Start</span>
+                            <div class="visit-time-input">
+                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-hour"
+                                    id="visit-start-hour" placeholder="09">
+                                <span class="visit-time-colon">:</span>
+                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-minute"
+                                    id="visit-start-minute" placeholder="00">
+                                <button type="button" class="visit-ampm-toggle" id="visit-start-ampm">AM</button>
+                            </div>
+                        </div>
+                        <div class="visit-time-row">
+                            <span class="visit-time-row-label">End</span>
+                            <div class="visit-time-input">
+                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-hour"
+                                    id="visit-end-hour" placeholder="10">
+                                <span class="visit-time-colon">:</span>
+                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-minute"
+                                    id="visit-end-minute" placeholder="00">
+                                <button type="button" class="visit-ampm-toggle" id="visit-end-ampm">AM</button>
+                            </div>
+                        </div>
+                        <div class="visit-time-clock-toggle" id="visit-clock-toggle">
+                            <button type="button" class="visit-clock-toggle-btn is-active" data-clock="12">12h</button>
+                            <button type="button" class="visit-clock-toggle-btn" data-clock="24">24h</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="date-range-picker-footer">
+                    <button type="button" class="date-range-picker-clear" id="visit-date-clear">Clear</button>
+                    <div class="date-range-picker-footer-actions">
+                        <button type="button" class="date-range-picker-cancel" id="visit-date-cancel">Cancel</button>
+                        <button type="button" class="date-range-picker-apply" id="visit-date-apply">Apply</button>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="overlay-visit-compact-col overlay-visit-compact-col--fields">
             <label class="overlay-field-label">Location (optional)</label>
@@ -89,6 +155,11 @@ separate read-only list of its own. Both share one route
 
     <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary overlay-visit-log-btn"
         id="overlay-visit-add-btn">Log Site Visit</button>
+</div>
+{% else %}
+<p class="overlay-field-empty">You don't have permission to log a site visit.</p>
+{% endif %}
+{% endcall %}
 </div>
 {% else %}
 <p class="overlay-field-empty">You don't have permission to log a site visit.</p>

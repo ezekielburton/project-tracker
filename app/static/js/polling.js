@@ -51,6 +51,12 @@
     // since there's no page-navigation event to hook it off of like init()
     // uses for everything else in this file.
     var _overlayStream = null;
+    // Projects list page table refresh (task #55, table-side) — separate
+    // from _overlayStream above: this one is tied to init()/teardown()'s
+    // normal page-navigation lifecycle (like _dashboardStream/_detailStream/
+    // _roleDashboardStream), not started/stopped by hand around an overlay
+    // open/close.
+    var _projectTableStream = null;
 
     // How often the fallback interval polls, when SSE isn't available or
     // has dropped — matches the cadence the old setInterval-only design used.
@@ -319,6 +325,10 @@
             _roleDashboardStream.close();
             _roleDashboardStream = null;
         }
+        if (_projectTableStream !== null) {
+            _projectTableStream.close();
+            _projectTableStream = null;
+        }
     }
 
     function stopOverlayStream() {
@@ -402,6 +412,22 @@
         if (document.querySelector('.dash-content-tabs')) {
             _roleDashboardStream = _connectLiveStream('/sse/dashboard', function () {
                 if (window.helixDashboardRefresh) window.helixDashboardRefresh();
+            }, _FALLBACK_INTERVAL_MS);
+        }
+
+        // Projects list page (task #55, table-side): identified by
+        // .project-list-page, unique to project_list/index.html. Reuses the
+        // same /sse/dashboard doorbell as both dashboards above — it's
+        // already a generic "some project changed" broadcast, not tied to
+        // any one page's markup, so a third page can listen to it too.
+        // The actual refresh (re-fetch just this view/filter/sort/group's
+        // rows and swap them into #project-table) is owned by
+        // project_list.js via window.helixRefreshProjectTable(), same
+        // separation-of-concerns as window.helixDashboardRefresh() above —
+        // this file only ever decides WHEN to refresh, never HOW.
+        if (document.querySelector('.project-list-page')) {
+            _projectTableStream = _connectLiveStream('/sse/dashboard', function () {
+                if (window.helixRefreshProjectTable) window.helixRefreshProjectTable();
             }, _FALLBACK_INTERVAL_MS);
         }
     }

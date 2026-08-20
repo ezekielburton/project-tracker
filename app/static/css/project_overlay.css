@@ -2829,9 +2829,138 @@ margin here, so an empty panel (just the History button) stays tiny. */
     gap: var(--space-5);
 }
 
-.air-datepicker-global-container {
-    z-index: 2000;
+/* Site visit Date & Time picker — replaces the old Air Datepicker
+   range+time widget with something styled like the projects table's own
+   Initial/Next Deadline picker (.date-range-picker in project_list.css,
+   already loaded on this page since the overlay is injected into
+   project_list/index.html). Reuses that file's .date-range-picker-nav/
+   -months/-month/-weekdays/-days/-day/-arrow/-footer/-clear/-cancel/
+   -apply classes as-is for the calendar and footer — only the two-column
+   body (calendar | time) and the typed H:MM inputs are new here. */
+.visit-datetime-picker {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    left: 0;
+    width: min(92vw, 760px);
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    padding: var(--space-4);
+    z-index: 30;
 }
+
+.visit-datetime-picker-body {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+}
+
+.visit-datetime-picker-calendar {
+    flex: 1;
+    min-width: 0;
+}
+
+.visit-datetime-picker-times {
+    flex: 0 0 160px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-left: var(--space-4);
+    border-left: 1px solid var(--border-subtle);
+}
+
+.visit-time-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.visit-time-row-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--grey-dark);
+    text-transform: uppercase;
+}
+
+.visit-time-input {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.visit-time-hour,
+.visit-time-minute {
+    width: 2.25rem;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) 0;
+}
+
+.visit-time-hour:focus,
+.visit-time-minute:focus {
+    outline: 2px solid var(--tangerine);
+    outline-offset: 1px;
+}
+
+.visit-time-colon {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--grey-dark);
+    user-select: none;
+    /* fixed separator, never itself editable */
+}
+
+.visit-ampm-toggle {
+    flex-shrink: 0;
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.visit-ampm-toggle:hover {
+    background: var(--surface-hover);
+}
+
+.visit-ampm-toggle.is-hidden {
+    display: none;
+}
+
+.visit-time-clock-toggle {
+    display: flex;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
+}
+
+.visit-clock-toggle-btn {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--grey-dark);
+    cursor: pointer;
+}
+
+.visit-clock-toggle-btn.is-active {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
+
 
 /* Designer picker restyled as "our usual blue action button" (18 Aug 2026)
    — scoped to THIS instance only, not avatar_picker generally. Every other
@@ -2908,6 +3037,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
    lands safely inside the picker column's own space. */
 .overlay-visit-compact-col--picker {
     flex: 0 0 300px;
+    position: relative;
 }
 
 .overlay-visit-compact-col--fields {

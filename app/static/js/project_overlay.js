@@ -74,7 +74,35 @@ window.ProjectOverlay = (function () {
                 btn.addEventListener('click', function () {
                     if (btn.classList.contains('active')) return;  // already here
                     enterSection(btn.dataset.mainTab, btn);
-                    if (onSectionSelected) onSectionSelected(btn.dataset.mainTab);
+
+                    // Any section with its own sub-tab strip (today: only
+                    // Design, via #project-overlay-subrail) should land on
+                    // its FIRST sub-category automatically, per Ezekiel (20
+                    // Aug 2026) — not on whatever subitem happened to be
+                    // left marked .active from a PREVIOUS visit. That was a
+                    // real bug: re-entering Design after visiting Notes &
+                    // Visits left "Details" still marked .active from
+                    // before, so clicking Details again hit the early-
+                    // return guard above (already .active = treated as a
+                    // no-op) and silently did nothing, while the content
+                    // pane kept showing stale Notes markup — the fix had to
+                    // be "clicking Deliverables instead" to get anything to
+                    // load at all. Clearing every subitem's .active state
+                    // and re-marking only the first one keeps the sidebar's
+                    // visible state and the content pane in sync every
+                    // time. Deliberately not Design-specific — this same
+                    // code path covers Finance/Production/Logistics for
+                    // free once they grow their own sub-tab strips.
+                    var defaultSubTabKey = null;
+                    if (subgroup && !subgroup.classList.contains('is-hidden')) {
+                        var subItems = subgroup.querySelectorAll('.project-overlay-sidebar-subitem');
+                        subItems.forEach(function (b, i) {
+                            b.classList.toggle('active', i === 0);
+                        });
+                        if (subItems.length) defaultSubTabKey = subItems[0].dataset.subTab;
+                    }
+
+                    if (onSectionSelected) onSectionSelected(btn.dataset.mainTab, defaultSubTabKey);
                 });
             });
 

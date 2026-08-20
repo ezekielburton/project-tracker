@@ -1,0 +1,39 @@
+{# app/templates/project_list/_table_rows.html
+   Drop-in replacement for #project-table's innerHTML (header row(s) plus
+   whatever rows/groups are currently in scope) — nothing else. Rendered by
+   project_list.py's table_rows() route, fetched by project_list.js's
+   refreshProjectTable() whenever the table page's SSE stream (see
+   polling.js's .project-list-page branch) gets a ping.
+
+   Deliberately mirrors index.html's own {% if groups %}...{% endif %} block
+   byte-for-byte (same macros, same structure) so a live-refreshed table is
+   indistinguishable from one that came from a real page load. #}
+{% from 'project_list/_row_macros.html' import project_row, table_header_row with context %}
+{% if groups %}
+{% for group in groups %}
+<div class="project-group">
+    <button type="button" class="project-group-header" aria-expanded="true">
+        <span class="project-group-caret">▾</span>
+        <span class="project-group-label">{{ group.label }}</span>
+        <span class="project-group-count">{{ group.rows|length }}</span>
+    </button>
+    <div class="project-group-table">
+        {% set ns = namespace(row_num=1) %}
+        {{ table_header_row(ns.row_num) }}
+        {% set ns.row_num = ns.row_num + 1 %}
+        {% for row in group.rows %}
+        {{ project_row(row, ns) }}
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% else %}
+{% set ns = namespace(row_num=1) %}
+{{ table_header_row(ns.row_num) }}
+{% set ns.row_num = ns.row_num + 1 %}
+{% for row in rows %}
+{{ project_row(row, ns) }}
+{% else %}
+<p class="project-list-empty">No projects to show.</p>
+{% endfor %}
+{% endif %}

@@ -96,8 +96,8 @@
                             </a>
 
                             {# Projects — internal nav link, JS intercepts and loads without refresh #}
-                            <a href="{{ url_for('main.projects') }}" class="sidebar-item sidebar-item--nav"
-                                data-link="projects" title="Projects">
+                            <a href="{{ url_for('project_list.index') }}" class="sidebar-item sidebar-item--nav" data-link="projects"
+                                title="Projects">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round">
@@ -1143,7 +1143,9 @@
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
     <script src="{{ url_for('static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>     
     {% endif %}
+    <!-- SPA:EXTRA_JS:START -->
     {% block extra_js %}{% endblock %}
+    <!-- SPA:EXTRA_JS:END -->
     <script src="{{ url_for('static', filename='js/sidebar.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}

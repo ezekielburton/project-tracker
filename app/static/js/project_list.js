@@ -5,7 +5,7 @@
 // consistent with the client-side performance principles locked at the
 // start of this build.
 
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
     // ---- Detail + Briefing overlay: open/close + URL state ----
     // Real click-to-open wiring (M3 Step 2) — replaces the old full-page
     // navigation to project_detail.detail with an overlay fetched and
@@ -334,10 +334,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         loadSubTabContent(projectId, subTabKey);
                     },
                     // in project_list.js, openProjectOverlay()'s onSectionSelected callback:
-                    function (sectionKey) {
+                    // defaultSubTabKey is project_overlay.js's freshly-picked
+                    // FIRST sub-category for whichever section was just
+                    // clicked (null for sections with no sub-tab strip,
+                    // e.g. Notes, or Finance/Production/Logistics today).
+                    // Actually loading it here — not just remembering it —
+                    // is the fix for the "click Design, click Details,
+                    // nothing happens" bug: previously this branch only
+                    // ever called saveLastView(), never loadSubTabContent(),
+                    // so the content pane kept showing whatever the
+                    // PREVIOUS section had rendered until some other click
+                    // happened to trigger a load.
+                    function (sectionKey, defaultSubTabKey) {
                         if (sectionKey === 'design') {
-                            const existing = getLastView(projectId);
-                            saveLastView(projectId, 'design', existing && existing.section === 'design' ? existing.subTab : null);
+                            const subTab = defaultSubTabKey || 'details';
+                            saveLastView(projectId, 'design', subTab);
+                            loadSubTabContent(projectId, subTab);
                         } else {
                             saveLastView(projectId, sectionKey, null);
                             if (sectionKey === 'notes') {
@@ -376,6 +388,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.helixPolling.startOverlayStream(projectId, function () {
                         if (activeOverlayEdit && activeOverlayEdit.isEditing()) return;
                         const lastView = getLastView(projectId);
+                        if (lastView && lastView.section === 'notes') {
+                            // Notes & Visits (M9) has real content behind it,
+                            // same as the Design sub-tabs below — not a
+                            // placeholder section, so it needs its own live
+                            // refresh instead of silently falling through to
+                            // the "nothing to do" branch placeholders use.
+                            loadNotesSection(projectId);
+                            return;
+                        }
                         const subTab = (lastView && lastView.section === 'design') ? (lastView.subTab || 'details') : null;
                         if (subTab) loadSubTabContent(projectId, subTab);
                     });
@@ -594,6 +615,66 @@ document.addEventListener('DOMContentLoaded', () => {
     const table = document.querySelector('.project-table');
 
     if (!table) return;
+
+    // ---- Live table refresh (task #55, table-side SSE) ----
+    // polling.js opens a stream to /sse/dashboard (the same generic "some
+    // project changed somewhere" doorbell the old and new dashboards
+    // already use) whenever .project-list-page is on screen, and calls
+    // this on every ping via window.helixRefreshProjectTable. Re-fetches
+    // just the rows for the CURRENT view/filter/sort/group (same query
+    // string the page itself is already showing) and swaps them straight
+    // into #project-table, so the table quietly stays live in the
+    // background — same principle as the overlay's own SSE refresh
+    // (startOverlayStream above), just scoped to the table instead of one
+    // project's detail.
+    //
+    // #project-overlay-mount is a SIBLING of .project-list-page's table
+    // region, not nested inside it, so replacing #project-table's content
+    // never touches an open overlay.
+    //
+    // Only #project-table's innerHTML is replaced — never the #project-table
+    // element itself — because project_list_layout.js's saved column
+    // widths/order live as CSS custom properties set directly on that
+    // element (see applyLayout()), and the row-click delegation just above
+    // this comment is bound to it too. Both survive a content-only swap for
+    // free. What does NOT survive it: the resize-handle and header-cell
+    // reorder listeners, which are bound directly to the header cells
+    // (not delegated) — bindColumnControls() has to re-run against the
+    // fresh cells afterwards, hence window.helixRebindProjectTableColumns.
+    function refreshProjectTable() {
+        // A resize or reorder drag holds direct references to the exact
+        // header-cell nodes being dragged and reads live measurements off
+        // them every animation frame — replacing them mid-drag would either
+        // freeze it or have it silently fail against now-detached nodes.
+        // Simplest safe fix: skip this one refresh. Nothing is lost — the
+        // next SSE ping picks up whatever changed once the user lets go.
+        if (document.body.classList.contains('is-resizing-column') ||
+            document.body.classList.contains('is-reordering-column')) {
+            return;
+        }
+
+        fetch('/projects-new/table-rows' + window.location.search)
+            .then((response) => (response.ok ? response.text() : null))
+            .then((html) => {
+                if (html === null) return;
+                // Re-check — a drag could have started while the fetch was
+                // in flight.
+                if (document.body.classList.contains('is-resizing-column') ||
+                    document.body.classList.contains('is-reordering-column')) {
+                    return;
+                }
+                table.innerHTML = html;
+                if (window.helixRebindProjectTableColumns) {
+                    window.helixRebindProjectTableColumns();
+                }
+            })
+            .catch(() => {
+                // Network blip — silently skip, same as every other poll/
+                // stream callback in this app. The next ping tries again.
+            });
+    }
+
+    window.helixRefreshProjectTable = refreshProjectTable;
 
     table.addEventListener('click', (e) => {
         const groupHeader = e.target.closest('.project-group-header');
@@ -1260,4 +1341,4 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
-});
+})();

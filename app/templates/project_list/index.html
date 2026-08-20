@@ -1,93 +1,9 @@
 {% extends "base.html" %}
 {% from '_shared_macros.html' import card, person_chip, tag, status_pill %}
-
-{# One project row (the link row itself, plus its expand-container sibling).
-`ns` is a Jinja namespace object (a mutable counter, not a plain {% set %}
-scalar) carrying the running --row-num across BOTH the flat "no grouping"
-loop and the grouped-boxes loop below — a plain {% set %} inside a macro
-or a nested {% for %} would re-scope on every iteration and lose the
-running count, which is exactly why this needs a namespace instead. #}
-{% macro project_row(row, ns) %}
-<a href="{{ url_for('project_detail.detail', project_id=row.id) }}" class="project-row project-row--link"
-    data-project-id="{{ row.id }}" style="--row-num: {{ ns.row_num }};">
-    <span class="project-col-expand">
-        <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
-            data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
-    </span>
-    <span class="project-col-name">{{ row.name }}</span>
-    <span class="project-col-client">{{ row.client or '—' }}</span>
-    <span class="project-col-cs">
-        {{ person_chip(row.cs_lead, 'CS Missing') }}
-    </span>
-    <span class="project-col-designers">
-        {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
-    </span>
-    <span class="project-col-team">
-        {% for t in row.design_teams %}{{ tag(t, t|lower) }}{% endfor %}{% if not row.design_teams %}—{% endif %}
-    </span>
-    <span
-        class="project-col-deadline{% if row.initial_deadline and row.initial_deadline < today %} project-deadline--past{% endif %}">
-        {{ row.initial_deadline.strftime('%d %b %Y') if row.initial_deadline else '—' }}
-    </span>
-    <span class="project-col-next-deadline">
-        {{ row.next_deadline.date.strftime('%d %b %Y') if row.next_deadline else '—' }}
-    </span>
-    <span class="project-col-urgency">
-        {% if row.urgency %}
-        <span class="project-urgency-wrap{% if row.urgency == 'overdue' %} project-urgency--overdue{% endif %}">
-            {{ tag(row.urgency|capitalize, row.urgency) }}
-        </span>
-        {% else %}
-        —
-        {% endif %}
-    </span>
-    <span class="project-col-next-deliverable">
-        {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
-    </span>
-    <span class="project-col-status">
-        {{ status_pill(row.blanket_status, row.status_pill_class) }}
-    </span>
-    <span class="project-col-summary">
-        {{ row.rollup or '—' }} </span>
-    <span class="project-col-job">{{ row.job_number or '—' }}</span>
-</a>
-<div class="project-expand-container" hidden style="grid-row: {{ ns.row_num + 1 }};"></div>
-{% set ns.row_num = ns.row_num + 2 %}
-{% endmacro %}
-
-{# The column-header row, in one place so it can be repeated — Group by
-renders this once per group (Monday-style separate mini-tables with
-their own repeating header), on top of the one always rendered at the
-very top of the page. Every repeat shares the exact same classes/
-data-col-key attributes as the original, so project_list_layout.js's
-resize/reorder logic (which queries by class/attribute across the
-whole table, not by a single fixed element) picks up every copy for
-free — dragging any one of them resizes/reorders that column
-everywhere at once, same as a single real table would. #}
-{% macro table_header_row(row_num) %}
-<div class="project-table-header project-row" style="--row-num: {{ row_num }};">
-    <span class="project-col-expand"></span>
-    <span class="project-col-name" data-col-key="name">Project Name<span
-            class="project-col-resize-handle"></span></span>
-    <span class="project-col-client" data-col-key="client">Client<span class="project-col-resize-handle"></span></span>
-    <span class="project-col-cs" data-col-key="cs">CS Lead<span class="project-col-resize-handle"></span></span>
-    <span class="project-col-designers" data-col-key="designers">Lead Designers<span
-            class="project-col-resize-handle"></span></span>
-    <span class="project-col-team" data-col-key="team">Team<span class="project-col-resize-handle"></span></span>
-    <span class="project-col-deadline" data-col-key="deadline">Initial Deadline<span
-            class="project-col-resize-handle"></span></span>
-    <span class="project-col-next-deadline" data-col-key="next-deadline">Next Deadline<span
-            class="project-col-resize-handle"></span></span>
-    <span class="project-col-urgency" data-col-key="urgency">Urgency<span
-            class="project-col-resize-handle"></span></span>
-    <span class="project-col-next-deliverable" data-col-key="next-deliverable">Next Deliverable<span
-            class="project-col-resize-handle"></span></span>
-    <span class="project-col-status" data-col-key="status">Status<span class="project-col-resize-handle"></span></span>
-    <span class="project-col-summary" data-col-key="summary">Summary<span
-            class="project-col-resize-handle"></span></span>
-    <span class="project-col-job" data-col-key="job">Job Number<span class="project-col-resize-handle"></span></span>
-</div>
-{% endmacro %}
+{# project_row() / table_header_row() moved to _row_macros.html (20 Aug 2026,
+task #55) — both this page and _table_rows.html (the SSE live-refresh
+partial, {% include %}'d further down) import them from there so a live
+refresh renders byte-identical row markup to a real page load. #}
 
 {% block title %}Projects — Vitamin-E{% endblock %}
 
@@ -394,46 +310,13 @@ everywhere at once, same as a single real table would. #}
         <div class="project-table-rounded-clip" id="project-table-scroll">
             <div class="project-table{% if groups %} project-table--grouped{% endif %}" id="project-table"
                 data-table-key="{{ table_key }}" data-save-layout-url="{{ url_for('project_list.save_layout') }}">
-                {% if groups %}
-                {# Group by renders as separate Monday-style cards: a tangerine
-                label bar (click it to collapse/expand) sitting on top of its
-                OWN rounded mini-table — its own repeated column header and
-                just that group's rows — rather than one shared header/grid
-                for the whole page. Each mini-table is its own independent
-                CSS Grid, but they all still line up column-for-column because
-                project_list_layout.js's saved widths/positions are plain CSS
-                custom properties set on the outer #project-table, which
-                cascade down into every group's grid the same way. Row
-                numbering (`ns`) restarts at 1 for each group, since each one
-                is now its own self-contained grid rather than sharing one
-                continuously-numbered grid with every other group. #}
-                {% for group in groups %}
-                <div class="project-group">
-                    <button type="button" class="project-group-header" aria-expanded="true">
-                        <span class="project-group-caret">▾</span>
-                        <span class="project-group-label">{{ group.label }}</span>
-                        <span class="project-group-count">{{ group.rows|length }}</span>
-                    </button>
-                    <div class="project-group-table">
-                        {% set ns = namespace(row_num=1) %}
-                        {{ table_header_row(ns.row_num) }}
-                        {% set ns.row_num = ns.row_num + 1 %}
-                        {% for row in group.rows %}
-                        {{ project_row(row, ns) }}
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-                {% else %}
-                {% set ns = namespace(row_num=1) %}
-                {{ table_header_row(ns.row_num) }}
-                {% set ns.row_num = ns.row_num + 1 %}
-                {% for row in rows %}
-                {{ project_row(row, ns) }}
-                {% else %}
-                <p class="project-list-empty">No projects to show.</p>
-                {% endfor %}
-                {% endif %}
+                {# Header row(s) + rows/groups live in their own partial (task
+                #55) so the SSE-triggered live refresh (project_list.js's
+                refreshProjectTable(), server side in table_rows() below)
+                can re-render exactly this and swap it into #project-table
+                without touching anything outside it — the {% include %}
+                here and that route render the literal same template. #}
+                {% include 'project_list/_table_rows.html' %}
             </div>
         </div>
         <div class="project-table-sticky-scrollbar" id="sticky-scrollbar">

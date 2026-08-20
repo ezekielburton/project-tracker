@@ -528,49 +528,25 @@ def _serialize_row(p):
         'urgency': _urgency_for(next_deadline, date.today()),
     }
 
-@project_list_bp.route('/')
-@login_required
-def index():
-    """ Three fixes presets. Set now as we build it out"""
-    user = _effective_user()
-    view = request.args.get('view', 'my')
-
-    # Fresh landing on a saved view (just clicked its tab, no filter params
-    # yet) - replay its saved filters as real query params via a redirect,
-    # so every existing filter/sort/group code path (all of which read from
-    # request.args) picks them up for free instead of needing its own
-    # separate "saved filter" code path. `len(request.args) <= 1` is the
-    # "fresh landing" check - only `view` itself is present so far.
-    if view.startswith('view-') and len(request.args) <= 1:
-        try:
-            view_id = int(view.split('-', 1)[1])
-        except ValueError:
-            view_id = None
-        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
-        if saved_view is not None and saved_view.filters:
-            params = dict(saved_view.filters)
-            params['view'] = view
-            return redirect(url_for('project_list.index', **params))
-
-    table_key = f'project_list:{view}'
-    layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key=table_key).first()
-    saved_layout = layout_row.layout if layout_row else None
-
-    deliverable_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:deliverable_table').first()
-    saved_deliverable_layout = deliverable_layout_row.layout if deliverable_layout_row else None
-    customer_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:customer_table').first()
-    saved_customer_layout = customer_layout_row.layout if customer_layout_row else None
-    
+def _compute_rows_and_groups(view, user):
+    """
+    The rows -> filter -> sort -> group pipeline, shared by index() and
+    table_rows() (added for task #55's SSE-triggered live table refresh —
+    see project_list.js's refreshProjectTable() and polling.js's
+    .project-list-page branch). Pulled out so the live-refresh endpoint can
+    never quietly drift out of sync with what a real page load computes —
+    same principle as _base_query_for_view/_rows_excluding already being
+    shared rather than re-derived per caller.
+    """
     query, order_by = _base_query_for_view(view, user)
 
     if query is None:
-        projects = []
+        rows = []
     else:
         query = _apply_sql_filters(query)
         projects = query.order_by(order_by).all()
-    
-    rows = [_serialize_row(p) for p in projects]
-    rows = _apply_row_filters(rows)
+        rows = [_serialize_row(p) for p in projects]
+        rows = _apply_row_filters(rows)
 
     # Sort is applied last, after every filter — it re-orders whatever
     # subset of rows is already showing, it never changes which rows show.
@@ -595,6 +571,82 @@ def index():
     else:
         group_field = ''
         groups = None
+
+    return rows, groups, sort_field, sort_dir, group_field
+
+
+@project_list_bp.route('/table-rows')
+@login_required
+def table_rows():
+    """
+    Stage 3 of task #55 (SSE live updates) — the Projects table's own
+    refresh endpoint. sse.py's /sse/dashboard is a generic "some project
+    changed somewhere" doorbell (same one the old and new dashboards
+    already listen to); on a ping, the client re-fetches this with its
+    current view/filter/sort/group query params still attached and swaps
+    the result straight into #project-table, leaving the rest of the page
+    (toolbar, filter panel, any open overlay) completely untouched. See
+    project_list.js's refreshProjectTable() and project_list_layout.js's
+    bindColumnControls() (re-run after the swap, since resize/reorder
+    listeners are bound directly to header cells, not delegated) for the
+    two pieces that make that swap safe without a full page reload.
+
+    Deliberately does NOT touch session['last_project_view'] the way
+    index() does — a background live-update ping should never change what
+    the user would land on next time they click the sidebar's Projects
+    link, only index() (a real navigation) should do that.
+    """
+    user = _effective_user()
+    view = request.args.get('view') or session.get('last_project_view', 'my')
+    rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(view, user)
+    return render_template('project_list/_table_rows.html', rows=rows, groups=groups, today=date.today())
+
+
+@project_list_bp.route('/')
+@login_required
+def index():
+    """ Three fixes presets. Set now as we build it out"""
+    user = _effective_user()
+    # Remember which tab the user was last on (per Ezekiel, 19 Aug 2026) —
+    # the sidebar's "Projects" link is a static href with no query string,
+    # so a plain visit here would otherwise always default to 'my' instead
+    # of wherever they left off. Session-scoped, not a DB column: meant to
+    # survive across navigations in one browsing session, not follow the
+    # user to a different device or across a logout.
+    view = request.args.get('view')
+    if view:
+        session['last_project_view'] = view
+    else:
+        view = session.get('last_project_view', 'my')
+
+    # Fresh landing on a saved view (just clicked its tab, no filter params
+    # yet) - replay its saved filters as real query params via a redirect,
+    # so every existing filter/sort/group code path (all of which read from
+    # request.args) picks them up for free instead of needing its own
+    # separate "saved filter" code path. `len(request.args) <= 1` is the
+    # "fresh landing" check - only `view` itself is present so far.
+    if view.startswith('view-') and len(request.args) <= 1:
+        try:
+            view_id = int(view.split('-', 1)[1])
+        except ValueError:
+            view_id = None
+        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
+        if saved_view is not None and saved_view.filters:
+            params = dict(saved_view.filters)
+            params['view'] = view
+            return redirect(url_for('project_list.index', **params))
+
+    table_key = f'project_list:{view}'
+
+    layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key=table_key).first()
+    saved_layout = layout_row.layout if layout_row else None
+
+    deliverable_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:deliverable_table').first()
+    saved_deliverable_layout = deliverable_layout_row.layout if deliverable_layout_row else None
+    customer_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:customer_table').first()
+    saved_customer_layout = customer_layout_row.layout if customer_layout_row else None
+    
+    rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(view, user)
 
     filter_counts = _build_filter_counts(view, user)
 

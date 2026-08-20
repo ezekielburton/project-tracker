@@ -86,6 +86,13 @@ _PROJECT_ID_GETTERS = {
     # ...)` on DecisionFlag), which does.
     'DecisionFlag':        lambda obj: obj.project_id,
     'DecisionFlagMessage': lambda obj: obj.flag.project_id,
+    # Added 19 Aug 2026 — M9 (Project Notes + Site Visits) shipped without
+    # entries here, so adding/deleting a note or a site visit fired zero
+    # NOTIFYs, same class of bug as the Secondary CS / DecisionFlag gaps
+    # documented above. Both have project_id directly, no relationship hop
+    # needed.
+    'ProjectNote': lambda obj: obj.project_id,
+    'SiteVisit':   lambda obj: obj.project_id,
 }
 
 

@@ -375,8 +375,6 @@ def create_app():
             response.status_code == 200):
           import re
           html = response.get_data(as_text=True)
-          # Send the page title as a header so JS can update document.title.
-          # Percent-encode it so non-latin-1 characters (e.g. em dash) don't crash the header.
           title_match = re.search(r'<title>(.*?)</title>', html, re.DOTALL)
           if title_match:
               from urllib.parse import quote
@@ -386,7 +384,23 @@ def create_app():
               html, re.DOTALL
           )
           if m:
-              response.set_data(m.group(1))
+              content = m.group(1)
+              # Page-specific scripts (each template's own {% block extra_js %})
+              # render AFTER </main> in the full page, so they were never part
+              # of the slice above — meaning sidebar.js's execScripts() had
+              # nothing to find, and a page whose JS lives in extra_js (rather
+              # than loading globally in base.html, like detail.js/polling.js
+              # do) got zero of its own JS on an SPA-navigated visit. Markers
+              # bound just that one block so this can never accidentally sweep
+              # up sidebar.js/polling.js/etc., which already load globally and
+              # must NOT be re-executed a second time (duplicate listeners).
+              extra_js_match = re.search(
+                  r'<!--\s*SPA:EXTRA_JS:START\s*-->(.*?)<!--\s*SPA:EXTRA_JS:END\s*-->',
+                  html, re.DOTALL
+              )
+              if extra_js_match:
+                  content += extra_js_match.group(1)
+              response.set_data(content)
         return response
 
 

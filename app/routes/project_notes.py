@@ -34,8 +34,9 @@ def _can_manage_notes(project, actor):
         or any(pd.user_id == actor.id for pd in project.assigned_designers)
     )
 
-def _is_technical_designer(user):
-    return user.role in ('designer', 'team_lead') and user.team == 'Technical'
+# becomes:
+def _is_designer(user):
+    return user.role in ('designer', 'team_lead')
 
 def _overlapping_site_visit(visit_user, start_at, end_at, exclude_id=None):
     from app.models import SiteVisit
@@ -57,8 +58,8 @@ def overlay_notes(project_id):
     actor = _get_actor()
     notes = ProjectNote.query.filter_by(project_id=project.id).all()
     site_visits = project.site_visits
-    technical_designers = User.query.filter(
-        User.role.in_(['designer', 'team_lead']), User.team == 'Technical'
+    designers = User.query.filter(
+        User.role.in_(['designer', 'team_lead'])
     ).order_by(User.name).all()
 
     # Merged, single-feed activity log (18 Aug 2026, per Ezekiel) — a logged
@@ -78,7 +79,7 @@ def overlay_notes(project_id):
         project=project, activity_items=activity_items,
         can_manage_notes=_can_manage_notes(project, actor),
         can_log_site_visit=_can_log_site_visit(actor),
-        technical_designers=technical_designers,
+        designers=designers,
         actor=actor,
     )
 
@@ -152,9 +153,9 @@ def create_site_visit(project_id):
     data = request.get_json(silent=True) or {}
 
     visit_user = User.query.get(int(data['user_id'])) if data.get('user_id') else None
-    if not visit_user or not _is_technical_designer(visit_user):
+    if not visit_user or not _is_designer(visit_user):
         return jsonify({'success': False, 'error_type': 'invalid_designer',
-                        'error': 'Please select a technical designer for this site visit.'}), 400
+                        'error': 'Please select a designer for this site visit.'}), 400
 
     try:
         start_at = _dt.fromisoformat(data.get('start_at'))

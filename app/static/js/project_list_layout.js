@@ -9,7 +9,7 @@
 // Resizing changes a position's width, and reording changes which key
 // points to which position.
 
-document.addEventListener('DOMContentLoaded', () => {
+(() => {
     const table = document.getElementById('project-table');
     // #project-table (the grid itself) is no longer the element that
     // scrolls — it's sized with `width: max-content` in project_list.css
@@ -139,10 +139,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 500);
     }
 
-    // ---- Resize ----
+    // ---- Resize + Reorder ----
+    // Both wrapped in one named function, rather than left as bare
+    // top-level code, so a table-content refresh (task #55 — the SSE live
+    // update swaps in fresh header/row markup via #project-table.innerHTML)
+    // can re-run just this part afterwards. Unlike the row-click handling
+    // in project_list.js (one delegated listener on #project-table itself,
+    // which survives an innerHTML swap of its children untouched), these
+    // two are bound directly to the header cells themselves — querying
+    // `table.querySelectorAll(...)` fresh each call, so calling this again
+    // after a refresh naturally targets only whatever's in the DOM right
+    // now. The OLD header cells (and their listeners) are simply garbage
+    // collected along with the DOM nodes being replaced — no manual
+    // teardown needed, and no risk of listeners piling up call over call.
+    // Exposed as window.helixRebindProjectTableColumns for project_list.js
+    // to call after that swap.
     const EDGE_ZONE = 40;    // px from the table's edge that triggers auto-extend
     const EXTEND_SPEED = 8;  // px per frame while pinned at an edge
 
+    function bindColumnControls() {
     table.querySelectorAll('.project-col-resize-handle').forEach((handle) => {
         handle.addEventListener('mousedown', (e) => {
             e.preventDefault();
@@ -270,6 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let hasMoved = false;
 
             cell.classList.add('is-dragging');
+            // Same purpose as resize's 'is-resizing-column' body class above —
+            // lets refreshProjectTable() (project_list.js, task #55) detect a
+            // drag in progress and skip that one live-update swap rather than
+            // yank the header cell out from under an active reorder.
+            document.body.classList.add('is-reordering-column');
 
             function onMouseMove(moveEvent) {
                 if (Math.abs(moveEvent.clientX - startX) > 4) hasMoved = true;
@@ -295,6 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
                 cell.classList.remove('is-dragging');
+                document.body.classList.remove('is-reordering-column');
                 if (hasMoved) scheduleSave();
             }
 
@@ -302,6 +323,12 @@ document.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('mouseup', onMouseUp);
         });
     });
+
+    syncStickyScrollbar();
+    } // end bindColumnControls()
+
+    bindColumnControls();
+    window.helixRebindProjectTableColumns = bindColumnControls;
 
     window.addEventListener('resize', syncStickyScrollbar);
 
@@ -444,4 +471,4 @@ document.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('mouseup', onMouseUp);
         });
     }
-});
+})();
