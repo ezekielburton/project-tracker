@@ -78,7 +78,6 @@ def create_app():
     from app.routes import main
     from app.routes.auth import auth
     from app.routes.projects_submission import submission_bp
-    from app.routes.projects_approval import approval_bp
     from app.routes.notifications import notifications_bp
     from app.models import Notification
     from flask_login import current_user
@@ -106,7 +105,6 @@ def create_app():
     app.register_blueprint(main)
     app.register_blueprint(auth)
     app.register_blueprint(submission_bp)
-    app.register_blueprint(approval_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(blog_bp)
     app.register_blueprint(feedback_bp)
