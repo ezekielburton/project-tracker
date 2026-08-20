@@ -109,6 +109,16 @@ def _pipeline_stage_for(raw_status):
         return ('Handed to Production', 'clover')
     if raw_status == 'briefed':
         return ('Briefed', 'sky')
+    # 'Submitted to Client' split out from the 'In Design' catch-all
+    # (M10, 20 Aug 2026, per Ezekiel) — the dashboard's Next Action work
+    # surfaced that collapsing these together hid a real distinction:
+    # 'In Design' means the design team still has work to do, while
+    # 'Submitted to Client' means design is done and CS is waiting on an
+    # external reply — different people, different next action. Uses the
+    # same label + colour Tier 1's derive_deliverable_status() already
+    # uses for this exact raw value, so the two tiers agree.
+    if raw_status == 'submitted_to_client':
+        return ('Submitted to Client', 'sage')
     return ('In Design', 'coral')
 
 
@@ -170,6 +180,16 @@ def derive_ccm_aggregate_status(project):
     # already handed to production also satisfies 'approved' in spirit.
     if channels and all(c.status in ('approved', 'handed_to_production') for c in channels):
         return ('Design Completed', 'clover')
+
+    # 'Submitted to Client' aggregate (M10, 20 Aug 2026, per Ezekiel) —
+    # mirrors Standard's same addition in _pipeline_stage_for() above.
+    # Only fires once EVERY channel has left active design (submitted,
+    # approved, or handed off) — if even one channel is still in_queue or
+    # revision_in_queue, design work is still genuinely happening
+    # somewhere on this project, so it correctly falls through to 'In
+    # Design' below instead of claiming everything's out for approval.
+    if channels and all(c.status in ('submitted_to_client', 'approved', 'handed_to_production') for c in channels):
+        return ('Submitted to Client', 'sage')
 
     started_manually = project.project_status != 'briefed'
     started_via_channel = any(c.status != 'in_queue' for c in channels) if channels else False

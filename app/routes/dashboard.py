@@ -5,7 +5,8 @@ from sqlalchemy import nullslast
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable, DecisionFlag, DeliverableAssignment
 from app.utils import get_actor
-from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer
+from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer, needs_client_approval
+from app.status_vocabulary import derive_project_status
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for() call for this blueprint's routes uses that, e.g.
@@ -802,6 +803,30 @@ def _customer_is_submitted_stage(pc):
     return all(d.status in _SUBMITTED_STAGE_STATUSES or d.status == 'approved' for d in deliverables)
 
 
+def _ccm_active_customers_submitted_stage(project):
+    """
+    C&CM equivalent of `project.project_status in _SUBMITTED_STAGE_STATUSES`
+    for _compute_priority_actions()'s Overdue suppression — added M10, 20
+    Aug 2026. project.project_status barely moves for a C&CM project (see
+    needs_client_approval()'s docstring in app/dashboard_logic.py), so it
+    can never correctly answer "has this work left the design team's
+    hands" the way it reliably does for Standard. Checks the SAME
+    customer population nearest_deadline() draws its candidate deadline
+    from (not cancelled, not yet approved) via the already-established
+    _customer_is_submitted_stage() per customer — if every customer that
+    could be driving the nearest deadline is submitted-stage or beyond,
+    so is whichever one actually is nearest. Returns False (don't
+    suppress) when there's no such customer at all — e.g. a Gulf-only
+    project, which nearest_deadline() already can't produce a deadline
+    for either, so this never actually gets consulted for those.
+    """
+    candidates = [
+        pc for pc in project.project_customers
+        if not pc.cancelled and pc.status != 'approved'
+    ]
+    return bool(candidates) and all(_customer_is_submitted_stage(pc) for pc in candidates)
+
+
 _DUBAI_TZ = timezone(timedelta(hours=4))
 
 
@@ -1019,15 +1044,22 @@ def _stat_project_rows(projects):
     list ("which projects make up this number"), not an actionable row
     like Due/Next Actions, so no cs_lead/designers/guidance fields here.
 
-    status_label uses the exact same `.replace('_', ' ').title()` pattern
-    api.py's own status_label already uses for this — same display
-    convention, not a new one invented for this card.
+    status_label used to be the raw `.replace('_', ' ').title()` pattern
+    api.py's own status_label uses — switched to derive_project_status()
+    (M10, 20 Aug 2026) so this card agrees with the Projects list page's
+    Status column instead of showing the internal project_status value
+    title-cased (e.g. a project genuinely 'In Design' was reading as
+    'In Progress' here while the Projects list correctly said 'In
+    Design' for the same project — same underlying data, two different
+    labels). Also now correct for C&CM, which derive_project_status()
+    resolves from channel state — the raw project_status value barely
+    moves for a C&CM project (see needs_client_approval()'s docstring).
     """
     rows = [{
         'project_id': p.id,
         'name': p.name,
         'deadline': (lambda d: d.isoformat() if d else None)(nearest_deadline(p)),
-        'status_label': (p.project_status or '').replace('_', ' ').title(),
+        'status_label': derive_project_status(p)[0],
     } for p in projects]
     # Nearest deadline first, no-deadline last — same convention every
     # other row list on this page sorts by (see _compute_at_risk_projects()
@@ -1044,12 +1076,17 @@ def _compute_your_active_projects(user):
 
 
 def _compute_pending_approval_projects(user):
-    """Body for the 'Pending Approval' stat card — same query
-    _compute_project_stats() counts for 'pending_approval'."""
-    return _stat_project_rows(
-        _scoped_projects(user, active_only=True)
-        .filter(Project.project_status == 'submitted_to_client').all()
-    )
+    """Body for the 'Pending Approval' stat card — was a flat
+    `project_status == 'submitted_to_client'` SQL filter; switched (M10,
+    20 Aug 2026) to needs_client_approval() filtered in Python, since
+    that flat filter only ever matched Standard briefs and silently
+    missed every C&CM project awaiting approval — see
+    needs_client_approval()'s docstring for why project_status itself
+    never reaches 'submitted_to_client' for C&CM."""
+    return _stat_project_rows([
+        p for p in _scoped_projects(user, active_only=True).all()
+        if needs_client_approval(p)
+    ])
 
 
 # _compute_total_active_projects() REMOVED 15 Jul 2026, later still, per
@@ -1105,15 +1142,22 @@ def _compute_project_stats(user):
     it's the one number on this row meant to answer "how many are there
     really", not "how many are mine".
 
-    "Pending Approval" = project_status == 'submitted_to_client' — the
-    exact status string used everywhere else in the app for this state
-    (see projects_approval.py's "Project must be in Submitted to Client
-    state to approve" check), not a new label invented for this card.
+    "Pending Approval" counts needs_client_approval() (app/dashboard_
+    logic.py) — was a flat project_status == 'submitted_to_client' filter
+    (the string projects_approval.py's old "Project must be in Submitted
+    to Client state to approve" check used, before that file was deleted
+    at M10 cutover) until 20 Aug 2026, when that filter was found to only
+    ever match Standard briefs — see needs_client_approval()'s docstring
+    for why a C&CM project's project_status never actually reaches
+    'submitted_to_client'. Counted in Python, not a query filter, since
+    the C&CM half of the check reaches across the channels/concept/kv
+    relationships rather than a single column.
     """
     your_active = _scoped_projects(user, active_only=True).count()
-    pending_approval = _scoped_projects(user, active_only=True).filter(
-        Project.project_status == 'submitted_to_client'
-    ).count()
+    pending_approval = sum(
+        1 for p in _scoped_projects(user, active_only=True).all()
+        if needs_client_approval(p)
+    )
     total_active = Project.query.filter(
         Project.project_status.notin_(['draft', 'approved', 'handed_to_production'])
     ).count()
@@ -1742,7 +1786,11 @@ def _compute_priority_actions(user):
         # that basis. has_no_cs_lead/has_missing_designer are unaffected
         # — those are staffing gaps, not deadline pressure, and stay
         # urgent regardless of submission stage.
-        is_overdue = bool(deadline) and deadline < today and p.project_status not in _SUBMITTED_STAGE_STATUSES
+        is_submitted_stage = (
+            _ccm_active_customers_submitted_stage(p) if p.brief_type == 'ccm'
+            else p.project_status in _SUBMITTED_STAGE_STATUSES
+        )
+        is_overdue = bool(deadline) and deadline < today and not is_submitted_stage
         has_no_cs_lead = not p.cs_lead_id
         is_urgent = is_overdue or has_no_cs_lead or has_missing_designer
 
@@ -2309,11 +2357,12 @@ def _compute_leadership_waiting_on_others(user):
       - 'assign'    — a requested design team has nobody assigned
                        (_missing_designer_teams()) — "Waiting for: Designer
                        assignment", Assign button.
-      - 'follow_up' — project_status == 'submitted_to_client' (the one
-                       status in the current get_next_action_owner()
-                       status_map whose guidance is literally "Follow up
-                       with client" — see dashboard_logic.py) — "Waiting
-                       for: Client confirmation", Follow up button.
+      - 'follow_up' — needs_client_approval(p) (app/dashboard_logic.py) —
+                       "Waiting for: Client confirmation", Follow up
+                       button. Was a flat project_status ==
+                       'submitted_to_client' check until M10 (20 Aug
+                       2026), which silently never matched a C&CM
+                       project — see needs_client_approval()'s docstring.
     Every other project (internal work in progress, nothing externally
     blocked) is simply not shown — this card is specifically about
     external/staffing blockers, not a general "what's everyone doing" feed
@@ -2333,7 +2382,7 @@ def _compute_leadership_waiting_on_others(user):
         if missing_teams:
             row_type = 'assign'
             waiting_for = 'Designer assignment'
-        elif p.project_status == 'submitted_to_client':
+        elif needs_client_approval(p):
             row_type = 'follow_up'
             waiting_for = 'Client confirmation'
         else:
@@ -2444,8 +2493,11 @@ def _compute_role_snapshot():
             my_actions = sum(1 for p in scoped if _is_owner(get_next_action_owner(p)['user'], u))
             if my_actions:
                 stat_key, stat_count = 'actions', my_actions
-            elif u.role == 'cs' and any(p.project_status == 'submitted_to_client' for p in scoped):
-                stat_key, stat_count = 'pending', sum(1 for p in scoped if p.project_status == 'submitted_to_client')
+            # needs_client_approval() not a flat project_status check
+            # (M10, 20 Aug 2026) — the flat check silently never matched a
+            # CS's C&CM projects; see its docstring in dashboard_logic.py.
+            elif u.role == 'cs' and any(needs_client_approval(p) for p in scoped):
+                stat_key, stat_count = 'pending', sum(1 for p in scoped if needs_client_approval(p))
             else:
                 waiting = sum(1 for p in scoped if not _is_owner(get_next_action_owner(p)['user'], u))
                 stat_key, stat_count = ('waiting', waiting) if waiting else ('clear', 0)
@@ -2990,9 +3042,14 @@ def _compute_designer_metrics(user):
     away just because this panel is reached via a different counter.
 
     'submitted' JUDGMENT CALL: project_status in ('submitted',
-    'internal_review', 'submitted_to_client') — "work has been handed off
+    'internal_review', 'submitted_to_client') OR needs_client_approval(p)
+    OR any deliverable at 'internal_review' — "work has been handed off
     and is awaiting someone else," the closest reading of "submitted
-    projects" this app's status vocabulary supports.
+    projects" this app's status vocabulary supports. The project_status
+    check alone (the original judgment call) only ever matches Standard
+    briefs — added the other two OR clauses at M10 (20 Aug 2026) since a
+    C&CM project's real submission state lives on its channels/deliverables
+    instead (see needs_client_approval()'s docstring, dashboard_logic.py).
     'revisions' JUDGMENT CALL: Project.revision_count > 0, regardless of
     whose turn it currently is (a project that's ever been through a
     revision cycle, not just ones currently awaiting a resubmit).
@@ -3012,7 +3069,11 @@ def _compute_designer_metrics(user):
     intro comment above).
     """
     assigned = _scoped_projects(user, active_only=True).all()
-    submitted = [p for p in assigned if p.project_status in ('submitted', 'internal_review', 'submitted_to_client')]
+    submitted = [p for p in assigned if (
+        p.project_status in ('submitted', 'internal_review', 'submitted_to_client')
+        or needs_client_approval(p)
+        or any(d.status == 'internal_review' for d in p.project_deliverables)
+    )]
     revisions = [p for p in assigned if (p.revision_count or 0) > 0]
     blocked_rows = _compute_designer_work_queue(user)['blocked']
 
