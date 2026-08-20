@@ -107,7 +107,7 @@
         {% if decisions %}
             {% for d in decisions %}
             <div class="dash-decision-row">
-                <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
+                <a class="dash-row" href="{{ url_for('project_list.index', project=d.project_id) }}">
                     <span class="dash-row-main">
                         <span class="dash-row-title">{{ d.project_name }}</span>
                         <span class="dash-row-sub">{{ d.note }}</span>

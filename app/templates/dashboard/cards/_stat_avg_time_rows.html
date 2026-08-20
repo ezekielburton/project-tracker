@@ -26,7 +26,7 @@
 {% for row in time_tracking_rows %}
 <div class="tt-project">
     <div class="tt-project-main">
-        <a class="tt-project-name" href="{{ url_for('project_detail.detail', project_id=row.id) }}?from=dashboard">{{ row.name }}</a>
+        <a class="tt-project-name" href="{{ url_for('project_list.index', project=row.id) }}">{{ row.name }}</a>
         <span class="tt-overall">
             <span class="tt-overall-value">{{ row.overall }}</span>
             <span class="tt-overall-label">HRS OVERALL</span>
