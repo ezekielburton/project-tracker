@@ -81,15 +81,14 @@
     // switch) and trusts it to call proceed() when it's actually safe to go.
     function guardUnsavedEdit(proceed) {
         if (activeOverlayEdit && activeOverlayEdit.isEditing() && activeOverlayEdit.hasUnsavedChanges()) {
-            if (window.showConfirm) {
-                window.showConfirm(
-                    'You have unsaved changes on Details. Discard them?',
-                    proceed,
-                    'Discard unsaved changes?'
-                );
-            } else if (window.confirm('You have unsaved changes on Details. Discard them?')) {
-                proceed();
-            }
+            // M10: showConfirm/#confirm-modal load on every page via
+            // base.html, so the native window.confirm() fallback this used
+            // to have was dead code — dropped.
+            window.showConfirm(
+                'You have unsaved changes on Details. Discard them?',
+                proceed,
+                'Discard unsaved changes?'
+            );
             return;
         }
         proceed();
@@ -253,8 +252,7 @@
                     if (resumeBtn) resumeBtn.classList.remove('is-hidden');
                     refreshDetailsIfActive();
                 }, (err) => alert(err || 'Could not put this project on hold.'));
-                if (window.showConfirm) window.showConfirm('Put this project on hold?', go);
-                else if (window.confirm('Put this project on hold?')) go();
+                window.showConfirm('Put this project on hold?', go); // M10: dropped dead native-confirm fallback
             });
         }
         if (resumeBtn) {
@@ -517,35 +515,36 @@
         modal.querySelectorAll('.overlay-create-draft-delete').forEach((btn) => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (!window.confirm('Delete this draft? This cannot be undone.')) return;
-                const draftId = btn.getAttribute('data-draft-id');
-                btn.disabled = true;
-                fetch(`/projects/${draftId}/draft`, { method: 'DELETE' })
-                    .then((res) => res.json())
-                    .then((result) => {
-                        if (!result.success) {
+                window.showConfirm('Delete this draft? This cannot be undone.', () => { // M10: was bare window.confirm()
+                    const draftId = btn.getAttribute('data-draft-id');
+                    btn.disabled = true;
+                    fetch(`/projects/${draftId}/draft`, { method: 'DELETE' })
+                        .then((res) => res.json())
+                        .then((result) => {
+                            if (!result.success) {
+                                btn.disabled = false;
+                                alert(result.error || 'Could not delete this draft.');
+                                return;
+                            }
+                            const row = modal.querySelector(`.overlay-create-draft-row[data-draft-id="${draftId}"]`);
+                            if (row) row.remove();
+                            if (!modal.querySelector('.overlay-create-draft-row')) {
+                                // Last one just got deleted — leave the picker
+                                // open (don't presume they want a new project
+                                // right now just because they cleaned up an old
+                                // one) with just Cancel / Start New left to
+                                // choose from.
+                                const list = modal.querySelector('.overlay-create-drafts-list');
+                                if (list) list.remove();
+                                const intro = modal.querySelector('.overlay-submit-summary-intro');
+                                if (intro) intro.textContent = 'No drafts left. Start a new project, or cancel below.';
+                            }
+                        })
+                        .catch(() => {
                             btn.disabled = false;
-                            alert(result.error || 'Could not delete this draft.');
-                            return;
-                        }
-                        const row = modal.querySelector(`.overlay-create-draft-row[data-draft-id="${draftId}"]`);
-                        if (row) row.remove();
-                        if (!modal.querySelector('.overlay-create-draft-row')) {
-                            // Last one just got deleted — leave the picker
-                            // open (don't presume they want a new project
-                            // right now just because they cleaned up an old
-                            // one) with just Cancel / Start New left to
-                            // choose from.
-                            const list = modal.querySelector('.overlay-create-drafts-list');
-                            if (list) list.remove();
-                            const intro = modal.querySelector('.overlay-submit-summary-intro');
-                            if (intro) intro.textContent = 'No drafts left. Start a new project, or cancel below.';
-                        }
-                    })
-                    .catch(() => {
-                        btn.disabled = false;
-                        alert('Could not delete this draft.');
-                    });
+                            alert('Could not delete this draft.');
+                        });
+                });
             });
         });
     }

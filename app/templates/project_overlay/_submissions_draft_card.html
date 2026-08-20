@@ -65,9 +65,9 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
             <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
             <div class="overlay-reference-file-actions">
                 <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
-                    data-preview-url="{{ url_for('submission.preview_submission_file', file_id=f.id) }}"
-                    data-download-url="{{ url_for('submission.download_submission_file', file_id=f.id) }}">Preview</button>
-                <a href="{{ url_for('submission.download_submission_file', file_id=f.id) }}"
+                    data-preview-url="{{ url_for('project_overlay.preview_submission_file', file_id=f.id) }}"
+                    data-download-url="{{ url_for('project_overlay.download_submission_file', file_id=f.id) }}">Preview</button>
+                <a href="{{ url_for('project_overlay.download_submission_file', file_id=f.id) }}"
                     class="overlay-file-action-btn">Download</a>
             </div>
         </div>
@@ -224,9 +224,9 @@ can_request_client_revision (a sent deck with no revision already pending). #}
                 <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
                 <div class="overlay-reference-file-actions">
                     <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
-                        data-preview-url="{{ url_for('submission.preview_submission_file', file_id=f.id) }}"
-                        data-download-url="{{ url_for('submission.download_submission_file', file_id=f.id) }}">Preview</button>
-                    <a href="{{ url_for('submission.download_submission_file', file_id=f.id) }}"
+                        data-preview-url="{{ url_for('project_overlay.preview_submission_file', file_id=f.id) }}"
+                        data-download-url="{{ url_for('project_overlay.download_submission_file', file_id=f.id) }}">Preview</button>
+                    <a href="{{ url_for('project_overlay.download_submission_file', file_id=f.id) }}"
                         class="overlay-file-action-btn">Download</a>
                     {% if can_manage_draft and not is_locked %}
                     <button type="button"
@@ -374,9 +374,9 @@ can_request_client_revision (a sent deck with no revision already pending). #}
                     <span class="overlay-reference-file-meta">{{ f.uploaded_by.name }}</span>
                     <div class="overlay-reference-file-actions">
                         <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
-                            data-preview-url="{{ url_for('submission.preview_submission_file', file_id=f.id) }}"
-                            data-download-url="{{ url_for('submission.download_submission_file', file_id=f.id) }}">Preview</button>
-                        <a href="{{ url_for('submission.download_submission_file', file_id=f.id) }}"
+                            data-preview-url="{{ url_for('project_overlay.preview_submission_file', file_id=f.id) }}"
+                            data-download-url="{{ url_for('project_overlay.download_submission_file', file_id=f.id) }}">Preview</button>
+                        <a href="{{ url_for('project_overlay.download_submission_file', file_id=f.id) }}"
                             class="overlay-file-action-btn">Download</a>
                     </div>
                 </div>
@@ -388,9 +388,9 @@ can_request_client_revision (a sent deck with no revision already pending). #}
                 <span class="overlay-reference-file-name">{{ h.submission.original_filename }}</span>
                 <div class="overlay-reference-file-actions">
                     <button type="button" class="overlay-file-action-btn overlay-draft-file-preview"
-                        data-preview-url="{{ url_for('submission.preview_submission', submission_id=h.submission.id) }}"
-                        data-download-url="{{ url_for('submission.download_submission', submission_id=h.submission.id) }}">Preview</button>
-                    <a href="{{ url_for('submission.download_submission', submission_id=h.submission.id) }}"
+                        data-preview-url="{{ url_for('project_overlay.preview_submission', submission_id=h.submission.id) }}"
+                        data-download-url="{{ url_for('project_overlay.download_submission', submission_id=h.submission.id) }}">Preview</button>
+                    <a href="{{ url_for('project_overlay.download_submission', submission_id=h.submission.id) }}"
                         class="overlay-file-action-btn">Download</a>
                 </div>
             </div>

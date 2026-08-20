@@ -71,8 +71,7 @@ window.ProjectFlags = (function () {
                             if (onChanged) onChanged();
                         }, function (err) { alert(err || 'Could not resolve this flag.'); });
                     };
-                    if (window.showConfirm) window.showConfirm('Mark this flag as resolved?', go);
-                    else if (window.confirm('Mark this flag as resolved?')) go();
+                    window.showConfirm('Mark this flag as resolved?', go); // M10: dropped dead native-confirm fallback
                 });
             });
         }

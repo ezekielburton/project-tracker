@@ -3533,3 +3533,246 @@ def generate_job_number():
     job_number = 'FOC-' + str(next_num).zfill(FOC_PAD)
 
     return jsonify({'job_number': job_number})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Submission file serving — download/preview (relocated for M10)
+#
+# WHAT: these four routes + their shared helper originally lived on
+# projects_submission.py (submission_bp), the designer-side upload/submit
+# blueprint that predates the overlay's own Submissions tab. Auditing that
+# file for M10 found the other 9 routes there (upload, submit-for-review,
+# flag, submit-to-client, add-file, download-all, send-revision,
+# start-revision, delete-file) have zero live callers anymore — all
+# superseded by project_overlay.py's own overlay/submissions/* routes built
+# in M3. These 4 are the exception: _submissions_draft_card.html still
+# hardcodes url_for('submission.download_submission'/'preview_submission'/
+# 'download_submission_file'/'preview_submission_file', ...) for its
+# preview/download buttons on both the active deck and submission history.
+#
+# HOW: moved verbatim — same URL paths, same function bodies, same
+# permission checks (all four were @login_required only, no role gate, in
+# the original) — onto project_overlay_bp instead of submission_bp. Because
+# the paths are unchanged, only the four url_for('submission.X', ...) call
+# sites in _submissions_draft_card.html needed repointing to
+# url_for('project_overlay.X', ...) — the blueprint/endpoint name changed,
+# the path didn't. download_submission_file() relied on ProjectSubmission
+# File/send_file being available at projects_submission.py's module top
+# level; that module-level import doesn't exist here, so it picked up an
+# explicit local import it didn't need before (caught before shipping, same
+# class of mistake as upload_project_file's missing User import at M10
+# task #4).
+#
+# WHY here, not a new file: Submissions is part of the same overlay these
+# other file-serving routes (Reference Files, task #4) already live next
+# to — one blueprint for the overlay's file-serving surface, not a fifth
+# blueprint for four routes.
+# ─────────────────────────────────────────────────────────────────────────
+
+@project_overlay_bp.route('/projects/submission/<int:submission_id>/download')
+@login_required
+def download_submission(submission_id):
+    from app.models import ProjectSubmission
+    from flask import send_file
+    import io, os
+
+    submission = ProjectSubmission.query.get_or_404(submission_id)
+    project    = Project.query.get(submission.project_id)
+
+    # All files live on NAS — upload route never saves to local disk
+    from app.nas import download_app_file, build_file_path
+    from flask import current_app
+    nas_path   = build_file_path(project, 'Submissions', submission.original_filename)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Submission download failed (id={submission_id}): {e}')
+        return ('File could not be retrieved from storage. '
+                'Please try again or contact support.', 502)
+    return send_file(
+        io.BytesIO(file_bytes),
+        as_attachment=True,
+        download_name=submission.original_filename
+    )
+
+
+def _load_submission_file_bytes(sub_file, project):
+    """Return the raw bytes of a submission file, reading from wherever it
+    physically lives right now.
+
+    A Draft-stage file sits in the local draft cache
+    (storage_location == 'cache' → bytes on disk at local_cache_path); every
+    other file is on the NAS under the project's Submissions/ folder
+    (storage_location == 'nas', the column default). Raises RuntimeError on
+    any failure — deliberately the SAME contract app.nas.download_app_file
+    already follows — so the two view functions below keep a single
+    `except RuntimeError` branch and never have to care where the file was.
+    """
+    if sub_file.storage_location == 'cache':
+        import os
+        path = sub_file.local_cache_path
+        if not path or not os.path.isfile(path):
+            raise RuntimeError(
+                f'cached submission file missing on disk '
+                f'(file_id={sub_file.id}, path={path!r})'
+            )
+        with open(path, 'rb') as fh:
+            return fh.read()
+
+    # storage_location == 'nas'. Two shapes live here:
+    #  1. Overlay flow (this rework): the submission's whole draft was zipped
+    #     into ONE archive at Submit to Client, so this file is a MEMBER of
+    #     that zip — download the zip, extract the one member. The member name
+    #     equals sub_file.original_filename (the submit-to-client route renames
+    #     the main deck to the canonical name before zipping, so every file's
+    #     member name == its original_filename — no per-file mapping needed).
+    #  2. Old flow: a post-submission "Attach Supporting File" upload, stored
+    #     as its own individual NAS object under its own name.
+    # The parent submission's stored deck name tells them apart: the overlay
+    # flow always stores a ".zip" there; the old flow stores the deck file
+    # itself (never a .zip).
+    from app.nas import download_app_file, build_file_path
+
+    submission = sub_file.submission
+    deck_name = submission.original_filename if submission else None
+    if deck_name and deck_name.lower().endswith('.zip'):
+        import io
+        import zipfile
+        zip_bytes = download_app_file(build_file_path(project, 'Submissions', deck_name))
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                return zf.read(sub_file.original_filename)
+        except KeyError:
+            raise RuntimeError(
+                f'member {sub_file.original_filename!r} not found in zip {deck_name!r} '
+                f'(file_id={sub_file.id})'
+            )
+        except zipfile.BadZipFile as e:
+            raise RuntimeError(f'corrupt submission zip {deck_name!r} (file_id={sub_file.id}): {e}')
+
+    # Old individual-object supplementary file — read it directly as before.
+    nas_path = build_file_path(project, 'Submissions', sub_file.original_filename)
+    return download_app_file(nas_path)
+
+
+@project_overlay_bp.route('/projects/submission/file/<int:file_id>/preview')
+@login_required
+def preview_submission_file(file_id):
+    """Serve a supplementary submission file for inline browser preview.
+    Same PDF/image-only restriction as reference file previews — these are
+    arbitrary supplementary uploads, not always something a browser can
+    render natively."""
+    from app.models import ProjectSubmissionFile
+    from flask import send_file, jsonify
+    import io
+
+    PREVIEWABLE_TYPES = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+    }
+
+    extra = ProjectSubmissionFile.query.get_or_404(file_id)
+
+    mimetype = PREVIEWABLE_TYPES.get((extra.file_type or '').lower())
+    if not mimetype:
+        return jsonify ({
+            'success': False,
+            'error': 'No preview available for this file type - download instead.'
+            }), 415
+    
+    project = Project.query.get(extra.project_id)
+    from flask import current_app
+    try:
+        file_bytes = _load_submission_file_bytes(extra, project)
+    except RuntimeError as e:
+        from flask import current_app
+        current_app.logger.error(f'Submission file preview failed (file_id={file_id}): {e}')
+        return jsonify({
+            'success': False,
+            'error': 'File could not be retrieved from storage. Try downloading it instead.'
+        }), 502
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        mimetype=mimetype,
+        as_attachment=False,
+        download_name=extra.original_filename
+    )
+
+
+@project_overlay_bp.route('/projects/submission/file/<int:file_id>/download')
+@login_required
+def download_submission_file(file_id):
+    """Download a supplementary file attached to a submission."""
+    # ProjectSubmissionFile/send_file relied on projects_submission.py's
+    # module-level imports before this relocation — added explicitly here
+    # since project_overlay.py doesn't import either at module level.
+    from app.models import ProjectSubmissionFile
+    from flask import send_file
+    import io
+
+    extra   = ProjectSubmissionFile.query.get_or_404(file_id)
+    project = Project.query.get(extra.project_id)
+
+    from flask import current_app
+    try:
+        file_bytes = _load_submission_file_bytes(extra, project)
+    except RuntimeError as e:
+        current_app.logger.error(f'Submission extra-file download failed (file_id={file_id}): {e}')
+        return ('File could not be retrieved from storage. '
+                'Please try again or contact support.', 502)
+    return send_file(
+        io.BytesIO(file_bytes),
+        as_attachment=True,
+        download_name=extra.original_filename
+    )
+
+
+@project_overlay_bp.route('/projects/submission/<int:submission_id>/preview')
+@login_required
+def preview_submission(submission_id):
+    """Serve a submission deck for inline browser preview instead of download.
+    PDFs are streamed as-is. PPTX decks get converted to PDF on the fly first,
+    since browsers can't render PowerPoint natively — this way the frontend
+    only ever has to deal with one format regardless of what was uploaded."""
+    from app.models import ProjectSubmission
+    from app.nas import download_app_file, build_file_path
+    from app.pptx_convert import convert_pptx_to_pdf
+    from flask import send_file, jsonify, current_app
+    import io, subprocess
+
+    submission = ProjectSubmission.query.get_or_404(submission_id)
+    project    = Project.query.get(submission.project_id)
+
+    nas_path   = build_file_path(project, 'Submissions', submission.original_filename)
+    try:
+        file_bytes = download_app_file(nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(f'Submission preview NAS fetch failed (id={submission_id}): {e}')
+        return jsonify({
+            'success': False,
+            'error': 'File could not be retrieved from storage. Try downloading instead.'
+        }), 502
+
+    if submission.file_type.lower() == 'pptx':
+        try:
+            file_bytes = convert_pptx_to_pdf(file_bytes)
+        except (subprocess.TimeoutExpired, RuntimeError) as e:
+            current_app.logger.warning(
+                f'Preview conversion failed for submission {submission_id}: {e}'
+            )
+            return jsonify({
+                'success': False,
+                'error': 'Preview unavailable for this file — try downloading instead.'
+            }), 502
+
+    return send_file(
+        io.BytesIO(file_bytes),
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=submission.original_filename.rsplit('.', 1)[0] + '.pdf'
+    )

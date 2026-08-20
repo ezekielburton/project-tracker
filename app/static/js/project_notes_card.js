@@ -87,14 +87,16 @@ window.ProjectNotesCard = (function () {
 
             contentEl.querySelectorAll('.overlay-note-delete').forEach((btn) => {
                 btn.addEventListener('click', () => {
-                    if (!window.confirm('Delete this note?')) return;
-                    const noteId = btn.getAttribute('data-note-id');
-                    postJson(`/projects/${projectId}/overlay/notes/${noteId}/delete`, {}).then(({ ok, data }) => {
-                        if (!ok || !data.success) {
-                            if (window.showToast) window.showToast(data.error || 'Could not delete this note.', 'error');
-                            return;
-                        }
-                        reload();
+                    // M10: was bare window.confirm() — unified on showConfirm()
+                    window.showConfirm('Delete this note?', () => {
+                        const noteId = btn.getAttribute('data-note-id');
+                        postJson(`/projects/${projectId}/overlay/notes/${noteId}/delete`, {}).then(({ ok, data }) => {
+                            if (!ok || !data.success) {
+                                if (window.showToast) window.showToast(data.error || 'Could not delete this note.', 'error');
+                                return;
+                            }
+                            reload();
+                        });
                     });
                 });
             });
@@ -472,14 +474,16 @@ window.ProjectNotesCard = (function () {
 
             contentEl.querySelectorAll('.overlay-visit-delete').forEach((btn) => {
                 btn.addEventListener('click', () => {
-                    if (!window.confirm('Delete this site visit?')) return;
-                    const visitId = btn.getAttribute('data-visit-id');
-                    postJson(`/projects/${projectId}/overlay/site-visits/${visitId}/delete`, {}).then(({ ok, data }) => {
-                        if (!ok || !data.success) {
-                            if (window.showToast) window.showToast(data.error || 'Could not delete this visit.', 'error');
-                            return;
-                        }
-                        reload();
+                    // M10: was bare window.confirm() — unified on showConfirm()
+                    window.showConfirm('Delete this site visit?', () => {
+                        const visitId = btn.getAttribute('data-visit-id');
+                        postJson(`/projects/${projectId}/overlay/site-visits/${visitId}/delete`, {}).then(({ ok, data }) => {
+                            if (!ok || !data.success) {
+                                if (window.showToast) window.showToast(data.error || 'Could not delete this visit.', 'error');
+                                return;
+                            }
+                            reload();
+                        });
                     });
                 });
             });

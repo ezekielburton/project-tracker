@@ -340,8 +340,10 @@ old separate create.html page. #}
     window.__savedDeliverableTableLayout = {{ saved_deliverable_layout | tojson }};
     window.__currentBaseView = {{ current_base_view | tojson }};
 </script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/air-datepicker@3/air-datepicker.css">
-<script src="https://cdn.jsdelivr.net/npm/air-datepicker@3/air-datepicker.js"></script>
+{# Air Datepicker CDN includes removed (M10, 20 Aug 2026) — the Site
+   visit Date & Time picker was already replaced by a custom-built widget
+   (.visit-datetime-picker in project_overlay.css); nothing on this page
+   has called into the AirDatepicker library since. #}
 <script src="{{ url_for('static', filename='js/project_list_layout.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/client_directory.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/project_overlay_create.js') }}?v={{ config.STATIC_VERSION }}"></script>

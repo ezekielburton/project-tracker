@@ -13,6 +13,15 @@ _NAS_SESSION = requests.Session()
 _NAS_SESSION.trust_env = False
 _NAS_SESSION.verify = False
 
+# Sticky NAS host, set the first time _get_session() successfully connects
+# (LAN IP or the NAS_WEB_URL fallback). (host, port) tuple, port is None
+# for the fallback path (NAS_WEB_URL is used as a full base URL, not a
+# bare host — no port to append). None until the first login. Kept for
+# the life of the process, not per-request — Ezekiel's call: a confirmed-
+# unreachable LAN IP shouldn't eat a fresh ~10s timeout on every single
+# NAS call for the rest of the run when running off the office network.
+_NAS_HOST_OVERRIDE = None
+
 from app.models import ProjectRegion, ProjectCustomer, Customer, Deliverable
 
 # Canonical display names for region slugs stored in the DB
@@ -27,32 +36,113 @@ REGION_DISPLAY = {
 
 # --------- Authentication ---------------
 
+def _nas_url(host, port, path):
+    """Build a NAS webapi URL from _get_session()'s (host, port). port is
+    None when running against NAS_WEB_URL (a QuickConnect base URL already
+    carries its own host + ID path segment, e.g. quickconnect.to/vitaminNAS26,
+    and never needs an explicit port appended) — port is only appended for
+    the LAN-IP case."""
+    if port:
+        return f'https://{host}:{port}{path}'
+    return f'https://{host}{path}'
+
 def _get_session():
-    """Login to Synology File Station API, return (sid, host, port)."""
-    host = current_app.config['NAS_HOST']
-    port = current_app.config['NAS_PORT']
-    resp = _NAS_SESSION.get(
-        f'https://{host}:{port}/webapi/auth.cgi',
-        params={
-            'api':     'SYNO.API.Auth',
-            'version': '3',
-            'method':  'login',
-            'account': current_app.config['NAS_USERNAME'],
-            'passwd':  current_app.config['NAS_PASSWORD'],
-            'session': 'FileStation',
-            'format':  'sid',
-        },
-        timeout=10
-    )
-    data = resp.json()
+    """Login to Synology File Station API, return (sid, host, port).
+
+    Tries NAS_HOST/NAS_PORT (the office LAN IP) first — server and NAS share
+    the office LAN in production, so this is the fast, expected path. Falls
+    back to NAS_WEB_URL (a Synology QuickConnect URL, e.g.
+    https://quickconnect.to/vitaminNAS26) only on a connection-level failure
+    (ConnectionError/Timeout) — the real case this covers is the app running
+    off the office network (a local dev instance elsewhere), where NAS_HOST
+    is simply unreachable. NAS_WEB_URL is used as a full base URL, no port
+    appended (Ezekiel's call, M10, 20 Aug 2026) — see _nas_url() above.
+
+    A bad login (wrong credentials) is NOT a connection failure — it still
+    raises the existing RuntimeError below without ever trying the fallback,
+    since QuickConnect wouldn't fix bad credentials either.
+
+    Whichever host succeeds is cached in _NAS_HOST_OVERRIDE for the rest of
+    this process's life (Ezekiel's call) — so a confirmed-unreachable LAN IP
+    doesn't eat a fresh ~10s timeout on every single NAS call for the rest
+    of the run.
+    """
+    global _NAS_HOST_OVERRIDE
+
+    if _NAS_HOST_OVERRIDE is not None:
+        host, port = _NAS_HOST_OVERRIDE
+    else:
+        host = current_app.config['NAS_HOST']
+        port = current_app.config['NAS_PORT']
+
+    def _attempt_login(host, port):
+        return _NAS_SESSION.get(
+            _nas_url(host, port, '/webapi/auth.cgi'),
+            params={
+                'api':     'SYNO.API.Auth',
+                'version': '3',
+                'method':  'login',
+                'account': current_app.config['NAS_USERNAME'],
+                'passwd':  current_app.config['NAS_PASSWORD'],
+                'session': 'FileStation',
+                'format':  'sid',
+            },
+            timeout=10
+        )
+
+    try:
+        resp = _attempt_login(host, port)
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as conn_exc:
+        # Fallback: NAS_TUNNEL_HOST is a Cloudflare Tunnel hostname (e.g.
+        # nas.vitamin-e.work) that reverse-proxies straight to the NAS —
+        # same tech as app.vitamin-e.work / ssh.vitamin-e.work, gated by a
+        # Cloudflare Access Service Token instead of the interactive login
+        # those use, since this is a script talking to it, not a browser.
+        # (QuickConnect was tried first, 20 Aug 2026 — it only serves a
+        # browser-oriented relay landing page to plain HTTP clients, not a
+        # usable webapi proxy, so it was replaced with this.)
+        tunnel_host = current_app.config.get('NAS_TUNNEL_HOST')
+        client_id = current_app.config.get('CF_ACCESS_CLIENT_ID')
+        client_secret = current_app.config.get('CF_ACCESS_CLIENT_SECRET')
+        # Nothing left to try if there's no fallback configured, or if
+        # (host, port) we just failed on WAS already the fallback (cached
+        # from _NAS_HOST_OVERRIDE) — don't loop between two dead ends.
+        if not tunnel_host or port is None:
+            raise RuntimeError(f'NAS unreachable (tried {host}): {conn_exc}')
+        if client_id and client_secret:
+            _NAS_SESSION.headers.update({
+                'CF-Access-Client-Id': client_id,
+                'CF-Access-Client-Secret': client_secret,
+            })
+        host = tunnel_host.split('://', 1)[-1].rstrip('/')
+        port = None
+        try:
+            resp = _attempt_login(host, port)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as conn_exc2:
+            raise RuntimeError(f'NAS unreachable on both LAN IP and NAS_TUNNEL_HOST ({host}): {conn_exc2}')
+
+    # A successful connection doesn't guarantee a JSON webapi response — a
+    # misconfigured Access policy or bad service token hands back an HTML
+    # error page instead of proxying to auth.cgi (see the CF-Access-Client-*
+    # env vars above). Surface what came back instead of letting a raw
+    # JSONDecodeError bubble up as an unhandled 500 (added 20 Aug 2026).
+    try:
+        data = resp.json()
+    except ValueError:
+        raise RuntimeError(
+            f'NAS login at {host!r} returned non-JSON (status {resp.status_code}): '
+            f'{resp.text[:300]!r}'
+        )
     if not data.get('success'):
         raise RuntimeError(f"NAS login failed: {data}")
+
+    _NAS_HOST_OVERRIDE = (host, port)
     return data['data']['sid'], host, port
 
 def _logout(host, port, sid):
     """Logout and invalidate the session token."""
     _NAS_SESSION.get(
-        f'https://{host}:{port}/webapi/auth.cgi',
+        _nas_url(host, port, '/webapi/auth.cgi'),
         params={
             'api':     'SYNO.API.Auth',
             'version': '1',
@@ -73,7 +163,7 @@ def _rename_folder(host, port, sid, folder_path, new_name):
     Logs a warning on failure — never raises.
     """
     resp = _NAS_SESSION.get(
-        f'https://{host}:{port}/webapi/entry.cgi',
+        _nas_url(host, port, '/webapi/entry.cgi'),
         params={
             'api':     'SYNO.FileStation.Rename',
             'version': '2',
@@ -96,7 +186,7 @@ def _create_folder(host, port, sid, parent_path, folder_name):
     Silently succeeds if folder already exists (force_parent=true).
     """
     _NAS_SESSION.get(
-        f'https://{host}:{port}/webapi/entry.cgi',
+        _nas_url(host, port, '/webapi/entry.cgi'),
         params={
             'api':          'SYNO.FileStation.CreateFolder',
             'version':      '2',
@@ -221,7 +311,7 @@ def upload_file_to_nas(project, subfolder, local_file_path, nas_filename):
 
             with open(local_file_path, 'rb') as f:
                 resp = _NAS_SESSION.post(
-                    f'https://{host}:{port}/webapi/entry.cgi',
+                    _nas_url(host, port, '/webapi/entry.cgi'),
                     params={
                         'api':     'SYNO.FileStation.Upload',
                         'version': '2',
@@ -334,7 +424,7 @@ def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
             sid, host, port = _get_session()
             try:
                 resp = _NAS_SESSION.post(
-                    f'https://{host}:{port}/webapi/entry.cgi',
+                    _nas_url(host, port, '/webapi/entry.cgi'),
                     params={
                         'api':     'SYNO.FileStation.Upload',
                         'version': '2',
@@ -385,7 +475,7 @@ def download_app_file(nas_file_path):
     sid, host, port = _get_session()
     try:
         resp = _NAS_SESSION.get(
-            f'https://{host}:{port}/webapi/entry.cgi',
+            _nas_url(host, port, '/webapi/entry.cgi'),
             params={
                 'api':     'SYNO.FileStation.Download',
                 'version': '2',
@@ -446,7 +536,7 @@ def delete_app_file(nas_file_path):
         sid, host, port = _get_session()
         try:
             _NAS_SESSION.get(
-                f'https://{host}:{port}/webapi/entry.cgi',
+                _nas_url(host, port, '/webapi/entry.cgi'),
                 params={
                     'api':     'SYNO.FileStation.Delete',
                     'version': '2',
