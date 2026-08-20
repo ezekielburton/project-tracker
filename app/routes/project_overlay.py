@@ -3491,3 +3491,45 @@ def delete_project_file(file_id):
     db.session.commit()
 
     return jsonify({'success': True})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Job number generation (relocated for M10)
+#
+# Originally lived on projects_brief.py's brief_bp (the old briefing page's
+# blueprint). Per that route's own comment: "only real consumer of this
+# route is project creation (grep confirms: legacy create.html and the new
+# create-mode overlay, project_overlay_create.js task #63)" — legacy
+# create.html is deleted at M10, project_overlay_create.js (line ~212,
+# fetch('/projects/generate-job-number')) is the one live caller left, so
+# it comes here rather than dying with the rest of brief_bp.
+#
+# NOTE (carried over, not fixed here): this still uses the non-atomic
+# MAX(job_number)+1 pattern — the architecture doc flags the atomic fix
+# (job_number_seq.nextval()) as separate M5 work, not yet wired up. Out of
+# scope for this M10 relocation; moved verbatim.
+# ─────────────────────────────────────────────────────────────────────────
+
+@project_overlay_bp.route('/projects/generate-job-number', methods=['GET'])
+@login_required
+@role_required('admin', 'cs', 'management', 'project_owner')
+def generate_job_number():
+    FOC_PAD = 3 # Digits: 3 -> FOC-001 ... FOC-999. Change to 4 for FOC-1000+
+
+    #Pull all existing FOC job numbers from the DB
+    existing = Project.query.with_entities(Project.job_number).filter(
+        Project.job_number.like('FOC-%')
+    ).all()
+
+    # Parse the numeric suffix from each, collect into a list
+    used_numbers = []
+    for (jn,) in existing:
+        suffix = jn[4:] # strip 'FOC- prefix
+        if suffix.isdigit():
+            used_numbers.append(int(suffix))
+
+    # Next number is max +1, or 1 if none exist yet
+    next_num = (max(used_numbers) + 1) if used_numbers else 1
+    job_number = 'FOC-' + str(next_num).zfill(FOC_PAD)
+
+    return jsonify({'job_number': job_number})

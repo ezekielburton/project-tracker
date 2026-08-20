@@ -77,7 +77,6 @@ def create_app():
     from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
     from app.routes import main
     from app.routes.auth import auth
-    from app.routes.projects_brief import brief_bp
     from app.routes.projects_submission import submission_bp
     from app.routes.projects_approval import approval_bp
     from app.routes.notifications import notifications_bp
@@ -106,7 +105,6 @@ def create_app():
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
     app.register_blueprint(auth)
-    app.register_blueprint(brief_bp)
     app.register_blueprint(submission_bp)
     app.register_blueprint(approval_bp)
     app.register_blueprint(admin_bp)

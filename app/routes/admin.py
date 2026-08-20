@@ -12,6 +12,7 @@ from app.models import (
     DesignType, DesignDirection, ActivityLog, NotificationSound
 )
 from app.utils import log_activity
+from app.decorators import role_required
 from app.notifications import broadcast_update_email
 from werkzeug.security import generate_password_hash
 
@@ -901,3 +902,45 @@ def broadcast_update():
         blog_url=blog_url
     )
     return jsonify({'success': True, 'sent': sent})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Deliverable-type reference image upload (relocated for M10)
+#
+# Originally lived on projects_brief.py's brief_bp. Per its own docstring,
+# this was "Shared by both the Admin Panel's Deliverable Types form and the
+# inline '+ Add custom deliverable' quick-add during C&CM briefing" — the
+# C&CM quick-add died with legacy create.html at M10, but the Admin Panel
+# usage (base.html's global pt-add-del-form, wired up in admin.js) is very
+# much still live, so it comes here rather than dying with the rest of
+# brief_bp. Kept the original role_required('cs', 'admin', 'management')
+# gate exactly as-is, not the stricter admin_required used elsewhere in
+# this file - narrowing it would be a real permission regression for CS
+# and management, who this route was always meant to allow.
+# ─────────────────────────────────────────────────────────────────────────
+
+@admin_bp.route('/projects/deliverable-types/upload-image', methods=['POST'])
+@login_required
+@role_required('cs', 'admin', 'management')
+def upload_deliverable_type_image():
+    """Upload a reference image for a DeliverableType. This route only
+    saves the file and hands back its filename; it doesn't touch the DB
+    itself, since it has no idea yet which DeliverableType (new or
+    existing) the image belongs to - the caller folds the returned
+    filename into its own create/update request."""
+    from flask import current_app
+
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
+        return jsonify({'success': False, 'error': 'File type not allowed'}), 400
+
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    upload_dir = os.path.join(current_app.root_path, 'static', 'deliverable-images')
+    os.makedirs(upload_dir, exist_ok=True)
+    file.save(os.path.join(upload_dir, filename))
+
+    return jsonify({'success': True, 'filename': filename})
