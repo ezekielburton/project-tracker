@@ -6,7 +6,8 @@
 from datetime import date
 from flask import Blueprint, render_template, session, request, jsonify, url_for, redirect
 from flask_login import login_required, current_user
-from sqlalchemy import nullslast
+from sqlalchemy import nullslast, func, case
+from sqlalchemy.orm import joinedload, selectinload
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog
 from app.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
@@ -26,30 +27,78 @@ def _effective_user():
         return UserModel.query.get(emulating_id)
     return current_user
 
-def _next_deadline_for(deliverable_query):
+def _eager_load(query):
     """
-    Given a Deliverable query already scoped to "this project" or "this
-    customer," finds the single most urgent deadline: the earliest
-    design_deadline among deliverables that aren't Approved yet.
+    Bulk-loads every relationship _serialize_row() touches — cs_lead,
+    client_brand, assigned_designers (and each one's designer), and
+    project_customers — in a fixed handful of extra queries, instead of
+    the ORM's default lazy loading, which fired one fresh SELECT per
+    project per relationship every time the row list was built. That N+1
+    pattern (times however many rows are in view, times the several
+    relationships touched, times the several passes _build_filter_counts
+    makes to compute each filter's own counts) was the projects page's
+    real performance problem — this collapses each pass down to a small,
+    fixed number of queries regardless of row count.
 
-    Approved deliverables are excluded because once a deliverable is
-    Approved there's nothing left to be "next" about — it's done.
-    Everything else (in_progress, submitted, revision states, etc.) still
-    has a live deadline that matters.
-
-    Deliberately does NOT filter out deadlines that have already passed —
-    an overdue deliverable is still the most urgent thing to show, not
-    something to quietly drop once its date is behind us.
+    Only applied where rows actually get serialized — not on the plain
+    .count() query, which never touches these columns.
     """
-    d = (
-        deliverable_query
-        .filter(Deliverable.status != 'approved')
-        .order_by(nullslast(Deliverable.design_deadline), nullslast(Deliverable.design_deadline_time))
-        .first()
+    return query.options(
+        joinedload(Project.cs_lead),
+        joinedload(Project.client_brand),
+        selectinload(Project.assigned_designers).joinedload(ProjectDesigner.designer),
+        selectinload(Project.project_customers),
     )
-    if d is None or d.design_deadline is None:
-        return None
-    return {'date': d.design_deadline, 'deliverable_name': d.name}
+
+
+def _bulk_deliverable_aggregates(project_ids):
+    """
+    Replaces the two queries _serialize_row() used to run PER PROJECT
+    (one for the rollup count, one for the next deadline) with one query
+    per aggregate covering every project currently being serialized —
+    same N+1 fix as _eager_load, for the two things that come from
+    Deliverable rather than a direct Project relationship.
+
+    Returns (rollups, next_deadlines), each a dict keyed by project_id.
+    """
+    if not project_ids:
+        return {}, {}
+
+    rollups = {}
+    rollup_rows = (
+        db.session.query(
+            Deliverable.project_id,
+            func.count(Deliverable.id),
+            func.sum(case((Deliverable.status == 'approved', 1), else_=0)),
+        )
+        .filter(Deliverable.project_id.in_(project_ids))
+        .group_by(Deliverable.project_id)
+        .all()
+    )
+    for project_id, total, approved in rollup_rows:
+        rollups[project_id] = f'{int(approved or 0)} of {total} Approved'
+
+    # Next deadline: the earliest design_deadline among each project's
+    # non-Approved deliverables (Approved ones are done, nothing left to be
+    # "next" about) — deliberately not filtering out already-passed dates,
+    # an overdue deliverable is still the most urgent thing to show, not
+    # something to quietly drop. One globally-sorted query instead of one
+    # per project: within any one project's own deliverables, nullslast
+    # ordering puts them in the same relative order a per-project query
+    # would, so the first row seen for a given project_id here is that
+    # project's earliest — no per-project re-sort needed.
+    next_deadlines = {}
+    for d in (
+        Deliverable.query
+        .filter(Deliverable.project_id.in_(project_ids), Deliverable.status != 'approved')
+        .order_by(nullslast(Deliverable.design_deadline), nullslast(Deliverable.design_deadline_time))
+        .all()
+    ):
+        if d.project_id in next_deadlines or d.design_deadline is None:
+            continue
+        next_deadlines[d.project_id] = {'date': d.design_deadline, 'deliverable_name': d.name}
+
+    return rollups, next_deadlines
 
 def _urgency_for(next_deadline, today):
     """
@@ -385,9 +434,10 @@ def _rows_excluding(view, user, exclude):
         return []
 
     query = _apply_sql_filters(query, exclude=exclude if exclude in sql_dims else None)
-    projects = query.order_by(order_by).all()
+    projects = _eager_load(query).order_by(order_by).all()
 
-    rows = [_serialize_row(p) for p in projects]
+    rollups, next_deadlines = _bulk_deliverable_aggregates([p.id for p in projects])
+    rows = [_serialize_row(p, rollups, next_deadlines) for p in projects]
     rows = _apply_row_filters(rows, exclude=exclude if exclude in row_dims else None)
     return rows
 
@@ -502,10 +552,10 @@ def _build_filter_counts(view, user):
         'design_type': design_type_counts,
     }
 
-def _serialize_row(p):
+def _serialize_row(p, rollups, next_deadlines):
     """Turns one Project into the flat dict the template needs. Pulled out of index(), now that there are three different queries feeding
-    in the same row shape.""" 
-    next_deadline = _next_deadline_for(Deliverable.query.filter_by(project_id=p.id))
+    in the same row shape. rollups/next_deadlines are the batch-computed dicts from _bulk_deliverable_aggregates() — a plain dict lookup here instead of each row running its own Deliverable query."""
+    next_deadline = next_deadlines.get(p.id)
     status_label, status_class = derive_project_status(p)
     return {
         'id': p.id,
@@ -522,7 +572,7 @@ def _serialize_row(p):
         'blanket_status': status_label,
         'status_pill_class': status_class,
         'brief_type': p.brief_type,
-        'rollup': _rollup_for(Deliverable.query.filter_by(project_id=p.id)),
+        'rollup': rollups.get(p.id),
         'customer_count': sum(1 for pc in p.project_customers if not pc.cancelled) if p.brief_type == 'ccm' else None,
         'next_deadline': next_deadline,
         'urgency': _urgency_for(next_deadline, date.today()),
@@ -544,8 +594,9 @@ def _compute_rows_and_groups(view, user):
         rows = []
     else:
         query = _apply_sql_filters(query)
-        projects = query.order_by(order_by).all()
-        rows = [_serialize_row(p) for p in projects]
+        projects = _eager_load(query).order_by(order_by).all()
+        rollups, next_deadlines = _bulk_deliverable_aggregates([p.id for p in projects])
+        rows = [_serialize_row(p, rollups, next_deadlines) for p in projects]
         rows = _apply_row_filters(rows)
 
     # Sort is applied last, after every filter — it re-orders whatever
@@ -797,17 +848,6 @@ def expand_customer(project_customer_id):
     pc = ProjectCustomer.query.get_or_404(project_customer_id)
     rows = [_serialize_deliverable_row(d) for d in pc.deliverables]
     return render_template('project_list/_deliverable_table.html', rows=rows, today=date.today(), brief_type='ccm')
-
-def _rollup_for(deliverable_query):
-    """ The computed rollup: Shows how many of this projects deliverables are Approved out of the total."""
-
-    deliverables = deliverable_query.all()
-    total = len(deliverables)
-    if total == 0:
-        return None
-    approved = sum(1 for d in deliverables if d.status == 'approved')
-    return f'{approved} of {total} Approved'
-
 
 # ---- Sorting ----
 # Every sort dimension a user can pick from the Sort popout, in display
