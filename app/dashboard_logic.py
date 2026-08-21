@@ -6,6 +6,100 @@ app/routes/dashboard.py (same convention as status_tracking.py / achievements.py
 so this logic is reusable anywhere a project's status needs summarizing.
 """
 
+# Project-level statuses where the underlying deliverables/channels can
+# genuinely be at different real-world stages from one another — 'briefed'
+# (nothing started), 'on_hold', 'approved', 'handed_to_production',
+# 'awaiting_posm_details' and friends are all effectively single-state
+# brackets where the project-level value IS the accurate answer already,
+# so _deliverable_level_action() below only ever runs inside this set.
+# C&CM projects only ever sit in 'in_progress' while their channels are
+# actually moving (see needs_client_approval()'s docstring for why
+# 'submitted_to_client'/'revision_in_queue' never appear at the project
+# level for C&CM) — 'in_progress' alone still covers them correctly here.
+_ACTIVE_PROJECT_STATUSES = {'in_progress', 'submitted_to_client', 'revision_in_queue'}
+
+# Ordered most- to least-urgent — the FIRST raw status from this list that
+# shows up anywhere among a project's deliverables (Standard) or channels
+# + concept/kv (C&CM) wins and becomes the project's one Next Action.
+# 'approved'/'handed_to_production' are deliberately excluded — those
+# contribute no signal here, same as they mean "nothing to do" at the
+# project level. Guidance text reuses status_map's own wording below so
+# the two never drift into saying the same thing two different ways.
+_DELIVERABLE_PRIORITY = [
+    ('internal_review',     ('cs', 'Check Internal Submission')),
+    ('internal_revision',   ('designer', 'Address internal revision and resubmit')),
+    ('revision_in_queue',   ('designer', 'Check client revision request and start work, or raise a flag')),
+    ('in_queue',            ('designer', 'Check brief and start work, or raise a flag')),
+    ('submitted_to_client', ('cs', 'Follow up with client')),
+]
+
+
+def _deliverable_level_action(project):
+    """
+    Added M10 (20 Aug 2026), per Ezekiel: the dashboard should keep
+    showing exactly ONE next action per project (never enumerate
+    deliverables in the UI — "that would make the dashboard pointless"),
+    but that one action was silently computed from project.project_status
+    alone, which doesn't move once a project is actively being worked —
+    two deliverables could be in revision and one already back with the
+    client and the project would still show whatever generic guidance
+    project_status.get() gave it. This picks the single most urgent real
+    signal from the actual deliverables/channels instead, still returning
+    exactly one (role, guidance) pair — the UI doesn't change, only which
+    one thing it's told to show.
+
+    Returns None (meaning: use the plain status_map lookup instead) when
+    project.project_status isn't in _ACTIVE_PROJECT_STATUSES, or when none
+    of _DELIVERABLE_PRIORITY's tracked raw statuses appear anywhere on the
+    project (e.g. every deliverable is already 'approved') — both cases
+    mean the existing project-level guidance is already the right answer.
+    """
+    if project.project_status not in _ACTIVE_PROJECT_STATUSES:
+        return None
+
+    if project.brief_type == 'ccm':
+        # Channels + Concept & KV — C&CM's real per-scope progress never
+        # lives on project.project_status itself (see needs_client_
+        # approval()'s docstring), so this is the ONLY place that signal
+        # comes from for a C&CM project's Next Action.
+        raw_statuses = {c.status for c in project.posm_channels}
+        if project.has_concept and project.concept_status:
+            raw_statuses.add(project.concept_status)
+        if project.has_kv and project.kv_status:
+            raw_statuses.add(project.kv_status)
+    else:
+        raw_statuses = {d.status for d in project.project_deliverables}
+
+    for raw_status, action in _DELIVERABLE_PRIORITY:
+        if raw_status in raw_statuses:
+            return action
+    return None
+
+
+def needs_client_approval(project):
+    """
+    Added M10 (20 Aug 2026) for the Pending Approval dashboard card,
+    replacing a flat `project.project_status == 'submitted_to_client'`
+    filter that only ever matched Standard briefs. Traced through
+    overlay_submissions_draft_submit_to_client (project_overlay.py): its
+    POSM-channel branch sets channel.status = 'submitted_to_client' and
+    its C&CM Concept & KV branch sets project.concept_status/kv_status —
+    record_project_status(project, 'submitted_to_client', ...) is only
+    ever called from the Standard-brief branch. So a C&CM project with
+    every channel sitting with the client never had project.project_status
+    move at all, and the old filter silently never surfaced it here.
+    """
+    if project.brief_type == 'ccm':
+        if any(c.status == 'submitted_to_client' for c in project.posm_channels):
+            return True
+        if project.has_concept and project.concept_status == 'submitted_to_client':
+            return True
+        if project.has_kv and project.kv_status == 'submitted_to_client':
+            return True
+        return False
+    return project.project_status == 'submitted_to_client'
+
+
 def get_next_action_owner(project):
     """
     Returns {'user': ..., 'role': <str>, 'guidance': <str>}.
@@ -75,13 +169,37 @@ def get_next_action_owner(project):
     # 'revision_in_progress' was silently falling through to the generic
     # ('cs', 'Check project status') default below — confirmed via grep that
     # none of those four ever matched a status_map key before this rebuild.
-    # 'in_queue' and 'submitted' are no longer SET anywhere in live code
-    # (grepped for record_project_status(..., 'in_queue'/'submitted') and
-    # found zero call sites — both are legacy values, still in the VALID
-    # whitelist for old data / a manual admin status-dropdown override), but
-    # kept here with their original guidance since they're still reachable
-    # that way and a project sitting in one shouldn't fall back to the
-    # generic default either.
+    # 'in_queue', 'submitted', 'internal_review', 'internal_revision',
+    # 'revision_in_progress', and 'awaiting_posm_details' are no longer SET
+    # anywhere in live code (confirmed again at M10 cutover, 20 Aug 2026 —
+    # grepped every record_project_status() call site across the current
+    # codebase and found none of these six as a literal argument). The
+    # "still reachable via a manual admin status-dropdown override" escape
+    # hatch this comment used to cite is itself gone now — that was
+    # projects_detail.py's set_project_status route, deleted whole with the
+    # old detail page (M10 task #4); there is no surviving way to write an
+    # arbitrary project_status value anymore, only the fixed literals each
+    # overlay route passes to record_project_status(). So these six are
+    # fully unreachable through any live code path today — kept anyway,
+    # defensively, purely for pre-M10 historical rows that may still sit at
+    # one of these raw values in the database, so a lookup against old data
+    # doesn't fall back to the generic default either.
+    #
+    # 'handed_to_production' added 18 Aug 2026 — a real status now (see
+    # project_preproduction.py's _cascade_handed_to_production), and was
+    # falling through to the generic default same as the four above before
+    # this rebuild did. Dashboard bug fix same day: this status is now
+    # also excluded from every "active work" list (_scoped_projects et al
+    # in dashboard.py) same as 'approved', so in practice this entry only
+    # matters for the active_only=False call sites (e.g. what-changed)
+    # that still look a handed-off project's guidance up.
+    #
+    # 'pre_production' added at M10 cutover (20 Aug 2026) to match
+    # app/status_vocabulary.py's own 'kept here for completeness in case
+    # that changes' branch for the same raw value — not written anywhere as
+    # a real project_status today (Standard projects surface Pre-Production
+    # per-deliverable instead, via _post_approval_deliverable_status), so
+    # this entry is forward-looking only, same reasoning as the six above.
     status_map = {
         'briefed':               ('designer', 'Start the project'),  # start-project route requires 'briefed' + a requested-team designer/team_lead (or admin) to fire it
         'in_queue':              ('designer', 'Check brief and start work, or raise a flag'),
@@ -93,10 +211,19 @@ def get_next_action_owner(project):
         'revision_in_queue':     ('designer', 'Check client revision request and start work, or raise a flag'),
         'revision_in_progress':  ('designer', 'Submit revised work'),
         'approved':              ('cs', 'Release files and start production if applicable'),
+        'handed_to_production':  ('cs', 'No action needed — handed to production'),
+        'pre_production':        ('cs', 'No action needed — in pre-production'),
         'on_hold':               ('cs', 'Unblock project'),
         'awaiting_posm_details': ('cs', 'Add POSM details when available'),
     }
-    role, guidance = status_map.get(project.project_status, ('cs', 'Check project status'))
+    # Deliverable/channel-level signal takes precedence when there is one —
+    # see _deliverable_level_action()'s docstring above. Falls back to the
+    # plain project-level lookup exactly as before when it returns None.
+    deliverable_action = _deliverable_level_action(project)
+    if deliverable_action is not None:
+        role, guidance = deliverable_action
+    else:
+        role, guidance = status_map.get(project.project_status, ('cs', 'Check project status'))
 
     if role == 'designer':
         # C&CM projects still in the concept/KV phase: point at whichever of

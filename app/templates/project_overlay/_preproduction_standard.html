@@ -1,0 +1,70 @@
+{% from '_shared_macros.html' import card %}
+
+<div class="overlay-details-grid">
+    {% set flagged_rows = rows | selectattr('is_flagged') | list %}
+    {% if flagged_rows %}
+    <div class="overlay-card-full">
+        <div class="overlay-preprod-attention-card">
+            <div class="overlay-preprod-attention-heading">
+                <span class="overlay-preprod-attention-label">⚑ Needs Attention</span>
+                <span class="overlay-preprod-attention-count">{{ flagged_rows | length }}</span>
+            </div>
+            <div class="overlay-preprod-list">
+                {% for row in flagged_rows %}
+                {% include "project_overlay/_preproduction_row.html" %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="overlay-card-full">
+        {% set header_extra %}
+        <span class="overlay-preprod-progress-count">{{ completed_count }} of {{ total_count }} handed to
+            production</span>
+        {% endset %}
+        {% call card('Pre-Production', header_extra) %}
+        <div class="overlay-card-controls-row">
+            <div class="overlay-submissions-view-toggle">
+                <button type="button" class="overlay-file-action-btn overlay-submissions-view-toggle-btn active"
+                    data-view="active">Active</button>
+                <button type="button" class="overlay-file-action-btn overlay-submissions-view-toggle-btn"
+                    data-view="history">History</button>
+            </div>
+        </div>
+
+        <div id="overlay-preprod-active-view">
+            <div class="overlay-preprod-list" id="overlay-preprod-active-list">
+                {% for row in rows | rejectattr('is_flagged') | rejectattr('is_complete') %}
+                {% include "project_overlay/_preproduction_row.html" %}
+                {% else %}
+                <p class="overlay-field-empty">Nothing in Pre-Production yet.</p>
+                {% endfor %}
+            </div>
+
+            {% set completed_rows = rows | selectattr('is_complete') | list %}
+            {% if completed_rows %}
+            <button type="button" class="overlay-preprod-completed-toggle" id="overlay-preprod-completed-toggle"
+                aria-expanded="false">
+                <span class="overlay-inc-chevron">▾</span> {{ completed_rows | length }} Handed to Production
+            </button>
+            <div class="overlay-preprod-list is-hidden" id="overlay-preprod-completed-list">
+                {% for row in completed_rows %}
+                {% include "project_overlay/_preproduction_row.html" %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="overlay-preprod-history-view is-hidden" id="overlay-preprod-history-view">
+            <select class="overlay-scope-select" id="overlay-preprod-history-filter">
+                <option value="all">All deliverables</option>
+                {% for row in rows %}
+                <option value="{{ row.deliverable.id }}">{{ row.deliverable.name }}</option>
+                {% endfor %}
+            </select>
+            <div class="overlay-preprod-history-list" id="overlay-preprod-history-list"></div>
+        </div>
+        {% endcall %}
+    </div>
+</div>

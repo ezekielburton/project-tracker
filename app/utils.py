@@ -51,24 +51,12 @@ def get_actor():
         return User.query.get(emulating_id)
     return current_user
 
-def work_hours_between(start, end):
-    """Elapsed hours between two datetimes, as a plain wall-clock duration
-    (added 13 Jul 2026, re-wiring the project time-tracking feature — see
-    record_project_status() in app/status_tracking.py, the only caller).
-
-    This is a straightforward (end - start) in hours, NOT a "business
-    hours" calculation that excludes nights/weekends/holidays — there was
-    no prior working implementation to match (the old, never-registered
-    app/routes/projects_old.py referenced a function of this name but
-    never defined it), and nothing in the codebase specifies working-hours
-    semantics, so the simplest honest interpretation was used. If Ezekiel
-    wants project timers to only count business hours, this is the one
-    place that needs to change.
-    """
-    return (end - start).total_seconds() / 3600.0
-
-
-def log_activity(action, description, user=None, entity_type=None, entity_name=None, entity_id=None):
+def log_activity(action, description, user=None, entity_type=None, entity_name=None, entity_id=None, changes=None):
+    """description stays the free-text sentence shown everywhere (dashboard's
+    What Changed card renders it as-is, deliberately no diff UI there — see
+    what_changed.html). changes is an optional structured old/new diff,
+    stored on the side for callers that want it later (e.g. an audit view);
+    must already be JSON-safe (dates as ISO strings, etc.) before calling."""
     from app import db
     from app.models import ActivityLog
     try:
@@ -78,7 +66,8 @@ def log_activity(action, description, user=None, entity_type=None, entity_name=N
             description=description,
             entity_type=entity_type,
             entity_name=entity_name,
-            entity_id=entity_id
+            entity_id=entity_id,
+            changes=changes
         )
         db.session.add(entry)
         db.session.commit()

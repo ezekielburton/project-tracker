@@ -228,7 +228,7 @@
    why the open ProjectStatusLog row could in theory be missing).
 #}
 {% macro dash_due_row(item, show_waiting=False) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
     {# "No deadline" fallback added 13 Jul 2026 when Next Actions started
        reusing this macro (see the big comment above) — Due's own rows
        never have a null deadline (only overdue items reach that card),
@@ -277,7 +277,7 @@
    where the markup that renders it lives.
 #}
 {% macro dash_at_risk_row(item) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
     <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
     <span class="dash-row-main">
         <span class="dash-row-title">{{ item.name }}</span>
@@ -309,7 +309,7 @@
 #}
 {% macro dash_leadership_risk_row(item) %}
 <div class="dash-decision-row dash-leadership-risk-row">
-    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
         <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
         <span class="dash-row-main">
             <span class="dash-row-title">
@@ -344,7 +344,7 @@
 
 {% macro dash_leadership_waiting_row(item) %}
 <div class="dash-decision-row dash-leadership-waiting-row">
-    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
         <span class="dash-row-main">
             <span class="dash-row-title">{{ item.project_name }}</span>
             <span class="dash-row-tags">
@@ -419,7 +419,7 @@
 #}
 {% macro dash_escalation_history_row(item, show_raised_by=False) %}
 <div class="dash-decision-row">
-    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
         <span class="dash-row-date">{{ item.resolved_display or '—' }}</span>
         <span class="dash-row-main">
             <span class="dash-row-title">{{ item.project_name }}</span>
@@ -509,7 +509,7 @@
    mini-stat badge is live-refreshed via SSE (see dashboard.js).
 #}
 {% macro dash_stat_project_row(item) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
     <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
     <span class="dash-row-main">
         <span class="dash-row-title">{{ item.name }}</span>
@@ -548,7 +548,7 @@
    elsewhere on this page.
 #}
 {% macro dash_priority_action_row(item) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
     <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
     <span class="dash-row-main">
         <span class="dash-row-title">{{ item.project_name }}</span>
@@ -586,7 +586,7 @@
    here, just "whoever's turn it is").
 #}
 {% macro dash_waiting_row(item) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
     <span class="dash-row-main">
         <span class="dash-row-title">{{ item.project_name }}</span>
         <span class="dash-row-tags">
@@ -626,7 +626,7 @@
    person owner list renders identically in both places.
 #}
 {% macro dash_due_today_row(item) %}
-<a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
     <span class="dash-row-date">{{ item.deadline }}</span>
     <span class="dash-row-main">
         <span class="dash-row-title">
@@ -685,7 +685,7 @@
 #}
 {% macro dash_designer_queue_row(item) %}
 <div class="dash-decision-row dash-designer-queue-row">
-    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
         <span class="dash-row-date{{ ' dash-row-date--warning' if not item.deadline else '' }}">{{ item.deadline if item.deadline else 'No Deadline' }}</span>
         <span class="dash-row-main">
             <span class="dash-row-title">

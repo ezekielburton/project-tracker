@@ -82,7 +82,7 @@
 
     {% if at_risk_projects %}
         {% for item in at_risk_projects %}
-        <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+        <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
             <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
             <span class="dash-row-main">
                 <span class="dash-row-title">{{ item.name }}</span>

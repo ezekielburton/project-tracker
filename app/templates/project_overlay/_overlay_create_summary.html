@@ -1,0 +1,100 @@
+{# app/templates/project_overlay/_overlay_create_summary.html
+   Confirm-and-create summary modal (task #64) — opens when "Add New
+   Project" is clicked in the create-mode overlay. Deliberately reuses the
+   SAME modal shell + CSS classes as the Submit to Client summary
+   (_submissions_submit_summary.html: modal-overlay/modal-box/modal-title/
+   modal-actions, overlay-submit-summary-section/-note/-error) per
+   Ezekiel's instruction to reuse that exact pattern rather than invent a
+   new one — only the content differs. Returned by
+   overlay_create_summary(); the confirm button posts to
+   overlay_create_finalize(). #}
+<div class="modal-overlay overlay-submit-summary-modal" id="overlay-create-summary-modal">
+    <div class="modal-box overlay-submit-summary-box">
+        <h3 class="modal-title">Create Project</h3>
+
+        <p class="overlay-submit-summary-intro">
+            Review before creating — you can still edit everything afterward.
+        </p>
+
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Project</span>
+            <ul class="overlay-submit-summary-deliverables">
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">{{ project.name }}</span>
+                    <span class="overlay-submit-summary-tag">{{ 'C&CM' if project.brief_type == 'ccm' else 'Standard'
+                        }}</span>
+                </li>
+            </ul>
+            <p class="overlay-submit-summary-note">
+                {{ project.job_number or 'No job number yet' }} · {{ project.client_brand.name if project.client_brand
+                else 'No client' }} · CS Lead: {{ project.cs_lead.name if project.cs_lead else '—' }}{% if
+                project.project_owner %} · Owner: {{ project.project_owner.name }}{% endif %}
+            </p>
+        </div>
+
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Dates</span>
+            <p class="overlay-submit-summary-note">
+                Initial: {{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else
+                '—' }} · Final: {{ project.execution_date.strftime('%d %b %Y') if project.execution_date else '—' }}
+            </p>
+        </div>
+
+        {% if project.brief_type == 'standard' %}
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Deliverables ({{ deliverables|length }})</span>
+            <ul class="overlay-submit-summary-deliverables">
+                {% for d in deliverables %}
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">{{ d.name }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% if project.is_production_only %}
+        <p class="overlay-submit-summary-note">
+            Production Only — every deliverable above will skip straight to Pre-Production.
+        </p>
+        {% endif %}
+        {% else %}
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Customers ({{ customers|length }})</span>
+            <ul class="overlay-submit-summary-deliverables">
+                {% for pc in customers %}
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">{{ pc.customer.name }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% if project.has_concept %}
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Concept & KV</span>
+            <p class="overlay-submit-summary-note">
+                Deadline: {{ project.concept_deadline.strftime('%d %b %Y') if project.concept_deadline else '—' }}
+            </p>
+        </div>
+        {% endif %}
+        {% if deliverables %}
+        <div class="overlay-submit-summary-section">
+            <span class="overlay-field-label">Deliverables ({{ deliverables|length }})</span>
+            <ul class="overlay-submit-summary-deliverables">
+                {% for d in deliverables %}
+                <li class="overlay-submit-summary-deliverable">
+                    <span class="overlay-submit-summary-deliverable-name">{{ d.name }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% endif %}
+
+        <span class="overlay-submit-summary-error hidden" id="overlay-create-summary-error"></span>
+
+        <div class="modal-actions">
+            <button type="button" class="overlay-file-action-btn" id="overlay-create-summary-cancel">Cancel</button>
+            <button type="button" class="overlay-file-action-btn overlay-submit-summary-confirm"
+                id="overlay-create-summary-confirm">Create Project</button>
+        </div>
+    </div>
+</div>

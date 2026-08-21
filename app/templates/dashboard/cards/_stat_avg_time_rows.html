@@ -1,0 +1,83 @@
+{#
+   app/templates/dashboard/cards/_stat_avg_time_rows.html
+   ───────────────────────────────────────────────────────
+   Extracted 18 Jul 2026 out of stat_avg_time.html's inline body (see that
+   file's own docstring for the full "why" — real perf fix: build_time_
+   tracking_rows() used to run unconditionally on EVERY admin/management
+   dashboard page load, a full company-wide N+1 scan, whether or not this
+   tab was ever opened).
+
+   This partial renders ONLY the row markup that goes INSIDE stat_avg_
+   time.html's `<div id="dash-time-tracking-list">` container — NOT that
+   container itself, which stays in stat_avg_time.html as a static,
+   always-present injection target (holding a "Loading…" placeholder until
+   this partial's rendered HTML is fetched and swapped in). Two consumers:
+   `GET /dashboard/api/time-tracking-rows` (dashboard.py — the lazy-load
+   endpoint dashboard.js fetches on first tab-open) renders this directly
+   and returns it as an HTML fragment.
+
+   Markup is byte-for-byte identical to what stat_avg_time.html used to
+   render inline, and still matches time_tracking.html's own .tt-* classes
+   exactly (time_tracking.css is loaded globally via base.html) — same
+   "the two views must never look inconsistent with each other" rule as
+   before, unaffected by where the rendering happens now.
+#}
+{% if time_tracking_rows %}
+{% for row in time_tracking_rows %}
+<div class="tt-project">
+    <div class="tt-project-main">
+        <a class="tt-project-name" href="{{ url_for('project_list.index', project=row.id) }}">{{ row.name }}</a>
+        <span class="tt-overall">
+            <span class="tt-overall-value">{{ row.overall }}</span>
+            <span class="tt-overall-label">HRS OVERALL</span>
+        </span>
+    </div>
+
+    {% if row.by_status %}
+    <div class="tt-status-chips">
+        {% for status, hours in row.by_status.items() %}
+        <span class="tt-status-chip">
+            <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
+            <span class="tt-status-chip-value">{{ hours }}h</span>
+        </span>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="tt-empty">No status history yet.</p>
+    {% endif %}
+
+    {% if row.deliverables %}
+    <details class="tt-deliverables">
+        <summary>{{ row.deliverables | length }} deliverable{{ 's' if row.deliverables | length != 1 }}</summary>
+        <div class="tt-deliverable-list">
+            {% for d in row.deliverables %}
+            <div class="tt-deliverable">
+                <div class="tt-deliverable-main">
+                    <span class="tt-deliverable-name">{{ d.name }}</span>
+                    <span class="tt-overall tt-overall--small">
+                        <span class="tt-overall-value">{{ d.overall }}</span>
+                        <span class="tt-overall-label">HRS OVERALL</span>
+                    </span>
+                </div>
+                {% if d.by_status %}
+                <div class="tt-status-chips">
+                    {% for status, hours in d.by_status.items() %}
+                    <span class="tt-status-chip">
+                        <span class="tt-status-chip-label">{{ status | replace('_', ' ') | title }}</span>
+                        <span class="tt-status-chip-value">{{ hours }}h</span>
+                    </span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="tt-empty">No status history yet.</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p class="tt-empty">No projects to show.</p>
+{% endif %}

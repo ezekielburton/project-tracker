@@ -280,7 +280,7 @@
                             <div class="dash-card-body-inner">
                                 {% for item in my_escalated_projects %}
                                 <div class="dash-decision-row">
-                                    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=item.project_id) }}?from=dashboard">
+                                    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
                                         <span class="dash-row-main">
                                             <span class="dash-row-title">{{ item.project_name }}</span>
                                             <span class="dash-row-tags">
@@ -375,7 +375,7 @@
                 <div class="dash-what-changed-scroll">
                     {% if what_changed %}
                         {% for entry in what_changed %}
-                        <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=entry.project_id) }}?from=dashboard">
+                        <a class="dash-row" href="{{ url_for('project_list.index', project=entry.project_id) }}">
                             <span class="dash-row-date">{{ entry.timestamp | dubai_time }}</span>
                             <span class="dash-row-main">
                                 <span class="dash-row-title dash-row-title--light">{{ entry.description }}</span>

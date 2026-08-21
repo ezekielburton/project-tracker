@@ -77,10 +77,6 @@ def create_app():
     from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
     from app.routes import main
     from app.routes.auth import auth
-    from app.routes.projects_brief import brief_bp
-    from app.routes.projects_detail import detail_bp
-    from app.routes.projects_submission import submission_bp
-    from app.routes.projects_approval import approval_bp
     from app.routes.notifications import notifications_bp
     from app.models import Notification
     from flask_login import current_user
@@ -98,14 +94,15 @@ def create_app():
     from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
     from app.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
     from app.routes.projects_transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
+    from app.routes.project_list import project_list_bp # Projects page list
+    from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
+    from app.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
+    from app.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
+
 
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
     app.register_blueprint(auth)
-    app.register_blueprint(brief_bp)
-    app.register_blueprint(detail_bp)
-    app.register_blueprint(submission_bp)
-    app.register_blueprint(approval_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(blog_bp)
     app.register_blueprint(feedback_bp)
@@ -120,6 +117,10 @@ def create_app():
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(time_tracking_bp)
     app.register_blueprint(transfer_bp)
+    app.register_blueprint(project_list_bp)
+    app.register_blueprint(project_overlay_bp)
+    app.register_blueprint(project_preproduction_bp)
+    app.register_blueprint(project_notes_bp)
 
     @app.context_processor
     @app.context_processor
@@ -266,6 +267,33 @@ def create_app():
 
     app.jinja_env.globals['nas_deliverable_url'] = _nas_deliverable_url
 
+    def _nas_project_url(project):
+        """Returns the DSM 7 File Station deep-link URL for a project's root
+        folder, or None if NAS_WEB_URL is not configured. Same launchParam
+        double-encoding as _nas_deliverable_url()/get_nas_link() — kept as
+        its own function rather than calling _nas_deliverable_url with no
+        deliverable, since the two produce genuinely different paths (this
+        one has no 'Design Files/...' suffix at all).
+        """
+        from urllib.parse import quote
+
+        base = (app.config.get('NAS_WEB_URL') or
+                f"https://{app.config.get('NAS_HOST', '')}:{app.config.get('NAS_PORT', '5001')}")
+
+        root      = app.config.get('NAS_PROJECT_ROOT', '/Projects')
+        year      = project.created_at.year
+        client    = project.client_brand.name if project.client_brand else 'Unknown Client'
+        proj_name = project.name
+        folder_path = f'{root}/{year}/{client}/{proj_name}'
+
+        path_encoded = quote(folder_path, safe='/')
+        launch_param = quote(f'opendir={path_encoded}', safe='/')
+        return (f'{base.rstrip("/")}/index.cgi'
+                f'?launchApp=SYNO.SDS.App.FileStation3.Instance'
+                f'&launchParam={launch_param}')
+
+    app.jinja_env.globals['nas_project_url'] = _nas_project_url
+
     @app.context_processor
     def inject_effective_user():
        from flask import session
@@ -339,8 +367,6 @@ def create_app():
             response.status_code == 200):
           import re
           html = response.get_data(as_text=True)
-          # Send the page title as a header so JS can update document.title.
-          # Percent-encode it so non-latin-1 characters (e.g. em dash) don't crash the header.
           title_match = re.search(r'<title>(.*?)</title>', html, re.DOTALL)
           if title_match:
               from urllib.parse import quote
@@ -350,7 +376,23 @@ def create_app():
               html, re.DOTALL
           )
           if m:
-              response.set_data(m.group(1))
+              content = m.group(1)
+              # Page-specific scripts (each template's own {% block extra_js %})
+              # render AFTER </main> in the full page, so they were never part
+              # of the slice above — meaning sidebar.js's execScripts() had
+              # nothing to find, and a page whose JS lives in extra_js (rather
+              # than loading globally in base.html, like detail.js/polling.js
+              # do) got zero of its own JS on an SPA-navigated visit. Markers
+              # bound just that one block so this can never accidentally sweep
+              # up sidebar.js/polling.js/etc., which already load globally and
+              # must NOT be re-executed a second time (duplicate listeners).
+              extra_js_match = re.search(
+                  r'<!--\s*SPA:EXTRA_JS:START\s*-->(.*?)<!--\s*SPA:EXTRA_JS:END\s*-->',
+                  html, re.DOTALL
+              )
+              if extra_js_match:
+                  content += extra_js_match.group(1)
+              response.set_data(content)
         return response
 
 

@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import card, person_chip, tag, status_pill %}
+{# project_row() / table_header_row() moved to _row_macros.html (20 Aug 2026,
+task #55) — both this page and _table_rows.html (the SSE live-refresh
+partial, {% include %}'d further down) import them from there so a live
+refresh renders byte-identical row markup to a real page load. #}
+
+{% block title %}Projects — Vitamin-E{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/shared.css') }}?v={{ config.STATIC_VERSION }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project_list.css') }}?v={{ config.STATIC_VERSION }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
+{% endblock %}
+
+{% block content %}
+<div class="project-list-page">
+    <h1 class="project-list-heading">Projects</h1>
+
+    <div class="project-list-header">
+        <div class="tab-strip">
+            <a href="{{ url_for('project_list.index', view='my') }}"
+                class="tab-strip-item{% if view == 'my' %} active{% endif %}">My Projects</a>
+            <a href="{{ url_for('project_list.index', view='all') }}"
+                class="tab-strip-item{% if view == 'all' %} active{% endif %}">
+                {% if effective_role in ('cs', 'admin', 'management') %}All Projects{% else %}Team Projects{% endif %}
+            </a>
+            <a href="{{ url_for('project_list.index', view='design_complete') }}"
+                class="tab-strip-item{% if view == 'design_complete' %} active{% endif %}">Design Completed</a>
+
+            {% for sv in saved_views %}
+            <div class="project-list-tab-wrap{% if view == 'view-' ~ sv.id %} active{% endif %}"
+                data-view-id="{{ sv.id }}">
+                <a href="{{ url_for('project_list.index', view='view-' ~ sv.id) }}"
+                    class="tab-strip-item project-list-tab-saved{% if view == 'view-' ~ sv.id %} active{% endif %}">
+                    <span class="project-list-tab-label">{{ sv.name }}</span>
+                </a>
+                <button type="button" class="project-list-tab-menu-btn" aria-label="View options">⋯</button>
+                <div class="project-list-tab-menu" hidden>
+                    <button type="button" class="project-list-tab-menu-item" data-action="rename">Rename</button>
+                    <button type="button" class="project-list-tab-menu-item project-list-tab-menu-item-danger"
+                        data-action="delete">Delete</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="project-list-toolbar">
+            {# Role set here must match project_overlay.py's _can_create_project() —
+            the button is just UI, that route function is the real gate. #}
+            {% if effective_role in ('admin', 'cs', 'management', 'project_owner') %}
+            <button type="button" class="project-toolbar-new-item" id="new-project-btn">+ New Project</button>
+            {% endif %}
+
+            <div class="project-toolbar-search-wrap">
+                <button type="button" id="search-toggle" class="project-toolbar-icon-btn"
+                    aria-label="Search">🔍</button>
+                <input type="text" name="search" id="toolbar-search" class="project-toolbar-search-input"
+                    placeholder="Search..." value="{{ active_filters.search }}" hidden>
+            </div>
+
+            <div class="project-filter-wrap">
+                <button type="button" id="filter-toggle"
+                    class="project-filter-toggle{% if active_filter_count %} is-active{% endif %}">
+                    Filter{% if active_filter_count %} / {{ active_filter_count }}{% endif %}
+                </button>
+                <div id="filter-panel" class="project-filter-panel" hidden>
+
+                    <div class="filter-panel-header">
+                        <span class="filter-panel-count">Showing {{ rows|length }} of {{ view_total }} items</span>
+                        <div class="filter-panel-header-actions">
+                            <button type="button" class="filter-clear-all" id="filter-clear-all">Clear all</button>
+                        </div>
+                    </div>
+
+                    <div class="filter-columns">
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">CS Lead</div>
+                            <div class="filter-column-list">
+                                {% for u in filter_options.cs_leads %}
+                                <button type="button"
+                                    class="filter-chip-row{% if u.id in active_filters.cs_lead %} is-selected{% endif %}"
+                                    data-filter-group="cs_lead" data-filter-value="{{ u.id }}">
+                                    <span class="filter-chip-text">{{ u.name }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.cs_lead.get(u.id, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Designers</div>
+                            <div class="filter-column-list">
+                                {% for u in filter_options.designers %}
+                                <button type="button"
+                                    class="filter-chip-row{% if u.id in active_filters.designers %} is-selected{% endif %}"
+                                    data-filter-group="designers" data-filter-value="{{ u.id }}">
+                                    <span class="filter-chip-text">{{ u.name }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.designers.get(u.id, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Client</div>
+                            <div class="filter-column-list">
+                                {% for c in filter_options.clients %}
+                                <button type="button"
+                                    class="filter-chip-row{% if c.id in active_filters.client %} is-selected{% endif %}"
+                                    data-filter-group="client" data-filter-value="{{ c.id }}">
+                                    <span class="filter-chip-text">{{ c.name }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.client.get(c.id, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Brief Type</div>
+                            <div class="filter-column-list">
+                                {% for value, label in filter_options.brief_types %}
+                                <button type="button"
+                                    class="filter-chip-row{% if value in active_filters.brief_type %} is-selected{% endif %}"
+                                    data-filter-group="brief_type" data-filter-value="{{ value }}">
+                                    <span class="filter-chip-text">{{ label }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.brief_type.get(value, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Status</div>
+                            <div class="filter-column-list">
+                                {% for status in filter_options.statuses %}
+                                <button type="button"
+                                    class="filter-chip-row{% if status in active_filters.status %} is-selected{% endif %}"
+                                    data-filter-group="status" data-filter-value="{{ status }}">
+                                    <span class="filter-chip-text">{{ status }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.status.get(status, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Urgency</div>
+                            <div class="filter-column-list">
+                                {% for value, label in filter_options.urgencies %}
+                                <button type="button"
+                                    class="filter-chip-row{% if value in active_filters.urgency %} is-selected{% endif %}"
+                                    data-filter-group="urgency" data-filter-value="{{ value }}">
+                                    <span class="filter-chip-text">{{ label }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.urgency.get(value, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="filter-column">
+                            <div class="filter-column-label">Team</div>
+                            <div class="filter-column-list">
+                                {% for value in filter_options.teams %}
+                                <button type="button"
+                                    class="filter-chip-row{% if value in active_filters.team %} is-selected{% endif %}"
+                                    data-filter-group="team" data-filter-value="{{ value }}">
+                                    <span class="filter-chip-text">{{ value }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.team.get(value, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                                <button type="button"
+                                    class="filter-chip-row{% if active_filters.team_undefined %} is-selected{% endif %}"
+                                    data-filter-group="team" data-filter-value="undefined">
+                                    <span class="filter-chip-text">Undefined</span>
+                                    <span class="filter-chip-count">{{ filter_counts.team.get(None, 0) }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="filter-date-row">
+                        <button type="button"
+                            class="filter-date-btn{% if active_filters.initial_deadline_from or active_filters.initial_deadline_to %} is-active{% endif %}"
+                            id="initial-deadline-filter-btn" data-param-prefix="initial_deadline"
+                            data-from="{{ active_filters.initial_deadline_from }}"
+                            data-to="{{ active_filters.initial_deadline_to }}">
+                            Initial Deadline
+                        </button>
+                        <button type="button"
+                            class="filter-date-btn{% if active_filters.next_deadline_from or active_filters.next_deadline_to %} is-active{% endif %}"
+                            id="next-deadline-filter-btn" data-param-prefix="next_deadline"
+                            data-from="{{ active_filters.next_deadline_from }}"
+                            data-to="{{ active_filters.next_deadline_to }}">
+                            Next Deadline
+                        </button>
+                    </div>
+                </div>
+                <div class="date-range-picker" id="date-range-picker" hidden>
+                    <div class="date-range-picker-header">
+                        <span class="date-range-picker-title" id="date-range-picker-title">Set Dates</span>
+                    </div>
+
+                    <div class="date-range-picker-nav">
+                        <button type="button" class="date-range-picker-arrow" id="date-range-prev"
+                            aria-label="Previous month">&larr;</button>
+
+                        <div class="date-range-picker-months">
+                            <div class="date-range-picker-month">
+                                <div class="date-range-picker-month-label" data-month-label="0"></div>
+                                <div class="date-range-picker-weekdays">
+                                    <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                                </div>
+                                <div class="date-range-picker-days" data-days="0"></div>
+                            </div>
+                            <div class="date-range-picker-month">
+                                <div class="date-range-picker-month-label" data-month-label="1"></div>
+                                <div class="date-range-picker-weekdays">
+                                    <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+                                </div>
+                                <div class="date-range-picker-days" data-days="1"></div>
+                            </div>
+                        </div>
+
+                        <button type="button" class="date-range-picker-arrow" id="date-range-next"
+                            aria-label="Next month">&rarr;</button>
+                    </div>
+
+                    <div class="date-range-picker-footer">
+                        <button type="button" class="date-range-picker-clear" id="date-range-clear">Clear</button>
+                        <div class="date-range-picker-footer-actions">
+                            <button type="button" class="date-range-picker-cancel"
+                                id="date-range-cancel">Cancel</button>
+                            <button type="button" class="date-range-picker-apply" id="date-range-apply">Apply</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# Show Cancelled — a shortcut for "status filter = Cancelled only"
+            (see _show_cancelled() in project_list.py), not a separate on/off
+            flag. is-active here just mirrors whether Cancelled happens to be
+            the active status filter right now — same state the Cancelled
+            chip in the filter panel reflects, since they're driven by the
+            exact same query param. #}
+            <button type="button" id="show-cancelled-toggle"
+                class="project-toolbar-sort-btn{% if show_cancelled %} is-active{% endif %}">
+                Show Cancelled
+            </button>
+
+            <div class="project-sort-wrap">
+                <button type="button" id="sort-toggle"
+                    class="project-toolbar-sort-btn{% if sort_field or group_field %} is-active{% endif %}">
+                    Sort{% if sort_field and group_field %} / 2{% elif sort_field or group_field %} / 1{% endif %}
+                </button>
+                <div id="sort-panel" class="project-sort-panel" hidden>
+                    <div class="sort-panel-header">
+                        <span class="sort-panel-title">Sort</span>
+                        <button type="button" class="sort-clear-all" id="sort-clear-all">Clear</button>
+                    </div>
+                    <div class="project-sort-panel-columns">
+                        <div class="project-sort-panel-col">
+                            <div class="project-sort-panel-col-title">Group by</div>
+                            <div class="sort-panel-options">
+                                {% for value, label in group_options %}
+                                <button type="button"
+                                    class="project-group-option{% if group_field == value %} is-selected{% endif %}"
+                                    data-group-field="{{ value }}">
+                                    {{ label }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="project-sort-panel-col">
+                            <div class="project-sort-panel-col-title">Order by</div>
+                            <div class="sort-panel-options">
+                                {% for value, label in sort_options %}
+                                <div class="sort-option-row">
+                                    <span class="sort-option-label">{{ label }}</span>
+                                    <div class="sort-option-directions">
+                                        <button type="button"
+                                            class="project-sort-option{% if sort_field == value and sort_dir == 'asc' %} is-selected{% endif %}"
+                                            data-sort-field="{{ value }}" data-sort-dir="asc"
+                                            aria-label="Sort {{ label }} ascending">▲</button>
+                                        <button type="button"
+                                            class="project-sort-option{% if sort_field == value and sort_dir == 'desc' %} is-selected{% endif %}"
+                                            data-sort-field="{{ value }}" data-sort-dir="desc"
+                                            aria-label="Sort {{ label }} descending">▼</button>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="project-save-view-wrap">
+                <button type="button" class="filter-save-view" id="save-new-view-btn"
+                    data-create-view-url="{{ url_for('project_list.create_view') }}" {% if not is_dirty %}hidden{% endif %}>Save as
+                    new view</button>
+            </div>
+
+        </div>
+    </div>
+
+    {% call card() %}
+    <div class="project-table-scroll-region{% if groups %} project-table-scroll-region--grouped{% endif %}">
+        <div class="project-table-rounded-clip" id="project-table-scroll">
+            <div class="project-table{% if groups %} project-table--grouped{% endif %}" id="project-table"
+                data-table-key="{{ table_key }}" data-save-layout-url="{{ url_for('project_list.save_layout') }}">
+                {# Header row(s) + rows/groups live in their own partial (task
+                #55) so the SSE-triggered live refresh (project_list.js's
+                refreshProjectTable(), server side in table_rows() below)
+                can re-render exactly this and swap it into #project-table
+                without touching anything outside it — the {% include %}
+                here and that route render the literal same template. #}
+                {% include 'project_list/_table_rows.html' %}
+            </div>
+        </div>
+        <div class="project-table-sticky-scrollbar" id="sticky-scrollbar">
+            <div class="project-table-sticky-scrollbar-inner" id="sticky-scrollbar-inner"></div>
+        </div>
+        </div>
+    {% endcall %}
+</div>
+<div class="project-resize-drag-indicator" id="resize-drag-indicator" hidden></div>
+<div id="project-overlay-mount"></div>
+{# Add Company / Add Contact modals (task #61) — shared partial, see its
+own docstring. Needed here now that "+ New Project" opens the create-mode
+overlay's Client/Contact selects directly on this page instead of on the
+old separate create.html page. #}
+{% include "partials/client_directory_modals.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.__savedTableLayout = {{ saved_layout | tojson }};
+    window.__savedDeliverableTableLayout = {{ saved_deliverable_layout | tojson }};
+    window.__currentBaseView = {{ current_base_view | tojson }};
+</script>
+{# Air Datepicker CDN includes removed (M10, 20 Aug 2026) — the Site
+   visit Date & Time picker was already replaced by a custom-built widget
+   (.visit-datetime-picker in project_overlay.css); nothing on this page
+   has called into the AirDatepicker library since. #}
+<script src="{{ url_for('static', filename='js/project_list_layout.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/client_directory.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_overlay_create.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_list.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_overlay.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_overlay_edit.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/avatar_picker.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/deliverable_picker.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_flags.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_details_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_deliverables_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_submissions_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_submissions_draft_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_preproduction_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/project_notes_card.js') }}?v={{ config.STATIC_VERSION }}"></script>
+
+{% endblock %}

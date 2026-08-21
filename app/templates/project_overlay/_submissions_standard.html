@@ -1,0 +1,12 @@
+{% from '_shared_macros.html' import card %}
+
+<div class="overlay-details-grid">
+    <div class="overlay-card-full">
+        {% call card('Submissions') %}
+        <div id="overlay-submissions-content" class="overlay-submissions-content" data-scope="{{ scope }}"
+            data-customer-id="{{ customer_id or '' }}">
+            {% include 'project_overlay/_submissions_draft_card.html' %}
+        </div>
+        {% endcall %}
+    </div>
+</div>

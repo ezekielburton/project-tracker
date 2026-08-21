@@ -1,11 +1,12 @@
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, abort
 from flask_login import login_required
 from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import nullslast
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable, DecisionFlag, DeliverableAssignment
 from app.utils import get_actor
-from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer
+from app.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer, needs_client_approval
+from app.status_vocabulary import derive_project_status
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for() call for this blueprint's routes uses that, e.g.
@@ -308,27 +309,23 @@ def index():
     else:
         layout_role = user.role
 
-    # Average Project Time's inline body (admin/management only — see the
-    # big comment above CARD_ORDER) reuses the EXACT SAME row-building
-    # function the standalone /time-tracking page calls, so the two never
-    # drift apart. Imported inside the function (not at module level) to
-    # avoid a circular import, same convention CLAUDE.md documents for
-    # activity logging — app.routes.time_tracking doesn't import from
-    # dashboard.py, but importing Flask route modules at module level
-    # tends to create import-order footguns in this codebase regardless.
-    # Skipped entirely (not just hidden) for every other role — same
-    # "don't run a query nobody can see the result of" reasoning
-    # flaggable_projects below already follows, and matches the tile's
-    # `muted` state, which is also keyed on the REAL user.role, not
-    # layout_role/scope (an admin previewing a CS lead's tab still gets
-    # the real company-wide table, not a blocked one — this card was never
-    # part of the scope-preview system to begin with, see its own
-    # docstring in stat_avg_time.html).
-    time_tracking_rows = []
-    if user.role in ('admin', 'management'):
-        from app.routes.time_tracking import build_time_tracking_rows
-        time_tracking_rows = build_time_tracking_rows()
-
+    # Average Project Time's inline body used to eagerly call
+    # build_time_tracking_rows() right here, on EVERY dashboard page load
+    # for admin/management — REMOVED 18 Jul 2026, real perf bug, not a
+    # style choice. That function does a full company-wide scan (every
+    # non-draft project, then for EACH one, its own project_deliverables
+    # lazy relationship, then for EACH deliverable, its own status_logs
+    # lazy relationship, plus a business-hours calculation per project and
+    # per deliverable) — an N+1 storm that ran whether or not the user
+    # ever opened this tab, and was the dominant cost behind a 3+ second
+    # dashboard load reported by Ezekiel (screenshot showed the main HTML
+    # request alone taking 3.27s). Now computed lazily, only when the tab
+    # is actually clicked, via GET /dashboard/api/time-tracking-rows (see
+    # that route further down + stat_avg_time.html/dashboard.js for the
+    # fetch-on-first-open wiring). stat_avg_time.html no longer takes a
+    # time_tracking_rows kwarg at all — it only needs `is_openable`
+    # (effective_role in ('admin','management')), computed inside the
+    # template itself, unchanged.
     card_order = CARD_ORDER.get(layout_role, CARD_ORDER['management'])
 
     # ── CS-only redesigned dashboard branch (16 Jul 2026) ─────────────────
@@ -390,15 +387,6 @@ def index():
             pending_approval_projects=_compute_pending_approval_projects(scope_user),
             due_default=_compute_due(scope_user, 'overdue'),
             clashes=_compute_clashes_response(scope_user),
-            # stat_avg_time.html's body is admin/management-only (muted for
-            # every other role via dash_card()'s own muted= mechanic, keyed
-            # on the REAL user.role) — a CS viewer can never open it, so
-            # there's no real table to fetch here. Passed as an empty list
-            # (not omitted) so the partial's Jinja doesn't hit an undefined
-            # variable on the 'body' render pass, same defensive reasoning
-            # dashboard.html's own time_tracking_rows=[] fallback uses for
-            # every non-admin/management role below.
-            time_tracking_rows=[],
             flaggable_projects=_compute_flaggable_projects(user),
         )
 
@@ -477,7 +465,6 @@ def index():
             pending_approval_projects=_compute_pending_approval_projects(scope_user),
             due_default=_compute_due(scope_user, 'overdue'),
             clashes=_compute_clashes_response(scope_user),
-            time_tracking_rows=time_tracking_rows,
         )
 
     # ── Designer / Team Lead dashboard branch (16 Jul 2026) ───────────────
@@ -543,7 +530,6 @@ def index():
         # total active projects also."
         your_active_projects=_compute_your_active_projects(scope_user),
         pending_approval_projects=_compute_pending_approval_projects(scope_user),
-        time_tracking_rows=time_tracking_rows,
         summary=_compute_summary(scope_user),
         what_changed=_compute_what_changed(scope_user),
         # Due card narrowed 12 Jul 2026 (fourth follow-up) to show ONLY
@@ -595,14 +581,20 @@ def index():
 
 def _scoped_projects(user, active_only=True):
     """
-    Drafts are always excluded. Approved projects are excluded too when
-    active_only=True (matches the existing dashboards' "active work" lists)
-    — some endpoints (what-changed) want the full history including
-    approved projects, so active_only=False is available for those.
+    Drafts are always excluded. Approved AND Handed to Production projects
+    are excluded too when active_only=True (matches the existing
+    dashboards' "active work" lists) — some endpoints (what-changed) want
+    the full history including completed projects, so active_only=False
+    is available for those. handed_to_production added 18 Aug 2026 — it's
+    a later, more-complete stage than approved (design has actually left
+    the building), so it belongs in the same "no longer active work"
+    bucket; before this fix it fell through every active-work filter here
+    and kept showing up in Due/At Risk/Next Actions/Priority Actions as if
+    it still needed attention.
     """
     base = Project.query.filter(Project.project_status != 'draft')
     if active_only:
-        base = base.filter(Project.project_status != 'approved')
+        base = base.filter(Project.project_status.notin_(['approved', 'handed_to_production']))
 
     if user.role in ('admin', 'management'):
         return base
@@ -610,6 +602,15 @@ def _scoped_projects(user, active_only=True):
     if user.role == 'cs':
         secondary_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(user_id=user.id).subquery()
         return base.filter(db.or_(Project.cs_lead_id == user.id, Project.id.in_(secondary_ids)))
+
+    if user.role == 'project_owner':
+        # Bug fix, 18 Aug 2026: this branch didn't exist — a project_owner
+        # user fell through to the designer/team_lead branch below, which
+        # checks ProjectDesigner assignments a Project Owner never has, so
+        # their dashboard silently returned zero projects. Mirrors
+        # project_list.py's _base_query_for_view() 'my' view, which already
+        # matches Project.project_owner_id == user.id correctly.
+        return base.filter(Project.project_owner_id == user.id)
 
     # designer / team_lead
     assigned_ids = db.session.query(ProjectDesigner.project_id).filter_by(user_id=user.id).subquery()
@@ -800,6 +801,30 @@ def _customer_is_submitted_stage(pc):
     if not deliverables:
         return False
     return all(d.status in _SUBMITTED_STAGE_STATUSES or d.status == 'approved' for d in deliverables)
+
+
+def _ccm_active_customers_submitted_stage(project):
+    """
+    C&CM equivalent of `project.project_status in _SUBMITTED_STAGE_STATUSES`
+    for _compute_priority_actions()'s Overdue suppression — added M10, 20
+    Aug 2026. project.project_status barely moves for a C&CM project (see
+    needs_client_approval()'s docstring in app/dashboard_logic.py), so it
+    can never correctly answer "has this work left the design team's
+    hands" the way it reliably does for Standard. Checks the SAME
+    customer population nearest_deadline() draws its candidate deadline
+    from (not cancelled, not yet approved) via the already-established
+    _customer_is_submitted_stage() per customer — if every customer that
+    could be driving the nearest deadline is submitted-stage or beyond,
+    so is whichever one actually is nearest. Returns False (don't
+    suppress) when there's no such customer at all — e.g. a Gulf-only
+    project, which nearest_deadline() already can't produce a deadline
+    for either, so this never actually gets consulted for those.
+    """
+    candidates = [
+        pc for pc in project.project_customers
+        if not pc.cancelled and pc.status != 'approved'
+    ]
+    return bool(candidates) and all(_customer_is_submitted_stage(pc) for pc in candidates)
 
 
 _DUBAI_TZ = timezone(timedelta(hours=4))
@@ -1019,15 +1044,22 @@ def _stat_project_rows(projects):
     list ("which projects make up this number"), not an actionable row
     like Due/Next Actions, so no cs_lead/designers/guidance fields here.
 
-    status_label uses the exact same `.replace('_', ' ').title()` pattern
-    api.py's own status_label already uses for this — same display
-    convention, not a new one invented for this card.
+    status_label used to be the raw `.replace('_', ' ').title()` pattern
+    api.py's own status_label uses — switched to derive_project_status()
+    (M10, 20 Aug 2026) so this card agrees with the Projects list page's
+    Status column instead of showing the internal project_status value
+    title-cased (e.g. a project genuinely 'In Design' was reading as
+    'In Progress' here while the Projects list correctly said 'In
+    Design' for the same project — same underlying data, two different
+    labels). Also now correct for C&CM, which derive_project_status()
+    resolves from channel state — the raw project_status value barely
+    moves for a C&CM project (see needs_client_approval()'s docstring).
     """
     rows = [{
         'project_id': p.id,
         'name': p.name,
         'deadline': (lambda d: d.isoformat() if d else None)(nearest_deadline(p)),
-        'status_label': (p.project_status or '').replace('_', ' ').title(),
+        'status_label': derive_project_status(p)[0],
     } for p in projects]
     # Nearest deadline first, no-deadline last — same convention every
     # other row list on this page sorts by (see _compute_at_risk_projects()
@@ -1044,12 +1076,17 @@ def _compute_your_active_projects(user):
 
 
 def _compute_pending_approval_projects(user):
-    """Body for the 'Pending Approval' stat card — same query
-    _compute_project_stats() counts for 'pending_approval'."""
-    return _stat_project_rows(
-        _scoped_projects(user, active_only=True)
-        .filter(Project.project_status == 'submitted_to_client').all()
-    )
+    """Body for the 'Pending Approval' stat card — was a flat
+    `project_status == 'submitted_to_client'` SQL filter; switched (M10,
+    20 Aug 2026) to needs_client_approval() filtered in Python, since
+    that flat filter only ever matched Standard briefs and silently
+    missed every C&CM project awaiting approval — see
+    needs_client_approval()'s docstring for why project_status itself
+    never reaches 'submitted_to_client' for C&CM."""
+    return _stat_project_rows([
+        p for p in _scoped_projects(user, active_only=True).all()
+        if needs_client_approval(p)
+    ])
 
 
 # _compute_total_active_projects() REMOVED 15 Jul 2026, later still, per
@@ -1084,8 +1121,10 @@ def _compute_project_stats(user):
     queries rather than reshaping this function's output, matching the
     "each card independently re-queries _scoped_projects()" convention
     every other card on this page already follows. Average Project Time's
-    body (admin/management only) comes from build_time_tracking_rows(),
-    fetched separately in index() — see that function's own docstring.
+    body (admin/management only) comes from build_time_tracking_rows() —
+    NOT fetched in index() anymore (18 Jul 2026 perf fix, see the big
+    comment there) — now lazy-loaded client-side via GET /dashboard/api/
+    time-tracking-rows only when the tab is actually opened.
     This function still feeds both the initial page load and the SSE
     live-refresh's /api/project-stats fetch (badges only, never bodies —
     see dashboard.js).
@@ -1103,17 +1142,24 @@ def _compute_project_stats(user):
     it's the one number on this row meant to answer "how many are there
     really", not "how many are mine".
 
-    "Pending Approval" = project_status == 'submitted_to_client' — the
-    exact status string used everywhere else in the app for this state
-    (see projects_approval.py's "Project must be in Submitted to Client
-    state to approve" check), not a new label invented for this card.
+    "Pending Approval" counts needs_client_approval() (app/dashboard_
+    logic.py) — was a flat project_status == 'submitted_to_client' filter
+    (the string projects_approval.py's old "Project must be in Submitted
+    to Client state to approve" check used, before that file was deleted
+    at M10 cutover) until 20 Aug 2026, when that filter was found to only
+    ever match Standard briefs — see needs_client_approval()'s docstring
+    for why a C&CM project's project_status never actually reaches
+    'submitted_to_client'. Counted in Python, not a query filter, since
+    the C&CM half of the check reaches across the channels/concept/kv
+    relationships rather than a single column.
     """
     your_active = _scoped_projects(user, active_only=True).count()
-    pending_approval = _scoped_projects(user, active_only=True).filter(
-        Project.project_status == 'submitted_to_client'
-    ).count()
+    pending_approval = sum(
+        1 for p in _scoped_projects(user, active_only=True).all()
+        if needs_client_approval(p)
+    )
     total_active = Project.query.filter(
-        Project.project_status.notin_(['draft', 'approved'])
+        Project.project_status.notin_(['draft', 'approved', 'handed_to_production'])
     ).count()
 
     # "Average Time" tile (added 13 Jul 2026, per Ezekiel: "add a card that
@@ -1315,7 +1361,9 @@ def _compute_due(user, filter_type):
 
         if p.brief_type == 'ccm':
             for pc in p.project_customers:
-                if pc.cancelled or pc.status == 'approved':
+                # handed_to_production added 18 Aug 2026 alongside approved —
+                # same "this channel is done, stop surfacing it" logic.
+                if pc.cancelled or pc.status in ('approved', 'handed_to_production'):
                     continue
                 if is_overdue_filter and _customer_is_submitted_stage(pc):
                     continue
@@ -1738,7 +1786,11 @@ def _compute_priority_actions(user):
         # that basis. has_no_cs_lead/has_missing_designer are unaffected
         # — those are staffing gaps, not deadline pressure, and stay
         # urgent regardless of submission stage.
-        is_overdue = bool(deadline) and deadline < today and p.project_status not in _SUBMITTED_STAGE_STATUSES
+        is_submitted_stage = (
+            _ccm_active_customers_submitted_stage(p) if p.brief_type == 'ccm'
+            else p.project_status in _SUBMITTED_STAGE_STATUSES
+        )
+        is_overdue = bool(deadline) and deadline < today and not is_submitted_stage
         has_no_cs_lead = not p.cs_lead_id
         is_urgent = is_overdue or has_no_cs_lead or has_missing_designer
 
@@ -2220,7 +2272,9 @@ def _compute_risk_overdue(user):
         if is_ccm:
             any_overdue_customer = False
             for pc in p.project_customers:
-                if pc.cancelled or pc.status == 'approved':
+                # handed_to_production added 18 Aug 2026 alongside approved —
+                # same "this channel is done, stop surfacing it" logic.
+                if pc.cancelled or pc.status in ('approved', 'handed_to_production'):
                     continue
                 if _customer_is_submitted_stage(pc):
                     continue
@@ -2303,11 +2357,12 @@ def _compute_leadership_waiting_on_others(user):
       - 'assign'    — a requested design team has nobody assigned
                        (_missing_designer_teams()) — "Waiting for: Designer
                        assignment", Assign button.
-      - 'follow_up' — project_status == 'submitted_to_client' (the one
-                       status in the current get_next_action_owner()
-                       status_map whose guidance is literally "Follow up
-                       with client" — see dashboard_logic.py) — "Waiting
-                       for: Client confirmation", Follow up button.
+      - 'follow_up' — needs_client_approval(p) (app/dashboard_logic.py) —
+                       "Waiting for: Client confirmation", Follow up
+                       button. Was a flat project_status ==
+                       'submitted_to_client' check until M10 (20 Aug
+                       2026), which silently never matched a C&CM
+                       project — see needs_client_approval()'s docstring.
     Every other project (internal work in progress, nothing externally
     blocked) is simply not shown — this card is specifically about
     external/staffing blockers, not a general "what's everyone doing" feed
@@ -2327,7 +2382,7 @@ def _compute_leadership_waiting_on_others(user):
         if missing_teams:
             row_type = 'assign'
             waiting_for = 'Designer assignment'
-        elif p.project_status == 'submitted_to_client':
+        elif needs_client_approval(p):
             row_type = 'follow_up'
             waiting_for = 'Client confirmation'
         else:
@@ -2410,7 +2465,9 @@ def _compute_role_snapshot():
     "Designer Row" split by team, and a team lead IS on one of the three
     design teams, same as any designer.
     """
-    all_projects = Project.query.filter(Project.project_status != 'draft', Project.project_status != 'approved').all()
+    all_projects = Project.query.filter(
+        Project.project_status.notin_(['draft', 'approved', 'handed_to_production'])
+    ).all()
     clashes = compute_clashes(all_projects)
     clash_designer_ids = set()
     for c in clashes['by_deliverable']:
@@ -2436,8 +2493,11 @@ def _compute_role_snapshot():
             my_actions = sum(1 for p in scoped if _is_owner(get_next_action_owner(p)['user'], u))
             if my_actions:
                 stat_key, stat_count = 'actions', my_actions
-            elif u.role == 'cs' and any(p.project_status == 'submitted_to_client' for p in scoped):
-                stat_key, stat_count = 'pending', sum(1 for p in scoped if p.project_status == 'submitted_to_client')
+            # needs_client_approval() not a flat project_status check
+            # (M10, 20 Aug 2026) — the flat check silently never matched a
+            # CS's C&CM projects; see its docstring in dashboard_logic.py.
+            elif u.role == 'cs' and any(needs_client_approval(p) for p in scoped):
+                stat_key, stat_count = 'pending', sum(1 for p in scoped if needs_client_approval(p))
             else:
                 waiting = sum(1 for p in scoped if not _is_owner(get_next_action_owner(p)['user'], u))
                 stat_key, stat_count = ('waiting', waiting) if waiting else ('clear', 0)
@@ -2601,6 +2661,30 @@ def api_escalation_history():
     return jsonify(_compute_escalation_history())
 
 
+# Added 18 Jul 2026 — real perf fix, not a new feature. build_time_tracking_
+# rows() used to be called unconditionally in index() on EVERY admin/
+# management dashboard page load, regardless of whether the Average
+# Project Time tab was ever opened — a full company-wide scan (every
+# non-draft project, then EACH one's project_deliverables relationship,
+# then EACH deliverable's status_logs relationship, plus a business-hours
+# calculation per project and per deliverable) that was the dominant cost
+# behind a 3+ second dashboard load Ezekiel reported (screenshot showed the
+# main HTML request alone taking 3.27s). Moved here so it only runs when a
+# user actually clicks the tab — see stat_avg_time.html/dashboard.js for
+# the fetch-on-first-open wiring. Returns a rendered HTML fragment (not
+# JSON) — the row markup is non-trivial (nested project/deliverable/
+# status-chip structure with <details> breakdowns), so reusing the exact
+# same Jinja partial server-side avoids duplicating that structure in JS.
+@dashboard_bp.route('/api/time-tracking-rows')
+@login_required
+def api_time_tracking_rows():
+    actor = get_actor()
+    if actor.role not in ('admin', 'management'):
+        abort(403)
+    from app.routes.time_tracking import build_time_tracking_rows
+    return render_template('dashboard/cards/_stat_avg_time_rows.html', time_tracking_rows=build_time_tracking_rows())
+
+
 # The deep-dive zone (Projects/Deliverables tabs at the bottom of the
 # dashboard — _is_at_risk(), _compute_deep_dive_projects(),
 # _compute_deep_dive_deliverables(), and their /api/deep-dive/* routes)
@@ -2707,7 +2791,7 @@ def _designer_relevant_entries(user):
                    .join(Deliverable, DeliverableAssignment.deliverable_id == Deliverable.id)
                    .join(Project, Deliverable.project_id == Project.id)
                    .filter(DeliverableAssignment.designer_id == user.id)
-                   .filter(Project.project_status.notin_(['draft', 'approved']))
+                   .filter(Project.project_status.notin_(['draft', 'approved', 'handed_to_production']))
                    .all())
 
     entries = {}  # dedupe key -> entry dict
@@ -2716,7 +2800,9 @@ def _designer_relevant_entries(user):
         p = d.project
         if d.project_customer_id:
             pc = d.project_customer
-            if pc is None or pc.cancelled or pc.status == 'approved':
+            # handed_to_production added 18 Aug 2026 alongside approved —
+            # same "this channel is done, stop surfacing it" logic.
+            if pc is None or pc.cancelled or pc.status in ('approved', 'handed_to_production'):
                 continue
             key = ('customer', pc.id)
             if key in entries:
@@ -2956,9 +3042,14 @@ def _compute_designer_metrics(user):
     away just because this panel is reached via a different counter.
 
     'submitted' JUDGMENT CALL: project_status in ('submitted',
-    'internal_review', 'submitted_to_client') — "work has been handed off
+    'internal_review', 'submitted_to_client') OR needs_client_approval(p)
+    OR any deliverable at 'internal_review' — "work has been handed off
     and is awaiting someone else," the closest reading of "submitted
-    projects" this app's status vocabulary supports.
+    projects" this app's status vocabulary supports. The project_status
+    check alone (the original judgment call) only ever matches Standard
+    briefs — added the other two OR clauses at M10 (20 Aug 2026) since a
+    C&CM project's real submission state lives on its channels/deliverables
+    instead (see needs_client_approval()'s docstring, dashboard_logic.py).
     'revisions' JUDGMENT CALL: Project.revision_count > 0, regardless of
     whose turn it currently is (a project that's ever been through a
     revision cycle, not just ones currently awaiting a resubmit).
@@ -2978,7 +3069,11 @@ def _compute_designer_metrics(user):
     intro comment above).
     """
     assigned = _scoped_projects(user, active_only=True).all()
-    submitted = [p for p in assigned if p.project_status in ('submitted', 'internal_review', 'submitted_to_client')]
+    submitted = [p for p in assigned if (
+        p.project_status in ('submitted', 'internal_review', 'submitted_to_client')
+        or needs_client_approval(p)
+        or any(d.status == 'internal_review' for d in p.project_deliverables)
+    )]
     revisions = [p for p in assigned if (p.revision_count or 0) > 0]
     blocked_rows = _compute_designer_work_queue(user)['blocked']
 

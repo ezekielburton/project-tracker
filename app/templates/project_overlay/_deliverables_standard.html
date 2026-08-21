@@ -1,0 +1,116 @@
+{% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker %}
+
+{% set skippable = (deliverables | rejectattr('status', 'equalto', 'approved') | list) if can_skip_preproduction else [] %}
+
+<div class="overlay-details-grid">
+    {# Flags — own div, sitting above the Deliverables card entirely (per
+    Ezekiel, 18 Aug 2026), sized to its own content rather than living
+    inside the card body. #}
+    {% if open_flags or can_manage_flags %}
+    <div class="overlay-card-full">
+        {% set flag_scope = 'deliverable' %}
+        {% set flags = open_flags %}
+        {% include "project_overlay/_flag_project_panel.html" %}
+    </div>
+    {% endif %}
+
+    <div class="overlay-card-full">
+        {% call card('Deliverables') %}
+        <div class="overlay-card-controls-row">
+            {% if can_toggle_focus %}
+            <span class="overlay-focus-toggle" id="overlay-deliverables-focus-toggle">
+                <button type="button" class="overlay-focus-toggle-btn{% if not default_focus %} active{% endif %}"
+                    data-scope="all">All</button>
+                <button type="button" class="overlay-focus-toggle-btn{% if default_focus %} active{% endif %}"
+                    data-scope="focused">Focused</button>
+            </span>
+            {% endif %}
+            <div class="overlay-deliverables-controls-right">
+                {% if can_manage_deliverables %}
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-edit-deliverables-btn">Edit Deliverables</button>
+                {% endif %}
+                {% if can_skip_preproduction %}
+                {# Always visible rather than vanishing at zero deliverables —
+                data-skippable-count lets the click handler explain why via a
+                toast instead of the button just disappearing unexplained. #}
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-skip-preprod-btn" data-skippable-count="{{ skippable|length }}">Skip to
+                    Pre-Production</button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="overlay-deliverables-body{% if default_focus %} is-focused{% endif %}"
+            id="overlay-deliverables-body">
+            <div class="overlay-deliverables-header">
+                <span>Name</span>
+                <span>Reference</span>
+                <span>Team</span>
+                <span>Deadline</span>
+                <span>Status</span>
+                <span>Revisions</span>
+            </div>
+            <div class="overlay-deliverables-list" id="overlay-deliverables-list">
+                {% for d in deliverables %}
+                <div class="overlay-deliverables-row"
+                    data-assigned-to-me="{{ 'true' if d.id in assigned_ids else 'false' }}">
+                    <span class="overlay-deliverables-name">{{ d.name }}
+                        {% if can_manage_flags %}
+                        <button type="button"
+                            class="overlay-flag-row-trigger{% if d.id in open_flags_by_deliverable_id %} has-flags{% endif %}"
+                            data-deliverable-id="{{ d.id }}" data-deliverable-name="{{ d.name }}"
+                            title="Flag an issue">⚑{% if d.id in open_flags_by_deliverable_id %}
+                            {{ open_flags_by_deliverable_id[d.id]|length }}{% endif %}</button>
+                        {% endif %}
+                    </span>
+                    <span class="overlay-deliverables-image">
+                        {% if d.deliverable_type and d.deliverable_type.reference_image %}
+                        <img src="{{ url_for('static', filename='deliverable-images/' + d.deliverable_type.reference_image) }}" alt=""
+                            class="deliverable-row-thumb">
+                        {% else %}
+                        <span class="overlay-deliverables-image-empty"></span>
+                        {% endif %}
+                    </span>
+                    <span class="overlay-deliverables-tags">
+                        {% if d.deliverable_type and d.deliverable_type.disciplines %}
+                            {% for disc in d.deliverable_type.disciplines %}{{ tag(disc.team, disc.team|lower) }}{% endfor %}
+                        {% elif d.teams %}
+                            {% for t in d.teams.split(',') if t %}{{ tag(t, t|lower) }}{% endfor %}
+                        {% else %}
+                            <span class="overlay-field-empty">—</span>
+                        {% endif %}
+                    </span>
+                    <span class="overlay-deliverables-deadline">
+                        {{ d.design_deadline.strftime('%d %b %Y') if d.design_deadline else '—' }}{% if
+                        d.design_deadline_time %} · {{ d.design_deadline_time.strftime('%H:%M') }}{% endif %}
+                    </span>
+                    <span class="overlay-deliverables-status">
+                        {{ status_pill(status_by_id[d.id][0], status_by_id[d.id][1]) }}
+                    </span>
+                    <span class="overlay-deliverables-revisions">{{ d.revision_count }}</span>
+                </div>
+                {% else %}
+                <p class="overlay-field-empty">No deliverables yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if can_skip_preproduction and skippable %}
+        <div class="overlay-flag-revision-form is-hidden" id="overlay-skip-preprod-form">
+            {# Deliverable picker's own "Select All" in its popover footer
+            covers Ezekiel's "or click all" case — no separate control
+            needed, selecting everything here is exactly the same request
+            as selecting a subset, just larger. #}
+            {{ deliverable_picker('overlay-skip-preprod-picker', skippable, []) }}
+            <span class="overlay-flag-revision-error hidden" id="overlay-skip-preprod-error"></span>
+            <div class="overlay-flag-revision-form-actions">
+                <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                    id="overlay-skip-preprod-confirm">Confirm Skip</button>
+                <button type="button" class="overlay-file-action-btn" id="overlay-skip-preprod-cancel">Cancel</button>
+            </div>
+        </div>
+        {% endif %}
+        {% endcall %}
+    </div>
+</div>

@@ -5,7 +5,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Vitamin-E{% endblock %}</title>
+    <title>{% block title %}One Vitamin Platform{% endblock %}</title>
     <link rel="icon" type="image/png" href="static/images/favicon.png">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/blog.css') }}?v={{ config.STATIC_VERSION }}">
@@ -23,7 +23,38 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}?v={{ config.STATIC_VERSION }}">
-    
+    {% block extra_css %}{% endblock %}
+
+    {# Local-dev safety net (found 20 Aug 2026, Ezekiel): the Werkzeug
+       reloader restarting mid-session (a code edit while someone's browsing)
+       leaves a split-second window where the old process has died and the
+       new one isn't listening yet. If a stylesheet <link> request races
+       that window it fails outright, and browsers don't retry a failed
+       stylesheet load on their own - the page renders with fully correct
+       HTML but zero CSS applied, which reads as "the whole page broke" even
+       though it's just a transient timing miss. Doesn't meaningfully apply
+       in production (systemd-managed gunicorn restarts aren't tied to live
+       edits the way the dev reloader is), but costs nothing to have there.
+       Scoped to same-origin /static/ stylesheets only - a flaky CDN hiccup
+       on the Quill/Cropper <link>s above shouldn't trigger a full reload.
+       Time-windowed (not a one-shot flag) so it keeps protecting across
+       multiple restarts in one browsing session, but won't reload-loop if
+       a stylesheet is genuinely broken rather than just racing a restart. #}
+    <script>
+        (function () {
+            var FLAG = 'helix_css_reload_at';
+            var last = parseInt(sessionStorage.getItem(FLAG) || '0', 10);
+            document.querySelectorAll('link[rel="stylesheet"][href^="/static/"]').forEach(function (link) {
+                link.addEventListener('error', function () {
+                    var now = Date.now();
+                    if (now - last < 5000) return; // already tried a reload for this in the last 5s - avoid a loop
+                    sessionStorage.setItem(FLAG, String(now));
+                    location.reload();
+                });
+            });
+        })();
+    </script>
+
 </head>
 
 <script>
@@ -48,7 +79,7 @@
     <div class="sidebar-header">
         <div class="sidebar-logo">
             <span class="sidebar-logo-min">V</span>
-            <span class="sidebar-logo-max">Vitamin-E</span>
+            <span class="sidebar-logo-max">One Vitamin Platform</span>
         </div>
         <div class="sidebar-header-actions">
             {# Expand/collapse toggle — always visible #}
@@ -95,8 +126,8 @@
                             </a>
 
                             {# Projects — internal nav link, JS intercepts and loads without refresh #}
-                            <a href="{{ url_for('main.projects') }}" class="sidebar-item sidebar-item--nav"
-                                data-link="projects" title="Projects">
+                            <a href="{{ url_for('project_list.index') }}" class="sidebar-item sidebar-item--nav" data-link="projects"
+                                title="Projects">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round">
@@ -107,7 +138,7 @@
                             </a>
 
                             {# File Storage — external link, opens NAS in new tab #}
-                            <a href="http://quickconnect.to/vitaminNAS26/files" target="_blank"
+                            <a href="http://quickconnect.to/vitaminNAS26/drive" target="_blank"
                                 class="sidebar-item sidebar-item--external" data-link="file-storage"
                                 title="File Storage">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
@@ -229,7 +260,7 @@
                             <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
                             <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
                             <path
-                                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+                                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.` 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
                         </svg>
                         <span class="sidebar-item-label">Color Directory</span>
                     </span>
@@ -627,7 +658,12 @@
                     <div id="pt-customers-list" class="accounts-user-list"></div>
                 </div>
                 <div class="pt-panel hidden" id="pt-panel-projects">
-                    <a href="{{ url_for('brief.drafts') }}" class="accounts-add-btn pt-add-link">+ Add Project</a>
+                    {# Repointed 18 Aug 2026 — was url_for('brief.drafts'), the old
+                       create-flow's drafts/entry page, now retired (task #67). The
+                       new create flow lives entirely on the Projects list page
+                       itself (its own "+ New Project" button), so this just sends
+                       admins there instead of trying to deep-link into it. #}
+                    <a href="{{ url_for('project_list.index') }}" class="accounts-add-btn pt-add-link">+ Add Project</a>
                     <div id="pt-projects-list" class="accounts-user-list"></div>
                 </div>
                 <div class="pt-panel hidden" id="pt-panel-drafts">
@@ -743,6 +779,7 @@
                         <option value="designer">Designer</option>
                         <option value="team_lead">Team Lead</option>
                         <option value="management">Management</option>
+                        <option value="project_owner">Project Owner</option>
                         <option value="admin">Admin</option>
                     </select>
                     <select id="new-user-team" class="form-input hidden">
@@ -994,7 +1031,7 @@
     </main>
 
     <footer class="footer">
-        <p>Vitamin-E &copy; 2026 - v2.3</p>
+        <p>OVP &copy; 2026 - v2.4</p>
     </footer>
 
     {% if show_wizard %}
@@ -1134,8 +1171,11 @@
     <script src="{{ url_for('static', filename='js/drag-drop.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/rich-editor.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-    <script src="{{ url_for('static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>     
     {% endif %}
+    <!-- SPA:EXTRA_JS:START -->
+    {% block extra_js %}{% endblock %}
+    <!-- SPA:EXTRA_JS:END -->
     <script src="{{ url_for('static', filename='js/sidebar.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}

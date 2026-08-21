@@ -141,6 +141,37 @@ class RoleTitle(db.Model):
 
     def __repr__(self):
         return f'<RoleTitle {self.role}: {self.title}>'
+    
+class UserTableLayout(db.Model):
+    """
+    One user's personal column widths + order for one table/view combination
+    (e.g. the Projects page's 'my' tab). Silent, ambient preference — auto-saved
+    as the user drags, never shared with other users, no explicit save action
+    needed from them.
+
+    `layout` is a JSON array of {'key': <column-key>, 'width': <px>} objects,
+    in display order — the array's order IS the column order, and each
+    entry's width is that column's current width. One row per (user, table_key)
+    pair; table_key looks like 'project_list:my', 'project_list:all', etc.,
+    so this same table can be reused by other pages later without needing a
+    new table per page.
+    """
+    __tablename__ = 'user_table_layouts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    table_key = db.Column(db.String(100), nullable=False)
+    layout = db.Column(db.JSON, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref='table_layouts')
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'table_key', name='uq_user_table_layout'),
+    )
+
+    def __repr__(self):
+        return f'<UserTableLayout user={self.user_id} table_key={self.table_key}>'
 
 
 # Fallback titles — used whenever no RoleTitle row exists yet for a given role.
@@ -153,6 +184,20 @@ DEFAULT_ROLE_TITLES = {
     'team_lead': 'Design Captain',
     'management': 'The Big Picture',
 }
+
+class ProjectTableView(db.Model):
+    """ A user's saved custom view on the Projects page. This consists of a name plus a remembered filter selectin,
+    which is layered on top of the three fixed presets. Also saves sorting options"""
+    __tablename__ = 'project_table_views'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    base_view = db.Column(db.String(20), nullable=False) # my / all / design_complete (renamed from 'approved' 18 Aug 2026 — see migrations/_backfill_project_table_view_base_view.py)
+    filters = db.Column(db.JSON, nullable=True) 
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='project_table_views')
     
 
 class NotificationSound (db.Model):
@@ -246,16 +291,11 @@ class Project(db.Model):
 
     # Auto-populated on creation
 
-    status = db.Column(db.String(50), default='To Be Briefed', nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     # Set by Designers
     lead_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-
-    # Hours counter
-    hours_accumulated = db.Column(db.Float, default=0.0)
-    timer_started_at = db.Column(db.DateTime, nullable=True)
 
     # Revision tracking
     revision_count = db.Column(db.Integer, default=0, nullable=False)
@@ -275,10 +315,27 @@ class Project(db.Model):
     design_direction_id = db.Column(db.Integer, db.ForeignKey('design_directions.id'), nullable=True)
     client_expectation = db.Column(db.Text, nullable=True)
     what_to_avoid = db.Column(db.Text, nullable=True)
+
     additional_information = db.Column(db.Text, nullable=True)
+    project_owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    is_production_only = db.Column(db.Boolean, default=False, nullable=False)
+    preproduction_requirements = db.Column(db.Text, nullable=True)
+
+    # Cancel/Archive (reversible) — see Projects Redesign Architecture.md §9
+    cancel_reason = db.Column(db.Text, nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    cancelled_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Soft-delete — rare, admin-only, permanent removal from the archive
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)
+    deleted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     # Relationships
     cs_lead = db.relationship('User', foreign_keys=[cs_lead_id])
+    project_owner = db.relationship('User', foreign_keys=[project_owner_id])
+    cancelled_by = db.relationship('User', foreign_keys=[cancelled_by_id])
+    deleted_by = db.relationship('User', foreign_keys=[deleted_by_id])
     creator = db.relationship('User', foreign_keys=[created_by_id])
     lead_designer = db.relationship('User', foreign_keys=[lead_designer_id])
     scope = db.relationship('Scope', backref='projects')
@@ -463,9 +520,9 @@ class ProjectCustomer(db.Model):
     
 
 
-# Deliverable Class, represents individual deliverables within a project. 
-# Flagging system for brief issues: if the brief_flag field is populated, it indicates there is an issue with the brief that needs to be resolved before work can proceed.
-# The brief_flag_resolved boolean indiciates whether the issue has been resolved
+# Deliverable Class, represents individual deliverables within a project.
+# Old brief-flag fields (brief_flag/brief_flag_resolved) dropped in the M10
+# cutover (20 Aug 2026) — superseded by the BriefFlag/BriefFlagMessage system.
 # Revision comments allows CS to request revisions for deliverables and free type the feedback, which can then be viewed by designers to understand what changes are needed.
 class Deliverable(db.Model):
     __tablename__ = 'deliverables'
@@ -484,10 +541,19 @@ class Deliverable(db.Model):
     revision_comment = db.Column(db.Text, nullable=True)
     revision_count = db.Column(db.Integer, default=0, nullable=False)
     flagged_for_revision = db.Column(db.Boolean, default=False, nullable=False)
-    brief_flag = db.Column(db.Text, nullable=True)
-    brief_flag_resolved = db.Column(db.Boolean, default=False, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    needs_technical = db.Column(db.Boolean, default=False, nullable=False)
+    technical_status = db.Column(db.String(50), nullable=True)
+    # 2D/3D split out from the old combined needs_artwork/artwork_status pair
+    # (17 Aug 2026) — each is now its own independent Pre-Production stream,
+    # matching how Design already treats 2D/3D/Technical as three separate
+    # teams. needs_artwork/artwork_status were dropped from the DB in the
+    # M10 cutover (20 Aug 2026) — this comment stays as the historical why.
+    needs_2d = db.Column(db.Boolean, default=False, nullable=False)
+    needs_3d = db.Column(db.Boolean, default=False, nullable=False)
+    status_2d = db.Column(db.String(50), nullable=True)
+    status_3d = db.Column(db.String(50), nullable=True)
 
     # overlaps= tells SQLAlchemy these relationships intentionally share the same
     # foreign key — project_deliverables and project_ref are the other side of this mapping
@@ -600,6 +666,7 @@ class ActivityLog(db.Model):
     entity_name = db.Column(db.String(200), nullable=True)
     entity_id = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    changes = db.Column(db.JSON, nullable=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
 
@@ -693,7 +760,77 @@ class ProjectFile(db.Model):
     def __repr__(self):
         return f'<ProjectFile {self.original_filename} project={self.project_id}>'
     
+class ProjectNote(db.Model):
+    """
+    Freeform, attributed, timestamped note on a project — the deliberate
+    escape hatch for documenting workflow outliers (e.g. "Ibrahim — early
+    draft of 1x1 stand technical — 4 Aug 10AM — [link]") without trying to
+    model every out-of-scope case in the status/data model itself. Distinct
+    from ActivityLog, which is machine-written; these are human-written.
+    Tags set up the future chat features (Projects Redesign Architecture.md §11).
+    """
+    __tablename__ = 'project_notes'
 
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    file_link = db.Column(db.String(500), nullable=True)
+    tags = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref=db.backref('notes', cascade='all, delete-orphan'))
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<ProjectNote project={self.project_id} author={self.author_id}>'
+
+
+class SiteVisit(db.Model):
+    """
+    Structured record of a technical person's site visit — start/end
+    times captured precisely (not a freeform note) so the dashboard can
+    compute when a technical designer is out of the building
+    (Projects Redesign Architecture.md §11).
+    """
+    __tablename__ = 'site_visits'
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    start_at = db.Column(db.DateTime, nullable=False)
+    end_at = db.Column(db.DateTime, nullable=False)
+    location = db.Column(db.String(255), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref=db.backref('site_visits', cascade='all, delete-orphan'))
+    user = db.relationship('User', foreign_keys=[user_id])
+
+    def __repr__(self):
+        return f'<SiteVisit project={self.project_id} user={self.user_id}>'
+
+
+class ProjectOverlaySeen(db.Model):
+    """
+    One row per (user, project) marking that user's first visit to the new
+    Detail overlay for that project — drives "first visit defaults to
+    Project Details, later visits default to Deliverables"
+    (Projects Redesign Architecture.md §3). A marker, not a log.
+    """
+    __tablename__ = 'project_overlay_views'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    first_viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    project = db.relationship('Project', foreign_keys=[project_id])
+
+    def __repr__(self):
+        return f'<ProjectOverlaySeen user={self.user_id} project={self.project_id}>'
+    
 class ProjectSubmission(db.Model):
     __tablename__= 'project_submissions'
 
@@ -732,6 +869,26 @@ class ProjectSubmission(db.Model):
     posm_customer_id = db.Column(db.Integer, db.ForeignKey('project_customers.id'), nullable=True)
     posm_country     = db.Column(db.String(50), nullable=True)  # 'uae','kuwait' etc. for Gulf projects
     phase = db.Column(db.String(20), default='concept_kv', nullable=False)  # 'concept_kv' or 'posm'
+    # Explicit workflow lifecycle — see Projects Redesign Architecture.md §C.
+    # Backfilled from existing signals in a dedicated follow-up script (not
+    # yet run) rather than assumed correct from this column definition alone.
+    workflow_status = db.Column(db.String(30), nullable=True)
+    last_internal_review_notified_at = db.Column(db.DateTime, nullable=True)
+    cs_note = db.Column(db.Text, nullable=True)
+    # Post-Approval Edits: incremented each time an already-Client-Approved
+    # submission's file is replaced without going through a full revision
+    # cycle. Stored counter, same convention as revision_count/
+    # posm_revision_count/ckv_revision_count elsewhere in this model.
+    post_approval_edit_count = db.Column(db.Integer, default=0, nullable=False)
+
+    # Set while a designer is mid-fix after clicking "Edit" on an already-
+    # locked (workflow_status='internal_review') submission — a modifier on
+    # top of that phase, not a new phase itself, since CS already knows to
+    # look and shouldn't be silently un-notified by an edit in progress.
+    # Cleared when the designer re-submits for review. The later SSE work
+    # (M4) will watch this to show CS a live "currently being edited" marker.
+    is_being_edited = db.Column(db.Boolean, default=False, nullable=False)
+    editing_started_at = db.Column(db.DateTime, nullable=True)
 
     # Relationships
     project = db.relationship('Project', backref=db.backref('submissions', cascade='all, delete-orphan'))
@@ -884,6 +1041,100 @@ class ProjectSubmissionDeliverable(db.Model):
         return f'<ProjectSubmissionDeliverable submission={self.submission_id} deliverable={self.deliverable_id}>'
 
 
+class ProjectSubmissionEvent(db.Model):
+    """Append-only history log for one submission's internal-review cycle —
+    M3 Step 4 sub-step 6 (Submit for Review / Edit / Flag Internal Revision).
+
+    One row per action: a designer's optional note when first submitting
+    for review, a designer's required reason when editing an already-locked
+    submission, or CS's required message (rich HTML, may include inline
+    images via the existing rich-editor.js / /inline-image route) when
+    flagging an internal revision. Rendered as a flat timeline — same
+    pattern as the Dashboard's .decision-flag-thread, not the nested
+    .flag-thread reply system, since this is a straight append-only log
+    with no replies-to-replies.
+
+    Distinct from ProjectRevision just above, which is a separate, later
+    concept: a revision CS sends back to the designer *after* a deck has
+    already gone to the client (M3 Step 4 sub-step 8 territory), not this
+    pre-client internal-review loop."""
+    __tablename__ = 'project_submission_events'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
+    event_type    = db.Column(db.String(30), nullable=False)  # 'submitted_for_review' | 'edited' | 'internal_revision'
+    author_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message       = db.Column(db.Text, nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    submission = db.relationship('ProjectSubmission',
+                                 backref=db.backref('events', cascade='all, delete-orphan',
+                                                    order_by='ProjectSubmissionEvent.created_at'))
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<ProjectSubmissionEvent submission={self.submission_id} type={self.event_type}>'
+
+
+class ProjectSubmissionEventDeliverable(db.Model):
+    """Junction table — records which deliverables were part of a given
+    ProjectSubmissionEvent. Currently only used for event_type='client_approval'
+    (Mark Approved): CS's note about that batch lives on the event's own
+    message column, this table just says which deliverables it covered, so a
+    submission approved in several separate batches keeps a distinct note +
+    deliverable list per batch rather than one note being overwritten. Same
+    shape as ProjectSubmissionDeliverable, just pointed at the event instead
+    of the submission itself."""
+    __tablename__ = 'project_submission_event_deliverables'
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('project_submission_events.id'), nullable=False)
+    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
+
+    event = db.relationship('ProjectSubmissionEvent',
+                            backref=db.backref('deliverable_links', cascade='all, delete-orphan'))
+    deliverable = db.relationship('Deliverable', backref=db.backref('approval_event_links', cascade='all, delete-orphan'))
+
+    def __repr__(self):
+        return f'<ProjectSubmissionEventDeliverable event={self.event_id} deliverable={self.deliverable_id}>'
+
+
+class DeliverablePreproductionEvent(db.Model):
+    """Append-only history log for one deliverable's Pre-Production review
+    cycle (admin/management/CS Lead/Project Owner flagging a technical/
+    artwork release upload for reupload — see _can_manage_preproduction).
+
+    Its own table — deliberately NOT ProjectSubmissionEvent — for two
+    reasons: (1) pre-production isn't submission-scoped, a deliverable can
+    land here via Skip to Pre-Production with no ProjectSubmission
+    involved at all, so a submission_id FK wouldn't always have anything
+    to point at; (2) Ezekiel wants this history kept separate from
+    Submissions' own event log, not filtered out of a shared one.
+
+    event_type is 'preprod_flag' for now (a stream got bounced back for reupload, message required) — its own distinct value so
+    later KPI queries ("average revision rounds") can filter cleanly
+    without guessing from free text. stream distinguishes which release
+    stream ('technical'/'artwork') the flag was about, for KPI breakdowns
+    that need that granularity."""
+    __tablename__ = 'deliverable_preproduction_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
+    event_type = db.Column(db.String(30), nullable=False)
+    stream = db.Column(db.String(20), nullable=True)  # 'technical' | 'artwork'
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    deliverable = db.relationship('Deliverable',
+                                  backref=db.backref('preproduction_events', cascade='all, delete-orphan',
+                                                     order_by='DeliverablePreproductionEvent.created_at'))
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<DeliverablePreproductionEvent deliverable={self.deliverable_id} type={self.event_type}>'
+
+
 class ProjectSubmissionFile(db.Model):
     """Supplementary files attached to a ProjectSubmission.
 
@@ -906,6 +1157,18 @@ class ProjectSubmissionFile(db.Model):
     project     = db.relationship('Project',
                                   backref=db.backref('submission_extra_files', cascade='all, delete-orphan'))
     uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+    # Draft-stage cache tracking (M3 Step 4 — Submissions content build).
+    # 'cache' = sitting in the local draft-cache folder, not yet on the NAS.
+    # 'nas'   = confirmed on the NAS (either zipped at Submit to Client, or
+    #           a post-submission "Attach Supporting File" upload, which
+    #           always goes straight to 'nas' and never touches the cache).
+    storage_location = db.Column(db.String(10), default='nas', nullable=False)
+    local_cache_path = db.Column(db.String(500), nullable=True)
+    # Exactly one file per active draft can be True at a time (app-enforced,
+    # not a DB constraint — same pattern as "only one active draft per
+    # channel"). Decides which file gets the canonical auto-generated name
+    # when the draft is zipped and moved to the NAS.
+    is_main_deck     = db.Column(db.Boolean, default=False, nullable=False)
 
     def __repr__(self):
         return f'<ProjectSubmissionFile {self.original_filename} submission={self.submission_id}>'

@@ -1,0 +1,46 @@
+{# app/templates/project_overlay/_flag_card.html
+One Brief Flag — header (type/subject/meta/resolve), reply thread, and an
+always-open reply box while unresolved. Shared by every flag scope
+(Details' project/concept/kv flags, Deliverables' per-deliverable flags,
+both Active view and the History view's client-rendered items use the
+same visual shape, see project_flags.js's renderHistory). Expects `flag`
+(a BriefFlag with .messages loaded) and `can_manage_flags` in context. #}
+
+{% set _flag_type_labels = {'project': 'Project', 'deliverable': 'Deliverable', 'concept': 'Concept', 'kv': 'KV'} %}
+
+<div class="overlay-flag-card{% if flag.is_resolved %} is-resolved{% endif %}" data-flag-id="{{ flag.id }}">
+    <div class="overlay-flag-card-header">
+        <span class="overlay-flag-type-badge">{{ _flag_type_labels.get(flag.flag_type, flag.flag_type) }}</span>
+        {% if flag.deliverable %}
+        <span class="overlay-flag-subject">{{ flag.deliverable.name }}</span>
+        {% endif %}
+        <span class="overlay-flag-meta">Raised by {{ flag.created_by.name if flag.created_by else 'Unknown' }} ·
+            {{ flag.created_at.strftime('%d %b %Y, %H:%M') if flag.created_at else '' }}</span>
+        {% if flag.is_resolved %}
+        <span class="overlay-flag-resolved-badge">✓ Resolved by {{ flag.resolved_by.name if flag.resolved_by else
+            'Unknown' }} · {{ flag.resolved_at.strftime('%d %b %Y') if flag.resolved_at else '' }}</span>
+        {% elif flag.can_resolve %}
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary overlay-flag-resolve-btn"
+            data-flag-id="{{ flag.id }}">Mark Resolved</button>
+        {% endif %}
+    </div>
+    <div class="overlay-flag-thread">
+        {% for msg in flag.messages %}
+        <div class="overlay-flag-message">
+            <div class="overlay-flag-message-header">
+                <span class="overlay-flag-message-author">{{ msg.author.name if msg.author else 'Unknown' }}</span>
+                <span class="overlay-flag-message-time">{{ msg.created_at.strftime('%d %b %Y, %H:%M') if
+                    msg.created_at else '' }}</span>
+            </div>
+            <p class="overlay-flag-message-text">{{ msg.message }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% if not flag.is_resolved and can_manage_flags %}
+    <div class="overlay-flag-reply-form">
+        <textarea class="overlay-flag-reply-input" placeholder="Reply…" rows="1"></textarea>
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action overlay-flag-reply-btn"
+            data-flag-id="{{ flag.id }}">Send</button>
+    </div>
+    {% endif %}
+</div>

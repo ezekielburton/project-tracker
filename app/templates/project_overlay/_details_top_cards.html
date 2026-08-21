@@ -1,0 +1,75 @@
+{# Core property rows, shared by both brief types. No wrapper div here —
+the calling template wraps this include plus its own brief-specific
+rows in one .overlay-properties list, so it reads as continuous. #}
+
+<div class="overlay-property-row">
+    <span class="overlay-property-label">Job Number</span>
+    <span class="overlay-property-value">{{ project.job_number or '—' }}</span>
+</div>
+<div class="overlay-property-row">
+    <span class="overlay-property-label">Project Status</span>
+    <span class="overlay-property-value overlay-status-row">
+        {{ status_pill(status_label, status_class) }}
+        {% if can_start_project %}
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+            id="overlay-start-project-btn">Start Project</button>
+        {% endif %}
+        {# Put on Hold / Resume / Cancel / Reactivate now live in the
+        overlay sidebar (see _overlay.html) — pinned to the bottom so
+        they're reachable from every sub-tab, not just Details. #}
+    </span>
+</div>
+{% if project.cancelled_at %}
+{# Visible to anyone who can see Details at all, not just can_cancel_project
+— cancellation is project-wide information, not a restricted action.
+Dashboard visibility (admin + management) is separate, later work. #}
+<div class="overlay-property-row">
+    <span class="overlay-property-label">Cancellation Reason</span>
+    <span class="overlay-property-value">
+        {{ project.cancel_reason }}
+        <span class="overlay-field-empty">— {{ project.cancelled_by.name if project.cancelled_by else 'Unknown' }},
+            {{ project.cancelled_at.strftime('%d %b %Y') }}</span>
+    </span>
+</div>
+{% endif %}
+<div class="overlay-property-row">
+    <span class="overlay-property-label">CS Lead</span>
+    <span class="overlay-property-value">
+        {% if can_reassign_cs_lead %}
+        {{ avatar_picker('cs-lead-picker', project.cs_lead, cs_lead_options, 'Select CS Lead…') }}
+        {% else %}
+        {{ person_chip(project.cs_lead, 'CS Missing') }}
+        {% endif %}
+    </span>
+</div>
+<div class="overlay-property-row">
+    <span class="overlay-property-label">Secondary CS</span>
+    <span class="overlay-property-value overlay-secondary-cs-value">
+        <span class="overlay-secondary-cs-list">
+            {% for assignment in project.secondary_cs_assignments %}
+            <span class="overlay-secondary-cs-row">
+                {{ person_chip(assignment.user) }}
+                {% if can_manage_cs %}
+                <button type="button" class="overlay-secondary-cs-remove" data-user-id="{{ assignment.user_id }}"
+                    aria-label="Remove">&times;</button>
+                {% endif %}
+            </span>
+            {% else %}
+            <span class="overlay-field-empty">None</span>
+            {% endfor %}
+        </span>
+        {% if can_manage_cs %}
+        {{ avatar_picker('secondary-cs-add-picker', None, available_cs_users, '+ Add') }}
+        {% endif %}
+    </span>
+</div>
+<div class="overlay-property-row">
+    <span class="overlay-property-label">Project Owner</span>
+    <span class="overlay-property-value">
+        {% if can_assign_owner %}
+        {{ avatar_picker('project-owner-picker', project.project_owner, owner_options, '+ Add Project Owner…') }}
+        {% else %}
+        {{ person_chip(project.project_owner, 'Unassigned') }}
+        {% endif %}
+    </span>
+    </div>

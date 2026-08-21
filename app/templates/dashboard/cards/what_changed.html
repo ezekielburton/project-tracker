@@ -87,7 +87,7 @@
 
     {% if what_changed %}
         {% for entry in what_changed %}
-            <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=entry.project_id) }}?from=dashboard">
+            <a class="dash-row" href="{{ url_for('project_list.index', project=entry.project_id) }}">
                 {# dubai_time converts the stored UTC timestamp to the
                    office's local time zone — same filter used everywhere
                    else in this app. #}

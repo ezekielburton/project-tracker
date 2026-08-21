@@ -41,6 +41,22 @@
     // being torn down, and matches this file's existing one-variable-per-
     // page-type convention (_dashboardStream / _detailStream).
     var _roleDashboardStream = null;
+    // New project overlay (task #35) — separate from _detailStream above on
+    // purpose: _detailStream/pollDetail are scoped to the OLD /projects/<id>
+    // detail page's #section-assignments fingerprint + a full-page reload,
+    // neither of which apply here (the overlay is injected into the
+    // Projects list page, not its own page nav, and refreshes via
+    // loadSubTabContent rather than window.location.reload()). Started/
+    // stopped explicitly by project_list.js around overlay open/close,
+    // since there's no page-navigation event to hook it off of like init()
+    // uses for everything else in this file.
+    var _overlayStream = null;
+    // Projects list page table refresh (task #55, table-side) — separate
+    // from _overlayStream above: this one is tied to init()/teardown()'s
+    // normal page-navigation lifecycle (like _dashboardStream/_detailStream/
+    // _roleDashboardStream), not started/stopped by hand around an overlay
+    // open/close.
+    var _projectTableStream = null;
 
     // How often the fallback interval polls, when SSE isn't available or
     // has dropped — matches the cadence the old setInterval-only design used.
@@ -309,6 +325,22 @@
             _roleDashboardStream.close();
             _roleDashboardStream = null;
         }
+        if (_projectTableStream !== null) {
+            _projectTableStream.close();
+            _projectTableStream = null;
+        }
+    }
+
+    function stopOverlayStream() {
+        if (_overlayStream !== null) {
+            _overlayStream.close();
+            _overlayStream = null;
+        }
+    }
+
+    function startOverlayStream(projectId, onChange) {
+        stopOverlayStream();
+        _overlayStream = _connectLiveStream('/sse/projects/' + projectId, onChange, _FALLBACK_INTERVAL_MS);
     }
 
 
@@ -382,6 +414,22 @@
                 if (window.helixDashboardRefresh) window.helixDashboardRefresh();
             }, _FALLBACK_INTERVAL_MS);
         }
+
+        // Projects list page (task #55, table-side): identified by
+        // .project-list-page, unique to project_list/index.html. Reuses the
+        // same /sse/dashboard doorbell as both dashboards above — it's
+        // already a generic "some project changed" broadcast, not tied to
+        // any one page's markup, so a third page can listen to it too.
+        // The actual refresh (re-fetch just this view/filter/sort/group's
+        // rows and swap them into #project-table) is owned by
+        // project_list.js via window.helixRefreshProjectTable(), same
+        // separation-of-concerns as window.helixDashboardRefresh() above —
+        // this file only ever decides WHEN to refresh, never HOW.
+        if (document.querySelector('.project-list-page')) {
+            _projectTableStream = _connectLiveStream('/sse/dashboard', function () {
+                if (window.helixRefreshProjectTable) window.helixRefreshProjectTable();
+            }, _FALLBACK_INTERVAL_MS);
+        }
     }
 
 
@@ -391,8 +439,10 @@
 
     // Expose pause/resume so modals can stop polling while they're open
     window.helixPolling = {
-        pause:  teardown,
-        resume: init
+        pause: teardown,
+        resume: init,
+        startOverlayStream: startOverlayStream,
+        stopOverlayStream: stopOverlayStream
     };
 
     // Run on the initial full page load

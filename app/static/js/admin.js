@@ -265,7 +265,7 @@
     }
 
     function renderAccountEdit(user) {
-        var roleOptions = ['cs', 'designer', 'team_lead', 'management', 'admin'].map(function (r) {
+        var roleOptions = ['cs', 'designer', 'team_lead', 'management', 'project_owner', 'admin'].map(function (r) {
             return '<option value="' + r + '"' + (user.role === r ? ' selected' : '') + '>' + r + '</option>';
         }).join('');
         var teamOptions = ['2D', '3D', 'Technical'].map(function (t) {

@@ -187,7 +187,7 @@
                     </span>
                 </div>
                 {% for d in c.deliverables %}
-                <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard">
+                <a class="dash-row" href="{{ url_for('project_list.index', project=d.project_id) }}">
                     <span class="dash-row-main">
                         <span class="dash-row-title">{{ d.name }} <span class="dash-row-title-detail">&mdash; {{ d.project_name }}</span></span>
                         <span class="dash-row-tags">
@@ -219,7 +219,7 @@
                     <span class="dash-clash-severity-tag dash-clash-severity-tag--detected">Clash Detected</span>
                 </div>
                 {% for proj in c.projects %}
-                <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=proj.id) }}?from=dashboard">
+                <a class="dash-row" href="{{ url_for('project_list.index', project=proj.id) }}">
                     <span class="dash-row-main">
                         <span class="dash-row-title">{{ proj.name }}</span>
                         {% if proj.missing_designer_tags %}

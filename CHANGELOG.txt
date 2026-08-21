@@ -8,8 +8,11 @@ New Features:
 
 - Escalations in the dashboard now have chat threads can be used to gather more information by both parties.
 - Escalation history has been added for CS and Management roles
+- Implemented daily backups of the database
 
 Adjustments:
+
+- Cleaned up database for old depricated entries
 
 
 Bug Fixes:

@@ -369,6 +369,42 @@
             '</a>';
     }
 
+    // Lazy-loads the Average Project Time tab's row list on its FIRST
+    // open only (added 18 Jul 2026 — real perf fix, see the big comment
+    // on this in dashboard.py's index()/api_time_tracking_rows()). Before
+    // this, build_time_tracking_rows()'s full company-wide scan ran on
+    // EVERY admin/management dashboard page load, tab opened or not — the
+    // dominant cost behind a 3+ second dashboard load. The endpoint
+    // returns rendered HTML (not JSON) — the row markup is non-trivial
+    // nested structure, so this reuses the exact same Jinja partial
+    // server-side (_stat_avg_time_rows.html) instead of duplicating it in
+    // JS. `data-lazy-loaded` guards against re-fetching this expensive
+    // query every time the tab is merely re-opened within the same page
+    // load — a stale-until-next-page-load result is an acceptable
+    // tradeoff for a table this heavy, same "compute once, reuse"
+    // reasoning Role Snapshot's ROLE_SNAPSHOT_TILES blob already uses
+    // elsewhere on this page.
+    function fetchAndLoadTimeTrackingRows() {
+        var container = document.getElementById('dash-time-tracking-list');
+        if (!container || container.dataset.lazyLoaded === '1') return;
+
+        fetch('/dashboard/api/time-tracking-rows')
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                container.innerHTML = html;
+                container.dataset.lazyLoaded = '1';
+                // Content height just changed AFTER expandBody() already
+                // measured this tab's max-height (the tab was opened,
+                // THEN this fetch resolved) — same class of clipping bug
+                // remeasureExpandedBody() exists for everywhere else on
+                // this page.
+                remeasureExpandedBody(container.closest('.dash-card-body-content'));
+            })
+            .catch(function () {
+                container.innerHTML = '<p class="tt-empty">Could not load this table. Try reopening the tab.</p>';
+            });
+    }
+
     function fetchAndRenderDue(filterValue) {
         var container = document.getElementById('dash-due-list');
         if (!container) return;
@@ -2544,6 +2580,14 @@
                     var body = document.querySelector(
                         '#dash-content-area .dash-card-body-content[data-card="' + tab.dataset.card + '"]');
                     expandBody(body);
+                    // Average Project Time (added 18 Jul 2026) — lazy-load
+                    // its row list the first time THIS tab specifically is
+                    // opened. No-op on every other tab (the function's own
+                    // #dash-time-tracking-list guard) and a no-op here on
+                    // any page without a stat_avg_time tab at all.
+                    if (tab.dataset.card === 'stat_avg_time') {
+                        fetchAndLoadTimeTrackingRows();
+                    }
                     return;
                 }
 

@@ -41,8 +41,25 @@
     --oak: #A07C5A;
     --pine: #63775B;
     --rose: #D9A2A8;
+    --background: #f5f1ed;
+    --page-background: #F5F0E8;
 
-    --white: #FFFFFF;
+    --sky: #B9DEFE;
+    --coral: #FF8559;
+    --sage: #9ed4a5;
+    --lavender: #B390FF;
+    /* Toned down from #66D575 (21 Aug 2026, per Ezekiel — the old value read
+       as a jarring, dated "flat design" neon green next to the rest of this
+       softer palette, especially on the Handed to Production status pill).
+       Standard, well-worn "success green" instead of a fluorescent one —
+       still clearly distinct from --sage, just not fighting with it. */
+    --clover: #4CAF5A;
+    --poppy: #FF4F4F;
+    --salmon: #FF8989;
+
+    --plain-white: #FFFFFF;
+    --white: #fafafa;
+    --information: #fffdfa;
     --black: #1A1A1A;
     --grey-light: #E8E8E8;
     --grey-mid: #AAAAAA;
@@ -59,6 +76,31 @@
     --radius: 6px;
     --radius-sm: 4px;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+    /*  Density/sizing - change --text-base and everything else scaled.
+        Values below are sourced from what's already in heavy use */
+        
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+
+    --text-xxs: 0.4rem;
+    --text-xs: 0.7rem;
+    --text-sm: 0.78rem;
+    --text-base: 1rem;
+    --text-med: 1.1rem;
+    --text-1g: 1.25rem;
+    --text-xl: 1.6rem;
+    --sent-zone-text: 1.4rem;
+
+    --avatar-sm: 1.5rem;
+    --avatar-md: 1.875rem;
+    --avatar-lg: 2.5rem;
+
+    --row-height: 2.75rem;
 
     /* Semantic aliases */
     --color-text:   #1A1A1A;
@@ -92,8 +134,8 @@
 }
 
 .account-avatar {
-    width: 30px;
-    height: 30px;
+    width: var(--avatar-md);
+    height: var(--avatar-md);
     border-radius: 50%;
     background-color: var(--tangerine);
     color: var(--white);
@@ -175,7 +217,7 @@ html {
 
 body {
     font-family: var(--font-body);
-    background-color: var(--sandstone);
+    background-color: var(--page-background);
     color: var(--black);
     min-height: 100vh;
     display: flex;
@@ -294,7 +336,7 @@ textarea {
    max-width: 0 collapses it to zero layout width so it doesn't push the toggle button over the V. */
 .sidebar-logo-max {
     font-family: var(--font-logo);
-    font-size: 1.6rem;
+    font-size: var(--text-med);
     color: var(--tangerine);
     line-height: 1;
     opacity: 0;
@@ -4361,7 +4403,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     background: var(--white);
     border-right: 1px solid var(--border-subtle);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
-    z-index: 200;
+    z-index: 5000;
     display: flex;
     flex-direction: column;
     transform: translateX(0);
@@ -4468,9 +4510,9 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 .emulation-badge {
     position: fixed;
-    top: 4rem;
+    bottom: 1rem;
     right: 1.25rem;
-    z-index: 300;
+    z-index: 5000;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -4525,7 +4567,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 .emulation-badge-dropdown {
     position: absolute;
-    top: calc(100% + 0.5rem);
+    bottom: calc(100% + 0.5rem);
     right: 0;
     width: 240px;
     background: var(--white);

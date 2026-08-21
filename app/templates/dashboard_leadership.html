@@ -242,7 +242,7 @@
             {% if decisions %}
                 {% for d in decisions %}
                 <div class="dash-decision-row" style="display: grid !important; grid-template-columns: 2fr 2fr 1fr 1fr 130px 100px !important; align-items: center !important; gap: 1rem !important;">
-                    <a class="dash-row" href="{{ url_for('project_detail.detail', project_id=d.project_id) }}?from=dashboard" style="display: contents !important;">
+                    <a class="dash-row" href="{{ url_for('project_list.index', project=d.project_id) }}" style="display: contents !important;">
                         <span class="dash-row-title">{{ d.project_name }}</span>
                         <span class="dash-row-sub">{{ d.note }}</span>
                         {# Avatar+name chip (16 Jul 2026, same-day follow-up

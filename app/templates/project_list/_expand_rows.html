@@ -1,0 +1,59 @@
+{# app/templates/project_list/_expand_rows.html
+C&CM only — the customer-level sub-table. Each customer row is itself
+expandable: clicking its toggle fetches expand_customer()'s response
+(_deliverable_table.html) into the sibling container right below it —
+same lazy-fetch-once pattern the outer table and the deliverable table
+both already use.
+
+Built as its own single shared grid (expand-customer-*), the same "one
+grid, rows are display:contents" technique as expand-deliverable-* and
+the outer .project-table — keeps header/row borders pixel-aligned and
+lets every column but the pinned expand slot resize independently.
+
+Interleaves a .project-expand-container after every row, same as the
+outer table — so, also like the outer table, each row and its container
+gets an explicit --row-num / grid-row rather than relying on the grid's
+automatic placement, since a hidden container coming in and out of the
+layout could otherwise shift things around. #}
+{% from '_shared_macros.html' import tag, status_pill %}
+<div class="expand-customer-table">
+    <div class="expand-customer-row expand-customer-header" style="--row-num: 1;">
+        <span class="expand-customer-col-expand"></span>
+        <span class="expand-customer-col-name" data-col-key="name">Customer Name<span
+                class="expand-customer-col-resize-handle"></span></span>
+        <span class="expand-customer-col-design-deadline" data-col-key="design-deadline">Design Deadline<span
+                class="expand-customer-col-resize-handle"></span></span>
+        <span class="expand-customer-col-installation-date" data-col-key="installation-date">Installation Date<span
+                class="expand-customer-col-resize-handle"></span></span>
+        <span class="expand-customer-col-deliverable-count" data-col-key="deliverable-count">Deliverables<span
+                class="expand-customer-col-resize-handle"></span></span>
+        <span class="expand-customer-col-revision-count" data-col-key="revision-count">Revisions<span
+                class="expand-customer-col-resize-handle"></span></span>
+        <span class="expand-customer-col-status" data-col-key="status">Status<span
+                class="expand-customer-col-resize-handle"></span></span>
+    </div>
+    {% for row in rows %}
+    <div class="expand-customer-row{% if loop.last %} expand-customer-row--last{% endif %}"
+        style="--row-num: {{ loop.index * 2 }};">
+        <span class="expand-customer-col-expand">
+            <button type="button" class="project-expand-toggle" aria-label="Show deliverables" aria-expanded="false"
+                data-expand-url="{{ row.expand_url }}">▸</button>
+        </span>
+        <span class="expand-customer-col-name">{{ row.label }}</span>
+        <span
+            class="expand-customer-col-design-deadline{% if row.design_deadline and row.design_deadline < today %} project-deadline--past{% endif %}">
+            {{ row.design_deadline.strftime('%d %b %Y') if row.design_deadline else '—' }}
+        </span>
+        <span class="expand-customer-col-installation-date">
+            {{ row.installation_date.strftime('%d %b %Y') if row.installation_date else '—' }}
+        </span>
+        <span class="expand-customer-col-deliverable-count">{{ row.deliverable_count }}</span>
+        <span class="expand-customer-col-revision-count">{{ row.revision_count }}</span>
+        <span class="expand-customer-col-status">{{ status_pill(row.blanket_status, row.status_pill_class) }}</span>
+    </div>
+<div class="project-expand-container project-expand-container--customer-nested" hidden
+        style="grid-row: {{ loop.index * 2 + 1 }};"></div>
+    {% else %}
+    <p class="project-list-empty">Nothing to show.</p>
+    {% endfor %}
+    </div>
