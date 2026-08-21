@@ -93,6 +93,12 @@ _PROJECT_ID_GETTERS = {
     # needed.
     'ProjectNote': lambda obj: obj.project_id,
     'SiteVisit':   lambda obj: obj.project_id,
+    # Added 21 Aug 2026 (Phase 4 — message reactions) — same shape as
+    # DecisionFlagMessage/DeliverableAssignment above: ProjectNoteReaction
+    # has no project_id column of its own, only a note_id, so it needs the
+    # relationship hop through .note to reach it. Without this, reacting
+    # to a message would never live-update anyone else's open drawer.
+    'ProjectNoteReaction': lambda obj: obj.note.project_id,
 }
 
 

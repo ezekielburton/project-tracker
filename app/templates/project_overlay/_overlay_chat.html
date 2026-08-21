@@ -1,0 +1,263 @@
+{# app/templates/project_overlay/_overlay_chat.html
+Persistent chat drawer content (M10 chat redesign) — a WhatsApp-style
+thread that replaced the old Notes card. project_list.js's loadChatDrawer()
+fetches this once per overlay open (on first open of the drawer) and
+re-fetches wholesale after every send/delete/pin, same reload-the-whole-
+fragment tradeoff every other overlay section already makes (see
+project_notes_card.js's reload()) — simpler than hand-patching a single
+bubble in and out of the DOM. Visible to anyone who can open the overlay
+at all, same as the old Notes card was — only the composer and the per-
+message hover toolbar/dropdown are gated behind can_manage_notes, not the
+thread itself.
+
+Message-interactions adjustment (21 Aug 2026): each message now carries a
+hover-revealed react-smiley + chevron (top right of its bubble); the
+chevron opens a Copy/Reply/React/Pin/Delete dropdown, the smiley jumps
+straight to the quick-react popover. Replies render a quoted snippet
+inside the new bubble; the timestamp moved from its own row into the
+bubble's bottom-right corner (a floated span, last child of the text).
+
+Phase 3 — attachments (21 Aug 2026): a message can carry one image/video
+instead of, or alongside, text (see ProjectNote.display_text() for what
+renders when there's no caption). The composer's attach button and staged-
+attachment preview bar are wired up in project_chat_panel.js.
+
+Phase 4 — emoji + reactions (21 Aug 2026): the composer's emoji picker
+inserts a character into the text you're typing (client-only, no route).
+The quick-react popover above is a DIFFERENT thing — real reactions now,
+POSTing to toggle_reaction() and rendering as the "👍 3"-style chips below
+each bubble (see row.reaction_groups).
+
+Phase 5 — mentions (21 Aug 2026): typing "@" in the composer opens a
+picker over the project's CS lead/secondary CS/project owner/assigned
+designers (project_chat_panel.js, fetched from /overlay/chat/mentionable);
+picking someone inserts "@Name " and notifies them on send. The bubble
+below renders row.body_html (see _highlight_mentions() in
+project_notes.py), not the raw note.body directly, so a sent message's
+"@Name" gets wrapped for highlighting instead of showing as plain text. #}
+
+{% if pinned_note %}
+<div class="overlay-chat-pinned-strip">
+    <div class="overlay-chat-pinned-item" data-jump-to="{{ pinned_note.id }}">
+        <span class="overlay-chat-pinned-icon">📌</span>
+        <span class="overlay-chat-pinned-author">{{ pinned_note.author.name }}:</span>
+        <span class="overlay-chat-pinned-text">{{ pinned_note.display_text() }}</span>
+        {% if can_manage_notes %}
+        <button type="button" class="overlay-chat-pinned-menu-btn" data-note-id="{{ pinned_note.id }}" aria-label="Pin options">⌄</button>
+        <div class="overlay-chat-pinned-menu hidden" data-note-id="{{ pinned_note.id }}">
+            <button type="button" class="overlay-chat-menu-item" data-action="unpin" data-note-id="{{ pinned_note.id }}">Unpin</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div class="overlay-chat-thread" id="overlay-chat-thread">
+    {% for row in chat_rows %}
+    {% if row.day_label %}
+    <div class="overlay-chat-day-divider"><span>{{ row.day_label }}</span></div>
+    {% endif %}
+    {% set note = row.note %}
+    <div class="overlay-chat-message{% if row.is_own %} overlay-chat-message--own{% endif %}" data-note-id="{{ note.id }}">
+        {% if not row.is_own %}
+        <span class="overlay-chat-avatar person-avatar">
+            {% if note.author.avatar_filename %}
+            <img src="{{ url_for('static', filename='avatars/' + note.author.avatar_filename) }}" alt="" loading="lazy">
+            {% else %}
+            <span class="person-avatar-initials">{{ note.author.name[0].upper() }}</span>
+            {% endif %}
+        </span>
+        {% endif %}
+        <div class="overlay-chat-bubble-col">
+            {% if not row.is_own %}<span class="overlay-chat-author">{{ note.author.name }}</span>{% endif %}
+            <div class="overlay-chat-bubble-wrap">
+                {% if can_manage_notes %}
+                <div class="overlay-chat-hover-toolbar">
+                    <button type="button" class="overlay-chat-react-btn" data-note-id="{{ note.id }}" aria-label="React">🙂</button>
+                    <button type="button" class="overlay-chat-menu-btn" data-note-id="{{ note.id }}" aria-label="Message options">⌄</button>
+                </div>
+                {% endif %}
+                <div class="overlay-chat-bubble">
+                    {% if note.reply_to %}
+                    <div class="overlay-chat-quote">
+                        <span class="overlay-chat-quote-author">{{ note.reply_to.author.name }}</span>
+                        <span class="overlay-chat-quote-text">{{ note.reply_to.display_text() }}</span>
+                    </div>
+                    {% endif %}
+                    {% if note.attachment_type %}
+                    {# Caption-less attachment: timestamp overlays the media itself (WhatsApp-
+                       style scrim pill) instead of getting its own text line below — see the
+                       {% if note.body %} branch underneath, which is what handles a caption. #}
+                    <div class="overlay-chat-attachment-wrap">
+                        {% if note.attachment_type == 'image' %}
+                        <a href="{{ url_for('project_notes.chat_attachment', note_id=note.id) }}" target="_blank">
+                            <img src="{{ url_for('project_notes.chat_attachment', note_id=note.id) }}" class="overlay-chat-attachment-image" alt="" loading="lazy">
+                        </a>
+                        {% else %}
+                        <video src="{{ url_for('project_notes.chat_attachment', note_id=note.id) }}" class="overlay-chat-attachment-video" controls preload="metadata"></video>
+                        {% endif %}
+                        {% if not note.body %}
+                        <span class="overlay-chat-timestamp overlay-chat-timestamp--on-media">{{ row.time }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if note.body %}
+                    <p class="overlay-chat-bubble-text">{{ row.body_html }}<span class="overlay-chat-timestamp">{{ row.time }}</span></p>
+                    {% endif %}
+                    {% if note.file_link %}
+                    <a href="{{ note.file_link }}" target="_blank" class="overlay-note-link">{{ note.file_link }}</a>
+                    {% endif %}
+                </div>
+                {% if can_manage_notes %}
+                <div class="overlay-chat-menu hidden" data-note-id="{{ note.id }}">
+                    <button type="button" class="overlay-chat-menu-item" data-action="copy" data-note-id="{{ note.id }}">Copy</button>
+                    <button type="button" class="overlay-chat-menu-item" data-action="reply" data-note-id="{{ note.id }}">Reply</button>
+                    <button type="button" class="overlay-chat-menu-item" data-action="react" data-note-id="{{ note.id }}">React</button>
+                    <button type="button" class="overlay-chat-menu-item" data-action="pin" data-note-id="{{ note.id }}">{{ 'Unpin' if note.is_pinned else 'Pin' }}</button>
+                    {% if row.can_delete %}
+                    <button type="button" class="overlay-chat-menu-item overlay-chat-menu-item-danger" data-action="delete" data-note-id="{{ note.id }}">Delete</button>
+                    {% endif %}
+                </div>
+                <div class="overlay-chat-react-popover hidden" data-note-id="{{ note.id }}">
+                    {% for emoji in ['👍', '❤️', '😂', '😮', '😢', '🙏'] %}
+                    <button type="button" class="overlay-chat-react-option" data-emoji="{{ emoji }}" data-note-id="{{ note.id }}">{{ emoji }}</button>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% if row.reaction_groups %}
+            {# Reaction chips (Phase 4, 21 Aug 2026) — always rendered for
+               anyone who can see the thread (reactions are informational),
+               but only clickable (a <button>, toggling your own reaction)
+               for people who can actually chat here; a plain <span> for
+               read-only viewers, same distinction the rest of this file
+               draws around can_manage_notes. #}
+            <div class="overlay-chat-reactions">
+                {% for group in row.reaction_groups %}
+                {% if can_manage_notes %}
+                <button type="button" class="overlay-chat-reaction-chip{% if group.reacted_by_me %} overlay-chat-reaction-chip--mine{% endif %}"
+                    data-note-id="{{ note.id }}" data-emoji="{{ group.emoji }}">{{ group.emoji }} {{ group.count }}</button>
+                {% else %}
+                <span class="overlay-chat-reaction-chip{% if group.reacted_by_me %} overlay-chat-reaction-chip--mine{% endif %}">{{ group.emoji }} {{ group.count }}</span>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <p class="overlay-field-empty overlay-chat-empty">No messages yet — start the conversation.</p>
+    {% endfor %}
+</div>
+
+{% if can_manage_notes %}
+<div class="overlay-chat-reply-preview hidden" id="overlay-chat-reply-preview">
+    <div class="overlay-chat-reply-preview-body">
+        <span class="overlay-chat-reply-preview-author" id="overlay-chat-reply-preview-author"></span>
+        <span class="overlay-chat-reply-preview-text" id="overlay-chat-reply-preview-text"></span>
+    </div>
+    <button type="button" class="overlay-chat-reply-preview-close" id="overlay-chat-reply-preview-close" aria-label="Cancel reply">&times;</button>
+</div>
+<div class="overlay-chat-staged-attachment hidden" id="overlay-chat-staged-attachment">
+    <div class="overlay-chat-staged-attachment-preview" id="overlay-chat-staged-attachment-preview"></div>
+    <span class="overlay-chat-staged-attachment-name" id="overlay-chat-staged-attachment-name"></span>
+    <button type="button" class="overlay-chat-staged-attachment-remove" id="overlay-chat-staged-attachment-remove" aria-label="Remove attachment">&times;</button>
+</div>
+<div class="overlay-chat-composer">
+    <button type="button" class="overlay-chat-attach-btn" id="overlay-chat-attach-btn" aria-label="Attach photo or video">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+    </button>
+    <input type="file" id="overlay-chat-file-input" class="hidden"
+        accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm,video/x-m4v">
+    <div class="overlay-chat-emoji-anchor">
+        <button type="button" class="overlay-chat-attach-btn" id="overlay-chat-emoji-trigger" aria-label="Add emoji">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                <line x1="9" x2="9.01" y1="9" y2="9"/>
+                <line x1="15" x2="15.01" y1="9" y2="9"/>
+            </svg>
+        </button>
+        {# Composer emoji picker (Phase 4, 21 Aug 2026) — separate from the
+           per-message quick-react popover above: this one inserts a
+           character into the text you're typing, doesn't touch the
+           server. Fully static/server-rendered (no per-note data needed),
+           unlike everything else in this file — picking an emoji here
+           stays open (WhatsApp lets you pick several in a row); it only
+           closes via its own trigger or an outside click, same as every
+           other popover in this drawer. #}
+        <div class="overlay-chat-emoji-picker hidden" id="overlay-chat-emoji-picker">
+            <div class="overlay-chat-emoji-tabs">
+                <button type="button" class="overlay-chat-emoji-tab" data-target="emoji-cat-smileys" aria-label="Smileys">😀</button>
+                <button type="button" class="overlay-chat-emoji-tab" data-target="emoji-cat-gestures" aria-label="Gestures">👍</button>
+                <button type="button" class="overlay-chat-emoji-tab" data-target="emoji-cat-hearts" aria-label="Hearts">❤️</button>
+                <button type="button" class="overlay-chat-emoji-tab" data-target="emoji-cat-objects" aria-label="Objects">🔥</button>
+                <button type="button" class="overlay-chat-emoji-tab" data-target="emoji-cat-food" aria-label="Food">🍕</button>
+                <button type="button" class="overlay-chat-emoji-tab" data-target="emoji-cat-nature" aria-label="Nature">🌟</button>
+            </div>
+            <div class="overlay-chat-emoji-grid" id="overlay-chat-emoji-grid">
+                <div class="overlay-chat-emoji-section" id="emoji-cat-smileys">
+                    <span class="overlay-chat-emoji-section-label">Smileys</span>
+                    <div class="overlay-chat-emoji-row">
+                        {% for e in ['😀','😁','😂','🤣','😊','😇','🙂','😉','😍','😘','😜','🤗','🤔','😎','😴','🥱','😢','😭','😤','😡','🥳','😱','🤯','🥺'] %}
+                        <button type="button" class="overlay-chat-emoji-option" data-emoji="{{ e }}">{{ e }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="overlay-chat-emoji-section" id="emoji-cat-gestures">
+                    <span class="overlay-chat-emoji-section-label">Gestures</span>
+                    <div class="overlay-chat-emoji-row">
+                        {% for e in ['👍','👎','👏','🙌','🙏','💪','🤝','👋','✌️','🤞','👌','🤙'] %}
+                        <button type="button" class="overlay-chat-emoji-option" data-emoji="{{ e }}">{{ e }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="overlay-chat-emoji-section" id="emoji-cat-hearts">
+                    <span class="overlay-chat-emoji-section-label">Hearts</span>
+                    <div class="overlay-chat-emoji-row">
+                        {% for e in ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','💕','💖','💯'] %}
+                        <button type="button" class="overlay-chat-emoji-option" data-emoji="{{ e }}">{{ e }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="overlay-chat-emoji-section" id="emoji-cat-objects">
+                    <span class="overlay-chat-emoji-section-label">Objects</span>
+                    <div class="overlay-chat-emoji-row">
+                        {% for e in ['🔥','🎉','✨','⭐','🚀','💡','📌','📅','✅','❌','⚠️','🎯'] %}
+                        <button type="button" class="overlay-chat-emoji-option" data-emoji="{{ e }}">{{ e }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="overlay-chat-emoji-section" id="emoji-cat-food">
+                    <span class="overlay-chat-emoji-section-label">Food</span>
+                    <div class="overlay-chat-emoji-row">
+                        {% for e in ['☕','🍕','🍔','🍺','🍻','🍰','🎂','🍎','🍓'] %}
+                        <button type="button" class="overlay-chat-emoji-option" data-emoji="{{ e }}">{{ e }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="overlay-chat-emoji-section" id="emoji-cat-nature">
+                    <span class="overlay-chat-emoji-section-label">Nature</span>
+                    <div class="overlay-chat-emoji-row">
+                        {% for e in ['🌟','🌈','☀️','🌙','⚡','🌧️'] %}
+                        <button type="button" class="overlay-chat-emoji-option" data-emoji="{{ e }}">{{ e }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="overlay-chat-input-wrap">
+        <textarea id="overlay-chat-input" class="overlay-chat-composer-input" placeholder="Message… (@ to mention)" rows="1"></textarea>
+        {# @-mention picker (Phase 5, 21 Aug 2026) — built and populated
+           entirely client-side (project_chat_panel.js fetches the
+           project's mentionable roster once per drawer-open from
+           /overlay/chat/mentionable, then filters it live as you type
+           after an "@"). Empty/hidden until there's a match — unlike the
+           emoji picker, there's no fixed list to server-render here. #}
+        <div class="overlay-chat-mention-picker hidden" id="overlay-chat-mention-picker"></div>
+    </div>
+    <button type="button" class="overlay-chat-send-btn" id="overlay-chat-send-btn" aria-label="Send">➤</button>
+</div>
+<span class="overlay-flag-revision-error hidden" id="overlay-chat-error"></span>
+{% endif %}

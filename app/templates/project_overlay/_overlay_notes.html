@@ -1,69 +1,39 @@
 {# app/templates/project_overlay/_overlay_notes.html
-Notes + Site Visits section (task #52/M9) — a top-level rail section,
-not a Design sub-tab (see project_overlay.js's SECTION_COLORS / rail
-markup). One merged activity feed (ProjectNote + SiteVisit rows,
-interleaved by created_at — 18 Aug 2026 per Ezekiel) inside the Notes
-card, plus a compact Site Visits card holding only the logging form —
-a logged visit shows up as its own row in the feed above rather than a
-separate read-only list of its own. Both share one route
-(overlay_notes()), which builds the merged/sorted activity_items list. #}
+Site Visits tab (M10 chat redesign, 21 Aug 2026) — this used to also hold
+a merged Notes feed; notes now live in the persistent chat drawer instead
+(see _overlay_chat.html + project_notes.py's overlay_chat()), so this
+partial is just the site-visit log + logging form now. Filename kept as
+_overlay_notes.html (not renamed to match) since a rename needs a real
+git mv, which this session's remote file tools can't do — a safe,
+non-blocking cleanup for later. #}
 {% from '_shared_macros.html' import card, avatar_picker %}
 <div class="overlay-notes-section">
-{% call card('Notes') %}
+{% call card('Site Visits') %}
 
 <div class="overlay-notes-list" id="overlay-notes-list">
-    {% for item in activity_items %}
-        {% if item.type == 'note' %}
-        {% set note = item.note %}
-        <div class="overlay-note-item" data-note-id="{{ note.id }}">
-            <div class="overlay-note-meta">
-                <span class="overlay-note-author">{{ note.author.name }}</span>
-                <span class="overlay-note-date">{{ note.created_at.strftime('%d %b %Y, %H:%M') }}</span>
-            </div>
-            <p class="overlay-notes-text">{{ note.body }}</p>
-            {% if note.file_link %}
-            <a href="{{ note.file_link }}" target="_blank" class="overlay-note-link">{{ note.file_link }}</a>
-            {% endif %}
-            {% if can_manage_notes and (note.author_id == actor.id or actor.role in ('admin', 'management')) %}
-            <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-note-delete"
-                data-note-id="{{ note.id }}">Delete</button>
-            {% endif %}
+    {% for visit in site_visits %}
+    <div class="overlay-note-item overlay-note-item--visit" data-visit-id="{{ visit.id }}">
+        <div class="overlay-note-meta">
+            <span class="overlay-note-author">🚗 {{ visit.user.name }} — Site Visit</span>
+            <span class="overlay-note-date">{{ visit.created_at.strftime('%d %b %Y, %H:%M') }}</span>
         </div>
-        {% else %}
-        {% set visit = item.visit %}
-        <div class="overlay-note-item overlay-note-item--visit" data-visit-id="{{ visit.id }}">
-            <div class="overlay-note-meta">
-                <span class="overlay-note-author">🚗 {{ visit.user.name }} — Site Visit</span>
-                <span class="overlay-note-date">{{ visit.created_at.strftime('%d %b %Y, %H:%M') }}</span>
-            </div>
-            <p class="overlay-notes-text">
-                {{ visit.start_at.strftime('%d %b %Y, %H:%M') }} – {{ visit.end_at.strftime('%d %b %Y, %H:%M') }}
-            </p>
-            {% if visit.location %}
-            <a href="{{ visit.location }}" target="_blank" class="overlay-note-link">{{ visit.location }}</a>
-            {% endif %}
-            {% if visit.notes %}<p class="overlay-notes-text">{{ visit.notes }}</p>{% endif %}
-            {% if visit.user_id == actor.id or actor.role in ('admin', 'management') %}
-            <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-visit-delete"
-                data-visit-id="{{ visit.id }}">Delete</button>
-            {% endif %}
-        </div>
+        <p class="overlay-notes-text">
+            {{ visit.start_at.strftime('%d %b %Y, %H:%M') }} – {{ visit.end_at.strftime('%d %b %Y, %H:%M') }}
+        </p>
+        {% if visit.location %}
+        <a href="{{ visit.location }}" target="_blank" class="overlay-note-link">{{ visit.location }}</a>
         {% endif %}
+        {% if visit.notes %}<p class="overlay-notes-text">{{ visit.notes }}</p>{% endif %}
+        {% if visit.user_id == actor.id or actor.role in ('admin', 'management') %}
+        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-visit-delete"
+            data-visit-id="{{ visit.id }}">Delete</button>
+        {% endif %}
+    </div>
     {% else %}
-    <p class="overlay-field-empty">No notes or site visits yet.</p>
+    <p class="overlay-field-empty">No site visits logged yet.</p>
     {% endfor %}
 </div>
 
-{% if can_manage_notes %}
-<div class="overlay-note-add">
-    <textarea id="overlay-note-body" class="overlay-create-textarea" placeholder="Add a note…"></textarea>
-    <span class="overlay-flag-revision-error hidden" id="overlay-note-error"></span>
-    <button type="button" class="overlay-file-action-btn" id="overlay-note-add-btn">Add Note</button>
-</div>
-{% endif %}
-{% endcall %}
-
-{% call card('Site Visits') %}
 {% if can_log_site_visit %}
 <div class="overlay-note-add">
     <label class="overlay-field-label">Designer</label>

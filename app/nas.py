@@ -423,6 +423,27 @@ def build_file_path(project, subfolder, filename):
     client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
     return f'{root}/{year}/{client_name}/{project.name}/{subfolder}/{filename}'
 
+
+def build_chat_file_path(project, filename):
+    """
+    Build the full NAS path for a chat attachment (M10 chat redesign —
+    Phase 3, 21 Aug 2026). Mirrors build_file_path's Year/Client/Project
+    structure but under NAS_CHATS_ROOT, a separate admin-only-access root
+    from NAS_PROJECT_ROOT — no per-type subfolder split (images and videos
+    for a project share one folder), since the whole point per Ezekiel is
+    "easy for me to clean up if ever needed" at the project level.
+    e.g. /Chats/2026/P&G/Summer 2026/9f2a...c1.jpg
+
+    No _create_folder() calls here unlike create_project_folders() below —
+    upload_app_file's own upload call creates any missing folder in the
+    path on the fly (same as every other NAS upload route already relies
+    on), so there's no separate provisioning step needed per project.
+    """
+    root        = current_app.config['NAS_CHATS_ROOT']
+    year        = project.created_at.year
+    client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
+    return f'{root}/{year}/{client_name}/{project.name}/{filename}'
+
 def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
     """
     Upload file bytes directly to a NAS folder. Retries up to _max_attempts

@@ -768,6 +768,9 @@ class ProjectNote(db.Model):
     model every out-of-scope case in the status/data model itself. Distinct
     from ActivityLog, which is machine-written; these are human-written.
     Tags set up the future chat features (Projects Redesign Architecture.md §11).
+    reply_to_id/is_pinned power the WhatsApp-style message interactions in
+    the chat drawer (M10 chat redesign, 21 Aug 2026) — quoting a message
+    when replying, and pinning one to the top of the thread.
     """
     __tablename__ = 'project_notes'
 
@@ -777,13 +780,72 @@ class ProjectNote(db.Model):
     body = db.Column(db.Text, nullable=False)
     file_link = db.Column(db.String(500), nullable=True)
     tags = db.Column(db.JSON, nullable=True)
+    # ON DELETE SET NULL: deleting the original message a reply quoted should
+    # orphan the quote (it just stops rendering), not cascade-delete the reply.
+    reply_to_id = db.Column(db.Integer, db.ForeignKey('project_notes.id', ondelete='SET NULL'), nullable=True)
+    is_pinned = db.Column(db.Boolean, nullable=False, default=False)
+    # Attachments (Phase 3 — images/videos, 21 Aug 2026). attachment_filename
+    # is the UUID-based name it's actually stored under on the NAS (see
+    # app.nas.build_chat_file_path); attachment_original_filename is what
+    # the sender's device called it, kept only for display/download-name
+    # purposes. attachment_type is 'image' | 'video' | None — None for an
+    # ordinary text-only note, same as today.
+    attachment_filename = db.Column(db.String(255), nullable=True)
+    attachment_original_filename = db.Column(db.String(255), nullable=True)
+    attachment_type = db.Column(db.String(10), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     project = db.relationship('Project', backref=db.backref('notes', cascade='all, delete-orphan'))
     author = db.relationship('User', foreign_keys=[author_id])
+    # remote_side=[id] tells SQLAlchemy which side of this self-referential
+    # FK is the "one" (the quoted original) vs. the "many" (replies to it).
+    reply_to = db.relationship('ProjectNote', remote_side=[id], foreign_keys=[reply_to_id])
+
+    def display_text(self):
+        """Text to show in the bubble/quote when there's no caption — an
+        attachment sent with no message still needs SOMETHING to render as
+        the bubble's text (and as the quoted snippet if someone replies to
+        it), same as WhatsApp showing "Photo"/"Video" for a caption-less
+        attachment."""
+        if self.body:
+            return self.body
+        if self.attachment_type == 'image':
+            return '📷 Photo'
+        if self.attachment_type == 'video':
+            return '🎥 Video'
+        return ''
 
     def __repr__(self):
         return f'<ProjectNote project={self.project_id} author={self.author_id}>'
+
+
+class ProjectNoteReaction(db.Model):
+    """
+    One person's emoji reaction to one chat message (M10 chat redesign —
+    Phase 4, 21 Aug 2026) — the real backend behind the quick-react
+    popover, which until now only opened/closed as a UI-only provision
+    (see project_chat_panel.js's earlier TODO). One reaction per person
+    per message, enforced by the unique constraint below: picking a
+    different emoji replaces your previous one, picking the same emoji
+    again removes it — the same toggle behaviour WhatsApp uses, not
+    unlimited reactions per person.
+    """
+    __tablename__ = 'project_note_reactions'
+    __table_args__ = (
+        db.UniqueConstraint('note_id', 'user_id', name='uq_project_note_reactions_note_user'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    note_id = db.Column(db.Integer, db.ForeignKey('project_notes.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    emoji = db.Column(db.String(16), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    note = db.relationship('ProjectNote', backref=db.backref('reactions', cascade='all, delete-orphan'))
+    user = db.relationship('User', foreign_keys=[user_id])
+
+    def __repr__(self):
+        return f'<ProjectNoteReaction note={self.note_id} user={self.user_id} emoji={self.emoji!r}>'
 
 
 class SiteVisit(db.Model):

@@ -1,9 +1,10 @@
 // app/static/js/project_notes_card.js
 //
-// Notes + Site Visits section (task #52/M9). Both cards live in one
-// fragment (_overlay_notes.html) and share this one controller — simplest
-// thing that works, since neither card has enough independent complexity
-// to justify its own file (unlike Deliverables/Pre-Production).
+// Site Visits tab controller (task #52/M9, notes half moved out M10 chat
+// redesign — see project_chat_panel.js). Kept its original filename/
+// module name (ProjectNotesCard) since renaming needs a real git mv this
+// session's remote file tools can't do — a safe, non-blocking cleanup for
+// later, along with the matching template rename noted in _overlay_notes.html.
 
 window.ProjectNotesCard = (function () {
 
@@ -37,69 +38,16 @@ window.ProjectNotesCard = (function () {
 
         function reload() {
             // Simplest safe way to reflect a successful add/delete — the
-            // create routes only hand back an id, not the full rendered
-            // row (author name, formatted dates, etc.), and re-fetching
-            // the whole section avoids duplicating that formatting logic
-            // in JS. Same tradeoff Deliverables' own edit-save flow makes.
-            // Returns the fetch chain so callers (e.g. wireNotes()'s add
-            // handler) can do something once the fresh content is in —
-            // like refocusing the note textarea for fast repeated entry.
+            // create route only hands back an id, not the full rendered
+            // row, and re-fetching the whole section avoids duplicating
+            // that formatting logic in JS. Same tradeoff Deliverables'
+            // own edit-save flow makes.
             return fetch(`/projects/${projectId}/overlay/notes`)
                 .then((res) => res.text())
                 .then((html) => {
                     contentEl.innerHTML = html;
-                    wireNotes();
                     wireSiteVisits();
                 });
-        }
-
-        // ---- Notes ----
-        function wireNotes() {
-            const addBtn = contentEl.querySelector('#overlay-note-add-btn');
-            const bodyInput = contentEl.querySelector('#overlay-note-body');
-            const errorEl = contentEl.querySelector('#overlay-note-error');
-
-            if (addBtn) {
-                addBtn.addEventListener('click', () => {
-                    const body = bodyInput ? bodyInput.value.trim() : '';
-                    if (!body) {
-                        if (errorEl) { errorEl.textContent = 'Note text is required.'; errorEl.classList.remove('hidden'); }
-                        return;
-                    }
-                    addBtn.disabled = true;
-                    if (errorEl) errorEl.classList.add('hidden');
-                    postJson(`/projects/${projectId}/overlay/notes/create`, { body: body }).then(({ ok, data }) => {
-                        addBtn.disabled = false;
-                        if (!ok || !data.success) {
-                            if (errorEl) { errorEl.textContent = data.error || 'Could not add this note.'; errorEl.classList.remove('hidden'); }
-                            return;
-                        }
-                        // Notes are meant to accumulate as an ongoing log,
-                        // not a one-off — refocus the fresh textarea so
-                        // adding the next one doesn't need an extra click.
-                        reload().then(() => {
-                            const freshBody = contentEl.querySelector('#overlay-note-body');
-                            if (freshBody) freshBody.focus();
-                        });
-                    });
-                });
-            }
-
-            contentEl.querySelectorAll('.overlay-note-delete').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    // M10: was bare window.confirm() — unified on showConfirm()
-                    window.showConfirm('Delete this note?', () => {
-                        const noteId = btn.getAttribute('data-note-id');
-                        postJson(`/projects/${projectId}/overlay/notes/${noteId}/delete`, {}).then(({ ok, data }) => {
-                            if (!ok || !data.success) {
-                                if (window.showToast) window.showToast(data.error || 'Could not delete this note.', 'error');
-                                return;
-                            }
-                            reload();
-                        });
-                    });
-                });
-            });
         }
 
         // ---- Site Visits ----
@@ -489,7 +437,6 @@ window.ProjectNotesCard = (function () {
             });
         }
 
-        wireNotes();
         wireSiteVisits();
 
         return {

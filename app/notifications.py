@@ -316,6 +316,28 @@ def notify_flag_reply(flag, project, triggered_by):
         )
 
 
+def notify_of_chat_mention(note, project, mentioned_users, triggered_by):
+    """Notify each person @-mentioned in a project chat message (M10 chat
+    redesign — Phase 5, 21 Aug 2026). mentioned_users is already resolved,
+    deduped, and validated against the project's real mentionable set by
+    the caller (create_note(), project_notes.py) — this just fires one
+    notification per person, same one-message-per-recipient shape as
+    notify_flag_reply above. No explicit `link` — falls back to opening
+    the project itself (see routes/notifications.py's mark_read), same
+    as every other project-scoped notification type; there's no deep
+    link into a specific drawer/tab yet."""
+    message = f'{triggered_by.name} mentioned you in "{project.name}".'
+    for user in mentioned_users:
+        create_notification(
+            recipient=user,
+            message=message,
+            notification_type='chat_mention',
+            project=project,
+            triggered_by=triggered_by,
+            pref_key='chat_mention',
+        )
+
+
 def notify_designers_of_revision_flag(deliverable, project, triggered_by):
     """
     Notify all designers assigned to a deliverable that it has been flagged for revision.

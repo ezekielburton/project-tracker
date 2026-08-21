@@ -14,7 +14,7 @@ window.ProjectOverlay = (function () {
     // before this existed. Wraps close (X/backdrop/Esc) and sub-tab clicks
     // only — switching top-level sections doesn't touch #project-overlay-
     // content today (see enterSection below), so there's nothing to lose yet.
-    function init(onCloseRequested, onSubTabSelected, onSectionSelected, onBeforeNavigate) {
+    function init(onCloseRequested, onSubTabSelected, onSectionSelected, onBeforeNavigate, onChatOpened) {
         var backdrop = document.getElementById('project-overlay-backdrop');
         var closeBtn = document.getElementById('project-overlay-close');
 
@@ -26,6 +26,49 @@ window.ProjectOverlay = (function () {
 
         if (closeBtn) {
             closeBtn.addEventListener('click', requestClose);
+        }
+
+        // ---- Chat drawer (M10 chat redesign) ----
+        // Persistent, reachable from any rail tab — not a section switch,
+        // so it lives here alongside close/backdrop/esc rather than in the
+        // section-switching block below. Opening both slides the drawer
+        // out AND widens the sheet (project_overlay.css's .chat-open) —
+        // two classes toggled together, one CSS transition each.
+        var sheet = document.getElementById('project-overlay-sheet');
+        var chatBtn = document.getElementById('project-overlay-chat-btn');
+        var chatDrawer = document.getElementById('project-overlay-chat-drawer');
+        var chatCloseBtn = document.getElementById('project-overlay-chat-close');
+        var chatLoaded = false;   // content is fetched once, on first open — not on every toggle
+
+        function openChat() {
+            if (!sheet || !chatDrawer) return;
+            sheet.classList.add('chat-open');
+            chatDrawer.classList.add('is-open');
+            if (chatBtn) chatBtn.classList.add('is-active');
+            if (!chatLoaded) {
+                chatLoaded = true;
+                if (onChatOpened) onChatOpened();
+            }
+        }
+
+        function closeChat() {
+            if (!sheet || !chatDrawer) return;
+            sheet.classList.remove('chat-open');
+            chatDrawer.classList.remove('is-open');
+            if (chatBtn) chatBtn.classList.remove('is-active');
+        }
+
+        function isChatOpen() {
+            return !!(chatDrawer && chatDrawer.classList.contains('is-open'));
+        }
+
+        if (chatBtn) {
+            chatBtn.addEventListener('click', function () {
+                if (isChatOpen()) { closeChat(); } else { openChat(); }
+            });
+        }
+        if (chatCloseBtn) {
+            chatCloseBtn.addEventListener('click', closeChat);
         }
 
         backdrop.addEventListener('click', function (e) {
@@ -149,7 +192,8 @@ window.ProjectOverlay = (function () {
             destroy: function () {
                 document.removeEventListener('keydown', escHandler);
             },
-            restoreView: restoreView
+            restoreView: restoreView,
+            isChatOpen: isChatOpen
         };
     }
 
