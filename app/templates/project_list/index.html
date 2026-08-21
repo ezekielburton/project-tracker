@@ -7,11 +7,8 @@ refresh renders byte-identical row markup to a real page load. #}
 
 {% block title %}Projects — Vitamin-E{% endblock %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/shared.css') }}?v={{ config.STATIC_VERSION }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/project_list.css') }}?v={{ config.STATIC_VERSION }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
-{% endblock %}
+{# shared.css/project_list.css/project_overlay.css now load globally from
+base.html's <head> instead of here — see the comment there for why. #}
 
 {% block content %}
 <div class="project-list-page">

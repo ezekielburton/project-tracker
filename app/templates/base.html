@@ -23,6 +23,17 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}?v={{ config.STATIC_VERSION }}">
+    {# shared.css/project_list.css/project_overlay.css load globally, same as
+    blog.css/feedback.css above and for the same reason — SPA navigation
+    (sidebar.js's navigateTo) strips everything outside <main id="main-content">
+    out of the response (see spa_strip_response in app/__init__.py), which
+    includes the whole <head>. A page-specific {% block extra_css %} only
+    ever renders on a real full page load, so a stylesheet declared there
+    silently never loads on a browser tab that reaches this page via SPA nav
+    instead — exactly what was happening on the Projects page until this. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shared.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_list.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
     {% block extra_css %}{% endblock %}
 
     {# Local-dev safety net (found 20 Aug 2026, Ezekiel): the Werkzeug
