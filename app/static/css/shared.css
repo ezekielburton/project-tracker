@@ -220,7 +220,11 @@
     font-size: var(--text-sm);
     font-weight: 700;
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
+    /* Full pill shape instead of the old --radius-sm square-cornered badge
+       (21 Aug 2026, per Ezekiel — the sharp-cornered solid-fill look read as
+       dated). Kept the flat-fill/mono-font language as-is; just the corners
+       and (see main.css) --clover's exact shade changed this pass. */
+    border-radius: 999px;
     white-space: nowrap;
     color: var(--black);
     /* placeholder — per-pill text colors TBD, you said ignore these for now */

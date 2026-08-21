@@ -67,6 +67,21 @@ def _get_session():
     doesn't eat a fresh ~10s timeout on every single NAS call for the rest
     of the run.
     """
+    return _login_with_session('FileStation')
+
+
+def _login_with_session(session_name):
+    """
+    Shared LAN-IP/NAS_TUNNEL_HOST fallback + _NAS_HOST_OVERRIDE caching
+    logic behind _get_session() — extracted 21 Aug 2026 so
+    resolve_drive_file_id() (Synology Drive) can reuse the exact same
+    tested fallback path instead of a second inline copy that could drift
+    out of sync. session_name is the Synology 'session' login param —
+    'FileStation' for _get_session()'s callers, 'SynologyDrive' for Drive
+    calls (Synology scopes which app an sid authorizes by this param, so
+    a FileStation sid isn't assumed to also work for Drive calls).
+    Returns (sid, host, port); raises RuntimeError on failure.
+    """
     global _NAS_HOST_OVERRIDE
 
     if _NAS_HOST_OVERRIDE is not None:
@@ -84,7 +99,7 @@ def _get_session():
                 'method':  'login',
                 'account': current_app.config['NAS_USERNAME'],
                 'passwd':  current_app.config['NAS_PASSWORD'],
-                'session': 'FileStation',
+                'session': session_name,
                 'format':  'sid',
             },
             timeout=10
@@ -551,3 +566,145 @@ def delete_app_file(nas_file_path):
             _logout(host, port, sid)
     except Exception as e:
         current_app.logger.warning(f'NAS delete failed for {nas_file_path}: {e}')
+
+
+# --------- Synology Drive deep-links (M10 NAS migration, 21 Aug 2026) ------
+#
+# Every user-facing "open this folder" button now points at Synology Drive
+# instead of File Station — Ezekiel's call, since Drive is the app people
+# actually browse in day to day now. Upload/download/rename/create-folder
+# (above) stay on the File Station API untouched; this section only builds
+# the clickable "open folder in browser" links.
+#
+# Drive addresses content by its own opaque internal file_id
+# (https://{host}/drive/#file_id={id}), and — confirmed 21 Aug 2026 against
+# Ezekiel's real DevTools capture — it has NO API that resolves a path
+# string straight to a file_id. Drive's own web client walks an ID tree:
+# SYNO.SynologyDrive.TeamFolders.list (method=list, version=1, no `path`
+# param — that response IS the root, each item already carries its own
+# file_id) gets you the top-level Team Folders (Docs and Templates,
+# Projects, etc). From there, SYNO.SynologyDrive.Files.list (method=list,
+# version=2) with path="id:{parent_file_id}" lists one folder's contents;
+# matching a child by `name` and taking ITS file_id lets you descend one
+# more level. Repeat per path segment. This replaces two earlier wrong
+# guesses: SYNO.SynologyDrive.Files method=get version=3 (doesn't exist),
+# and a '/team-folders/' path-string prefix (Drive doesn't resolve path
+# strings at all, so there was nothing for that prefix to fix).
+
+def _path_to_segments(path):
+    """Splits a File Station-style path ('/Docs and Templates/Templates/
+    Simulation Files') into the ordered list of folder names Drive's
+    TeamFolders/Files.list walk needs (see resolve_drive_file_id()).
+    Filters out empty segments, so a leading and/or trailing slash is
+    harmless."""
+    return [seg for seg in path.split('/') if seg]
+
+
+def resolve_drive_file_id(folder_path):
+    """
+    Resolves a filesystem-style path to its Synology Drive file_id by
+    walking Drive's own ID-based folder tree one segment at a time —
+    see the module comment above for why this can't be a single API call.
+
+    Logs in via _login_with_session('SynologyDrive') — the SAME LAN-IP/
+    NAS_TUNNEL_HOST fallback _get_session() uses, just a different
+    'session' scope (a FileStation sid isn't assumed to also authorize
+    Drive calls). Uses whichever (host, port) that login actually
+    succeeded on for every walk step too — not the raw config value.
+
+    Returns None on any failure (unreachable NAS, a path segment not
+    found, bad auth, unexpected response shape) — callers treat None as
+    "no Drive link available," same as the old File Station builders did
+    when NAS_WEB_URL wasn't configured. Every failure is logged via
+    current_app.logger so a None return isn't a dead end when debugging.
+    """
+    segments = _path_to_segments(folder_path)
+    if not segments:
+        current_app.logger.warning('Drive file_id lookup called with an empty path')
+        return None
+
+    try:
+        sid, host, port = _login_with_session('SynologyDrive')
+    except RuntimeError as e:
+        current_app.logger.warning(f'Drive login failed resolving {folder_path!r}: {e}')
+        return None
+
+    def _list(params):
+        # cookies={'id': sid} added 21 Aug 2026 alongside the existing _sid
+        # query param — mirrors download_app_file()'s FileStation.Download
+        # call elsewhere in this file. Some Synology webapi endpoints (Drive
+        # included, it seems) check the session cookie, not just _sid, and
+        # silently hand back a limited/empty result instead of a real auth
+        # error when it's missing, which is indistinguishable from "this
+        # path segment genuinely doesn't exist" without this.
+        resp = _NAS_SESSION.get(
+            _nas_url(host, port, '/webapi/entry.cgi'),
+            params={**params, '_sid': sid},
+            cookies={'id': sid},
+            timeout=10,
+        )
+        return resp.json()
+
+    try:
+        # Root level: Team Folders (no `path` param — this call IS the root).
+        data = _list({
+            'api': 'SYNO.SynologyDrive.TeamFolders', 'version': '1', 'method': 'list',
+            'offset': '0', 'limit': '1000',
+            'sort_by': 'name', 'sort_direction': 'asc',
+            'filter': '{"include_transient":true}',
+        })
+        if not data.get('success'):
+            current_app.logger.warning(f'Drive TeamFolders list failed resolving {folder_path!r}: {data}')
+            return None
+        items = data['data']['items']
+
+        file_id = None
+        for depth, segment in enumerate(segments):
+            match = next((it for it in items if it['name'] == segment), None)
+            if not match:
+                # Dumps the actual item names Drive returned at this level —
+                # added 21 Aug 2026 so a mismatch (wrong session scope, wrong
+                # root, a renamed folder) shows itself in one log line
+                # instead of another round of blind guessing.
+                current_app.logger.warning(
+                    f'Drive path segment {segment!r} not found (resolving {folder_path!r}, '
+                    f'matched so far: {segments[:depth]!r}) — items actually returned: '
+                    f'{[it.get("name") for it in items]!r}'
+                )
+                return None
+            file_id = match['file_id']
+            if depth == len(segments) - 1:
+                break  # last segment — file_id above is the answer, no need to list its contents
+            data = _list({
+                'api': 'SYNO.SynologyDrive.Files', 'version': '2', 'method': 'list',
+                'offset': '0', 'limit': '1000',
+                'sort_by': 'name', 'sort_direction': 'asc',
+                'path': f'id:{file_id}',
+                'filter': '{"include_transient":true}',
+            })
+            if not data.get('success'):
+                current_app.logger.warning(f'Drive Files list failed under {segment!r} resolving {folder_path!r}: {data}')
+                return None
+            items = data['data']['items']
+
+        return file_id
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, ValueError, KeyError) as e:
+        current_app.logger.warning(f'Drive file_id lookup errored for {folder_path!r}: {e}')
+        return None
+
+
+def build_drive_folder_url(folder_path):
+    """Public entry point for every NAS-open-folder call site — resolves
+    folder_path (a plain File Station-style path, e.g. '/Docs and
+    Templates/Templates/Simulation Files' or '/Projects/2026/Client/Job')
+    to a Drive file_id via resolve_drive_file_id()'s ID-tree walk, and
+    returns the web-client deep-link, or None if anything along the way
+    failed. Signature unchanged from the earlier (wrong) version, so none
+    of file_templates.py / project_overlay.py / project_preproduction.py
+    need to change."""
+    file_id = resolve_drive_file_id(folder_path)
+    if not file_id:
+        return None
+    base = (current_app.config.get('NAS_WEB_URL') or
+            f"https://{current_app.config.get('NAS_HOST', '')}")
+    return f'{base.rstrip("/")}/drive/#file_id={file_id}'

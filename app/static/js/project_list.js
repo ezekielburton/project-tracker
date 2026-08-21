@@ -265,6 +265,13 @@
             });
         }
 
+        // Open Project Folder (Synology Drive, M10 NAS migration, 21 Aug 2026) —
+        // click-triggered, see main.js's openNasLink().
+        const openFolderBtn = sidebarEl.querySelector('#overlay-open-folder-btn');
+        if (openFolderBtn) {
+            openFolderBtn.addEventListener('click', () => openNasLink(openFolderBtn));
+        }
+
         const cancelBtn = sidebarEl.querySelector('#overlay-cancel-project-btn');
         const uncancelBtn = sidebarEl.querySelector('#overlay-uncancel-project-btn');
         const cancelForm = sidebarEl.querySelector('#overlay-cancel-project-form');

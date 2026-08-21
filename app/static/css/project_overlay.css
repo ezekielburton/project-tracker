@@ -619,15 +619,20 @@ moves read as the same color). */
     background: var(--background);
 }
 
+/* Background/border reworked 21 Aug 2026, per Ezekiel — the old flat
+   --background fill + black left-accent bar read as "ugly" against the rest
+   of the theme. Now just a step darker than the white card it sits in
+   (--surface-hover) with a real border all the way round, same treatment
+   as .overlay-preprod-stream below so the two match. */
 .overlay-notes-text {
     font-family: var(--font-body);
     font-size: 0.95rem;
     color: var(--color-text);
     line-height: 1.6;
-    background: var(--background);
-    border-left: 3px solid var(--black);
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
     padding: 0.75rem 1rem;
-    border-radius: 4px;
+    border-radius: var(--radius);
     margin: 0;
     white-space: pre-wrap;
 }
@@ -2031,13 +2036,18 @@ moves read as the same color). */
     padding: var(--space-5);
 }
 
+/* Full card treatment (21 Aug 2026, per Ezekiel — each history entry was a
+   bare border-bottom row with no fill, so the list read as one continuous
+   blur instead of distinct entries). Matches .overlay-preprod-row/
+   .overlay-flag-card's white+border+shadow language rather than a plain
+   divided list — .overlay-preprod-history-list's existing gap (below)
+   already spaces these out, so no :last-child override is needed anymore. */
 .overlay-preprod-history-item {
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--border-subtle);
-}
-
-.overlay-preprod-history-item:last-child {
-    border-bottom: none;
+    padding: var(--space-3) var(--space-4);
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
 }
 
 .overlay-preprod-history-item-header {
@@ -2064,14 +2074,27 @@ moves read as the same color). */
     display: none;
 }
 
+/* background+shadow added 21 Aug 2026, per Ezekiel — this had only a
+   border before, no fill, so an active row visually blended straight into
+   the page background ("I don't know where to look in this system").
+   Matches the white+border+shadow language .overlay-preprod-attention-card/
+   .overlay-flag-card already use elsewhere on this same tab. */
 .overlay-preprod-row {
-    padding: var(--space-3);
+    padding: var(--space-4);
+    background: var(--white);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
+    box-shadow: var(--shadow);
 }
 
+/* Completed rows deliberately stay flat (no shadow), background matched to
+   the same --white every other row uses (21 Aug 2026, per Ezekiel — the
+   --sandstone fill read as a second, different-colored section instead of
+   just a flatter version of the same card; a border is enough to mark it
+   "settled/archived" next to the elevated active rows above). */
 .overlay-preprod-row.is-complete {
-    background: var(--sandstone, #fafafa);
+    background: var(--white);
+    box-shadow: none;
 }
 
 .overlay-preprod-row.is-flagged {
@@ -2118,7 +2141,7 @@ moves read as the same color). */
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-2);
+    margin-bottom: var(--space-4);
 }
 
 /* ------- Brief Flags (task #42) -------
@@ -2405,15 +2428,17 @@ margin here, so an empty panel (just the History button) stays tiny. */
 }
 
 /* Rose, not the neutral tier — a flag count is a warning signal (something
-   needs attention), same family as Flag for Reupload. */
+   needs attention), same family as Flag for Reupload. Sized to match
+   .overlay-file-action-btn--action (the Files button) — 21 Aug 2026, per
+   Ezekiel, it was reading as an afterthought next to it. */
 .overlay-preprod-flag-count-btn {
     font-family: var(--font-body);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--salmon);
     background: none;
     border: 1px solid var(--salmon);
     border-radius: 999px;
-    padding: 2px var(--space-2);
+    padding: var(--space-2) var(--space-3);
     cursor: pointer;
 }
 
@@ -2432,7 +2457,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-top: var(--space-1);
+    margin-top: var(--space-3);
 }
 
 .overlay-preprod-design-chip {
@@ -2467,18 +2492,43 @@ margin here, so an empty panel (just the History button) stays tiny. */
     gap: var(--space-3);
 }
 
+/* Background reworked 21 Aug 2026, per Ezekiel — the earlier --sandstone
+   fill read as "ugly" (too beige/dated). --surface-hover is a subtler step
+   down from the already-white .overlay-preprod-row this is nested inside —
+   still reads as a distinct nested block, just not a sandy one — paired
+   with a real --border (not --border-subtle) so it's clearly delineated
+   against a background this close to it. */
 .overlay-preprod-stream {
     flex: 0 1 220px;
     padding: var(--space-3);
-    border: 1px solid var(--border-subtle);
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
 }
 
+/* Header now carries BOTH the label/status and the action button(s) in one
+   row (21 Aug 2026, per Ezekiel — Mark Done used to sit stacked at the
+   bottom of the card; now it's to the right, same height as the label).
+   flex-wrap fixes a real bug Ezekiel found: with Approve + Flag for
+   Reupload both showing (the "uploaded" state) there isn't room for them
+   next to the label group in a 220px card, and without wrap they were
+   rendering on TOP of the label/status text instead of pushing it aside.
+   Now the actions cluster drops to its own full-width line instead. */
 .overlay-preprod-stream-header {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: var(--space-2);
     margin-bottom: var(--space-2);
+}
+
+.overlay-preprod-stream-label-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .overlay-preprod-stream-status {
@@ -2503,14 +2553,57 @@ margin here, so an empty panel (just the History button) stays tiny. */
     color: var(--salmon);
 }
 
+/* No more margin-top — this now sits inline in .overlay-preprod-stream-header
+   (right side) instead of stacked below it. flex-wrap + justify-content:
+   flex-end so Approve + Flag for Reupload (two buttons) wrap onto a second
+   line, still right-aligned, rather than overflowing the 220px card. */
 .overlay-preprod-stream-actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--space-2);
-    margin-top: var(--space-2);
+    flex-shrink: 0;
 }
 
 .overlay-preprod-stream-actions.is-hidden {
     display: none;
+}
+
+/* Technical Assignment picker slot (21 Aug 2026, per Ezekiel) — sits below
+   the header row, same spot the old read-only person_chip used to occupy
+   for every stream before 2D/3D's was removed in favor of the row-level
+   Designer line. */
+.overlay-preprod-stream-assignment {
+    margin-top: var(--space-1);
+}
+
+/* Technical's Mark Done/Approve/Flag render after the assignment picker now
+   ("selector on top, mark done below" — 21 Aug 2026, per Ezekiel), instead
+   of inline in the header the way 2D/3D still do — needs its own top
+   margin here since it's no longer sharing the header row's gap. */
+.overlay-preprod-stream-assignment + .overlay-preprod-stream-actions {
+    margin-top: var(--space-2);
+}
+
+/* The flag comment shown inside a flagged stream's card (21 Aug 2026, per
+   Ezekiel) — reuses .overlay-notes-text's quoted-body look, just tightened
+   up to fit a 220px card instead of the wider CS Note/history usage. */
+.overlay-preprod-flag-message {
+    font-size: var(--text-sm);
+    padding: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+/* Files button icon — the real Synology Drive logo now (21 Aug 2026, per
+   Ezekiel, dropped in static/images/drivelogo.png), swapped in for the
+   earlier generic cloud glyph placeholder. */
+.overlay-preprod-nas-icon {
+    width: 0.95em;
+    height: 0.95em;
+    object-fit: contain;
+    border-radius: 2px;
+    vertical-align: -0.1em;
+    margin-right: 4px;
 }
 
 .overlay-preprod-flag-form {
@@ -2766,16 +2859,28 @@ margin here, so an empty panel (just the History button) stays tiny. */
    .overlay-notes-text (the quoted-body look) and .overlay-file-action-btn
    are both reused as-is — only the row/list/form scaffolding is new. */
 
+/* Full card treatment (21 Aug 2026, per Ezekiel — same fix as
+   .overlay-preprod-history-item above and for the same reason: this was a
+   bare border-bottom row with no fill, so the whole feed blended into the
+   page background instead of reading as individual entries). #overlay-
+   notes-list's gap (below) spaces these out now, so no :last-child override
+   is needed. .overlay-note-item--visit's left-border accent (further down
+   this file) still layers on top of this fine. */
 .overlay-note-item {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding: var(--space-3) 0;
-    border-bottom: 1px solid var(--border-subtle);
+    padding: var(--space-3) var(--space-4);
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
 }
 
-.overlay-note-item:last-child {
-    border-bottom: none;
+#overlay-notes-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
 }
 
 .overlay-note-meta {

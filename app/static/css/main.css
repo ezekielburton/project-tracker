@@ -48,7 +48,12 @@
     --coral: #FF8559;
     --sage: #9ed4a5;
     --lavender: #B390FF;
-    --clover: #66D575;
+    /* Toned down from #66D575 (21 Aug 2026, per Ezekiel — the old value read
+       as a jarring, dated "flat design" neon green next to the rest of this
+       softer palette, especially on the Handed to Production status pill).
+       Standard, well-worn "success green" instead of a fluorescent one —
+       still clearly distinct from --sage, just not fighting with it. */
+    --clover: #4CAF5A;
     --poppy: #FF4F4F;
     --salmon: #FF8989;
 

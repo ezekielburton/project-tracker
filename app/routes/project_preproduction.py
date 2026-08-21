@@ -214,7 +214,7 @@ def _cascade_client_approval(project, channel, actor, now):
                 project.kv_status = 'approved'
 
 
-def _build_preproduction_row(d, actor):
+def _build_preproduction_row(d, actor, can_act):
     """Per-deliverable data the Pre-Production tab needs: per-stream
     assignment/status/candidate-picker options, the 2D/3D assignments
     carried over from Design (read-only here — nothing to do, they just
@@ -229,15 +229,27 @@ def _build_preproduction_row(d, actor):
     bare None status. Existence alone is enough: status only ever resets
     to None via flag_stream (or the column's initial default), so if any
     flag event has ever been logged for a stream that's currently None,
-    the flag is why it's None."""
+    the flag is why it's None.
+
+    can_act (21 Aug 2026, per Ezekiel) — new param, same value the caller
+    already computed via _can_manage_preproduction(). Only used to decide
+    whether the Technical stream gets an interactive picker vs. a read-only
+    chip (see technical_options below) — every other field here is
+    unaffected by who's viewing."""
     from app.status_vocabulary import derive_deliverable_status
-    from app.models import ProjectSubmissionEvent, ProjectSubmissionEventDeliverable, DeliverablePreproductionEvent
+    from app.models import ProjectSubmissionEvent, ProjectSubmissionEventDeliverable, DeliverablePreproductionEvent, User
 
     flag_events = DeliverablePreproductionEvent.query.filter_by(
         deliverable_id=d.id, event_type='preprod_flag'
-    ).all()
+    ).order_by(DeliverablePreproductionEvent.created_at.desc()).all()
     flag_count = len(flag_events)
     flagged_streams = {e.stream for e in flag_events}
+    # Newest-first, so the first hit per stream is that stream's most recent
+    # flag comment (21 Aug 2026, per Ezekiel — the flag message wasn't shown
+    # anywhere once logged; this is what the stream card below renders).
+    latest_flag_message = {}
+    for e in flag_events:
+        latest_flag_message.setdefault(e.stream, e.message)
 
     streams = []
     for stream_key, cfg in _STREAM_FIELDS.items():
@@ -251,14 +263,36 @@ def _build_preproduction_row(d, actor):
         # step removed — any designer can pick up any stream and mark it
         # done, see mark_stream_done).
         assignment = next((a for a in d.disciplines if a.team == cfg['team']), None)
-        streams.append({
+        can_mark_done = actor.role in ('designer', 'team_lead', 'admin', 'management')
+        stream_row = {
             'key': stream_key,
             'label': cfg['label'],
             'assignment': assignment,
             'status': status_val,  # None | 'uploaded' | 'approved'
             'is_flagged': is_flagged,
-            'can_mark_done': actor.role in ('designer', 'team_lead', 'admin', 'management'),
-        })
+            'can_mark_done': can_mark_done,
+            # The comment left on this stream's most recent flag — only set
+            # when is_flagged, so the card can show why it's back in
+            # progress (21 Aug 2026, per Ezekiel).
+            'flag_message': latest_flag_message.get(stream_key) if is_flagged else None,
+        }
+        # Technical Assignment picker (21 Aug 2026, per Ezekiel) — 2D/3D
+        # deliberately do NOT get this; that designer already shows once,
+        # read-only, in design_assignments below ("whoever made the design
+        # releases the artwork"). Technical has no such guarantee of a
+        # Design-phase assignee, so it's the one stream assignable here.
+        # Options mirror _details_design_leads.html's own per-team picker
+        # (User.team == the stream's team, designer/team_lead only) — same
+        # precedent, just scoped to one deliverable instead of one project.
+        # Only queried when can_act, and only for the technical stream —
+        # no point building an options list nobody can use, or for streams
+        # that never render a picker regardless.
+        if stream_key == 'technical' and can_act:
+            stream_row['technical_options'] = User.query.filter(
+                User.team == cfg['team'],
+                User.role.in_(['designer', 'team_lead'])
+            ).order_by(User.name).all()
+        streams.append(stream_row)
 
     design_assignments = [a for a in d.disciplines if a.team in ('2D', '3D')]
 
@@ -324,7 +358,7 @@ def overlay_preproduction(project_id):
 
         for c in all_customers:
             in_scope = [d for d in c['deliverables'] if _in_preproduction_scope(d)]
-            c['rows'] = [_build_preproduction_row(d, actor) for d in in_scope]
+            c['rows'] = [_build_preproduction_row(d, actor, can_act) for d in in_scope]
             # Per-customer, not project-wide — the header count lives inside
             # each panel, toggling with the rows via the same is-hidden
             # mechanism instead of showing one project-wide total that never
@@ -346,7 +380,7 @@ def overlay_preproduction(project_id):
         d for d in Deliverable.query.filter_by(project_id=project_id, project_customer_id=None).order_by(Deliverable.id).all()
         if _in_preproduction_scope(d)
     ]
-    rows = [_build_preproduction_row(d, actor) for d in deliverables]
+    rows = [_build_preproduction_row(d, actor, can_act) for d in deliverables]
     return render_template(
         'project_overlay/_preproduction_standard.html',
         project=project,
@@ -587,6 +621,67 @@ def flag_stream(deliverable_id):
     return jsonify({'success': True})
 
 
+# ── Technical Assignment (21 Aug 2026, per Ezekiel) ─────────────────────
+# Technical is the one stream that gets an interactive picker here (see
+# _build_preproduction_row's technical_options / _preproduction_row.html) —
+# 2D/3D don't need one, since whoever Design already assigned is assumed to
+# release the artwork too (that's the row-level "Designer" line, read-only).
+# Technical has no such guaranteed Design-phase assignee, so this is the
+# first place a DeliverableAssignment(team='Technical') row can actually be
+# created or changed through the UI, rather than only via project transfer
+# (projects_transfer.py) or never at all.
+
+@project_preproduction_bp.route('/deliverables/<int:deliverable_id>/preproduction/assign-technical', methods=['POST'])
+@login_required
+def assign_technical(deliverable_id):
+    """Sets (or clears) who's doing the Technical stream on one deliverable.
+    Same permission gate as Approve/Flag (_can_manage_preproduction) — the
+    picker itself is only ever rendered for someone who passes that check
+    (see _build_preproduction_row/_preproduction_row.html), but the route
+    re-checks server-side rather than trusting the client got here honestly.
+    designer_id=null (or omitted) clears the assignment back to Unassigned —
+    the avatar-picker popover doesn't offer an explicit "Unassigned" option
+    today, so this is reachable only by a future clear-affordance or a
+    direct API call for now; wired up regardless since "un-assign" is the
+    obvious complement to "assign" and costs nothing extra here."""
+    from app import db
+    from app.models import DeliverableAssignment
+    from app.utils import log_activity
+
+    deliverable = Deliverable.query.get_or_404(deliverable_id)
+    project = deliverable.project
+    actor = _get_actor()
+    if not _can_manage_preproduction(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
+
+    data = request.get_json() or {}
+    raw_designer_id = data.get('designer_id')
+    designer_id = int(raw_designer_id) if raw_designer_id else None
+
+    assignment = DeliverableAssignment.query.filter_by(
+        deliverable_id=deliverable.id, team='Technical'
+    ).first()
+
+    if designer_id is None:
+        if assignment:
+            db.session.delete(assignment)
+    elif assignment:
+        assignment.designer_id = designer_id
+        assignment.assigned_by_id = actor.id
+    else:
+        db.session.add(DeliverableAssignment(
+            deliverable_id=deliverable.id, team='Technical',
+            designer_id=designer_id, assigned_by_id=actor.id,
+        ))
+    db.session.commit()
+
+    log_activity('preprod_technical_assigned',
+                 f'{actor.name} updated the Technical assignment for "{deliverable.name}" on "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
+
+
 # ── Flag/comment history ────────────────────────────────────────────────
 
 @project_preproduction_bp.route('/projects/<int:project_id>/preproduction/events')
@@ -617,3 +712,37 @@ def preproduction_events(project_id):
         }
         for e in events
     ]})
+
+
+# ── NAS deep-link (M10 NAS migration, 21 Aug 2026) ──────────────────────
+
+@project_preproduction_bp.route('/deliverables/<int:deliverable_id>/nas-folder-link')
+@login_required
+def deliverable_nas_folder_link(deliverable_id):
+    """Resolves a deliverable's Design Files subfolder to a Synology Drive
+    deep-link, click-triggered rather than baked in at render time (Drive
+    needs a live API resolve per folder — see app/nas.py's
+    build_drive_folder_url()). Derives the C&CM region/customer path itself
+    from the deliverable's own project_customer, same as the old
+    nas_deliverable_url() Jinja global this replaces, so the frontend
+    doesn't need to pass anything beyond the deliverable id."""
+    from flask import current_app, jsonify
+    from app.nas import build_drive_folder_url, REGION_DISPLAY
+
+    deliverable = Deliverable.query.get_or_404(deliverable_id)
+    project = deliverable.project
+    root = current_app.config.get('NAS_PROJECT_ROOT', '/Projects')
+    client = project.client_brand.name if project.client_brand else 'Unknown Client'
+    design_root = f'{root}/{project.created_at.year}/{client}/{project.name}/Design Files'
+
+    if deliverable.project_customer_id:
+        pc = deliverable.project_customer
+        region_display = REGION_DISPLAY.get((pc.customer.region or '').lower(), (pc.customer.region or '').title())
+        folder_path = f'{design_root}/{region_display}/{pc.customer.name}/{deliverable.name}'
+    else:
+        folder_path = f'{design_root}/{deliverable.name}'
+
+    url = build_drive_folder_url(folder_path)
+    if not url:
+        return jsonify({'success': False, 'error': 'Could not reach the NAS.'}), 502
+    return jsonify({'success': True, 'url': url})

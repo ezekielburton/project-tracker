@@ -12,6 +12,32 @@
 // main.js - Vitamin-E
 console.log("Vitamin-E loaded.");
 
+// ── Open NAS folder in Synology Drive (M10 NAS migration, 21 Aug 2026) ──
+// Shared by file-templates.js, project_list.js (project sidebar), and
+// project_preproduction_card.js (per-deliverable "Files" button) — any
+// button that opens a NAS folder now goes through Synology Drive instead
+// of File Station. Drive addresses folders by an opaque internal file_id,
+// not by path, so the URL can't be built at render time the way the old
+// File Station links were — btn's data-url points at a small JSON route
+// that resolves the folder server-side (see app/nas.py's
+// build_drive_folder_url()) and hands back the real Drive URL to open.
+function openNasLink(btn) {
+    var url = btn.getAttribute('data-url');
+    if (!url) return;
+    btn.disabled = true;
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+        btn.disabled = false;
+        if (data.success) {
+            window.open(data.url, '_blank', 'noopener');
+        } else {
+            showToast(data.error || 'Could not open the NAS folder.', 'error');
+        }
+    }).catch(function () {
+        btn.disabled = false;
+        showToast('Could not reach the NAS.', 'error');
+    });
+}
+
 // ── Dev Tools: Wipe Projects ─────────────────────────────────────────────────
 // These functions only do anything if the wipe modal exists in the DOM, which
 // only happens when DEV_TOOLS_ENABLED=true is set in .env (never on production).

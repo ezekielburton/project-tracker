@@ -291,16 +291,11 @@ class Project(db.Model):
 
     # Auto-populated on creation
 
-    status = db.Column(db.String(50), default='To Be Briefed', nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     # Set by Designers
     lead_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-
-    # Hours counter
-    hours_accumulated = db.Column(db.Float, default=0.0)
-    timer_started_at = db.Column(db.DateTime, nullable=True)
 
     # Revision tracking
     revision_count = db.Column(db.Integer, default=0, nullable=False)
@@ -525,9 +520,9 @@ class ProjectCustomer(db.Model):
     
 
 
-# Deliverable Class, represents individual deliverables within a project. 
-# Flagging system for brief issues: if the brief_flag field is populated, it indicates there is an issue with the brief that needs to be resolved before work can proceed.
-# The brief_flag_resolved boolean indiciates whether the issue has been resolved
+# Deliverable Class, represents individual deliverables within a project.
+# Old brief-flag fields (brief_flag/brief_flag_resolved) dropped in the M10
+# cutover (20 Aug 2026) — superseded by the BriefFlag/BriefFlagMessage system.
 # Revision comments allows CS to request revisions for deliverables and free type the feedback, which can then be viewed by designers to understand what changes are needed.
 class Deliverable(db.Model):
     __tablename__ = 'deliverables'
@@ -546,19 +541,15 @@ class Deliverable(db.Model):
     revision_comment = db.Column(db.Text, nullable=True)
     revision_count = db.Column(db.Integer, default=0, nullable=False)
     flagged_for_revision = db.Column(db.Boolean, default=False, nullable=False)
-    brief_flag = db.Column(db.Text, nullable=True)
-    brief_flag_resolved = db.Column(db.Boolean, default=False, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     needs_technical = db.Column(db.Boolean, default=False, nullable=False)
-    needs_artwork = db.Column(db.Boolean, default=False, nullable=False)
     technical_status = db.Column(db.String(50), nullable=True)
-    artwork_status = db.Column(db.String(50), nullable=True)
     # 2D/3D split out from the old combined needs_artwork/artwork_status pair
     # (17 Aug 2026) — each is now its own independent Pre-Production stream,
     # matching how Design already treats 2D/3D/Technical as three separate
-    # teams. needs_artwork/artwork_status stay in place, unused going
-    # forward — additive migration, nothing dropped.
+    # teams. needs_artwork/artwork_status were dropped from the DB in the
+    # M10 cutover (20 Aug 2026) — this comment stays as the historical why.
     needs_2d = db.Column(db.Boolean, default=False, nullable=False)
     needs_3d = db.Column(db.Boolean, default=False, nullable=False)
     status_2d = db.Column(db.String(50), nullable=True)

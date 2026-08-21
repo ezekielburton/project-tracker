@@ -39,13 +39,49 @@ window.ProjectPreproductionCard = (function () {
             });
         });
 
-        // ── Mark Done (the assignee marking their own upload ready). ──
+        // ── Open this deliverable's folder (Synology Drive, M10 NAS
+        // migration, 21 Aug 2026) — click-triggered, see main.js's
+        // openNasLink(). ──
+        rootEl.querySelectorAll('.overlay-preprod-nas-link').forEach(function (btn) {
+            btn.addEventListener('click', function () { openNasLink(btn); });
+        });
+
+        // ── Technical Assignment picker (21 Aug 2026, per Ezekiel) — only
+        // the Technical stream gets an interactive picker (2D/3D show the
+        // row-level Designer chip instead, see _preproduction_row.html).
+        // Same AvatarPicker.init(el, onSelect) recipe as the Design Leads
+        // per-team picker in project_details_card.js — the containing
+        // .overlay-preprod-stream carries data-deliverable-id already
+        // (rendered for every stream, not just Technical's), so no need to
+        // encode it into the picker's own id. ──
+        var pickerHandles = [];
+        rootEl.querySelectorAll('.overlay-preprod-stream[data-stream="technical"] .avatar-picker').forEach(function (pickerEl) {
+            var streamEl = pickerEl.closest('.overlay-preprod-stream');
+            if (!streamEl) return;
+            pickerHandles.push(window.AvatarPicker.init(pickerEl, function (userId) {
+                postJson(`/deliverables/${streamEl.dataset.deliverableId}/preproduction/assign-technical`, {
+                    designer_id: userId,
+                }).then(function (data) {
+                    if (!data.success) { alert(data.error || 'Could not update this assignment.'); return; }
+                    onChanged();
+                });
+            }));
+        });
+
+        // ── Mark Done (the assignee marking their own upload ready). Every
+        // stream lives inside a .overlay-preprod-stream card again (21 Aug
+        // 2026, per Ezekiel — the idle-stream quick-action extraction was
+        // reverted), so this just reads deliverable-id/stream off the
+        // containing card, same as Approve/Flag below. ──
         rootEl.querySelectorAll('.overlay-preprod-markdone-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var streamEl = btn.closest('.overlay-preprod-stream');
                 if (!streamEl) return;
-                postJson(`/deliverables/${streamEl.dataset.deliverableId}/preproduction/mark-done`, {
-                    stream: streamEl.dataset.stream,
+                var deliverableId = streamEl.dataset.deliverableId;
+                var stream = streamEl.dataset.stream;
+                if (!deliverableId || !stream) return;
+                postJson(`/deliverables/${deliverableId}/preproduction/mark-done`, {
+                    stream: stream,
                 }).then(function (data) {
                     if (!data.success) { alert(data.error || 'Could not mark this done.'); return; }
                     onChanged();
@@ -182,7 +218,9 @@ window.ProjectPreproductionCard = (function () {
         }
 
         return {
-            destroy: function () { }
+            destroy: function () {
+                pickerHandles.forEach(function (h) { if (h) h.destroy(); });
+            }
         };
     }
 

@@ -38,14 +38,19 @@ active section. See project_overlay.js. #}
                 <button type="button" class="project-overlay-sidebar-item" data-main-tab="logistics">Logistics</button>
                 <button type="button" class="project-overlay-sidebar-item" data-main-tab="notes">Notes & Visits</button>
 
-                {% set _project_folder_url = nas_project_url(project) %}
-                {% if _project_folder_url or can_manage_flags or can_toggle_hold or can_cancel_project %}
+                {% if True %}
+                {# Open Project Folder now always renders — it's click-triggered
+                (Synology Drive needs a live API resolve per folder, see
+                app/nas.py's build_drive_folder_url()), so we can no longer know
+                at render time whether the link will actually resolve the way
+                nas_project_url() used to let us check synchronously. This {% if
+                True %} just keeps the surrounding div's original shape (it
+                still needs to render whenever the folder button OR any of the
+                three flags below is true — which is now unconditionally). #}
                 <div class="project-overlay-sidebar-lifecycle">
-                    {% if _project_folder_url %}
-                    <a href="{{ _project_folder_url }}" target="_blank" rel="noopener"
-                        class="project-overlay-sidebar-action-btn" id="overlay-open-folder-btn">Open Project
-                        Folder</a>
-                    {% endif %}
+                    <button type="button" class="project-overlay-sidebar-action-btn" id="overlay-open-folder-btn"
+                        data-url="{{ url_for('project_overlay.overlay_nas_folder_link', project_id=project.id) }}">Open
+                        Project Folder</button>
 
                     {% if can_manage_flags %}
                     {# Flag Issue (task #42 follow-up, 18 Aug 2026) — raising a

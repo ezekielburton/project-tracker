@@ -1555,6 +1555,29 @@ def overlay_uncancel_project(project_id):
     return jsonify({'success': True})
 
 
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/nas-folder-link')
+@login_required
+def overlay_nas_folder_link(project_id):
+    """Resolves the project's root NAS folder to a Synology Drive deep-link
+    (M10 NAS migration, 21 Aug 2026) — click-triggered rather than baked
+    into the sidebar at render time, since Drive needs a live API resolve
+    per folder (see app/nas.py's build_drive_folder_url()). Same path-
+    building this route replaces from the old nas_project_url() Jinja
+    global."""
+    from flask import current_app, jsonify
+    from app.nas import build_drive_folder_url
+
+    project = Project.query.get_or_404(project_id)
+    root = current_app.config.get('NAS_PROJECT_ROOT', '/Projects')
+    client = project.client_brand.name if project.client_brand else 'Unknown Client'
+    folder_path = f'{root}/{project.created_at.year}/{client}/{project.name}'
+
+    url = build_drive_folder_url(folder_path)
+    if not url:
+        return jsonify({'success': False, 'error': 'Could not reach the NAS.'}), 502
+    return jsonify({'success': True, 'url': url})
+
+
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/toggle-hold', methods=['POST'])
 @login_required
 def overlay_toggle_hold(project_id):
