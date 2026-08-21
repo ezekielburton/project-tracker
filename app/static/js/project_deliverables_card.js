@@ -182,6 +182,23 @@ window.ProjectDeliverablesCard = (function () {
             return out;
         }
 
+        // Every row here is a free-text name rather than a picked-from-
+        // catalogue type, so nothing stops two rows under the same customer
+        // (or both un-scoped, on Standard) ending up with the identical
+        // name by accident — catches that before Save rather than after,
+        // returning the first duplicate name found, or null if none.
+        function findDuplicateName(deliverables) {
+            var seen = {};
+            for (var i = 0; i < deliverables.length; i++) {
+                var row = deliverables[i];
+                if (row.deleted || !row.name) continue;
+                var key = (row.project_customer_id || '') + '::' + row.name.toLowerCase();
+                if (seen[key]) return row.name;
+                seen[key] = true;
+            }
+            return null;
+        }
+
         // The list Add Deliverable / Apply Deadline to All should target:
         // the visible customer panel's list on C&CM, or the only list on
         // Standard (no panels there at all).
@@ -260,6 +277,11 @@ window.ProjectDeliverablesCard = (function () {
             if (saveBtn) {
                 saveBtn.addEventListener('click', function () {
                     var deliverables = collectAllRows(rootEl);
+                    var duplicateName = findDuplicateName(deliverables);
+                    if (duplicateName) {
+                        showToast('"' + duplicateName + '" is on this list more than once — give each deliverable a unique name before saving.', 'error');
+                        return;
+                    }
                     saveBtn.disabled = true;
                     var originalText = saveBtn.textContent;
                     saveBtn.textContent = 'Saving…';
