@@ -3,11 +3,16 @@ window.ProjectDeliverablesCard = (function () {
         if (!rootEl) return null;
         var destroyed = false;
         var skipPickerHandle = null;
+        var assignPickerHandles = [];
+        var statusPickerHandles = [];
 
         function bindReadOnly() {
             wireDeliverablesRail(rootEl);
             wireFocusToggle(rootEl);
             wireSkipToPreproduction();
+            wireSelfAssignTags();
+            assignPickerHandles = wireManageAssignPickers();
+            statusPickerHandles = wireStatusOverridePickers();
 
             // Flags (task #42) — deliverable-scoped flag sections (one per
             // C&CM customer panel, one for Standard's flat list) plus every
@@ -98,6 +103,106 @@ window.ProjectDeliverablesCard = (function () {
                         });
                 });
             }
+        }
+
+        // ── Team-tag assignment (22 Aug 2026) — the Deliverables roster's
+        // Team column now doubles as the assign control. Two independent
+        // wire-ups, matching the two modes deliverable_assign_tag() renders
+        // (_shared_macros.html): a plain designer's one-click self-toggle
+        // (no popover), and everyone else's avatar-picker popover. ──
+        function wireSelfAssignTags() {
+            rootEl.querySelectorAll('.deliverable-assign-tag[data-mode="self"]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    btn.disabled = true;
+                    fetch(`/projects/${projectId}/overlay/deliverables/assign`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            deliverable_id: btn.dataset.deliverableId,
+                            team: btn.dataset.team,
+                            self_toggle: true,
+                        }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (!data.success) {
+                                btn.disabled = false;
+                                showToast(data.error || 'Could not update your assignment.', 'error');
+                                return;
+                            }
+                            if (onChanged) onChanged();
+                        })
+                        .catch(function () {
+                            btn.disabled = false;
+                            showToast('Something went wrong. Please try again.', 'error');
+                        });
+                });
+            });
+        }
+
+        function wireManageAssignPickers() {
+            var handles = [];
+            rootEl.querySelectorAll('.deliverable-assign-tag[data-team]').forEach(function (pickerEl) {
+                // Only the manage-mode wrapper (a real .avatar-picker div)
+                // gets AvatarPicker.init — the self-mode tag is a bare
+                // <button>, no popover, handled entirely above.
+                if (!pickerEl.classList.contains('avatar-picker')) return;
+                var handle = window.AvatarPicker.init(pickerEl, function (userId, el) {
+                    fetch(`/projects/${projectId}/overlay/deliverables/assign`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            deliverable_id: el.dataset.deliverableId,
+                            team: el.dataset.team,
+                            designer_id: userId || null,
+                        }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (!data.success) {
+                                showToast(data.error || 'Could not update this assignment.', 'error');
+                                return;
+                            }
+                            if (onChanged) onChanged();
+                        })
+                        .catch(function () {
+                            showToast('Something went wrong. Please try again.', 'error');
+                        });
+                });
+                if (handle) handles.push(handle);
+            });
+            return handles;
+        }
+
+        // Admin status override (22 Aug 2026, per Ezekiel) — only rendered
+        // at all when can_override_status (see _deliverables_standard.html
+        // / _deliverables_ccm.html), one .status-picker per deliverable
+        // row. onChanged() re-fetches the whole tab on success, same as
+        // every other mutation in this card.
+        function wireStatusOverridePickers() {
+            var handles = [];
+            rootEl.querySelectorAll('.status-picker').forEach(function (pickerEl) {
+                var handle = window.StatusPicker.init(pickerEl, function (statusValue, el) {
+                    fetch(el.dataset.targetUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: statusValue }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (!data.success) {
+                                showToast(data.error || 'Could not update this status.', 'error');
+                                return;
+                            }
+                            if (onChanged) onChanged();
+                        })
+                        .catch(function () {
+                            showToast('Something went wrong. Please try again.', 'error');
+                        });
+                });
+                if (handle) handles.push(handle);
+            });
+            return handles;
         }
 
         function backToReadOnly() {
@@ -315,7 +420,14 @@ window.ProjectDeliverablesCard = (function () {
             bindReadOnly();
         }
 
-        return { destroy: function () { destroyed = true; if (skipPickerHandle) skipPickerHandle.destroy(); } };
+        return {
+            destroy: function () {
+                destroyed = true;
+                if (skipPickerHandle) skipPickerHandle.destroy();
+                assignPickerHandles.forEach(function (h) { h.destroy(); });
+                statusPickerHandles.forEach(function (h) { h.destroy(); });
+            }
+        };
     }
     return { init: init };
 })();

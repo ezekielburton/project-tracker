@@ -316,6 +316,21 @@ def notify_flag_reply(flag, project, triggered_by):
         )
 
 
+def notify_of_chat_mention(note, project, mentioned_users, triggered_by):
+    """Notify each person @-mentioned in a chat message. mentioned_users is
+    already resolved/validated by the caller (create_note())."""
+    message = f'{triggered_by.name} mentioned you in "{project.name}".'
+    for user in mentioned_users:
+        create_notification(
+            recipient=user,
+            message=message,
+            notification_type='chat_mention',
+            project=project,
+            triggered_by=triggered_by,
+            pref_key='chat_mention',
+        )
+
+
 def notify_designers_of_revision_flag(deliverable, project, triggered_by):
     """
     Notify all designers assigned to a deliverable that it has been flagged for revision.

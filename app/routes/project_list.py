@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import nullslast, func, case
 from sqlalchemy.orm import joinedload, selectinload
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel
 from app.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 from app.status_tracking import bulk_project_status_started_at, bulk_project_client_approved_at
 
@@ -396,7 +396,15 @@ def _base_query_for_view(view, user):
             .correlate(Project)
             .scalar_subquery()
         )
-        query = Project.query.filter_by(project_status='handed_to_production')
+        query = Project.query.filter(
+            db.or_(
+                Project.project_status == 'handed_to_production',
+                db.and_(
+                    Project.brief_type == 'ccm',
+                    Project.posm_channels.any(ProjectPosmChannel.status.in_(('approved', 'handed_to_production')))
+                )
+            )
+        )
         order_by = handed_at.desc()
 
     else:  # 'my' - default

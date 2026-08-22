@@ -1,163 +1,130 @@
 {# app/templates/project_overlay/_overlay_notes.html
-Notes + Site Visits section (task #52/M9) — a top-level rail section,
-not a Design sub-tab (see project_overlay.js's SECTION_COLORS / rail
-markup). One merged activity feed (ProjectNote + SiteVisit rows,
-interleaved by created_at — 18 Aug 2026 per Ezekiel) inside the Notes
-card, plus a compact Site Visits card holding only the logging form —
-a logged visit shows up as its own row in the feed above rather than a
-separate read-only list of its own. Both share one route
-(overlay_notes()), which builds the merged/sorted activity_items list. #}
-{% from '_shared_macros.html' import card, avatar_picker %}
+Site Visits tab (M10 chat redesign, 21 Aug 2026) — this used to also hold
+a merged Notes feed; notes now live in the persistent chat drawer instead
+(see _overlay_chat.html + project_notes.py's overlay_chat()), so this
+partial is just the site-visit log + logging form now. Filename kept as
+_overlay_notes.html (not renamed to match) since a rename needs a real
+git mv, which this session's remote file tools can't do — a safe,
+non-blocking cleanup for later. #}
+{% from '_shared_macros.html' import card, avatar_picker, person_chip %}
 <div class="overlay-notes-section">
-{% call card('Notes') %}
+{% call card('Site Visits') %}
+
+{% if can_log_site_visit %}
+<button type="button" class="overlay-file-action-btn overlay-file-action-btn--tangerine"
+    id="overlay-visit-open-modal-btn">+ Add Site Visit</button>
+{% endif %}
 
 <div class="overlay-notes-list" id="overlay-notes-list">
-    {% for item in activity_items %}
-        {% if item.type == 'note' %}
-        {% set note = item.note %}
-        <div class="overlay-note-item" data-note-id="{{ note.id }}">
-            <div class="overlay-note-meta">
-                <span class="overlay-note-author">{{ note.author.name }}</span>
-                <span class="overlay-note-date">{{ note.created_at.strftime('%d %b %Y, %H:%M') }}</span>
-            </div>
-            <p class="overlay-notes-text">{{ note.body }}</p>
-            {% if note.file_link %}
-            <a href="{{ note.file_link }}" target="_blank" class="overlay-note-link">{{ note.file_link }}</a>
-            {% endif %}
-            {% if can_manage_notes and (note.author_id == actor.id or actor.role in ('admin', 'management')) %}
-            <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-note-delete"
-                data-note-id="{{ note.id }}">Delete</button>
-            {% endif %}
-        </div>
-        {% else %}
-        {% set visit = item.visit %}
-        <div class="overlay-note-item overlay-note-item--visit" data-visit-id="{{ visit.id }}">
-            <div class="overlay-note-meta">
-                <span class="overlay-note-author">🚗 {{ visit.user.name }} — Site Visit</span>
-                <span class="overlay-note-date">{{ visit.created_at.strftime('%d %b %Y, %H:%M') }}</span>
-            </div>
-            <p class="overlay-notes-text">
-                {{ visit.start_at.strftime('%d %b %Y, %H:%M') }} – {{ visit.end_at.strftime('%d %b %Y, %H:%M') }}
-            </p>
-            {% if visit.location %}
-            <a href="{{ visit.location }}" target="_blank" class="overlay-note-link">{{ visit.location }}</a>
-            {% endif %}
-            {% if visit.notes %}<p class="overlay-notes-text">{{ visit.notes }}</p>{% endif %}
+    {% for visit in site_visits %}
+    <div class="overlay-note-item overlay-note-item--visit" data-visit-id="{{ visit.id }}">
+        <div class="overlay-visit-header">
+            <span class="overlay-visit-header-label">Site Visit &nbsp;|&nbsp;
+                {{ visit.start_at.strftime('%H:%M') }} - {{ visit.end_at.strftime('%H:%M') }} -
+                {{ visit.start_at.strftime('%A, %d %b %Y') }}</span>
             {% if visit.user_id == actor.id or actor.role in ('admin', 'management') %}
             <button type="button" class="overlay-file-action-btn overlay-file-action-btn--danger overlay-visit-delete"
                 data-visit-id="{{ visit.id }}">Delete</button>
             {% endif %}
         </div>
-        {% endif %}
+
+        <div class="overlay-visit-chips">
+            {{ person_chip(visit.user) }}
+            {% if visit.location %}
+                {% if visit.location_link %}
+                <a href="{{ visit.location_link }}" target="_blank" class="overlay-visit-location-chip">{{ visit.location }}</a>
+                {% else %}
+                <span class="overlay-visit-location-chip overlay-visit-location-chip--plain">{{ visit.location }}</span>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        {% if visit.notes %}<p class="overlay-notes-text">{{ visit.notes }}</p>{% endif %}
+    </div>
     {% else %}
-    <p class="overlay-field-empty">No notes or site visits yet.</p>
+    <p class="overlay-field-empty">No site visits logged yet.</p>
     {% endfor %}
 </div>
-
-{% if can_manage_notes %}
-<div class="overlay-note-add">
-    <textarea id="overlay-note-body" class="overlay-create-textarea" placeholder="Add a note…"></textarea>
-    <span class="overlay-flag-revision-error hidden" id="overlay-note-error"></span>
-    <button type="button" class="overlay-file-action-btn" id="overlay-note-add-btn">Add Note</button>
-</div>
-{% endif %}
-{% endcall %}
-
-{% call card('Site Visits') %}
 {% if can_log_site_visit %}
-<div class="overlay-note-add">
-    <label class="overlay-field-label">Designer</label>
-    {{ avatar_picker('overlay-visit-designer-picker', None, designers, trigger_label='Select Designer') }}
+<div class="modal-overlay hidden" id="overlay-visit-modal">
+    <div class="modal-box">
+        <h3 class="modal-title">Add Site Visit</h3>
 
-    <div class="overlay-visit-compact-row">
-        <div class="overlay-visit-compact-col overlay-visit-compact-col--picker">
-            <label class="overlay-field-label">Date &amp; Time</label>
-            <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
-                id="overlay-visit-range-btn">Select Date and Time</button>
-            <span class="overlay-visit-range-display" id="overlay-visit-range-display"></span>
+        <label class="overlay-field-label">Designer</label>
+        {{ avatar_picker('overlay-visit-designer-picker', None, designers, trigger_label='Select Designer') }}
 
-            <div class="visit-datetime-picker" id="visit-datetime-picker" hidden>
-                <div class="visit-datetime-picker-body">
-                    <div class="visit-datetime-picker-calendar">
-                        <div class="date-range-picker-nav">
-                            <button type="button" class="date-range-picker-arrow" id="visit-date-prev"
-                                aria-label="Previous month">&larr;</button>
-                            <div class="date-range-picker-months">
-                                <div class="date-range-picker-month">
-                                    <div class="date-range-picker-month-label" data-visit-month-label="0"></div>
-                                    <div class="date-range-picker-weekdays">
-                                        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
-                                    </div>
-                                    <div class="date-range-picker-days" data-visit-days="0"></div>
+        <div class="visit-datetime-picker" id="visit-datetime-picker">
+            <div class="visit-datetime-picker-body">
+                <div class="visit-datetime-picker-calendar">
+                    <div class="date-range-picker-nav">
+                        <button type="button" class="date-range-picker-arrow" id="visit-date-prev"
+                            aria-label="Previous month">&larr;</button>
+                        <div class="date-range-picker-months">
+                            <div class="date-range-picker-month">
+                                <div class="date-range-picker-month-label" data-visit-month-label="0"></div>
+                                <div class="date-range-picker-weekdays">
+                                    <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
                                 </div>
-                                <div class="date-range-picker-month">
-                                    <div class="date-range-picker-month-label" data-visit-month-label="1"></div>
-                                    <div class="date-range-picker-weekdays">
-                                        <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
-                                    </div>
-                                    <div class="date-range-picker-days" data-visit-days="1"></div>
-                                </div>
-                            </div>
-                            <button type="button" class="date-range-picker-arrow" id="visit-date-next"
-                                aria-label="Next month">&rarr;</button>
-                        </div>
-                    </div>
-
-                    <div class="visit-datetime-picker-times">
-                        <div class="visit-time-row">
-                            <span class="visit-time-row-label">Start</span>
-                            <div class="visit-time-input">
-                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-hour"
-                                    id="visit-start-hour" placeholder="09">
-                                <span class="visit-time-colon">:</span>
-                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-minute"
-                                    id="visit-start-minute" placeholder="00">
-                                <button type="button" class="visit-ampm-toggle" id="visit-start-ampm">AM</button>
+                                <div class="date-range-picker-days" data-visit-days="0"></div>
                             </div>
                         </div>
-                        <div class="visit-time-row">
-                            <span class="visit-time-row-label">End</span>
-                            <div class="visit-time-input">
-                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-hour"
-                                    id="visit-end-hour" placeholder="10">
-                                <span class="visit-time-colon">:</span>
-                                <input type="text" inputmode="numeric" maxlength="2" class="visit-time-minute"
-                                    id="visit-end-minute" placeholder="00">
-                                <button type="button" class="visit-ampm-toggle" id="visit-end-ampm">AM</button>
-                            </div>
-                        </div>
-                        <div class="visit-time-clock-toggle" id="visit-clock-toggle">
-                            <button type="button" class="visit-clock-toggle-btn is-active" data-clock="12">12h</button>
-                            <button type="button" class="visit-clock-toggle-btn" data-clock="24">24h</button>
-                        </div>
+                        <button type="button" class="date-range-picker-arrow" id="visit-date-next"
+                            aria-label="Next month">&rarr;</button>
                     </div>
                 </div>
 
-                <div class="date-range-picker-footer">
-                    <button type="button" class="date-range-picker-clear" id="visit-date-clear">Clear</button>
-                    <div class="date-range-picker-footer-actions">
-                        <button type="button" class="date-range-picker-cancel" id="visit-date-cancel">Cancel</button>
-                        <button type="button" class="date-range-picker-apply" id="visit-date-apply">Apply</button>
+                <div class="visit-datetime-picker-times">
+                    <div class="visit-time-row">
+                        <span class="visit-time-row-label">Start</span>
+                        <div class="visit-time-input">
+                            <input type="text" inputmode="numeric" maxlength="2" class="visit-time-hour"
+                                id="visit-start-hour" placeholder="09">
+                            <span class="visit-time-colon">:</span>
+                            <input type="text" inputmode="numeric" maxlength="2" class="visit-time-minute"
+                                id="visit-start-minute" placeholder="00">
+                        </div>
+                    </div>
+                    <div class="visit-time-row">
+                        <span class="visit-time-row-label">End</span>
+                        <div class="visit-time-input">
+                            <input type="text" inputmode="numeric" maxlength="2" class="visit-time-hour"
+                                id="visit-end-hour" placeholder="10">
+                            <span class="visit-time-colon">:</span>
+                            <input type="text" inputmode="numeric" maxlength="2" class="visit-time-minute"
+                                id="visit-end-minute" placeholder="00">
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="overlay-visit-compact-col overlay-visit-compact-col--fields">
-            <label class="overlay-field-label">Location (optional)</label>
-            <input type="text" id="overlay-visit-location" class="overlay-create-input overlay-visit-location-input"
-                placeholder="Maps link or address">
-            <label class="overlay-field-label">Notes (optional)</label>
-            <textarea id="overlay-visit-notes" class="overlay-create-textarea overlay-visit-notes-textarea"></textarea>
+
+        <div class="overlay-visit-location-row">
+            <div class="overlay-visit-location-col">
+                <label class="overlay-field-label">Location</label>
+                <input type="text" id="overlay-visit-location" class="overlay-create-input overlay-visit-location-input"
+                    placeholder="e.g. DIFC, Dubai">
+            </div>
+            <div class="overlay-visit-location-col">
+                <label class="overlay-field-label">Location Link (optional)</label>
+                <input type="text" id="overlay-visit-location-link" class="overlay-create-input overlay-visit-location-input"
+                    placeholder="Maps link">
+            </div>
+        </div>
+
+        <label class="overlay-field-label">Notes (optional)</label>
+        <textarea id="overlay-visit-notes" class="overlay-create-textarea overlay-visit-notes-textarea"></textarea>
+
+        <div class="date-range-picker-footer">
+            <button type="button" class="date-range-picker-clear" id="visit-date-clear">Clear</button>
+            <span class="overlay-flag-revision-error hidden" id="overlay-visit-error"></span>
+            <button type="button" class="date-range-picker-cancel" id="visit-date-cancel">Cancel</button>
+            <button type="button" class="date-range-picker-apply" id="visit-date-apply">Add Site Visit</button>
         </div>
     </div>
-
-    <span class="overlay-flag-revision-error hidden" id="overlay-visit-error"></span>
-
-    <button type="button" class="overlay-file-action-btn overlay-file-action-btn--primary overlay-visit-log-btn"
-        id="overlay-visit-add-btn">Log Site Visit</button>
 </div>
 {% else %}
 <p class="overlay-field-empty">You don't have permission to log a site visit.</p>
 {% endif %}
+
 {% endcall %}
 </div>

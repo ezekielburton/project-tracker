@@ -35,6 +35,8 @@ class Config:
     NAS_USERNAME = os.environ.get('NAS_USERNAME')
     NAS_PASSWORD = os.environ.get('NAS_PASSWORD')
     NAS_PROJECT_ROOT = os.environ.get('NAS_PROJECT_ROOT', '/Projects')
+    # Separate root from NAS_PROJECT_ROOT — chat images/videos get their own folder.
+    NAS_CHATS_ROOT = os.environ.get('NAS_CHATS_ROOT', '/Chats')
     # Base URL for File Station deep links — set to QuickConnect URL for external access.
     # e.g. NAS_WEB_URL=https://quickconnect.to/YOUR_QUICKCONNECT_ID
     # Defaults to LAN IP (https://{NAS_HOST}:{NAS_PORT}) if not set.

@@ -423,6 +423,15 @@ def build_file_path(project, subfolder, filename):
     client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
     return f'{root}/{year}/{client_name}/{project.name}/{subfolder}/{filename}'
 
+
+def build_chat_file_path(project, filename):
+    """Chat attachment NAS path under NAS_CHATS_ROOT, e.g. /Chats/2026/P&G/Summer 2026/9f2a...c1.jpg.
+    No provisioning step needed — upload_app_file creates missing folders on upload."""
+    root        = current_app.config['NAS_CHATS_ROOT']
+    year        = project.created_at.year
+    client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
+    return f'{root}/{year}/{client_name}/{project.name}/{filename}'
+
 def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
     """
     Upload file bytes directly to a NAS folder. Retries up to _max_attempts

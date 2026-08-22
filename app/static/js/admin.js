@@ -1350,8 +1350,22 @@ ptAddDelForm.addEventListener('submit', function (e) {
                     '<div class="account-user-edit-form">' +
                     '<input type="text" class="form-input pt-del-name-input" value="' + type.name + '">' +
                     '<div class="pt-discipline-checks">' +
-                    ['2d', '3d', 'technical'].map(function (d) {
-                        var checked = type.disciplines.indexOf(d) !== -1 ? 'checked' : '';
+                    // Canonical casing ('2D'/'3D'/'Technical') — must match
+                    // the create form (base.html) and User.team exactly,
+                    // since the Deliverables roster's team-tag assignment
+                    // feature looks designers up by an exact team-string
+                    // match. This used to be a lowercase array, silently
+                    // rewriting a type's disciplines to '2d'/'technical'
+                    // on every save through this edit form (the create
+                    // form was never affected — only this one). Fixed 22
+                    // Aug 2026; the case-insensitive .some() below still
+                    // shows a type's existing lowercase-saved disciplines
+                    // as checked so editing one doesn't silently drop them
+                    // — the next save just re-normalizes them correctly.
+                    ['2D', '3D', 'Technical'].map(function (d) {
+                        var checked = type.disciplines.some(function (existing) {
+                            return existing.toLowerCase() === d.toLowerCase();
+                        }) ? 'checked' : '';
                         return '<label><input type="checkbox" value="' + d + '" ' + checked + '> ' + d.toUpperCase() + '</label>';
                     }).join('') +
                     '</div>' +

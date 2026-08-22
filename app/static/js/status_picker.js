@@ -1,25 +1,38 @@
-window.AvatarPicker = (function () {
+// app/static/js/status_picker.js
+// Admin-only status override control (22 Aug 2026, per Ezekiel) — click a
+// status pill in the overlay, see every possible status, pick one to
+// override it. Same generic popover mechanics as avatar_picker.js (open/
+// close/position/outside-click/Esc/close-on-scroll), just its own class
+// hooks (.status-picker*) and reading data-status-value instead of
+// data-user-id — kept as its own small file rather than generalizing
+// avatar_picker.js, since that component is already wired up and shipping
+// for the Deliverables assign feature and touching it risks regressing
+// that unrelated, already-working flow.
+//
+// Deliberately as dumb as AvatarPicker: this file only knows how to open/
+// close a popover and report which option was clicked. It doesn't know
+// what a "project" or "deliverable" is, or how to POST — see
+// project_details_card.js / project_deliverables_card.js for the actual
+// override request + DOM refresh built around this.
+window.StatusPicker = (function () {
     var activeClose = null;
 
     function init(pickerEl, onSelect) {
         if (!pickerEl) return null;
 
-        var trigger = pickerEl.querySelector('.avatar-picker-trigger');
-        var popover = pickerEl.querySelector('.avatar-picker-popover');
+        var trigger = pickerEl.querySelector('.status-picker-trigger');
+        var popover = pickerEl.querySelector('.status-picker-popover');
         if (!trigger || !popover) return null;
 
         function closeOnScroll(e) {
-            // Scrolling the popover's own option list also fires a scroll
-            // event (it captures up through window same as any other) —
-            // only close for scrolling OUTSIDE the popover.
             if (popover.contains(e.target)) return;
             close();
         }
 
         function positionPopover() {
-            // popover is position:fixed (shared.css) so it escapes any
-            // ancestor's overflow clipping — computed here from the
-            // trigger's actual on-screen position each time it opens.
+            // position:fixed (shared.css, same as .avatar-picker-popover)
+            // so it escapes any ancestor's overflow clipping — the status
+            // pill lives inside scrollable overlay cards/lists.
             var rect = trigger.getBoundingClientRect();
             var margin = 8;
             var popoverWidth = popover.offsetWidth;
@@ -28,14 +41,9 @@ window.AvatarPicker = (function () {
             var top = rect.bottom + margin;
             var left = rect.left;
 
-            // Flip above the trigger if there's no room below — the
-            // trigger button stays visible either way, since the popover
-            // sits adjacent to it, never on top of it.
             if (top + popoverHeight > window.innerHeight && rect.top - popoverHeight - margin > 0) {
                 top = rect.top - popoverHeight - margin;
             }
-
-            // Clamp horizontally so it never renders off the right edge.
             if (left + popoverWidth > window.innerWidth) {
                 left = Math.max(margin, window.innerWidth - popoverWidth - margin);
             }
@@ -48,14 +56,9 @@ window.AvatarPicker = (function () {
             if (activeClose && activeClose !== close) {
                 activeClose();
             }
-            popover.hidden = false;   // must be in the render tree before offsetWidth/Height can be measured
+            popover.hidden = false;
             positionPopover();
             activeClose = close;
-            // A fixed-position popover doesn't move if an ancestor (e.g.
-            // a card's own scrollable list) scrolls underneath it — close
-            // on any scroll so it never visually detaches from the button
-            // that opened it. Capture phase catches inner-container
-            // scrolling too, not just the window itself.
             window.addEventListener('scroll', closeOnScroll, true);
         }
 
@@ -87,10 +90,10 @@ window.AvatarPicker = (function () {
         document.addEventListener('keydown', escHandler);
 
         popover.addEventListener('click', function (e) {
-            var option = e.target.closest('.avatar-picker-option');
+            var option = e.target.closest('.status-picker-option');
             if (!option) return;
             close();
-            onSelect(option.dataset.userId, pickerEl);
+            onSelect(option.dataset.statusValue, pickerEl);
         });
 
         return {

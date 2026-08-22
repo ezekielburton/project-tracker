@@ -16,6 +16,17 @@ active section. See project_overlay.js. #}
                 id="project-overlay-cancel-btn">Cancel</button>
             <button type="button" class="project-overlay-save-btn is-hidden" id="project-overlay-save-btn">Save</button>
             {% endif %}
+            {# Chat — a persistent drawer reachable from any rail tab, not a section of its own. #}
+            <button type="button" class="project-overlay-chat-btn" id="project-overlay-chat-btn"
+                aria-label="Chat">
+                {# lucide "message-circle-more", stroke set to currentColor. #}
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/>
+                    <path d="M8 12h.01"/>
+                    <path d="M12 12h.01"/>
+                    <path d="M16 12h.01"/>
+                </svg>
+            </button>
             <button type="button" class="project-overlay-close" id="project-overlay-close"
                 aria-label="Close">&times;</button>
         </div>
@@ -36,7 +47,7 @@ active section. See project_overlay.js. #}
                 <button type="button" class="project-overlay-sidebar-item"
                     data-main-tab="production">Production</button>
                 <button type="button" class="project-overlay-sidebar-item" data-main-tab="logistics">Logistics</button>
-                <button type="button" class="project-overlay-sidebar-item" data-main-tab="notes">Notes & Visits</button>
+                <button type="button" class="project-overlay-sidebar-item" data-main-tab="notes">Site Visits</button>
 
                 {% if True %}
                 {# Open Project Folder now always renders — it's click-triggered
@@ -110,6 +121,18 @@ active section. See project_overlay.js. #}
                 {% else %}
                 {% include "project_overlay/_details_ccm.html" %}
                 {% endif %}
+            </div>
+            <div class="project-overlay-chat-drawer" id="project-overlay-chat-drawer">
+                <div class="project-overlay-chat-drawer-inner">
+                    <div class="project-overlay-chat-header">
+                        <span class="project-overlay-chat-title">Chat</span>
+                        <button type="button" class="project-overlay-chat-close" id="project-overlay-chat-close"
+                            aria-label="Close chat">&times;</button>
+                    </div>
+                    <div class="project-overlay-chat-content" id="project-overlay-chat-content">
+                        {# Lazy-loaded on first open — see project_list.js's loadChatDrawer(). #}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
