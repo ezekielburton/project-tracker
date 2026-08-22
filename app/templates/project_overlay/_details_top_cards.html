@@ -1,6 +1,7 @@
 {# Core property rows, shared by both brief types. No wrapper div here —
 the calling template wraps this include plus its own brief-specific
 rows in one .overlay-properties list, so it reads as continuous. #}
+{% from '_shared_macros.html' import status_pill %}
 
 <div class="overlay-property-row">
     <span class="overlay-property-label">Job Number</span>
@@ -9,7 +10,28 @@ rows in one .overlay-properties list, so it reads as continuous. #}
 <div class="overlay-property-row">
     <span class="overlay-property-label">Project Status</span>
     <span class="overlay-property-value overlay-status-row">
+        {# No admin override for this pill anymore (22 Aug 2026
+        simplification, per Ezekiel) — status_label/status_class are a
+        pure live roll-up of the project's deliverables now, so an
+        override would just get silently clobbered by the next
+        deliverable change. Only the deliverable-level pill still has an
+        override (see _deliverables_standard.html/_deliverables_ccm.html). #}
         {{ status_pill(status_label, status_class) }}
+        {% if status_started_at %}
+        {# "All status changes need to be time stamped" (22 Aug 2026, per
+        Ezekiel) — when this project's raw status last changed
+        (ProjectStatusLog), not necessarily since this exact pill label
+        first appeared (see status_tracking.py's project_status_started_at
+        docstring). #}
+        <span class="overlay-status-since">Since {{ status_started_at.strftime('%d %b %Y') }}</span>
+        {% endif %}
+        {% if client_approved_at %}
+        {# Client-approval moment specifically (22 Aug 2026, later the
+        same day, per Ezekiel) — shown alongside "Since" once a project's
+        reached Handed to Production, since "Since" at that point reflects
+        the handoff date, not when the client actually approved it. #}
+        <span class="overlay-status-since">Client-approved {{ client_approved_at.strftime('%d %b %Y') }}</span>
+        {% endif %}
         {% if can_start_project %}
         <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
             id="overlay-start-project-btn">Start Project</button>

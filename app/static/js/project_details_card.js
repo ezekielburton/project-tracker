@@ -24,6 +24,13 @@ window.ProjectDetailsCard = (function () {
             }));
         });
 
+        // Project-level admin status override picker was removed (22 Aug
+        // 2026 simplification, per Ezekiel) — #project-status-picker no
+        // longer renders (see _details_top_cards.html), the pill is now a
+        // pure live roll-up of the project's deliverables. Only the
+        // deliverable-level override picker remains (see
+        // project_deliverables_card.js), unaffected by this removal.
+
         rootEl.querySelectorAll('.overlay-secondary-cs-remove').forEach(function (btn) {
             btn.addEventListener('click', function () { postForm(`/projects/${projectId}/secondary-cs/${btn.dataset.userId}/remove`, ''); });
         });

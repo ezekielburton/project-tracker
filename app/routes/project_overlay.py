@@ -191,27 +191,162 @@ def _serialize_flag(flag, actor):
     }
 
 
-def _build_deliverable_focus_context(deliverables, actor):
+# ── Admin status override (22 Aug 2026, per Ezekiel; deliverable-only as of
+# the same-day simplification a few hours later) ────────────────────────────
+# Originally offered both a project-level and a deliverable-level override.
+# The project-level one was retired the same day the status vocabulary got
+# simplified: project.project_status is now a pure live roll-up of the
+# project's own deliverables (status_vocabulary.py's derive_project_status /
+# status_tracking.py's sync_project_pipeline_status — "nothing else decides
+# it", per Ezekiel), recomputed after every deliverable-affecting action. An
+# admin override of the PROJECT pill would just get silently clobbered the
+# next time any deliverable on it changed, so there's nothing left for that
+# control to usefully do — override the deliverables instead and the
+# project follows automatically, same as every other action already does.
+#
+# The deliverable-level override still writes the same real underlying
+# fields a normal status change would (record_deliverable_status(), the
+# needs_2d/3d/technical + per-stream status fields) rather than a cosmetic
+# "display override" flag — every other piece of code that reads those
+# fields (the project roll-up above, project_preproduction.py's cascades,
+# dashboards, revision tracking) stays correct afterward instead of quietly
+# disagreeing with what's shown.
+_DELIVERABLE_STATUS_OVERRIDE_OPTIONS = [
+    ('In Design', 'coral'),
+    ('Pre-Production', 'oak'),
+    ('Handed to Production', 'clover'),
+]
+
+# Raw Deliverable.status value an "In Design" override writes — reuses
+# 'in_progress' as a generic "back to in design" reset, since every
+# pre-approval raw value (in_queue/in_progress/internal_review/
+# revision_in_queue/etc.) reads as "In Design" the same way regardless of
+# which one it literally is (status_vocabulary.py's derive_deliverable_status).
+# The two post-approval labels (Pre-Production / Handed to Production) are
+# handled separately in override_deliverable_status() — they both write
+# status='approved' underneath; which one actually displays is entirely a
+# function of needs_2d/3d/technical + status_2d/status_3d/technical_status
+# (status_vocabulary.py's _post_approval_deliverable_status), not this map.
+_DELIVERABLE_STATUS_WRITE = {
+    'In Design': 'in_progress',
+}
+
+
+_TEAM_CANONICAL = {'2d': '2D', '3d': '3D', 'technical': 'Technical'}
+
+
+def _canonical_team(raw):
+    """Normalizes a team string to the exact casing User.team/registration
+    use ('2D'/'3D'/'Technical'). Needed because DeliverableTypeDiscipline.team
+    (set via the admin Deliverable Types editor) and the free-text
+    Deliverable.teams field aren't guaranteed to be saved in that casing —
+    the edit form in admin.js stored them lowercase ('2d'/'3d'/'technical')
+    until 22 Aug 2026, so plenty of existing rows still are. Nothing before
+    the team-tag assignment feature (this file) cared about exact casing —
+    display always went through .lower() anyway for the CSS class name —
+    so this mismatch was invisible until an exact `User.team == team`
+    match was needed. Normalizing here, at read time, means every
+    deliverable's Assignments column works immediately regardless of
+    which casing its own disciplines happen to be stored in, without
+    needing a data migration or every type to be re-saved first."""
+    if not raw:
+        return raw
+    return _TEAM_CANONICAL.get(raw.strip().lower(), raw.strip())
+
+
+def _needed_teams(d):
+    """Which teams (2D/3D/Technical) a deliverable actually needs, in
+    display order — same source-of-truth branching the Team column
+    template used to do inline (deliverable_type's own disciplines list,
+    falling back to the free-text Deliverable.teams field for
+    C&CM/manually-added rows with no catalogue type). Centralized here so
+    _build_deliverable_focus_context can build the assignment context off
+    the exact same list the template renders. Always returns canonically-
+    cased team strings — see _canonical_team()."""
+    if d.deliverable_type and d.deliverable_type.disciplines:
+        return [_canonical_team(disc.team) for disc in d.deliverable_type.disciplines]
+    if d.teams:
+        return [_canonical_team(t) for t in d.teams.split(',') if t]
+    return []
+
+
+def _build_deliverable_focus_context(deliverables, actor, can_manage_project):
     """Computes the per-deliverable status pill + Focused/All eligibility data
     that both the Standard and C&CM Deliverables views need, so the two
     branches in overlay_deliverables() can't drift out of sync on this.
+
+    Also builds `assign_by_deliverable` (added 22 Aug 2026) — per
+    deliverable, per needed team, who's assigned (if anyone) and what
+    clicking that team's tag should do for the viewing actor. This is the
+    read side of the Team column's click-to-assign feature; the write
+    side is assign_deliverable_team() below.
     """
     from app.status_vocabulary import derive_deliverable_status
+    from app.status_tracking import bulk_deliverable_status_started_at
+    from app.models import User
     status_by_id = {}
     assigned_ids = set()
     for d in deliverables:
         status_by_id[d.id] = derive_deliverable_status(d)
         if any(a.designer_id == actor.id for a in d.disciplines):
             assigned_ids.add(d.id)
+    # "All status changes need to be time stamped" (22 Aug 2026, per
+    # Ezekiel) — one bulk query for the whole roster rather than one per
+    # deliverable, same pattern _bulk_deliverable_aggregates uses in
+    # project_list.py.
+    status_started_at_by_id = bulk_deliverable_status_started_at([d.id for d in deliverables])
+
+    # Options are per-team, not per-deliverable/per-row — one small query
+    # per distinct team actually in use on this roster (at most 3:
+    # 2D/3D/Technical), regardless of how many deliverables are showing.
+    needed_teams = set()
+    for d in deliverables:
+        needed_teams.update(_needed_teams(d))
+    options_by_team = {
+        team: User.query.filter(User.role.in_(['designer', 'team_lead']), User.team == team)
+                         .order_by(User.name).all()
+        for team in needed_teams
+    }
+
+    assign_by_deliverable = {}
+    for d in deliverables:
+        assignment_by_team = {a.team: a for a in d.disciplines}
+        row = []
+        for team in _needed_teams(d):
+            existing = assignment_by_team.get(team)
+            if can_manage_project or (actor.role == 'team_lead' and actor.team == team):
+                mode = 'manage'
+            elif actor.role == 'designer' and actor.team == team:
+                mode = 'self'
+            else:
+                mode = 'static'
+            row.append({
+                'team': team,
+                'person': existing.designer if existing else None,
+                'mode': mode,
+                'options': options_by_team.get(team, []),
+            })
+        assign_by_deliverable[d.id] = row
+
     return {
         'status_by_id': status_by_id,
+        'status_started_at_by_id': status_started_at_by_id,
         'assigned_ids': assigned_ids,
+        'assign_by_deliverable': assign_by_deliverable,
         # Designer/Team Lead/Admin get the toggle; everyone else always sees All.
         'can_toggle_focus': actor.role in ('designer', 'team_lead', 'admin'),
         # Designer/Team Lead default to Focused (their own workload first);
         # Admin's toggle doesn't filter anything either way, per your call —
         # defaulting it to All just means it starts in the "off" position.
         'default_focus': actor.role in ('designer', 'team_lead'),
+        # Status override (22 Aug 2026, per Ezekiel) — admin-only, click the
+        # pill / pick a different status. One shared option list regardless
+        # of brief type: derive_deliverable_status is identical for
+        # Standard and C&CM deliverables. This is the only status override
+        # left in the overlay — the project-level one was retired the same
+        # day (see the comment above _DELIVERABLE_STATUS_OVERRIDE_OPTIONS).
+        'can_override_status': actor.role == 'admin',
+        'deliverable_status_options': _DELIVERABLE_STATUS_OVERRIDE_OPTIONS,
     }
 
 def _build_ccm_deliverable_sections(project):
@@ -613,6 +748,7 @@ def _build_details_context(project, actor):
     apart from each other."""
     from app.models import User
     from app.status_vocabulary import derive_project_status
+    from app.status_tracking import project_status_started_at, project_client_approved_at
 
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
 
@@ -646,7 +782,24 @@ def _build_details_context(project, actor):
     else:
         owner_options = []
 
+    # No admin override for this pill anymore (22 Aug 2026 simplification,
+    # per Ezekiel) — status_label/status_class are now a pure live roll-up
+    # of the project's own deliverables (status_vocabulary.py's
+    # derive_project_status), so there's nothing here left to override;
+    # override the deliverables instead and this follows automatically.
     status_label, status_class = derive_project_status(project)
+    # "All status changes need to be time stamped" (22 Aug 2026, per
+    # Ezekiel) — when this project's raw status last changed, straight
+    # from ProjectStatusLog; None if it pre-dates that table.
+    status_started_at = project_status_started_at(project)
+    # Client-approval moment specifically (22 Aug 2026, later the same
+    # day, per Ezekiel — "Client Approved" removed as its own pill stage:
+    # "ensure anything that ever does go to preproduction gets its client
+    # approved time stamped"). Only worth showing separately from
+    # status_started_at once the project's moved on to Handed to
+    # Production — at Pre-Production they're the same moment, and at In
+    # Design there's no current approval to show.
+    client_approved_at = project_client_approved_at(project) if status_label == 'Handed to Production' else None
 
     requested_teams = [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
     assignments_by_team = {pd.team: pd for pd in project.assigned_designers}
@@ -687,13 +840,13 @@ def _build_details_context(project, actor):
     concept_kv_designer = project.concept_designer or project.kv_designer
 
     # Start Project (13 Aug 2026) — the one manual gate that moves a project
-    # off "Briefed" (status_vocabulary.py's _pipeline_stage_for /
-    # derive_ccm_aggregate_status). Same button, same underlying action for
-    # both brief types: Standard has no other way off Briefed at all; C&CM
-    # already flips its aggregate automatically once some channel starts,
-    # but this lets the design team flag the whole project as started up
-    # front, regardless of which channel gets picked up first. Reuses
-    # can_edit_project's permission tier rather than a new one.
+    # off "Briefed" (status_vocabulary.py's derive_project_status checks
+    # project.project_status == 'briefed' explicitly, ahead of the
+    # deliverable roll-up). Same button, same underlying action for both
+    # brief types — this is still the only thing that moves either brief
+    # type off Briefed; nothing deliverable-driven does, by design (a
+    # project sits at Briefed until someone deliberately starts it).
+    # Reuses can_edit_project's permission tier rather than a new one.
     can_start_project = can_edit_project and project.project_status == 'briefed'
 
     # Cancel/Reactivate (18 Aug 2026) — see _can_cancel_project. Project
@@ -751,6 +904,8 @@ def _build_details_context(project, actor):
     return dict(
         status_label=status_label,
         status_class=status_class,
+        status_started_at=status_started_at,
+        client_approved_at=client_approved_at,
         can_reassign_cs_lead=can_reassign_cs_lead,
         can_manage_cs=can_manage_cs,
         can_assign_owner=can_assign_owner,
@@ -1456,11 +1611,10 @@ def overlay_details_save(project_id):
 @login_required
 def overlay_start_project(project_id):
     """Start Project — the manual gate off "Briefed" (see _build_details_
-    context's can_start_project + status_vocabulary.py's _pipeline_stage_for
-    / derive_ccm_aggregate_status). One button, one action, both brief
-    types: flips project_status from 'briefed' to 'in_progress', which both
-    derivations already treat as "In Design" via their default/manual-gate
-    branch — no brief_type-specific logic needed here."""
+    context's can_start_project + status_vocabulary.py's derive_project_
+    status). One button, one action, both brief types: flips project_status
+    from 'briefed' to 'in_progress', which the unified derivation reads as
+    "In Design" — no brief_type-specific logic needed here."""
     from flask import jsonify
     from app import db
     from app.status_tracking import record_project_status
@@ -1485,16 +1639,81 @@ def overlay_start_project(project_id):
     return jsonify({'success': True})
 
 
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/<int:deliverable_id>/status/override', methods=['POST'])
+@login_required
+def override_deliverable_status(project_id, deliverable_id):
+    """Admin-only status override (22 Aug 2026, per Ezekiel; simplified to
+    the 3-stage vocabulary the same day — see _DELIVERABLE_STATUS_OVERRIDE_
+    OPTIONS above). The two post-approval labels both write raw
+    status='approved' underneath; which one actually displays is entirely a
+    function of needs_2d/3d/technical + status_2d/status_3d/technical_status
+    (status_vocabulary.py's _post_approval_deliverable_status), so those
+    three fields are what this route actually varies per target, not the
+    status column itself.
+
+    Note: picking "Pre-Production" on a deliverable that structurally
+    needs no 2D/3D/Technical follow-up (derive_preproduction_needs finds
+    nothing) will still read back as "Handed to Production" immediately —
+    same honest behavior a real approval would produce now, not a bug in
+    this override.
+
+    Calls sync_project_pipeline_status() at the end — an admin overriding a
+    deliverable is exactly the kind of "deliverable-affecting action" that
+    can flip the project's own pill, same as a real approval/revision would."""
+    from app import db
+    from app.models import Deliverable
+    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
+    from app.status_vocabulary import derive_deliverable_status, derive_preproduction_needs
+
+    deliverable = Deliverable.query.filter_by(id=deliverable_id, project_id=project_id).first_or_404()
+    actor = _get_actor()
+    if actor.role != 'admin':
+        return jsonify({'success': False, 'error': 'Admin only.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    label = data.get('status')
+
+    if label in _DELIVERABLE_STATUS_WRITE:
+        record_deliverable_status(deliverable, _DELIVERABLE_STATUS_WRITE[label], actor)
+    elif label in ('Pre-Production', 'Handed to Production'):
+        record_deliverable_status(deliverable, 'approved', actor)
+        needs_2d, needs_3d, needs_technical = derive_preproduction_needs(deliverable)
+        deliverable.needs_2d = needs_2d
+        deliverable.needs_3d = needs_3d
+        deliverable.needs_technical = needs_technical
+        # Pre-Production's real 3-state vocabulary is None (not started) ->
+        # 'uploaded' -> 'approved' (see project_preproduction.py's module
+        # docstring) — there's no 'in_progress' value anywhere else in that
+        # system, so picking "Pre-Production" here resets each needed
+        # stream to None (honestly "nothing uploaded yet") rather than
+        # inventing a 4th value the real Pre-Production tab wouldn't know
+        # how to render.
+        stream_value = 'approved' if label == 'Handed to Production' else None
+        if needs_2d:
+            deliverable.status_2d = stream_value
+        if needs_3d:
+            deliverable.status_3d = stream_value
+        if needs_technical:
+            deliverable.technical_status = stream_value
+    else:
+        return jsonify({'success': False, 'error': 'Not a valid status for this deliverable.'}), 400
+
+    sync_project_pipeline_status(deliverable.project, actor)
+    db.session.commit()
+    status_label, status_class = derive_deliverable_status(deliverable)
+    return jsonify({'success': True, 'status_label': status_label, 'status_class': status_class})
+
+
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/cancel', methods=['POST'])
 @login_required
 def overlay_cancel_project(project_id):
     """Cancel Project (§9 of the architecture doc, finally wired up 18 Aug
     2026) — cancel_reason/cancelled_at/cancelled_by_id already existed on
     the model unused. Deliberately doesn't touch project_status at all:
-    status_vocabulary.py's derive_pipeline_status/derive_ccm_aggregate_
-    status both check cancelled_at first, ahead of the underlying pipeline
-    stage, so cancelling never overwrites (and reactivating never needs to
-    restore) whatever stage the project was actually in."""
+    status_vocabulary.py's derive_project_status() checks cancelled_at
+    first, ahead of the underlying pipeline stage, so cancelling never
+    overwrites (and reactivating never needs to restore) whatever stage the
+    project was actually in."""
     from datetime import datetime as dt
     from app import db
     from app.utils import log_activity
@@ -1817,7 +2036,7 @@ def overlay_deliverables(project_id):
             can_skip_preproduction=can_skip_preproduction,
             can_manage_flags=can_manage_flags,
             open_flags_by_deliverable_id=open_flags_by_deliverable_id,
-            **_build_deliverable_focus_context(all_deliverables, actor),
+            **_build_deliverable_focus_context(all_deliverables, actor, can_manage),
         )
 
     deliverables = Deliverable.query.filter_by(
@@ -1832,7 +2051,7 @@ def overlay_deliverables(project_id):
         can_manage_flags=can_manage_flags,
         open_flags=open_flags,
         open_flags_by_deliverable_id=open_flags_by_deliverable_id,
-        **_build_deliverable_focus_context(deliverables, actor),
+        **_build_deliverable_focus_context(deliverables, actor, can_manage),
     )
 
 
@@ -1999,6 +2218,131 @@ def save_standard_deliverables(project_id):
                      user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})
+
+
+def _can_write_deliverable_assignment(project, actor, team, target_designer_id, existing_assignment):
+    """Who may change one deliverable's Design-phase team assignment, and
+    how far. Same set as _can_manage_deliverables (admin/management/CS
+    Lead/secondary CS/Project Owner) plus this team's own team lead can
+    set it to anyone on the team, or clear it. A plain designer never
+    reaches this — see assign_deliverable_team()'s self_toggle branch,
+    which is a separate, narrower path that can only ever touch the
+    caller's own assignment, never a teammate's."""
+    if _can_manage_deliverables(project, actor):
+        return True
+    if actor.role == 'team_lead' and actor.team == team:
+        return True
+    return False
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/assign', methods=['POST'])
+@login_required
+def assign_deliverable_team(project_id):
+    """Design-phase team assignment for the Deliverables roster's Team
+    column (added 22 Aug 2026, per Ezekiel — the roster showed which teams
+    a deliverable NEEDS from day one, but DeliverableAssignment had no
+    write path anywhere after the M10 overlay rebuild; the old detail page
+    had this, the new overlay never got it back). Two distinct paths:
+
+    - self_toggle: a plain designer's one-click claim/release on their own
+      team. Always re-reads the current DB state and only ever touches a
+      row where designer_id is already the caller's own id (or creates a
+      fresh one) — never overwrites a teammate's assignment, regardless of
+      what the client's last-rendered state claimed.
+    - designer_id (manage mode, possibly None to clear): CS/Admin/
+      Management/Project Owner, or this team's own team lead, setting it
+      to anyone on the team, reassigning, or clearing it outright.
+
+    Separate from project_preproduction.py's assign_technical() — that one
+    governs who does the LATER Pre-Production Technical stream; this one
+    governs who's actually doing the Design-phase work a deliverable's
+    2D/3D/Technical tags say it needs (which Pre-Production's own "2D/3D
+    don't need their own assignment step" reasoning already assumes
+    exists — see the comment above assign_technical())."""
+    from app import db
+    from app.models import Deliverable, DeliverableAssignment, User
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    data = request.get_json(silent=True) or {}
+    deliverable_id = data.get('deliverable_id')
+    # Normalized defensively — the template always renders a canonical
+    # data-team attribute now (see _needed_teams()), but this keeps a
+    # stray '2d'/'technical' from a stale cached page or a direct API
+    # call from silently creating a second, differently-cased
+    # DeliverableAssignment row for the same team.
+    team = _canonical_team(data.get('team'))
+    deliverable = Deliverable.query.get(deliverable_id) if deliverable_id else None
+    if not deliverable or deliverable.project_id != project_id or not team:
+        return jsonify({'success': False, 'error': 'Could not find that deliverable.'}), 400
+
+    existing = DeliverableAssignment.query.filter_by(
+        deliverable_id=deliverable.id, team=team
+    ).first()
+
+    if data.get('self_toggle'):
+        if actor.role != 'designer' or actor.team != team:
+            return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
+        if existing and existing.designer_id == actor.id:
+            db.session.delete(existing)
+            db.session.commit()
+            log_activity('deliverable_unassigned',
+                         f'{actor.name} removed themself from {team} on "{deliverable.name}" ({project.name})',
+                         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+            return jsonify({'success': True, 'designer_id': None})
+        if existing:
+            # Someone else already claimed it since this button last
+            # rendered — self_toggle can never steal another designer's
+            # assignment, only ever the caller's own.
+            return jsonify({
+                'success': False,
+                'error': f'{existing.designer.name} is already assigned to {team} on this deliverable.',
+            }), 409
+        db.session.add(DeliverableAssignment(
+            deliverable_id=deliverable.id, team=team,
+            designer_id=actor.id, assigned_by_id=actor.id,
+        ))
+        db.session.commit()
+        log_activity('deliverable_assigned',
+                     f'{actor.name} assigned themself to {team} on "{deliverable.name}" ({project.name})',
+                     user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+        return jsonify({'success': True, 'designer_id': actor.id})
+
+    if not _can_write_deliverable_assignment(project, actor, team, None, existing):
+        return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
+
+    raw_designer_id = data.get('designer_id')
+    designer_id = int(raw_designer_id) if raw_designer_id else None
+
+    if designer_id is None:
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+            log_activity('deliverable_unassigned',
+                         f'{actor.name} removed the {team} assignment from "{deliverable.name}" ({project.name})',
+                         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+        return jsonify({'success': True, 'designer_id': None})
+
+    target = User.query.get(designer_id)
+    if not target or target.role not in ('designer', 'team_lead') or target.team != team:
+        return jsonify({'success': False, 'error': f'That person is not on the {team} team.'}), 400
+
+    if existing:
+        existing.designer_id = designer_id
+        existing.assigned_by_id = actor.id
+    else:
+        db.session.add(DeliverableAssignment(
+            deliverable_id=deliverable.id, team=team,
+            designer_id=designer_id, assigned_by_id=actor.id,
+        ))
+    db.session.commit()
+    log_activity('deliverable_assigned',
+                 f'{actor.name} assigned {target.name} to {team} on "{deliverable.name}" ({project.name})',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    return jsonify({'success': True, 'designer_id': designer_id})
+
 
 @project_overlay_bp.route('/projects/<int:project_id>/set-project-owner', methods=['POST'])
 @login_required
@@ -2661,7 +3005,7 @@ def overlay_submissions_submit_to_client(project_id):
     """
     import re
     from app.models import ProjectSubmissionFile, ProjectSubmissionEvent
-    from app.status_tracking import record_project_status, record_deliverable_status
+    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
     from app.notifications import notify_of_submission_to_client
     from app.utils import log_activity
     from app.submission_cache import build_zip_bytes, clear_submission_cache
@@ -2792,8 +3136,10 @@ def overlay_submissions_submit_to_client(project_id):
         if draft.includes_kv and project.has_kv:
             project.kv_status = 'submitted_to_client'
     else:
-        # Standard Brief — pipeline status + included deliverables (unchanged).
-        record_project_status(project, 'submitted_to_client', actor)
+        # Standard Brief — included deliverables (unchanged). Project-level
+        # pipeline status is no longer set directly here (22 Aug 2026
+        # simplification, per Ezekiel) — see the sync call below, which
+        # covers this branch along with the other two.
         is_revised_submission = (project.revision_count or 0) > 0
         included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
         for deliverable in project.project_deliverables:
@@ -2805,6 +3151,11 @@ def overlay_submissions_submit_to_client(project_id):
             project.concept_status = 'submitted_to_client'
         if project.kv_status:
             project.kv_status = 'submitted_to_client'
+
+    # Project pill (22 Aug 2026 simplification, per Ezekiel) is now a pure
+    # deliverable roll-up — covers all three branches above uniformly,
+    # replacing what used to be a Standard-only direct write here.
+    sync_project_pipeline_status(project, actor)
 
     db.session.add(ProjectSubmissionEvent(
         submission_id=draft.id, event_type='submitted_to_client',
@@ -2931,7 +3282,7 @@ def overlay_submissions_client_revision(project_id):
     (that supersession happens in overlay_submissions_submit_to_client).
     """
     from app.models import ProjectSubmissionEvent, ProjectDesigner
-    from app.status_tracking import record_project_status, record_deliverable_status
+    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
     from app.notifications import create_notification
     from app.utils import strip_html, log_activity
     from app import db
@@ -2997,13 +3348,23 @@ def overlay_submissions_client_revision(project_id):
             project.kv_status = 'revision_in_queue'
         rev_label = f'#{project.ckv_revision_count}'
     else:
-        # Standard Brief - whole project + all deliverables.
+        # Standard Brief - whole project + all deliverables. Project-level
+        # pipeline status is no longer set directly here (22 Aug 2026
+        # simplification, per Ezekiel) — see the sync call below.
         project.revision_count = (project.revision_count or 0) + 1
-        record_project_status(project, 'revision_in_queue', actor)
         for deliverable in project.project_deliverables:
             record_deliverable_status(deliverable, 'revision_in_queue', actor)
             deliverable.revision_count = project.revision_count
         rev_label = f'#{project.revision_count}'
+
+    # Project pill (22 Aug 2026 simplification, per Ezekiel) is now a pure
+    # deliverable roll-up — covers all three branches above uniformly. A
+    # revision reverts the affected deliverable(s) back to "In Design", so
+    # this can revert a project that was already reading Pre-Production/
+    # Handed to Production back to In Design too, same rule either
+    # direction. Reverting doesn't erase the earlier client-approval
+    # timestamp — see status_tracking.py's project_client_approved_at().
+    sync_project_pipeline_status(project, actor)
 
     db.session.add(ProjectSubmissionEvent(
         submission_id=sent.id, event_type='client_revision',
@@ -3052,13 +3413,18 @@ def overlay_submissions_approve(project_id):
     Deliverable below).
 
     Ports the old projects_approval.py approve_submission's proven cascade
-    logic (channel/project only flips to Client Approved once EVERY
+    logic (channel/project only flips to fully approved once EVERY
     deliverable in that channel/project — not just this deck's — is
     approved) into the overlay's scope-resolved shape, mirroring
-    overlay_submissions_client_revision.
+    overlay_submissions_client_revision. "Fully approved" no longer gets
+    its own pill label anywhere (22 Aug 2026 simplification, per Ezekiel —
+    the project pill reads Pre-Production at this point; a channel's own
+    per-customer row reads the same, fixed 23 Aug 2026 after it was
+    initially missed), but the moment itself is still real and still
+    timestamped, non-destructively, via ProjectStatusLog.
     """
     from app.models import Deliverable, ProjectPosmChannel, ProjectSubmissionEvent, ProjectSubmissionEventDeliverable
-    from app.status_tracking import record_project_status, record_deliverable_status
+    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
     from app.status_vocabulary import derive_preproduction_needs
     from app.notifications import notify_of_project_approved
     from app.achievements import check_achievements
@@ -3120,9 +3486,9 @@ def overlay_submissions_approve(project_id):
             return jsonify({'success': False, 'error': 'Select at least one deliverable to approve.'}), 400
         for d in pending:
             record_deliverable_status(d, 'approved', actor)
-            # Auto-flag Pre-Production streams the moment a deliverable
-            # goes Client Approved — no separate manual step (13 Aug 2026,
-            # see status_vocabulary.py's derive_preproduction_needs).
+            # Auto-flag Pre-Production streams the moment a deliverable is
+            # client-approved — no separate manual step (13 Aug 2026, see
+            # status_vocabulary.py's derive_preproduction_needs).
             d.needs_2d, d.needs_3d, d.needs_technical = derive_preproduction_needs(d)
         approved_deliverables_this_call = pending
 
@@ -3150,7 +3516,9 @@ def overlay_submissions_approve(project_id):
             channel.approved_by_id = actor.id
 
             # Cascade further: only once EVERY channel + C&KV (if applicable)
-            # is done does the whole project become Client Approved.
+            # is done does the whole project become fully approved (project
+            # pill reads Pre-Production at that point — see the comment
+            # above sync_project_pipeline_status() below).
             all_channels = ProjectPosmChannel.query.filter_by(project_id=project.id).all()
             if all_channels and all(c.status == 'approved' for c in all_channels):
                 ckv_gate = True
@@ -3159,7 +3527,6 @@ def overlay_submissions_approve(project_id):
                 if project.has_kv and project.kv_status != 'approved':
                     ckv_gate = False
                 if ckv_gate:
-                    record_project_status(project, 'approved', actor)
                     project.approved_at = now
                     project.approved_by_id = actor.id
                     all_approved = True
@@ -3183,7 +3550,6 @@ def overlay_submissions_approve(project_id):
         # it's ready).
         all_channels = ProjectPosmChannel.query.filter_by(project_id=project.id).all()
         if all_channels and all(c.status == 'approved' for c in all_channels):
-            record_project_status(project, 'approved', actor)
             project.approved_at = now
             project.approved_by_id = actor.id
             all_approved = True
@@ -3201,14 +3567,13 @@ def overlay_submissions_approve(project_id):
             return jsonify({'success': False, 'error': 'Select at least one deliverable to approve.'}), 400
         for d in pending:
             record_deliverable_status(d, 'approved', actor)
-            # Auto-flag Pre-Production streams the moment a deliverable
-            # goes Client Approved — no separate manual step (13 Aug 2026,
-            # see status_vocabulary.py's derive_preproduction_needs).
+            # Auto-flag Pre-Production streams the moment a deliverable is
+            # client-approved — no separate manual step (13 Aug 2026, see
+            # status_vocabulary.py's derive_preproduction_needs).
             d.needs_2d, d.needs_3d, d.needs_technical = derive_preproduction_needs(d)
         approved_deliverables_this_call = pending
 
         if all(d.status == 'approved' for d in project.project_deliverables):
-            record_project_status(project, 'approved', actor)
             project.approved_at = now
             project.approved_by_id = actor.id
             all_approved = True
@@ -3216,6 +3581,15 @@ def overlay_submissions_approve(project_id):
                 project.concept_status = 'approved'
             if project.kv_status:
                 project.kv_status = 'approved'
+
+    # Project pill (22 Aug 2026 simplification, per Ezekiel) is now a pure
+    # deliverable roll-up, independent of the ckv_gate/all_approved logic
+    # above — Concept/KV approval isn't a deliverable, so it no longer
+    # blocks the pill the way it still blocks the "officially approved"
+    # notification/timestamp (all_approved, read below by
+    # notify_of_project_approved/check_achievements). Covers all three
+    # branches above uniformly.
+    sync_project_pipeline_status(project, actor)
 
     # Batch note (M3 Step 4 sub-step 8, added 13 Aug 2026) — always log an
     # event for this approval action, even with an empty note, so the deck's

@@ -8,10 +8,13 @@ done/approve/flag on a stream, Skip to Pre-Production, and the Handed to
 Production cascade.
 
 Design recap (locked with Ezekiel, 13 Aug 2026, extended 17 Aug 2026):
-- No new "gate" between Client Approved and Pre-Production — a deliverable
+- No new "gate" between client approval and Pre-Production — a deliverable
   reaching status='approved' with any needs_2d/needs_3d/needs_technical set
   is already effectively in Pre-Production; DeliverableStatusLog already
-  timestamps that moment for free (see record_deliverable_status).
+  timestamps that moment for free (see record_deliverable_status, and
+  status_tracking.py's deliverable_client_approved_at() for reading it back
+  — added 22 Aug 2026 once "Client Approved" stopped being its own pill
+  label, project and deliverable alike).
 - status_2d/status_3d/technical_status each get a 3-state vocabulary: None
   (not started, or flagged and waiting on reupload) -> 'uploaded' (releaser
   marked their upload done) -> 'approved' (Project Owner signed off — the
@@ -105,31 +108,34 @@ def _can_skip_preproduction(project, actor):
 
 def _stream_done(deliverable):
     """True once a deliverable is no longer blocking the "handed to
-    production" cascade below — either every stream it needed is approved
-    ('Handed to Production'), or it never needed any Pre-Production
-    stream in the first place ('Client Approved' with needs_2d/3d/
-    technical all False, so it never really entered Pre-Production at
-    all). Bug fix, 18 Aug 2026: this used to check only for 'Handed to
-    Production', which meant a single no-needs deliverable in a project/
-    channel silently blocked the whole cascade forever, since
-    _post_approval_deliverable_status() never reports that case as
-    'Handed to Production' — it has nothing to hand off."""
+    production" cascade below — either every stream it needed is approved,
+    or it never needed any Pre-Production stream in the first place.
+    Either way _post_approval_deliverable_status() reports that as
+    'Handed to Production' — a no-needs deliverable has had nothing to
+    hand off since the 22 Aug 2026 deliverable simplification (it used to
+    park at a permanent 'Client Approved' before that; see
+    status_vocabulary.py), so a single equality check is enough here now."""
     from app.status_vocabulary import _post_approval_deliverable_status
     label, _ = _post_approval_deliverable_status(deliverable)
-    return label in ('Handed to Production', 'Client Approved')
+    return label == 'Handed to Production'
 
 
 def _cascade_handed_to_production(project, actor, now):
     """Once every deliverable in a channel/project now has every stream it
     needs approved, advances the channel/project itself to
     'handed_to_production' — automatically, no manual confirmation step
-    (17 Aug 2026: minimizing admin work is the point). Standard: checks
-    project.project_deliverables directly. C&CM: per-channel first (same
-    UAE/Gulf-region matching the Client Approval cascade uses), then the
-    whole project once every channel has reached it. Safe to call after
-    every single stream approval — it just no-ops until the last one lands."""
+    (17 Aug 2026: minimizing admin work is the point). C&CM: per-channel
+    first (same UAE/Gulf-region matching the Client Approval cascade
+    uses) — that per-channel status is real, independent state (still
+    read by C&CM's per-customer expand rows), kept exactly as before. The
+    project-level pill itself is no longer decided here directly (22 Aug
+    2026 simplification, per Ezekiel) — it's a live roll-up computed by
+    sync_project_pipeline_status() from every deliverable's own status,
+    called unconditionally at the end for both brief types. Safe to call
+    after every single stream approval — it just no-ops until the last
+    one lands."""
     from app.models import ProjectPosmChannel
-    from app.status_tracking import record_project_status
+    from app.status_tracking import sync_project_pipeline_status
 
     if project.brief_type == 'ccm':
         channels = ProjectPosmChannel.query.filter_by(project_id=project.id).all()
@@ -153,13 +159,7 @@ def _cascade_handed_to_production(project, actor, now):
             if channel_deliverables and all(_stream_done(d) for d in channel_deliverables):
                 channel.status = 'handed_to_production'
 
-        all_channels = ProjectPosmChannel.query.filter_by(project_id=project.id).all()
-        if all_channels and all(c.status == 'handed_to_production' for c in all_channels):
-            record_project_status(project, 'handed_to_production', actor)
-    else:
-        deliverables = project.project_deliverables
-        if deliverables and all(_stream_done(d) for d in deliverables):
-            record_project_status(project, 'handed_to_production', actor)
+    sync_project_pipeline_status(project, actor)
 
 
 def _cascade_client_approval(project, channel, actor, now):
@@ -168,9 +168,15 @@ def _cascade_client_approval(project, channel, actor, now):
     duplicated here rather than imported/refactored out, to avoid touching
     that already-verified, live route while wiring up a second entry
     point (Skip to Pre-Production) into the same completion rule. channel
-    is None for Standard; a resolved ProjectPosmChannel for C&CM POSM."""
+    is None for Standard; a resolved ProjectPosmChannel for C&CM POSM.
+    The project-level pill itself is no longer set directly here (22 Aug
+    2026 simplification, per Ezekiel) — sync_project_pipeline_status()
+    recomputes it as a live roll-up from every deliverable, called
+    unconditionally at the end, independent of the ckv_gate below (that
+    gate still controls only the official approved_at/approved_by_id
+    business-approval timestamp and the concept/kv sync, not the pill)."""
     from app.models import ProjectPosmChannel
-    from app.status_tracking import record_project_status
+    from app.status_tracking import sync_project_pipeline_status
 
     if channel is not None:
         if channel.posm_customer_id:
@@ -200,18 +206,18 @@ def _cascade_client_approval(project, channel, actor, now):
                 if project.has_kv and project.kv_status != 'approved':
                     ckv_gate = False
                 if ckv_gate:
-                    record_project_status(project, 'approved', actor)
                     project.approved_at = now
                     project.approved_by_id = actor.id
     else:
         if project.project_deliverables and all(d.status == 'approved' for d in project.project_deliverables):
-            record_project_status(project, 'approved', actor)
             project.approved_at = now
             project.approved_by_id = actor.id
             if project.concept_status:
                 project.concept_status = 'approved'
             if project.kv_status:
                 project.kv_status = 'approved'
+
+    sync_project_pipeline_status(project, actor)
 
 
 def _build_preproduction_row(d, actor, can_act):
@@ -588,6 +594,7 @@ def flag_stream(deliverable_id):
     designer" apart from "never started" for the Needs Attention section."""
     from app import db
     from app.models import DeliverablePreproductionEvent
+    from app.status_tracking import sync_project_pipeline_status
     from app.utils import log_activity
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
@@ -607,6 +614,16 @@ def flag_stream(deliverable_id):
         return jsonify({'success': False, 'error': 'A comment is required to flag for reupload.'}), 400
 
     setattr(deliverable, _STREAM_FIELDS[stream]['status'], None)
+
+    # Flagging a stream can revert a project that had reached Handed to
+    # Production back down to Pre-Production (the deliverable's raw status
+    # stays 'approved' — flagging never sends it all the way back to In
+    # Design, only its post-approval label moves) — this was a real
+    # pre-existing gap (flag_stream never called any cascade before the 22
+    # Aug 2026 simplification), fixed here rather than left in place. The
+    # client-approval timestamp itself isn't touched by this either way —
+    # see status_tracking.py's deliverable_client_approved_at().
+    sync_project_pipeline_status(project, actor)
 
     db.session.add(DeliverablePreproductionEvent(
         deliverable_id=deliverable.id, event_type='preprod_flag', stream=stream,

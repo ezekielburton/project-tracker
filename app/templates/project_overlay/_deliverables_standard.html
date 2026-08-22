@@ -1,4 +1,4 @@
-{% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker %}
+{% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker, deliverable_assign_tag, status_override_picker %}
 
 {% set skippable = (deliverables | rejectattr('status', 'equalto', 'approved') | list) if can_skip_preproduction else [] %}
 
@@ -46,7 +46,7 @@
             <div class="overlay-deliverables-header">
                 <span>Name</span>
                 <span>Reference</span>
-                <span>Team</span>
+                <span>Assignments</span>
                 <span>Deadline</span>
                 <span>Status</span>
                 <span>Revisions</span>
@@ -73,20 +73,31 @@
                         {% endif %}
                     </span>
                     <span class="overlay-deliverables-tags">
-                        {% if d.deliverable_type and d.deliverable_type.disciplines %}
-                            {% for disc in d.deliverable_type.disciplines %}{{ tag(disc.team, disc.team|lower) }}{% endfor %}
-                        {% elif d.teams %}
-                            {% for t in d.teams.split(',') if t %}{{ tag(t, t|lower) }}{% endfor %}
+                        {% for t in assign_by_deliverable.get(d.id, []) %}
+                        {{ deliverable_assign_tag(d.id, t.team, t.person, t.options, t.mode) }}
                         {% else %}
-                            <span class="overlay-field-empty">—</span>
-                        {% endif %}
+                        <span class="overlay-field-empty">—</span>
+                        {% endfor %}
                     </span>
                     <span class="overlay-deliverables-deadline">
                         {{ d.design_deadline.strftime('%d %b %Y') if d.design_deadline else '—' }}{% if
                         d.design_deadline_time %} · {{ d.design_deadline_time.strftime('%H:%M') }}{% endif %}
                     </span>
-                    <span class="overlay-deliverables-status">
+                    {# "All status changes need to be time stamped" (22 Aug
+                    2026, per Ezekiel) — a native title tooltip rather than
+                    always-visible text, since this compact table row has
+                    no room to spare (see project_overlay/_details_top_cards.html
+                    for the always-visible version on the Details tab). #}
+                    <span class="overlay-deliverables-status"
+                        {% if status_started_at_by_id.get(d.id) %}title="Since {{ status_started_at_by_id[d.id].strftime('%d %b %Y') }}"{% endif %}>
+                        {% if can_override_status %}
+                        {{ status_override_picker('deliverable-status-picker-' ~ d.id, status_by_id[d.id][0],
+                        status_by_id[d.id][1], deliverable_status_options,
+                        url_for('project_overlay.override_deliverable_status', project_id=project.id,
+                        deliverable_id=d.id)) }}
+                        {% else %}
                         {{ status_pill(status_by_id[d.id][0], status_by_id[d.id][1]) }}
+                        {% endif %}
                     </span>
                     <span class="overlay-deliverables-revisions">{{ d.revision_count }}</span>
                 </div>

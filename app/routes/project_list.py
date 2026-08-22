@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app import db
 from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog
 from app.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
+from app.status_tracking import bulk_project_status_started_at, bulk_project_client_approved_at
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
 
@@ -306,6 +307,25 @@ def _apply_row_filters(rows, exclude=None):
 
     return rows
 
+def _resolve_view(view, user):
+    """
+    A saved custom view ("view-<id>") isn't itself a base query — it's a
+    name + a remembered filter selection layered on top of one of the three
+    fixed presets. Resolves it down to that preset so callers only ever have
+    to know about 'my'/'all'/'design_complete'. Idempotent: calling it again
+    on an already-resolved view ('my'/'all'/'design_complete') just returns
+    it unchanged, since those never start with 'view-'.
+    """
+    if view.startswith('view-'):
+        try:
+            view_id = int(view.split('-', 1)[1])
+        except ValueError:
+            view_id = None
+        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
+        return saved_view.base_view if saved_view else 'my'
+    return view
+
+
 def _base_query_for_view(view, user):
     """
     Returns (query, order_by) for whichever of the three fixed views is
@@ -315,31 +335,23 @@ def _base_query_for_view(view, user):
     view" too, not the whole projects table.
     """
     order_by = Project.first_output_deadline.asc()
-
-    # A saved custom view ("view-<id>") isn't itself a base query — it's a
-    # name + a remembered filter selection layered on top of one of the
-    # three fixed presets. Resolve it down to that preset here so every
-    # other branch below only ever has to know about 'my'/'all'/'design_complete'.
-    if view.startswith('view-'):
-        try:
-            view_id = int(view.split('-', 1)[1])
-        except ValueError:
-            view_id = None
-        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
-        view = saved_view.base_view if saved_view else 'my'
+    view = _resolve_view(view, user)
 
     # 'approved' (the raw status value) is a transient in-flight status now
     # (M8 added Pre-Production/Handed to Production after it), not a finish
     # line — so as of 18 Aug 2026 it's no longer excluded from My/All. Only
     # 'handed_to_production' (the real terminal state) is excluded, matching
-    # dashboard.py's _scoped_projects(). A user who wants a "Client Approved
+    # dashboard.py's _scoped_projects(). A user who wants a "Pre-Production
     # only" list can now build it themselves: My or All + Status filter =
-    # "Client Approved", saved as a custom view — see the 'design_complete'
-    # branch below for the one fixed tab that still hardcodes a status. That
-    # VIEW KEY was renamed from 'approved' to 'design_complete' on 18 Aug
-    # 2026 too (was confusing next to the now-unrelated 'approved' status
-    # value) — see migrations/_backfill_project_table_view_base_view.py for
-    # the one-time rename of any already-saved views built on top of it.
+    # "Pre-Production", saved as a custom view — see the 'design_complete'
+    # branch below for the one fixed tab that still hardcodes a status.
+    # (That filter value used to be "Client Approved" — same raw 'approved'
+    # status, relabeled 22 Aug 2026 per Ezekiel, see status_vocabulary.py.)
+    # That VIEW KEY was renamed from 'approved' to 'design_complete' on 18
+    # Aug 2026 too (was confusing next to the now-unrelated 'approved'
+    # status value) — see
+    # migrations/_backfill_project_table_view_base_view.py for the
+    # one-time rename of any already-saved views built on top of it.
     if view == 'all':
         if user.role in ('cs', 'admin', 'management', 'project_owner'):
             query = Project.query.filter(
@@ -365,6 +377,16 @@ def _base_query_for_view(view, user):
         # (Project has no dedicated timestamp column for this stage, unlike
         # approved_at) — most recently completed first, same intent as the
         # old approved_at.desc().
+        #
+        # Simple again (22 Aug 2026, per Ezekiel) — the brief broadening
+        # this tab briefly gained the same day (to also catch C&CM projects
+        # still short of project_status == 'handed_to_production' but
+        # already reading a "Design Completed" pill) doesn't apply anymore:
+        # that separate "Design Completed" label is gone entirely, one
+        # unified project pill now reads Handed to Production the same way
+        # for Standard and C&CM (status_vocabulary.py's
+        # derive_project_status), so this tab is exactly the projects at
+        # that raw status, same for both brief types, no .any(...) needed.
         handed_at = (
             db.session.query(db.func.max(ProjectStatusLog.started_at))
             .filter(
@@ -552,9 +574,9 @@ def _build_filter_counts(view, user):
         'design_type': design_type_counts,
     }
 
-def _serialize_row(p, rollups, next_deadlines):
+def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_approved_at=None):
     """Turns one Project into the flat dict the template needs. Pulled out of index(), now that there are three different queries feeding
-    in the same row shape. rollups/next_deadlines are the batch-computed dicts from _bulk_deliverable_aggregates() — a plain dict lookup here instead of each row running its own Deliverable query."""
+    in the same row shape. rollups/next_deadlines/status_started_at/client_approved_at are the batch-computed dicts from _bulk_deliverable_aggregates()/bulk_project_status_started_at()/bulk_project_client_approved_at() — a plain dict lookup here instead of each row running its own query."""
     next_deadline = next_deadlines.get(p.id)
     status_label, status_class = derive_project_status(p)
     return {
@@ -571,6 +593,16 @@ def _serialize_row(p, rollups, next_deadlines):
         'status': p.project_status,
         'blanket_status': status_label,
         'status_pill_class': status_class,
+        # "All status changes need to be time stamped" (22 Aug 2026, per
+        # Ezekiel) — when this project's raw status last changed
+        # (ProjectStatusLog), fetched in bulk by the caller. None if
+        # status_started_at wasn't passed in, or nothing's logged yet.
+        'status_started_at': (status_started_at or {}).get(p.id),
+        # Client-approval moment specifically (22 Aug 2026, later the same
+        # day, per Ezekiel) — survives the project moving on to Handed to
+        # Production, unlike status_started_at above. None if never
+        # approved, or client_approved_at wasn't passed in.
+        'client_approved_at': (client_approved_at or {}).get(p.id),
         'brief_type': p.brief_type,
         'rollup': rollups.get(p.id),
         'customer_count': sum(1 for pc in p.project_customers if not pc.cancelled) if p.brief_type == 'ccm' else None,
@@ -596,8 +628,18 @@ def _compute_rows_and_groups(view, user):
         query = _apply_sql_filters(query)
         projects = _eager_load(query).order_by(order_by).all()
         rollups, next_deadlines = _bulk_deliverable_aggregates([p.id for p in projects])
-        rows = [_serialize_row(p, rollups, next_deadlines) for p in projects]
+        status_started_at = bulk_project_status_started_at([p.id for p in projects])
+        client_approved_at = bulk_project_client_approved_at([p.id for p in projects])
+        rows = [_serialize_row(p, rollups, next_deadlines, status_started_at, client_approved_at) for p in projects]
         rows = _apply_row_filters(rows)
+
+        # No post-serialize "Design Completed" filtering needed anymore
+        # (22 Aug 2026 simplification, per Ezekiel) — that separate label
+        # is gone, and the SQL-level exclusion in _base_query_for_view
+        # (Project.project_status != 'handed_to_production' for My/All,
+        # == 'handed_to_production' for design_complete) is already exact
+        # now that the project pill is a plain live roll-up with no
+        # in-between C&CM-only state to reconcile against a computed field.
 
     # Sort is applied last, after every filter — it re-orders whatever
     # subset of rows is already showing, it never changes which rows show.
@@ -712,10 +754,17 @@ def index():
         # 'In Progress' removed (13 Aug 2026) — the C&CM aggregate's "In
         # Progress" stage was renamed to "In Design" to match Standard's
         # wording (status_vocabulary.py), so it's no longer a distinct
-        # blanket_status value to filter on.
+        # blanket_status value to filter on. 'Design Completed' removed
+        # (22 Aug 2026 simplification, per Ezekiel) — that separate label
+        # doesn't exist anywhere anymore, a project whose pill reads
+        # Handed to Production is what lands on that tab. 'Client
+        # Approved' removed the same day, later — the project-level pill
+        # is now the same 4-stage shape as the deliverable pill (Briefed /
+        # In Design / Pre-Production / Handed to Production, plus the
+        # orthogonal On Hold/Cancelled); 'Pre-Production' replaces it as
+        # the filter value for that same raw 'approved' status.
         'statuses': [
-            'Briefed', 'In Design', 'Client Approved', 'Pre-Production', 'Handed to Production',
-            'Design Completed', 'On Hold', 'Cancelled',
+            'Briefed', 'In Design', 'Pre-Production', 'Handed to Production', 'On Hold', 'Cancelled',
         ],
         'urgencies': [('overdue', 'Overdue'), ('urgent', 'Urgent'), ('prioritize', 'Prioritize'), ('normal', 'Normal')],
         'teams': TEAM_KEYS,

@@ -87,6 +87,39 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {% endmacro %}
 
     {#
+    status_override_picker(picker_id, current_label, current_class, options, target_url)
+    ───────────────────────────────────────────────────────────────────────────────────
+    Admin-only "click the pill, pick a different status, it overrides"
+    control (22 Aug 2026, per Ezekiel) — same toggle-button + popover
+    recipe as avatar_picker() below, just swapping person rows for status
+    pills. `options` is a list of (label, css_modifier) pairs — the exact
+    shape status_vocabulary.py's own derive_*_status() functions return,
+    and what app/routes/project_overlay.py's
+    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS passes in, so the popover can
+    never offer a status that doesn't render as a real pill. `target_url`
+    is the POST endpoint status_picker.js sends { status: <label> } to on
+    selection. The project-level override this macro used to also serve
+    was retired the same day (22 Aug 2026 simplification, per Ezekiel) —
+    the project pill is a pure live roll-up now, so this macro is only
+    ever used for a deliverable's own status (see
+    project_deliverables_card.js). #}
+    {% macro status_override_picker(picker_id, current_label, current_class, options, target_url) %}
+    <div class="status-picker" id="{{ picker_id }}" data-target-url="{{ target_url }}">
+        <button type="button" class="status-picker-trigger">
+            {{ status_pill(current_label, current_class) }}
+        </button>
+        <div class="status-picker-popover" hidden>
+            {% for label, modifier in options %}
+            <button type="button" class="status-picker-option{% if label == current_label %} is-current{% endif %}"
+                data-status-value="{{ label }}">
+                {{ status_pill(label, modifier) }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endmacro %}
+
+    {#
     included_summary(includes_concept, includes_kv, names)
     ──────────────────────────────────────────────────────
     The quiet "N deliverables ▾" line shown under a sent / historical
@@ -154,6 +187,95 @@ the app. Deliberately a <span>, not a link — same reasoning as the
             {% endfor %}
         </div>
     </div>
+    {% endmacro %}
+
+    {#
+    deliverable_assign_tag(deliverable_id, team, person, options, mode)
+    ──────────────────────────────────────────────────────────────────
+    One team-tag cell in the Deliverables roster's Team column (added 22
+    Aug 2026 — the roster always showed which teams a deliverable NEEDS,
+    but nothing let anyone say who's actually ON it; DeliverableAssignment
+    existed and was already read elsewhere (the Focused toggle) but had no
+    write path anywhere in the UI). `mode` is computed server-side per
+    deliverable/team in _build_deliverable_focus_context
+    (app/routes/project_overlay.py) and picks one of three renderings:
+
+      'manage' — CS/Admin/Management/Project Owner, or this team's own
+                 team lead. Opens the standard avatar-picker popover (same
+                 AvatarPicker.js hook classes avatar_picker() above uses)
+                 to assign, reassign, or unassign anyone on the team.
+      'self'   — a plain designer on this exact team. One click claims it
+                 if empty or releases their own claim if it's already
+                 them — no popover, wired directly in
+                 project_deliverables_card.js (self_toggle), which can
+                 never touch a teammate's assignment (enforced
+                 server-side too, in assign_deliverable_team()).
+      'static' — no standing on this team and not a manager. Same
+                 non-interactive tag look it always had, plus a small
+                 avatar alongside it once someone's assigned, so a
+                 read-only viewer still sees who's on it.
+
+    Deliberately reuses .avatar-picker-placeholder (shared.css) for the
+    "nobody yet, click to fill" dashed-pill look in both interactive
+    modes — same visual language as every other empty picker in this app,
+    not a new one invented just for this.
+    #}
+    {% macro deliverable_assign_tag(deliverable_id, team, person, options, mode) %}
+    {% if mode == 'manage' %}
+    <div class="avatar-picker deliverable-assign-tag" data-deliverable-id="{{ deliverable_id }}" data-team="{{ team }}">
+        <button type="button" class="avatar-picker-trigger">
+            {% if person %}
+            <span class="deliverable-assign-avatar deliverable-assign-avatar--{{ team|lower }}" title="{{ person.name }}">
+                {% if person.avatar_filename %}
+                <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="" loading="lazy">
+                {% else %}
+                <span class="person-avatar-initials">{{ person.name[0].upper() }}</span>
+                {% endif %}
+            </span>
+            {% else %}
+            <span class="avatar-picker-placeholder">{{ team }}</span>
+            {% endif %}
+        </button>
+        <div class="avatar-picker-popover" hidden>
+            {% if person %}
+            <button type="button" class="avatar-picker-option deliverable-assign-unassign" data-user-id="">Unassign</button>
+            {% endif %}
+            {% for opt in options %}
+            <button type="button" class="avatar-picker-option{{ ' is-current' if person and opt.id == person.id else '' }}"
+                data-user-id="{{ opt.id }}">{{ person_chip(opt) }}</button>
+            {% else %}
+            <p class="avatar-picker-empty">No {{ team }} designers yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif mode == 'self' %}
+    <button type="button"
+        class="deliverable-assign-tag deliverable-assign-tag--self{% if not person %} avatar-picker-placeholder{% endif %}"
+        data-deliverable-id="{{ deliverable_id }}" data-team="{{ team }}" data-mode="self"
+        title="{% if person %}{{ person.name }} — click to remove yourself{% else %}Click to assign yourself to {{ team }}{% endif %}">
+        {% if person %}
+        <span class="deliverable-assign-avatar deliverable-assign-avatar--{{ team|lower }}">
+            {% if person.avatar_filename %}
+            <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="" loading="lazy">
+            {% else %}
+            <span class="person-avatar-initials">{{ person.name[0].upper() }}</span>
+            {% endif %}
+        </span>
+        {% else %}{{ team }}{% endif %}
+    </button>
+    {% else %}
+    {{ tag(team, team|lower) }}
+    {% if person %}
+    <span class="deliverable-assign-avatar deliverable-assign-avatar--{{ team|lower }} deliverable-assign-avatar--static"
+        title="{{ person.name }}">
+        {% if person.avatar_filename %}
+        <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="" loading="lazy">
+        {% else %}
+        <span class="person-avatar-initials">{{ person.name[0].upper() }}</span>
+        {% endif %}
+    </span>
+    {% endif %}
+    {% endif %}
     {% endmacro %}
 
     {#

@@ -205,11 +205,19 @@
 }
 
 /*  ---- Status Pill
-    The new three-tier status vocabulary (Deliverable / Pipeline / C&CM aggregate) from
-    the Detail+Briefing overlay rework — see Projects Redesign Architecture.md §4.
+    The status vocabulary from the Detail+Briefing overlay rework — see
+    Projects Redesign Architecture.md §4 for the original three-tier
+    version, and app/status_vocabulary.py for the 22 Aug 2026
+    simplification (per Ezekiel) that collapsed it down to one Deliverable
+    pill + one Project pill, no separate "Design Completed" label.
     One base shape + a color modifier per distinct pill color (not per status label),
-    since several statuses across tiers intentionally share the same color (e.g.
-    Client Approved / Handed to Production / Design Completed are all --clover).
+    since several statuses intentionally share the same color (e.g.
+    "Handed to Production" is --clover everywhere it appears — project,
+    deliverable, and a C&CM per-customer row alike). "Client Approved" is
+    not one of these labels anywhere anymore as of 23 Aug 2026 (per
+    Ezekiel) — status_vocabulary.py's _pipeline_stage_for() was the one
+    remaining place it still rendered (a C&CM per-customer row), fixed to
+    read "Pre-Production" (--oak) like everything else.
     Which label maps to which modifier is decided server-side (M2 backend derivation) —
     this file only owns shape + color. */
 
@@ -403,5 +411,71 @@
 .avatar-picker-trigger:hover .avatar-picker-action-label {
     color: var(--black);
     border-color: var(--black);
+}
+
+/* Admin status override (22 Aug 2026, per Ezekiel) — status_picker.js /
+_shared_macros.html's status_override_picker(). Same recipe as
+.avatar-picker* above, just triggered by a status pill instead of a
+person chip; kept as its own class family rather than reusing
+.avatar-picker* since the two components aren't interchangeable
+(different dataset key, different popover content). */
+.status-picker {
+    position: relative;
+    display: inline-block;
+}
+
+.status-picker-trigger {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.status-picker-trigger .status-pill {
+    cursor: pointer;
+}
+
+.status-picker-popover {
+    position: fixed;
+    width: max-content;
+    min-width: 180px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    padding: var(--space-2);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.status-picker-popover[hidden] {
+    display: none;
+}
+
+.status-picker-option {
+    background: none;
+    border: none;
+    text-align: left;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+}
+
+.status-picker-option:hover {
+    background: var(--surface-hover);
+}
+
+/* The status this row already reads — a quiet marker rather than a
+disabled state, since re-picking the current status is a harmless no-op
+the backend already handles fine. */
+.status-picker-option.is-current {
+    background: var(--surface-hover);
 }
 

@@ -1,42 +1,75 @@
 """
 app/status_vocabulary.py
 
-The new three-tier status vocabulary from the Detail+Briefing overlay rework
-— see Projects Redesign Architecture.md §4. These are read-only DERIVATION
-functions: given a model instance, return the (label, css_modifier) pair a
-template renders as a status pill (see app/static/css/shared.css's
-.status-pill / .status-pill--<modifier> classes). They don't write anything —
-actual status transitions still happen through app/status_tracking.py's
-funnel and record_deliverable_status()/record_project_status(); this module
-only translates the resulting raw values into the new vocabulary for display,
-in one place, so every surface (Projects list, later the overlay + roster)
+The status vocabulary from the Detail+Briefing overlay rework — see
+Projects Redesign Architecture.md §4 for the original three-tier version,
+and the 22 Aug 2026 simplification (per Ezekiel) that collapsed it down to
+this one. These are read-only DERIVATION functions: given a model instance,
+return the (label, css_modifier) pair a template renders as a status pill
+(see app/static/css/shared.css's .status-pill / .status-pill--<modifier>
+classes). They don't write anything — actual status transitions still
+happen through app/status_tracking.py's funnel
+(record_deliverable_status()/record_project_status()/
+sync_project_pipeline_status()); this module only translates the resulting
+raw values into the vocabulary for display, in one place, so every surface
 agrees.
+
+The simplification (22 Aug 2026, per Ezekiel): a deliverable pill now only
+ever reads In Design -> Pre-Production -> Handed to Production — every
+pre-approval raw status (Briefed/In Progress/In Review/In Revision/
+Submitted to Client) collapses into one "In Design" label, and a
+deliverable that needs no Pre-Production stream at all now reads Handed to
+Production immediately on approval instead of parking at a permanent
+"Client Approved". The project pill matches that exact same 3-stage shape
+(same day, per Ezekiel's follow-up — "it's actually much cleaner going
+from In Design -> Preproduction -> handed to production"): Briefed -> In
+Design -> Pre-Production -> Handed to Production (On Hold/Cancelled still
+orthogonal, checked first) — computed as a live roll-up of the project's
+own deliverables (see derive_project_status below), the same rule for
+Standard and C&CM alike; there is no more separate C&CM aggregate tier and
+no more "Design Completed" as its own label — a project whose pill reads
+Handed to Production is what the Projects list's Design Completed tab
+shows (project_list.py), nothing else does. "Client Approved" is gone as a
+label entirely now, everywhere — project pill, deliverable pill, AND
+C&CM's per-customer expand rows (_pipeline_stage_for() below, corrected
+23 Aug 2026 after it was missed in the first pass — Ezekiel: "why am I
+still seeing client approved on customer channels?"). The raw 'approved'
+status value still means exactly what it always did (client signed off,
+ready for Pre-Production), it just no longer gets its own pill text
+anywhere; see status_tracking.py's project_client_approved_at()/
+deliverable_client_approved_at() for where that moment is still captured
+with a timestamp, non-destructively, for future dashboard use even though
+nothing displays it as its own stage anymore.
+
+The raw underlying values these collapse FROM are unchanged and still real
+— submission review/revision/approval and the Pre-Production stream cycle
+still work exactly as before, this module just displays less granularity
+than it used to.
+
+_pipeline_stage_for() / derive_customer_pipeline_status() are still their
+own separate TRACKING mechanism, not a display exception anymore: C&CM's
+per-customer expand rows (project_list.py) read ProjectPosmChannel.status,
+a genuinely independent per-channel field that has never fed the overall
+project pill and still doesn't — that per-customer state-tracking was
+deliberately left alone and still is. But the VOCABULARY it displays
+through now matches everywhere else — no surface anywhere shows "Client
+Approved" any longer.
 """
 from app.models import ProjectPosmChannel
 
 
-# ── Tier 1: Deliverable status (every deliverable, both brief types) ───────
-# "Unassigned" became "Briefed" during the M2 Figma pass (30 Jul 2026) — a
-# deliverable just reads Briefed until an explicit "Start" action flips
-# Deliverable.status to 'in_progress'. That button doesn't exist yet (lands
-# with the M6 roster), so no real deliverable has this raw value today —
-# every fresh deliverable sits at 'in_queue' until a designer submits it.
+# ── Deliverable status (every deliverable, both brief types) ───────────────
 def derive_deliverable_status(deliverable):
-    """Returns (label, css_modifier) for one Deliverable row."""
-    raw = deliverable.status
-
-    if raw in ('revision_in_queue', 'internal_revision', 'revision_in_progress'):
-        return ('In Revision', 'lavender')
-    if raw == 'internal_review':
-        return ('In Review', 'canary')
-    if raw == 'submitted_to_client':
-        return ('Submitted to Client', 'sage')
-    if raw == 'approved':
+    """Returns (label, css_modifier) for one Deliverable row. Every
+    pre-approval raw value (in_queue/in_progress/internal_review/
+    revision_in_queue/internal_revision/revision_in_progress/
+    submitted_to_client — the real Submissions-flow states, still written
+    exactly as before) reads as one "In Design" label now; only 'approved'
+    branches into the post-approval Pre-Production/Handed to Production
+    split below."""
+    if deliverable.status == 'approved':
         return _post_approval_deliverable_status(deliverable)
-    if raw == 'in_progress':
-        return ('In Progress', 'coral')
-    # raw == 'in_queue' (or the unused legacy column default)
-    return ('Briefed', 'sky')
+    return ('In Design', 'coral')
 
 
 def derive_preproduction_needs(deliverable):
@@ -66,10 +99,18 @@ def _post_approval_deliverable_status(deliverable):
     NULL/anything else = still in progress, 'approved' = that stream is
     done — a deliverable only reaches Handed to Production once every
     stream it actually needs is approved.
+
+    A deliverable that needs NO Pre-Production stream at all used to park
+    permanently at "Client Approved" (nothing left to do, but nothing to
+    call it either). Simplified (22 Aug 2026, per Ezekiel) — "Client
+    Approved" was dropped from the deliverable's 3-stage flow entirely, so
+    approval alone now reads as done: Handed to Production immediately,
+    same as if it had needed streams and every one of them just got
+    approved.
     """
     needs_any = deliverable.needs_2d or deliverable.needs_3d or deliverable.needs_technical
     if not needs_any:
-        return ('Client Approved', 'clover')
+        return ('Handed to Production', 'clover')
 
     done_2d = (not deliverable.needs_2d) or deliverable.status_2d == 'approved'
     done_3d = (not deliverable.needs_3d) or deliverable.status_3d == 'approved'
@@ -80,30 +121,22 @@ def _post_approval_deliverable_status(deliverable):
     return ('Pre-Production', 'oak')
 
 
-# ── Shared stage mapping (Tier 2 + the per-channel check Tier 3 uses) ──────
-# 'handed_to_production' is written for real now (18 Aug 2026) by
-# project_preproduction.py's _cascade_handed_to_production, both here at
-# the Standard project_status level and via ProjectPosmChannel.status for
-# C&CM (see derive_ccm_aggregate_status's own explicit branch for that
-# case — this shared function only covers the raw-status-string mapping).
-# 'pre_production' itself is still never written as its own project_status
-# value — Standard projects read 'Pre-Production' through
-# _post_approval_deliverable_status's per-deliverable pill instead, not
-# through this project-level branch — kept here for completeness in case
-# that changes.
-#
-# 'briefed' gets its own real branch (13 Aug 2026) — previously fell through
-# to the default and every fresh Standard project read "In Design" the
-# instant it was created, with no way to show it hadn't actually been
-# started. Standard projects seed at 'briefed' (projects_submission.py) and
-# stay there until the Details tab's "Start Project" button flips
-# project_status to 'in_progress' via record_project_status(). Channel
-# status never uses 'briefed' (channels seed at 'in_queue'), so this branch
-# only ever fires for the Tier 2 project-level call site below.
+# ── Per-channel stage mapping — used only by derive_customer_pipeline_status
+# now (22 Aug 2026 simplification, per Ezekiel) — the overall project pill
+# above no longer reads ProjectPosmChannel.status at all, but C&CM's
+# per-customer expand rows still do, unchanged: that per-channel state
+# tracking is genuinely independent and stays exactly as it was. The
+# LABEL VOCABULARY it renders through does not get its own exception,
+# though (fixed 23 Aug 2026, per Ezekiel — the per-customer table was
+# still showing "Client Approved" pills after that label was supposed to
+# be gone everywhere): 'approved' now reads "Pre-Production" here too,
+# same text/colour as 'pre_production' below and as the project/
+# deliverable pills — one vocabulary, no surface left showing the old
+# label. 'briefed'/'pre_production' branches are dead for a real channel
+# (channels never seed at or advance to either raw value) — kept for
+# completeness/history, same as before this simplification.
 def _pipeline_stage_for(raw_status):
-    if raw_status == 'approved':
-        return ('Client Approved', 'clover')
-    if raw_status == 'pre_production':
+    if raw_status in ('approved', 'pre_production'):
         return ('Pre-Production', 'oak')
     if raw_status == 'handed_to_production':
         return ('Handed to Production', 'clover')
@@ -122,89 +155,56 @@ def _pipeline_stage_for(raw_status):
     return ('In Design', 'coral')
 
 
-# ── Tier 2: Pipeline status (Standard project-level) ───────────────────────
-# On Hold / Cancelled are orthogonal to the pipeline (§4) — checked first,
-# ahead of the underlying stage.
-def derive_pipeline_status(project):
-    """Returns (label, css_modifier) for a Standard project's Status column."""
-    if project.cancelled_at is not None:
-        return ('Cancelled', 'salmon')
-    if project.project_status == 'on_hold':
-        return ('On Hold', 'poppy')
-    return _pipeline_stage_for(project.project_status)
-
-
-# ── Tier 3: C&CM aggregate (C&CM project overall) ───────────────────────────
-# Computed from every channel — see the M1 finding in Projects Redesign
-# Architecture.md §C: the real per-customer/per-region pipeline lives on
-# ProjectPosmChannel, not ProjectCustomer.status (which is only ever
-# 'briefed' in the real code).
+# ── Project status — one unified rule for both brief types ─────────────────
+# On Hold / Cancelled are orthogonal — checked first, ahead of the
+# underlying stage, same as always. Briefed is still the explicit Start
+# Project gate (untouched by this simplification — a project sits at
+# Briefed until someone clicks Start, exactly as before).
 #
-# "In Progress" renamed to "In Design" (13 Aug 2026) to match Standard's
-# wording — both tiers now use the same label for "actively being
-# designed," per Ezekiel. Also gated on the same manual project_status
-# flag Standard's Start Project button sets: previously this stage was
-# purely channel-derived (only flipped once some individual channel's
-# status moved off 'in_queue'), so a C&CM project could sit reading
-# "Briefed" for a long time even after the design team had genuinely
-# started, just because no one channel had been picked up yet. The
-# project-level flag now takes precedence — one Start Project click on
-# the Details tab moves the whole project to "In Design" regardless of
-# which channel starts first — while a channel moving on its own still
-# flips it too, for projects where no one bothered clicking Start.
-def derive_ccm_aggregate_status(project):
-    """Returns (label, css_modifier) for a C&CM project's Status column."""
+# Past Briefed, the pill is a pure live roll-up of the project's own
+# deliverables (22 Aug 2026 simplification, per Ezekiel) — the SAME rule
+# for Standard and C&CM alike, computed across every deliverable on the
+# project regardless of which C&CM customer/channel it's under. Nothing
+# else decides it (not Submit to Client, not Concept/KV approval, not a
+# per-channel cascade) — see app/status_tracking.py's
+# sync_project_pipeline_status(), the one place that writes
+# project.project_status based on this rule, called after every action
+# that can change a deliverable's own label.
+#
+# Same 3-stage shape as the deliverable pill now (22 Aug 2026, later the
+# same day, per Ezekiel — "Client Approved" removed as its own stage
+# entirely, "much cleaner going from In Design -> Preproduction -> handed
+# to production"):
+#   - In Design: at least one deliverable hasn't moved past In Design yet.
+#   - Pre-Production: every deliverable has moved past In Design (each
+#     one's own label is Pre-Production or Handed to Production) — this is
+#     the same raw project_status value ('approved') that used to read
+#     "Client Approved"; only the label/colour changed, see the module
+#     docstring for where that moment is still timestamped.
+#   - Handed to Production: every deliverable itself reads Handed to
+#     Production. This is also what the Projects list's Design Completed
+#     tab shows (project_list.py) — there's no separate "Design Completed"
+#     label anymore, Handed to Production IS what lands there.
+def derive_project_status(project):
+    """Returns (label, css_modifier) for a project's Status column/pill —
+    same rule regardless of brief_type."""
     if project.cancelled_at is not None:
         return ('Cancelled', 'salmon')
     if project.project_status == 'on_hold':
         return ('On Hold', 'poppy')
+    if project.project_status == 'briefed':
+        return ('Briefed', 'sky')
 
-    channels = project.posm_channels
-
-    # Handed to Production (bug fix, 18 Aug 2026) — every channel fully
-    # released via Pre-Production's cascade (see project_preproduction.py's
-    # _cascade_handed_to_production). Checked ahead of "Design Completed"
-    # below since it's the later stage — without this branch, a channel
-    # reaching 'handed_to_production' no longer matched the all-'approved'
-    # check either, so a fully handed-off project fell through to the
-    # started_manually/started_via_channel check further down and
-    # regressed to showing "In Design".
-    if channels and all(c.status == 'handed_to_production' for c in channels):
-        return ('Handed to Production', 'clover')
-
-    # "Design Completed" originally meant every customer reached Handed
-    # to Production, back when that stage didn't exist in real channel
-    # data — 'approved' was the practical stand-in. Now that
-    # handed_to_production is real (see above, which catches it first),
-    # this means "every channel is at least Client Approved" — a channel
-    # already handed to production also satisfies 'approved' in spirit.
-    if channels and all(c.status in ('approved', 'handed_to_production') for c in channels):
-        return ('Design Completed', 'clover')
-
-    # 'Submitted to Client' aggregate (M10, 20 Aug 2026, per Ezekiel) —
-    # mirrors Standard's same addition in _pipeline_stage_for() above.
-    # Only fires once EVERY channel has left active design (submitted,
-    # approved, or handed off) — if even one channel is still in_queue or
-    # revision_in_queue, design work is still genuinely happening
-    # somewhere on this project, so it correctly falls through to 'In
-    # Design' below instead of claiming everything's out for approval.
-    if channels and all(c.status in ('submitted_to_client', 'approved', 'handed_to_production') for c in channels):
-        return ('Submitted to Client', 'sage')
-
-    started_manually = project.project_status != 'briefed'
-    started_via_channel = any(c.status != 'in_queue' for c in channels) if channels else False
-    if started_manually or started_via_channel:
+    deliverables = project.project_deliverables
+    if not deliverables:
         return ('In Design', 'coral')
 
-    return ('Briefed', 'sky')
-
-
-def derive_project_status(project):
-    """The Projects-list-page Status column/filter value for one project —
-    Pipeline status for Standard, the C&CM aggregate for C&CM."""
-    if project.brief_type == 'ccm':
-        return derive_ccm_aggregate_status(project)
-    return derive_pipeline_status(project)
+    labels = [derive_deliverable_status(d)[0] for d in deliverables]
+    if all(label == 'Handed to Production' for label in labels):
+        return ('Handed to Production', 'clover')
+    if all(label != 'In Design' for label in labels):
+        return ('Pre-Production', 'oak')
+    return ('In Design', 'coral')
 
 
 def derive_customer_pipeline_status(project_customer):

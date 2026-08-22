@@ -56,7 +56,21 @@ running count, which is exactly why this needs a namespace instead. #}
     <span class="project-col-next-deliverable">
         {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
     </span>
-    <span class="project-col-status">
+    {# data-status-value drives project_list.js's Design Completed click
+    override below — a plain data attribute rather than string-matching the
+    pill's rendered text, so it survives any future label/copy tweak. title
+    is "All status changes need to be time stamped" (22 Aug 2026, per
+    Ezekiel) — a native tooltip, same compact-table reasoning as the
+    Overlay's Deliverables tab (see project_overlay/_deliverables_standard.html).
+    Once Handed to Production, "Since" alone would be the handoff date, not
+    when the client actually approved — client_approved_at (added the same
+    day, later, once "Client Approved" stopped being its own pill stage)
+    fills that back in as a second line. #}
+    {% set status_title = [] %}
+    {% if row.status_started_at %}{% set _ = status_title.append('Since ' ~ row.status_started_at.strftime('%d %b %Y')) %}{% endif %}
+    {% if row.client_approved_at %}{% set _ = status_title.append('Client-approved ' ~ row.client_approved_at.strftime('%d %b %Y')) %}{% endif %}
+    <span class="project-col-status" data-status-value="{{ row.blanket_status }}"
+        {% if status_title %}title="{{ status_title|join(' · ') }}"{% endif %}>
         {{ status_pill(row.blanket_status, row.status_pill_class) }}
     </span>
     <span class="project-col-summary">

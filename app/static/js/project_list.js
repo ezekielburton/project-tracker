@@ -19,6 +19,7 @@
     let activeOverlay = null;
     let activeSubTabCard = null;   // whichever sub-tab's card module is currently mounted (Details, Deliverables, ...)
     let activeOverlayEdit = null;  // M4 edit-mode handle — reset (not destroyed) on every sub-tab switch, see loadSubTabContent
+    let activeChatPanel = null;    // M10 chat redesign — the persistent drawer's controller, independent of activeSubTabCard
 
     // ---- Detail + Briefing overlay: remember last section + sub-tab ----
     // Per-project localStorage, same kebab-case-plus-projectId key shape
@@ -163,6 +164,28 @@
                 contentEl.innerHTML = html;
                 if (window.ProjectNotesCard) {
                     activeSubTabCard = window.ProjectNotesCard.init(contentEl, projectId);
+                }
+            });
+    }
+
+    // Chat drawer (M10 chat redesign) — independent of loadNotesSection/
+    // loadSubTabContent above: the drawer is reachable from any rail tab,
+    // not a section of its own, so its content lives in its own container
+    // (#project-overlay-chat-content) and is never touched by a sub-tab
+    // switch. Called once by project_overlay.js's onChatOpened the first
+    // time someone opens the drawer for this overlay session, and again
+    // any time the panel itself needs a fresh fetch (send/delete, and —
+    // once the live-update hookup lands — an incoming SSE ping while open).
+    function loadChatDrawer(projectId) {
+        const contentEl = document.getElementById('project-overlay-chat-content');
+        if (!contentEl) return;
+
+        fetch(`/projects/${projectId}/overlay/chat`)
+            .then((res) => res.text())
+            .then((html) => {
+                contentEl.innerHTML = html;
+                if (window.ProjectChatPanel) {
+                    activeChatPanel = window.ProjectChatPanel.init(contentEl, projectId);
                 }
             });
     }
@@ -362,7 +385,14 @@
                             }
                         }
                     },
-                    guardUnsavedEdit
+                    guardUnsavedEdit,
+                    // onChatOpened — chat is a persistent drawer, not a rail
+                    // section, so this fires once (first open only, see
+                    // project_overlay.js's chatLoaded) rather than every
+                    // section switch.
+                    function () {
+                        loadChatDrawer(projectId);
+                    }
                 );
 
                 // Edit mode (M4) — header (name/Edit/Save/Cancel) is part of
@@ -391,6 +421,11 @@
                 // already covers that case safely at Save time instead.
                 if (window.helixPolling) {
                     window.helixPolling.startOverlayStream(projectId, function () {
+                        // Chat drawer — independent of whichever rail section is showing underneath.
+                        if (activeChatPanel && activeOverlay && activeOverlay.isChatOpen && activeOverlay.isChatOpen()) {
+                            activeChatPanel.liveRefresh();
+                        }
+
                         if (activeOverlayEdit && activeOverlayEdit.isEditing()) return;
                         const lastView = getLastView(projectId);
                         if (lastView && lastView.section === 'notes') {
@@ -582,6 +617,10 @@
             activeSubTabCard.destroy();
             activeSubTabCard = null;
         }
+        if (activeChatPanel) {
+            activeChatPanel.destroy();
+            activeChatPanel = null;
+        }
         activeOverlayEdit = null;
         if (window.helixPolling) window.helixPolling.stopOverlayStream();
         overlayMount.innerHTML = '';
@@ -728,6 +767,23 @@
                     container.innerHTML = html;
                     container.dataset.loaded = 'true';
                 });
+            return;
+        }
+
+        // Handed to Production pill — jumps to the Design Completed tab
+        // instead of opening the overlay, since that tab is exactly "every
+        // project currently at this status" (see project_list.py's
+        // design_complete branch). Retargeted from the old 'Design
+        // Completed' pill value (22 Aug 2026 simplification, per Ezekiel)
+        // — that separate label is gone, 'Handed to Production' is now the
+        // one pill value that lands here for both Standard and C&CM. Every
+        // other status pill still falls through to the normal
+        // row-opens-overlay behavior below.
+        const statusCell = e.target.closest('.project-col-status');
+        if (statusCell && statusCell.dataset.statusValue === 'Handed to Production') {
+            e.preventDefault();
+            e.stopPropagation();
+            window.location.href = '/projects-new/?view=design_complete';
             return;
         }
 
