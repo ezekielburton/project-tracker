@@ -1,6 +1,7 @@
 {# Core property rows, shared by both brief types. No wrapper div here —
 the calling template wraps this include plus its own brief-specific
 rows in one .overlay-properties list, so it reads as continuous. #}
+{% from '_shared_macros.html' import status_override_picker %}
 
 <div class="overlay-property-row">
     <span class="overlay-property-label">Job Number</span>
@@ -9,7 +10,12 @@ rows in one .overlay-properties list, so it reads as continuous. #}
 <div class="overlay-property-row">
     <span class="overlay-property-label">Project Status</span>
     <span class="overlay-property-value overlay-status-row">
+        {% if can_override_status %}
+        {{ status_override_picker('project-status-picker', status_label, status_class, status_override_options,
+        url_for('project_overlay.override_project_status', project_id=project.id)) }}
+        {% else %}
         {{ status_pill(status_label, status_class) }}
+        {% endif %}
         {% if can_start_project %}
         <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
             id="overlay-start-project-btn">Start Project</button>

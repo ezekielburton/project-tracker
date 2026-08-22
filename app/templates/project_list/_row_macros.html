@@ -56,7 +56,10 @@ running count, which is exactly why this needs a namespace instead. #}
     <span class="project-col-next-deliverable">
         {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
     </span>
-    <span class="project-col-status">
+    {# data-status-value drives project_list.js's Design Completed click
+    override below — a plain data attribute rather than string-matching the
+    pill's rendered text, so it survives any future label/copy tweak. #}
+    <span class="project-col-status" data-status-value="{{ row.blanket_status }}">
         {{ status_pill(row.blanket_status, row.status_pill_class) }}
     </span>
     <span class="project-col-summary">

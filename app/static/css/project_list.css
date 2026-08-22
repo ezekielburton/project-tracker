@@ -350,6 +350,21 @@
     grid-column: var(--pos-status, 11);
 }
 
+/* Design Completed pill (22 Aug 2026, per Ezekiel) — the one status pill
+that's independently clickable (jumps to the Design Completed tab, see
+project_list.js's click handler on .project-col-status), so it gets its
+own hover affordance to read as clickable within a row that otherwise
+opens the overlay from anywhere you click. Selector keys off the data
+attribute, not the pill's colour modifier — "clover" is shared with
+Client Approved / Handed to Production, which aren't clickable. */
+.project-col-status[data-status-value="Design Completed"] .status-pill {
+    cursor: pointer;
+}
+
+.project-col-status[data-status-value="Design Completed"] .status-pill:hover {
+    filter: brightness(0.94);
+}
+
 .project-col-summary {
     grid-column: var(--pos-summary, 12);
 }
@@ -455,6 +470,19 @@ body.is-resizing-column * {
     background: var(--background);
     border-bottom: 1px solid var(--border-subtle);
     grid-column: 1 / -1;
+    /* 22 Aug 2026 — the sub-table injected here (.expand-deliverable-table
+    or .expand-customer-table) is its own independent grid, sized
+    width: max-content off its OWN columns, which have nothing to do
+    with the outer #project-table's own tracks. Without its own scroll
+    boundary, wide sub-table content (many columns, long names) simply
+    overflowed this cell — and by extension the page — instead of
+    scrolling, forcing a browser resize/zoom to see it. This is the same
+    "overflow-x: auto lives on the WRAPPING element, not the grid"
+    pattern #project-table-scroll already uses for the outer table (see
+    project_list.css's long Pass 3 comment on .project-table) — applied
+    here as this sub-table's own dedicated scroll boundary, independent
+    of whatever the outer table's scroll region is doing. */
+    overflow-x: auto;
 }
 
 /* Group by renders as separate Monday-style cards, each floating on the
@@ -591,16 +619,30 @@ body.is-resizing-column * {
 .expand-deliverable-table {
     position: relative;
     display: grid;
-    /* Status wrapped in minmax(min-content, ...) — same fix as
-    .project-table's tracks (see its own long comment above) — so the
-    column can never shrink narrower than the status pill's own intrinsic
-    width. Bug fix, 18 Aug 2026: was a bare 1fr, so the pill (white-space:
-    nowrap) would push past the column edge instead of the column
-    growing to fit it. */
+    /* Every track wrapped in minmax(min-content, ...) — the same Pass
+    4/6 fix .project-table's own tracks got (see its long comment
+    above), extended to this sub-table 22 Aug 2026 (it only had the
+    status column's half of the fix until then). Was: every other
+    column had a bare fr maximum, a shared-space unit that let one
+    column's content (a long deliverable name) inflate every OTHER fr
+    column's rendered width regardless of that column's own content —
+    same bug, same cause, as the outer table's Pass 4. The JS default
+    (project_list_layout.js, DELIVERABLE_DEFAULT_LAYOUT) now matches:
+    'max-content' widths, not fr strings, so on first load (before any
+    manual resize) every column already sizes purely from its own
+    content, with the status column's original 18 Aug fix folded into
+    the same treatment rather than being the one column handled
+    differently. */
     grid-template-columns:
-        var(--dtrack-name, 2fr) var(--dtrack-deadline, 1fr) var(--dtrack-deadline-time, 1fr) var(--dtrack-2d, 1.3fr) var(--dtrack-3d, 1.3fr) var(--dtrack-technical, 1.3fr) minmax(min-content, var(--dtrack-status, 1fr));
+        minmax(min-content, var(--dtrack-name, max-content))
+        minmax(min-content, var(--dtrack-deadline, max-content))
+        minmax(min-content, var(--dtrack-deadline-time, max-content))
+        minmax(min-content, var(--dtrack-2d, max-content))
+        minmax(min-content, var(--dtrack-3d, max-content))
+        minmax(min-content, var(--dtrack-technical, max-content))
+        minmax(min-content, var(--dtrack-status, max-content));
     margin-top: var(--space-2);
-    width: fit-content;
+    width: max-content;
     max-width: 100%;
     background: var(--white);
     border: 1px solid var(--border-subtle);
@@ -634,6 +676,11 @@ body.is-resizing-column * {
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--border-subtle);
+    /* Same reasoning as .project-table-header > span's white-space:
+    nowrap — text that's allowed to wrap under-reports its own
+    min-content, and the header row shares tracks with every data row,
+    so its label width has to count toward the column's real floor. */
+    white-space: nowrap;
 }
 
 .expand-deliverable-col-resize-handle {
@@ -712,16 +759,25 @@ body.is-resizing-column * {
 .expand-customer-table {
     position: relative;
     display: grid;
-    /* Status wrapped in minmax(min-content, ...) — same fix as
-    .project-table's tracks. Bug fix, 18 Aug 2026: was a bare 1fr with no
-    JS-driven minimum at all (the resize-handle markup exists but was
-    never wired up for this table), so the status pill could overflow the
-    column outright. */
+    /* Every track wrapped in minmax(min-content, ...) — same Pass 4/6
+    fix as .expand-deliverable-table above (22 Aug 2026), extended past
+    just the status column. No resize JS ever wired up for this table
+    (the resize-handle markup exists but is inert — see
+    project_list_layout.js), so these are pure CSS fallbacks with no
+    custom property ever actually set; max-content as the fallback
+    means every column still sizes to its own content by default,
+    rather than a bare fr letting one column's content inflate another's. */
     grid-template-columns:
-        2.5rem var(--ctrack-name, 2fr) var(--ctrack-design-deadline, 1fr) var(--ctrack-installation-date, 1fr) var(--ctrack-deliverable-count, 1fr) var(--ctrack-revision-count, 1fr) minmax(min-content, var(--ctrack-status, 1fr));
+        2.5rem
+        minmax(min-content, var(--ctrack-name, max-content))
+        minmax(min-content, var(--ctrack-design-deadline, max-content))
+        minmax(min-content, var(--ctrack-installation-date, max-content))
+        minmax(min-content, var(--ctrack-deliverable-count, max-content))
+        minmax(min-content, var(--ctrack-revision-count, max-content))
+        minmax(min-content, var(--ctrack-status, max-content));
     grid-auto-rows: auto;
     margin-top: var(--space-2);
-    width: fit-content;
+    width: max-content;
     max-width: 100%;
     background: var(--white);
     border: 1px solid var(--border-subtle);
@@ -741,6 +797,9 @@ body.is-resizing-column * {
     align-items: center;
     border-bottom: 1px solid var(--border-subtle);
     grid-row: var(--row-num);
+    /* Same reasoning as .expand-deliverable-row > span's white-space:
+    nowrap — wrapped text under-reports its own min-content. */
+    white-space: nowrap;
 }
 
 .expand-customer-row>span:not(:last-child) {

@@ -191,27 +191,204 @@ def _serialize_flag(flag, actor):
     }
 
 
-def _build_deliverable_focus_context(deliverables, actor):
+# ── Admin status override (22 Aug 2026, per Ezekiel) ────────────────────────
+# Lets an admin click a project/deliverable status pill in the overlay,
+# see every possible status, and pick one to override it. Deliberately
+# rewrites the same real underlying fields a normal status change would
+# (record_project_status()/record_deliverable_status(), the per-channel
+# ProjectPosmChannel.status columns, the needs_2d/3d/technical + per-stream
+# status fields) rather than a cosmetic "display override" flag — every
+# other piece of code that reads those fields (the Design Completed tab,
+# project_preproduction.py's cascades, dashboards, revision tracking) stays
+# correct afterward instead of quietly disagreeing with what's shown. See
+# override_project_status()/override_deliverable_status() below for the
+# actual writes; these three lists are just "what shows in the popover",
+# each a (label, css_modifier) pair straight out of status_vocabulary.py's
+# own vocabulary so the picker can never show a pill that doesn't match
+# what a real one would look like.
+#
+# On Hold / Cancelled are deliberately NOT offered here — they're
+# orthogonal flags with their own dedicated sidebar buttons (Put on Hold /
+# Resume, Cancel / Reactivate) and their own bookkeeping (cancelled_at/
+# cancelled_by/cancel_reason); adding them to this list would just give
+# two different controls that both think they own the same state.
+_STANDARD_STATUS_OVERRIDE_OPTIONS = [
+    ('Briefed', 'sky'),
+    ('In Design', 'coral'),
+    ('Submitted to Client', 'sage'),
+    ('Client Approved', 'clover'),
+    ('Pre-Production', 'oak'),
+    ('Handed to Production', 'clover'),
+]
+
+# C&CM's aggregate (status_vocabulary.py's derive_ccm_aggregate_status) has
+# no "Client Approved" or "Pre-Production" branch at all — it jumps
+# straight from Submitted to Client to Design Completed once every channel
+# is at least approved, so those two labels simply aren't reachable states
+# for the aggregate pill and aren't offered here.
+_CCM_STATUS_OVERRIDE_OPTIONS = [
+    ('Briefed', 'sky'),
+    ('In Design', 'coral'),
+    ('Submitted to Client', 'sage'),
+    ('Design Completed', 'clover'),
+    ('Handed to Production', 'clover'),
+]
+
+_DELIVERABLE_STATUS_OVERRIDE_OPTIONS = [
+    ('Briefed', 'sky'),
+    ('In Progress', 'coral'),
+    ('In Review', 'canary'),
+    ('In Revision', 'lavender'),
+    ('Submitted to Client', 'sage'),
+    ('Client Approved', 'clover'),
+    ('Pre-Production', 'oak'),
+    ('Handed to Production', 'clover'),
+]
+
+# Raw project_status values a Standard project override writes via
+# record_project_status(). 1:1 with _STANDARD_STATUS_OVERRIDE_OPTIONS.
+_STANDARD_STATUS_WRITE = {
+    'Briefed': 'briefed',
+    'In Design': 'in_progress',
+    'Submitted to Client': 'submitted_to_client',
+    'Client Approved': 'approved',
+    'Pre-Production': 'pre_production',
+    'Handed to Production': 'handed_to_production',
+}
+
+# Raw ProjectPosmChannel.status value applied to EVERY channel on a C&CM
+# project override (per Ezekiel — no per-channel targeting here).
+_CCM_CHANNEL_STATUS_WRITE = {
+    'Briefed': 'in_queue',
+    'In Design': 'in_progress',
+    'Submitted to Client': 'submitted_to_client',
+    'Design Completed': 'approved',
+    'Handed to Production': 'handed_to_production',
+}
+
+# Raw Deliverable.status values a deliverable override writes via
+# record_deliverable_status(). The three post-approval labels (Client
+# Approved / Pre-Production / Handed to Production) are handled separately
+# in override_deliverable_status() — they all write status='approved'
+# underneath; which one actually displays is entirely a function of
+# needs_2d/3d/technical + status_2d/status_3d/technical_status
+# (status_vocabulary.py's _post_approval_deliverable_status), not this map.
+_DELIVERABLE_STATUS_WRITE = {
+    'Briefed': 'in_queue',
+    'In Progress': 'in_progress',
+    'In Review': 'internal_review',
+    'In Revision': 'revision_in_queue',
+    'Submitted to Client': 'submitted_to_client',
+}
+
+
+_TEAM_CANONICAL = {'2d': '2D', '3d': '3D', 'technical': 'Technical'}
+
+
+def _canonical_team(raw):
+    """Normalizes a team string to the exact casing User.team/registration
+    use ('2D'/'3D'/'Technical'). Needed because DeliverableTypeDiscipline.team
+    (set via the admin Deliverable Types editor) and the free-text
+    Deliverable.teams field aren't guaranteed to be saved in that casing —
+    the edit form in admin.js stored them lowercase ('2d'/'3d'/'technical')
+    until 22 Aug 2026, so plenty of existing rows still are. Nothing before
+    the team-tag assignment feature (this file) cared about exact casing —
+    display always went through .lower() anyway for the CSS class name —
+    so this mismatch was invisible until an exact `User.team == team`
+    match was needed. Normalizing here, at read time, means every
+    deliverable's Assignments column works immediately regardless of
+    which casing its own disciplines happen to be stored in, without
+    needing a data migration or every type to be re-saved first."""
+    if not raw:
+        return raw
+    return _TEAM_CANONICAL.get(raw.strip().lower(), raw.strip())
+
+
+def _needed_teams(d):
+    """Which teams (2D/3D/Technical) a deliverable actually needs, in
+    display order — same source-of-truth branching the Team column
+    template used to do inline (deliverable_type's own disciplines list,
+    falling back to the free-text Deliverable.teams field for
+    C&CM/manually-added rows with no catalogue type). Centralized here so
+    _build_deliverable_focus_context can build the assignment context off
+    the exact same list the template renders. Always returns canonically-
+    cased team strings — see _canonical_team()."""
+    if d.deliverable_type and d.deliverable_type.disciplines:
+        return [_canonical_team(disc.team) for disc in d.deliverable_type.disciplines]
+    if d.teams:
+        return [_canonical_team(t) for t in d.teams.split(',') if t]
+    return []
+
+
+def _build_deliverable_focus_context(deliverables, actor, can_manage_project):
     """Computes the per-deliverable status pill + Focused/All eligibility data
     that both the Standard and C&CM Deliverables views need, so the two
     branches in overlay_deliverables() can't drift out of sync on this.
+
+    Also builds `assign_by_deliverable` (added 22 Aug 2026) — per
+    deliverable, per needed team, who's assigned (if anyone) and what
+    clicking that team's tag should do for the viewing actor. This is the
+    read side of the Team column's click-to-assign feature; the write
+    side is assign_deliverable_team() below.
     """
     from app.status_vocabulary import derive_deliverable_status
+    from app.models import User
     status_by_id = {}
     assigned_ids = set()
     for d in deliverables:
         status_by_id[d.id] = derive_deliverable_status(d)
         if any(a.designer_id == actor.id for a in d.disciplines):
             assigned_ids.add(d.id)
+
+    # Options are per-team, not per-deliverable/per-row — one small query
+    # per distinct team actually in use on this roster (at most 3:
+    # 2D/3D/Technical), regardless of how many deliverables are showing.
+    needed_teams = set()
+    for d in deliverables:
+        needed_teams.update(_needed_teams(d))
+    options_by_team = {
+        team: User.query.filter(User.role.in_(['designer', 'team_lead']), User.team == team)
+                         .order_by(User.name).all()
+        for team in needed_teams
+    }
+
+    assign_by_deliverable = {}
+    for d in deliverables:
+        assignment_by_team = {a.team: a for a in d.disciplines}
+        row = []
+        for team in _needed_teams(d):
+            existing = assignment_by_team.get(team)
+            if can_manage_project or (actor.role == 'team_lead' and actor.team == team):
+                mode = 'manage'
+            elif actor.role == 'designer' and actor.team == team:
+                mode = 'self'
+            else:
+                mode = 'static'
+            row.append({
+                'team': team,
+                'person': existing.designer if existing else None,
+                'mode': mode,
+                'options': options_by_team.get(team, []),
+            })
+        assign_by_deliverable[d.id] = row
+
     return {
         'status_by_id': status_by_id,
         'assigned_ids': assigned_ids,
+        'assign_by_deliverable': assign_by_deliverable,
         # Designer/Team Lead/Admin get the toggle; everyone else always sees All.
         'can_toggle_focus': actor.role in ('designer', 'team_lead', 'admin'),
         # Designer/Team Lead default to Focused (their own workload first);
         # Admin's toggle doesn't filter anything either way, per your call —
         # defaulting it to All just means it starts in the "off" position.
         'default_focus': actor.role in ('designer', 'team_lead'),
+        # Status override (22 Aug 2026, per Ezekiel) — admin-only, click the
+        # pill / pick a different status. One shared option list regardless
+        # of brief type: Tier 1 (status_vocabulary.py's
+        # derive_deliverable_status) is identical for Standard and C&CM
+        # deliverables, unlike the project-level pill above.
+        'can_override_status': actor.role == 'admin',
+        'deliverable_status_options': _DELIVERABLE_STATUS_OVERRIDE_OPTIONS,
     }
 
 def _build_ccm_deliverable_sections(project):
@@ -647,6 +824,8 @@ def _build_details_context(project, actor):
         owner_options = []
 
     status_label, status_class = derive_project_status(project)
+    can_override_status = actor.role == 'admin'
+    status_override_options = _CCM_STATUS_OVERRIDE_OPTIONS if project.brief_type == 'ccm' else _STANDARD_STATUS_OVERRIDE_OPTIONS
 
     requested_teams = [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
     assignments_by_team = {pd.team: pd for pd in project.assigned_designers}
@@ -751,6 +930,8 @@ def _build_details_context(project, actor):
     return dict(
         status_label=status_label,
         status_class=status_class,
+        can_override_status=can_override_status,
+        status_override_options=status_override_options,
         can_reassign_cs_lead=can_reassign_cs_lead,
         can_manage_cs=can_manage_cs,
         can_assign_owner=can_assign_owner,
@@ -1485,6 +1666,116 @@ def overlay_start_project(project_id):
     return jsonify({'success': True})
 
 
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/status/override', methods=['POST'])
+@login_required
+def override_project_status(project_id):
+    """Admin-only status override (22 Aug 2026, per Ezekiel) — see the
+    _STANDARD_STATUS_OVERRIDE_OPTIONS/_CCM_STATUS_OVERRIDE_OPTIONS block
+    above for the design rationale. For C&CM, applies the target status to
+    EVERY channel on the project — there's no per-channel targeting from
+    this control; a single lagging customer/region is still better fixed
+    from the Submissions/Pre-Production tabs, which already work per-
+    channel."""
+    from app import db
+    from app.status_tracking import record_project_status
+    from app.status_vocabulary import derive_project_status
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role != 'admin':
+        return jsonify({'success': False, 'error': 'Admin only.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    label = data.get('status')
+
+    if project.brief_type == 'ccm':
+        if label not in _CCM_CHANNEL_STATUS_WRITE:
+            return jsonify({'success': False, 'error': 'Not a valid status for this project.'}), 400
+        raw_channel_status = _CCM_CHANNEL_STATUS_WRITE[label]
+        for channel in project.posm_channels:
+            channel.status = raw_channel_status
+        # project.project_status is only ever consulted as the Briefed/In
+        # Design tiebreaker (derive_ccm_aggregate_status's started_manually
+        # check) — the other three targets already produce their label
+        # from channel state alone, so only these two need it touched.
+        if label == 'Briefed':
+            record_project_status(project, 'briefed', actor)
+        elif label == 'In Design':
+            record_project_status(project, 'in_progress', actor)
+        elif label == 'Handed to Production':
+            # Mirrors project_preproduction.py's _cascade_handed_to_production,
+            # which writes both the channel level (above) and this project-
+            # level flag once every channel is handed off for real.
+            record_project_status(project, 'handed_to_production', actor)
+    else:
+        if label not in _STANDARD_STATUS_WRITE:
+            return jsonify({'success': False, 'error': 'Not a valid status for this project.'}), 400
+        record_project_status(project, _STANDARD_STATUS_WRITE[label], actor)
+
+    db.session.commit()
+    status_label, status_class = derive_project_status(project)
+    return jsonify({'success': True, 'status_label': status_label, 'status_class': status_class})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/<int:deliverable_id>/status/override', methods=['POST'])
+@login_required
+def override_deliverable_status(project_id, deliverable_id):
+    """Admin-only status override (22 Aug 2026, per Ezekiel) — same real-
+    fields-not-cosmetic approach as override_project_status above. The
+    three post-approval labels all write raw status='approved'; which one
+    actually displays is entirely a function of needs_2d/3d/technical +
+    status_2d/status_3d/technical_status (status_vocabulary.py's
+    _post_approval_deliverable_status), so those three fields are what
+    this route actually varies per target, not the status column itself.
+
+    Note: picking "Pre-Production" on a deliverable that structurally
+    needs no 2D/3D/Technical follow-up (derive_preproduction_needs finds
+    nothing) will still read back as "Client Approved" — same honest
+    behavior a real approval would produce, not a bug in this override."""
+    from app import db
+    from app.models import Deliverable
+    from app.status_tracking import record_deliverable_status
+    from app.status_vocabulary import derive_deliverable_status, derive_preproduction_needs
+
+    deliverable = Deliverable.query.filter_by(id=deliverable_id, project_id=project_id).first_or_404()
+    actor = _get_actor()
+    if actor.role != 'admin':
+        return jsonify({'success': False, 'error': 'Admin only.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    label = data.get('status')
+
+    if label in _DELIVERABLE_STATUS_WRITE:
+        record_deliverable_status(deliverable, _DELIVERABLE_STATUS_WRITE[label], actor)
+    elif label == 'Client Approved':
+        # The only way this label is the terminal state — needs_any True
+        # never reads "Client Approved" (see _post_approval_deliverable_status),
+        # it jumps straight to Pre-Production/Handed to Production instead.
+        record_deliverable_status(deliverable, 'approved', actor)
+        deliverable.needs_2d = False
+        deliverable.needs_3d = False
+        deliverable.needs_technical = False
+    elif label in ('Pre-Production', 'Handed to Production'):
+        record_deliverable_status(deliverable, 'approved', actor)
+        needs_2d, needs_3d, needs_technical = derive_preproduction_needs(deliverable)
+        deliverable.needs_2d = needs_2d
+        deliverable.needs_3d = needs_3d
+        deliverable.needs_technical = needs_technical
+        stream_value = 'approved' if label == 'Handed to Production' else 'in_progress'
+        if needs_2d:
+            deliverable.status_2d = stream_value
+        if needs_3d:
+            deliverable.status_3d = stream_value
+        if needs_technical:
+            deliverable.technical_status = stream_value
+    else:
+        return jsonify({'success': False, 'error': 'Not a valid status for this deliverable.'}), 400
+
+    db.session.commit()
+    status_label, status_class = derive_deliverable_status(deliverable)
+    return jsonify({'success': True, 'status_label': status_label, 'status_class': status_class})
+
+
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/cancel', methods=['POST'])
 @login_required
 def overlay_cancel_project(project_id):
@@ -1817,7 +2108,7 @@ def overlay_deliverables(project_id):
             can_skip_preproduction=can_skip_preproduction,
             can_manage_flags=can_manage_flags,
             open_flags_by_deliverable_id=open_flags_by_deliverable_id,
-            **_build_deliverable_focus_context(all_deliverables, actor),
+            **_build_deliverable_focus_context(all_deliverables, actor, can_manage),
         )
 
     deliverables = Deliverable.query.filter_by(
@@ -1832,7 +2123,7 @@ def overlay_deliverables(project_id):
         can_manage_flags=can_manage_flags,
         open_flags=open_flags,
         open_flags_by_deliverable_id=open_flags_by_deliverable_id,
-        **_build_deliverable_focus_context(deliverables, actor),
+        **_build_deliverable_focus_context(deliverables, actor, can_manage),
     )
 
 
@@ -1999,6 +2290,131 @@ def save_standard_deliverables(project_id):
                      user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})
+
+
+def _can_write_deliverable_assignment(project, actor, team, target_designer_id, existing_assignment):
+    """Who may change one deliverable's Design-phase team assignment, and
+    how far. Same set as _can_manage_deliverables (admin/management/CS
+    Lead/secondary CS/Project Owner) plus this team's own team lead can
+    set it to anyone on the team, or clear it. A plain designer never
+    reaches this — see assign_deliverable_team()'s self_toggle branch,
+    which is a separate, narrower path that can only ever touch the
+    caller's own assignment, never a teammate's."""
+    if _can_manage_deliverables(project, actor):
+        return True
+    if actor.role == 'team_lead' and actor.team == team:
+        return True
+    return False
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/assign', methods=['POST'])
+@login_required
+def assign_deliverable_team(project_id):
+    """Design-phase team assignment for the Deliverables roster's Team
+    column (added 22 Aug 2026, per Ezekiel — the roster showed which teams
+    a deliverable NEEDS from day one, but DeliverableAssignment had no
+    write path anywhere after the M10 overlay rebuild; the old detail page
+    had this, the new overlay never got it back). Two distinct paths:
+
+    - self_toggle: a plain designer's one-click claim/release on their own
+      team. Always re-reads the current DB state and only ever touches a
+      row where designer_id is already the caller's own id (or creates a
+      fresh one) — never overwrites a teammate's assignment, regardless of
+      what the client's last-rendered state claimed.
+    - designer_id (manage mode, possibly None to clear): CS/Admin/
+      Management/Project Owner, or this team's own team lead, setting it
+      to anyone on the team, reassigning, or clearing it outright.
+
+    Separate from project_preproduction.py's assign_technical() — that one
+    governs who does the LATER Pre-Production Technical stream; this one
+    governs who's actually doing the Design-phase work a deliverable's
+    2D/3D/Technical tags say it needs (which Pre-Production's own "2D/3D
+    don't need their own assignment step" reasoning already assumes
+    exists — see the comment above assign_technical())."""
+    from app import db
+    from app.models import Deliverable, DeliverableAssignment, User
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    data = request.get_json(silent=True) or {}
+    deliverable_id = data.get('deliverable_id')
+    # Normalized defensively — the template always renders a canonical
+    # data-team attribute now (see _needed_teams()), but this keeps a
+    # stray '2d'/'technical' from a stale cached page or a direct API
+    # call from silently creating a second, differently-cased
+    # DeliverableAssignment row for the same team.
+    team = _canonical_team(data.get('team'))
+    deliverable = Deliverable.query.get(deliverable_id) if deliverable_id else None
+    if not deliverable or deliverable.project_id != project_id or not team:
+        return jsonify({'success': False, 'error': 'Could not find that deliverable.'}), 400
+
+    existing = DeliverableAssignment.query.filter_by(
+        deliverable_id=deliverable.id, team=team
+    ).first()
+
+    if data.get('self_toggle'):
+        if actor.role != 'designer' or actor.team != team:
+            return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
+        if existing and existing.designer_id == actor.id:
+            db.session.delete(existing)
+            db.session.commit()
+            log_activity('deliverable_unassigned',
+                         f'{actor.name} removed themself from {team} on "{deliverable.name}" ({project.name})',
+                         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+            return jsonify({'success': True, 'designer_id': None})
+        if existing:
+            # Someone else already claimed it since this button last
+            # rendered — self_toggle can never steal another designer's
+            # assignment, only ever the caller's own.
+            return jsonify({
+                'success': False,
+                'error': f'{existing.designer.name} is already assigned to {team} on this deliverable.',
+            }), 409
+        db.session.add(DeliverableAssignment(
+            deliverable_id=deliverable.id, team=team,
+            designer_id=actor.id, assigned_by_id=actor.id,
+        ))
+        db.session.commit()
+        log_activity('deliverable_assigned',
+                     f'{actor.name} assigned themself to {team} on "{deliverable.name}" ({project.name})',
+                     user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+        return jsonify({'success': True, 'designer_id': actor.id})
+
+    if not _can_write_deliverable_assignment(project, actor, team, None, existing):
+        return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
+
+    raw_designer_id = data.get('designer_id')
+    designer_id = int(raw_designer_id) if raw_designer_id else None
+
+    if designer_id is None:
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+            log_activity('deliverable_unassigned',
+                         f'{actor.name} removed the {team} assignment from "{deliverable.name}" ({project.name})',
+                         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+        return jsonify({'success': True, 'designer_id': None})
+
+    target = User.query.get(designer_id)
+    if not target or target.role not in ('designer', 'team_lead') or target.team != team:
+        return jsonify({'success': False, 'error': f'That person is not on the {team} team.'}), 400
+
+    if existing:
+        existing.designer_id = designer_id
+        existing.assigned_by_id = actor.id
+    else:
+        db.session.add(DeliverableAssignment(
+            deliverable_id=deliverable.id, team=team,
+            designer_id=designer_id, assigned_by_id=actor.id,
+        ))
+    db.session.commit()
+    log_activity('deliverable_assigned',
+                 f'{actor.name} assigned {target.name} to {team} on "{deliverable.name}" ({project.name})',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    return jsonify({'success': True, 'designer_id': designer_id})
+
 
 @project_overlay_bp.route('/projects/<int:project_id>/set-project-owner', methods=['POST'])
 @login_required

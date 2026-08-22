@@ -371,19 +371,42 @@
             status: 90,
         };
 
+        // 'max-content' widths, not fr strings — same Pass 4 fix
+        // DEFAULT_LAYOUT above got, applied here 22 Aug 2026. A bare fr
+        // maximum is a shared-space unit: it let one column's content
+        // (a long deliverable name) inflate every OTHER fr column's
+        // rendered width regardless of what was actually in it — that's
+        // exactly the giant, mostly-empty Status column this was
+        // reported as. Paired with the CSS's minmax(min-content,
+        // max-content) (project_list.css, .expand-deliverable-table),
+        // each column now sizes purely from its own content.
         const DELIVERABLE_DEFAULT_LAYOUT = [
-            { key: 'name', width: '2fr' },
-            { key: 'deadline', width: '1fr' },
-            { key: 'deadline-time', width: '1fr' },
-            { key: '2d', width: '1.3fr' },
-            { key: '3d', width: '1.3fr' },
-            { key: 'technical', width: '1.3fr' },
-            { key: 'status', width: '1fr' },
+            { key: 'name', width: 'max-content' },
+            { key: 'deadline', width: 'max-content' },
+            { key: 'deadline-time', width: 'max-content' },
+            { key: '2d', width: 'max-content' },
+            { key: '3d', width: 'max-content' },
+            { key: 'technical', width: 'max-content' },
+            { key: 'status', width: 'max-content' },
         ];
 
         let deliverableLayout = (window.__savedDeliverableTableLayout && window.__savedDeliverableTableLayout.length)
             ? window.__savedDeliverableTableLayout
             : DELIVERABLE_DEFAULT_LAYOUT.map((c) => ({ ...c }));
+
+        // Auto-heal: an account with a saved layout from before this fix
+        // may still have fr-based widths (an untouched default, or a
+        // value a drag ended on — the resize handler below already
+        // forces max-content for the measurement instant, but the
+        // RESULT it saved was still a plain px value layered on top of
+        // whatever fr-inflated width was on screen at the time). Same
+        // upgrade DEFAULT_LAYOUT's own auto-heal does above — applies
+        // immediately, no manual layout reset needed.
+        deliverableLayout.forEach((col) => {
+            if (typeof col.width === 'string' && /fr$/.test(col.width.trim())) {
+                col.width = 'max-content';
+            }
+        });
 
         DELIVERABLE_DEFAULT_LAYOUT.forEach((def) => {
             if (!deliverableLayout.find((c) => c.key === def.key)) {

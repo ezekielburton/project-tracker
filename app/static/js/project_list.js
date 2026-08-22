@@ -770,6 +770,21 @@
             return;
         }
 
+        // Design Completed pill (22 Aug 2026, per Ezekiel) — jumps to the
+        // Design Completed tab instead of opening the overlay, since that
+        // tab is exactly "every project currently showing this pill" (see
+        // project_list.py's design_complete branch + the matching
+        // exclusion from My/All in _compute_rows_and_groups). Every other
+        // status pill still falls through to the normal row-opens-overlay
+        // behavior below.
+        const statusCell = e.target.closest('.project-col-status');
+        if (statusCell && statusCell.dataset.statusValue === 'Design Completed') {
+            e.preventDefault();
+            e.stopPropagation();
+            window.location.href = '/projects-new/?view=design_complete';
+            return;
+        }
+
         // Not the expand toggle — a click anywhere else on a project row
         // opens the overlay instead of navigating to the old detail page.
         const rowLink = e.target.closest('.project-row--link');

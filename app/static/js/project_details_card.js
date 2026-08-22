@@ -24,6 +24,34 @@ window.ProjectDetailsCard = (function () {
             }));
         });
 
+        // Admin status override (22 Aug 2026, per Ezekiel) — only rendered
+        // at all when can_override_status (see _details_top_cards.html),
+        // so no extra guard needed here beyond the querySelector not
+        // finding it for anyone else. onChanged() re-fetches this whole
+        // tab, same as every other mutation in this file — simplest way
+        // to pick up the new pill without hand-patching the DOM.
+        var statusPicker = rootEl.querySelector('#project-status-picker');
+        if (statusPicker) {
+            pickerHandles.push(window.StatusPicker.init(statusPicker, function (statusValue, pickerEl) {
+                fetch(pickerEl.dataset.targetUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: statusValue }),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.success) {
+                            alert(data.error || 'Could not update this status.');
+                            return;
+                        }
+                        onChanged();
+                    })
+                    .catch(function () {
+                        alert('Something went wrong. Please try again.');
+                    });
+            }));
+        }
+
         rootEl.querySelectorAll('.overlay-secondary-cs-remove').forEach(function (btn) {
             btn.addEventListener('click', function () { postForm(`/projects/${projectId}/secondary-cs/${btn.dataset.userId}/remove`, ''); });
         });

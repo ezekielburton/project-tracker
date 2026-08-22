@@ -2269,6 +2269,84 @@ button.overlay-chat-reaction-chip:hover {
     display: none;
 }
 
+/* ------- Deliverables: Team-tag assignment (22 Aug 2026) -------
+   deliverable_assign_tag() (_shared_macros.html) reuses .avatar-picker /
+   .avatar-picker-trigger / .avatar-picker-popover / .avatar-picker-option
+   and .avatar-picker-placeholder as-is (shared.css) for the picker
+   plumbing and the "nobody yet, dashed pill" empty state — this block is
+   only the pieces that are genuinely new: the small team-ringed avatar
+   that replaces a tag once someone's assigned, and the self-toggle
+   button's own reset (it isn't a .avatar-picker-trigger, just a plain
+   button carrying the same look). */
+
+.deliverable-assign-avatar {
+    width: var(--avatar-sm);
+    height: var(--avatar-sm);
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ashen);
+    border: 2px solid transparent;
+    transition: box-shadow 0.15s ease;
+}
+
+.deliverable-assign-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Same three colors as .tag--2d/3d/technical (shared.css) — team stays
+   identifiable by color even once the tag's text is replaced by a face. */
+.deliverable-assign-avatar--2d { border-color: var(--pine); }
+.deliverable-assign-avatar--3d { border-color: var(--ashen); }
+.deliverable-assign-avatar--technical { border-color: var(--oak); }
+
+.deliverable-assign-tag--self {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    font: inherit;
+}
+
+.deliverable-assign-tag--self:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.avatar-picker.deliverable-assign-tag .avatar-picker-trigger:hover .deliverable-assign-avatar,
+.deliverable-assign-tag--self:not(:disabled):hover .deliverable-assign-avatar {
+    box-shadow: 0 0 0 2px var(--surface-hover);
+}
+
+/* Unassign is a reversal action, not a pick — same rose the rest of the
+   app reserves for that (Cancel, Flag, Request Client Revision). */
+.avatar-picker-option.deliverable-assign-unassign {
+    color: var(--rose);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-1);
+    padding-bottom: var(--space-2);
+}
+
+.avatar-picker-option.is-current {
+    background: var(--surface-hover);
+}
+
+/* Static (view-only) rendering keeps the original plain tag and just
+   appends the avatar alongside it — the viewer has no standing to act,
+   so nothing here is a button. */
+.deliverable-assign-avatar--static {
+    margin-left: -2px;
+}
+
 /* ------- Deliverables: editable table ------- */
 
 .overlay-deliverables-edit-header,

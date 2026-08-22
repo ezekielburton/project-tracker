@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import nullslast, func, case
 from sqlalchemy.orm import joinedload, selectinload
 from app import db
-from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog
+from app.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel
 from app.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new')
@@ -306,6 +306,30 @@ def _apply_row_filters(rows, exclude=None):
 
     return rows
 
+def _resolve_view(view, user):
+    """
+    A saved custom view ("view-<id>") isn't itself a base query — it's a
+    name + a remembered filter selection layered on top of one of the three
+    fixed presets. Resolves it down to that preset so callers only ever have
+    to know about 'my'/'all'/'design_complete'. Pulled out of
+    _base_query_for_view (22 Aug 2026) so _compute_rows_and_groups can also
+    ask "which fixed view is this really?" when it needs to branch on the
+    resolved view itself — see the Design Completed row-filtering there,
+    which has to run whether someone's looking at a saved view built on top
+    of 'my'/'all' or the fixed tab directly. Idempotent: calling it again on
+    an already-resolved view ('my'/'all'/'design_complete') just returns it
+    unchanged, since those never start with 'view-'.
+    """
+    if view.startswith('view-'):
+        try:
+            view_id = int(view.split('-', 1)[1])
+        except ValueError:
+            view_id = None
+        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
+        return saved_view.base_view if saved_view else 'my'
+    return view
+
+
 def _base_query_for_view(view, user):
     """
     Returns (query, order_by) for whichever of the three fixed views is
@@ -315,18 +339,7 @@ def _base_query_for_view(view, user):
     view" too, not the whole projects table.
     """
     order_by = Project.first_output_deadline.asc()
-
-    # A saved custom view ("view-<id>") isn't itself a base query — it's a
-    # name + a remembered filter selection layered on top of one of the
-    # three fixed presets. Resolve it down to that preset here so every
-    # other branch below only ever has to know about 'my'/'all'/'design_complete'.
-    if view.startswith('view-'):
-        try:
-            view_id = int(view.split('-', 1)[1])
-        except ValueError:
-            view_id = None
-        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
-        view = saved_view.base_view if saved_view else 'my'
+    view = _resolve_view(view, user)
 
     # 'approved' (the raw status value) is a transient in-flight status now
     # (M8 added Pre-Production/Handed to Production after it), not a finish
@@ -365,6 +378,20 @@ def _base_query_for_view(view, user):
         # (Project has no dedicated timestamp column for this stage, unlike
         # approved_at) — most recently completed first, same intent as the
         # old approved_at.desc().
+        #
+        # Broadened (22 Aug 2026, per Ezekiel) to also fetch C&CM projects
+        # that haven't hit project_status == 'handed_to_production' yet but
+        # already read the "Design Completed" pill (status_vocabulary.py's
+        # derive_ccm_aggregate_status — every channel at least Client
+        # Approved, not necessarily every channel handed off). That pill is
+        # clickable from the Projects table now and lands here, so this tab
+        # has to actually contain what it promises. The .any(...) below is
+        # deliberately loose — it only needs to not miss a candidate; the
+        # exact "Design Completed" vs "Handed to Production" vs neither
+        # split happens after serialization in _compute_rows_and_groups,
+        # same computed-field-filtering pattern _apply_row_filters already
+        # uses (blanket_status isn't a plain column, so it can't be
+        # expressed as a WHERE clause here).
         handed_at = (
             db.session.query(db.func.max(ProjectStatusLog.started_at))
             .filter(
@@ -374,7 +401,15 @@ def _base_query_for_view(view, user):
             .correlate(Project)
             .scalar_subquery()
         )
-        query = Project.query.filter_by(project_status='handed_to_production')
+        query = Project.query.filter(
+            db.or_(
+                Project.project_status == 'handed_to_production',
+                db.and_(
+                    Project.brief_type == 'ccm',
+                    Project.posm_channels.any(ProjectPosmChannel.status.in_(('approved', 'handed_to_production')))
+                )
+            )
+        )
         order_by = handed_at.desc()
 
     else:  # 'my' - default
@@ -598,6 +633,23 @@ def _compute_rows_and_groups(view, user):
         rollups, next_deadlines = _bulk_deliverable_aggregates([p.id for p in projects])
         rows = [_serialize_row(p, rollups, next_deadlines) for p in projects]
         rows = _apply_row_filters(rows)
+
+        # Design Completed now lives in its own fixed tab (22 Aug 2026, per
+        # Ezekiel) — a C&CM project can read the "Design Completed" pill
+        # (status_vocabulary.py's derive_ccm_aggregate_status) well before
+        # project.project_status itself flips to 'handed_to_production'
+        # (that only happens once EVERY channel is individually handed off
+        # — see project_preproduction.py's _cascade_handed_to_production),
+        # so it's excluded from My/All exactly when the broadened
+        # design_complete query above is guaranteed to have already fetched
+        # it, and vice versa — the two branches are two sides of the same
+        # cutover, kept next to each other in intent even though they run
+        # against different rows dicts.
+        resolved_view = _resolve_view(view, user)
+        if resolved_view in ('my', 'all'):
+            rows = [r for r in rows if r['blanket_status'] != 'Design Completed']
+        elif resolved_view == 'design_complete':
+            rows = [r for r in rows if r['blanket_status'] in ('Design Completed', 'Handed to Production')]
 
     # Sort is applied last, after every filter — it re-orders whatever
     # subset of rows is already showing, it never changes which rows show.
