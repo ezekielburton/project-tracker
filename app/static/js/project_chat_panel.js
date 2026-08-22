@@ -1,77 +1,20 @@
 // app/static/js/project_chat_panel.js
-//
-// Persistent chat drawer controller (M10 chat redesign) — the project-
-// level chat thread that replaced the old Notes card. Lives in its own
-// module rather than project_notes_card.js (which still owns the Site
-// Visits form) because the drawer's lifecycle is independent of whichever
-// rail tab happens to be showing underneath it: project_overlay.js opens/
-// closes the drawer itself, project_list.js's loadChatDrawer() lazy-fetches
-// this module's content on first open, and this module only ever wires
-// whatever's inside #project-overlay-chat-content.
-//
-// Message-interactions adjustment (21 Aug 2026): hover a message to reveal
-// a react-smiley + chevron. The chevron opens a Copy/Reply/React/Pin/
-// Delete dropdown (Delete only rendered server-side when the 5-minute
-// self-delete window still applies); the smiley jumps straight to the
-// quick-react popover.
-//
-// Phase 3 — attachments (21 Aug 2026): the attach button stages one image
-// or video before send (client-compressed for images, hard-capped at
-// 16MB with no compression for video), shown in a preview bar above the
-// composer until Send or the bar's own remove button clears it.
-//
-// Phase 4 — emoji picker + real reactions (21 Aug 2026): the quick-react
-// popover's emoji buttons and a message's own reaction chips now both
-// POST to the real reactions backend (toggleReaction()) instead of the
-// earlier no-op provision. The composer also gets its own multi-category
-// emoji picker (#overlay-chat-emoji-picker) — picking an emoji inserts it
-// at the cursor and deliberately leaves the picker open for multi-select.
-//
-// Phase 5 — mentions (21 Aug 2026): typing "@" in the composer opens
-// #overlay-chat-mention-picker, filtered from this project's roster
-// (fetched once per drawer-open from /overlay/chat/mentionable — CS
-// lead, secondary CS, project owner, assigned designers). Picking someone
-// inserts "@Name " and queues them for a notification on send; sendMessage
-// only actually includes a mention whose "@Name" text is still literally
-// in the composer at send time (see its activeMentionIds filter).
-
-
+// Persistent chat drawer controller — messages, replies, pins, attachments,
+// reactions, emoji picker, and @-mentions. Wires #project-overlay-chat-content.
 
 window.ProjectChatPanel = (function () {
 
     function init(contentEl, projectId) {
 
-        // Reply-in-progress state — lives outside wire()/reload() so it
-        // survives a full-fragment refresh (e.g. a reload triggered by
-        // someone else's message shouldn't silently drop what you were
-        // replying to). Cleared explicitly on send or via the preview
-        // bar's close button.
+        // Lives outside wire()/reload() so a refresh doesn't drop it.
         var replyState = null; // { noteId, author, text } | null
 
-        // Attachment-in-progress state (Phase 3, 21 Aug 2026) — same
-        // lives-outside-wire()/reload() treatment as replyState, so a
-        // live update arriving while you're mid-attach doesn't drop the
-        // photo/video you already picked. blob is what actually gets
-        // uploaded (for images, the CLIENT-COMPRESSED result, not the
-        // original file — see compressImage()); previewUrl is an object
-        // URL for the staged-attachment bar's thumbnail, revoked whenever
-        // it's replaced or cleared so these don't leak across a long
-        // session.
+        // blob is the upload payload (client-compressed for images); previewUrl
+        // is an object URL for the preview bar, revoked when replaced/cleared.
         var stagedAttachment = null; // { blob, filename, type, previewUrl } | null
 
-        // @-mentions (Phase 5, 21 Aug 2026). mentionableUsers is this
-        // project's roster — fetched once below, right after wire() runs
-        // the first time, and reused for every "@" typed during this
-        // drawer-open (doesn't change often enough mid-session to justify
-        // re-fetching per keystroke). mentionedUsers accumulates whoever
-        // was actually picked from the dropdown; sendMessage() re-checks
-        // each one's "@Name" text is still literally present in the
-        // composer before including it, so deleting a mention after
-        // inserting it silently drops the notification too — no separate
-        // "remove mention" affordance needed. mentionQuery tracks the
-        // in-progress "@word" being typed (its start index in the
-        // textarea's value, and the query text after the "@") so a picker
-        // click knows exactly what substring to replace.
+        // mentionableUsers: this project's roster, fetched once per drawer-open.
+        // mentionQuery: the in-progress "@word" being typed.
         var mentionableUsers = []; // [{id, name}]
         var mentionedUsers = [];   // [{id, name}]
         var mentionQuery = null;   // { start, query } | null
@@ -98,7 +41,7 @@ window.ProjectChatPanel = (function () {
             fetch(`/projects/${projectId}/overlay/chat/mentionable`)
                 .then((res) => res.json())
                 .then((data) => { if (data && data.users) mentionableUsers = data.users; })
-                .catch(() => { /* mention picker just won't find anyone — not fatal */ });
+                .catch(() => {});
         }
 
         function scrollToBottom() {
@@ -106,17 +49,9 @@ window.ProjectChatPanel = (function () {
             if (thread) thread.scrollTop = thread.scrollHeight;
         }
 
-        // Bubble text carries its timestamp as a floated child span (the
-        // "time in the bottom-right corner of the bubble" CSS trick) — Copy
-        // and Reply both need the message text alone, so this clones the
-        // node and strips the timestamp before reading textContent rather
-        // than duplicating the raw note body into a data-attribute.
-        //
-        // A caption-less attachment has no .overlay-chat-bubble-text at all
-        // (see _overlay_chat.html) — falls back to the same placeholder
-        // text ProjectNote.display_text() renders server-side for the
-        // quote block, so Reply's live preview bar matches what actually
-        // gets stored/rendered once the reply is sent.
+        // Clones the bubble text and strips the floated timestamp span, so
+        // Copy/Reply get the message text alone. Falls back to a Photo/Video
+        // placeholder for a caption-less attachment.
         function getMessageText(messageEl) {
             const textEl = messageEl.querySelector('.overlay-chat-bubble-text');
             if (textEl) {
@@ -139,10 +74,7 @@ window.ProjectChatPanel = (function () {
             contentEl.querySelectorAll('.overlay-chat-mention-picker').forEach((el) => el.classList.add('hidden'));
         }
 
-        // Shared by the per-message dropdown's Pin/Unpin item and the
-        // pinned strip's own chevron menu — the server enforces one pin
-        // per project (a new pin silently replaces the old one), so this
-        // is always just "toggle this note's flag and reload."
+        // Server enforces one pin per project — a new pin replaces the old one.
         function togglePin(noteId) {
             postJson(`/projects/${projectId}/overlay/notes/${noteId}/pin`, {}).then(({ ok, data }) => {
                 if (!ok || !data.success) {
@@ -153,11 +85,7 @@ window.ProjectChatPanel = (function () {
             });
         }
 
-        // Real reactions backend (Phase 4, 21 Aug 2026) — shared by the
-        // quick-react popover's emoji buttons and a reaction chip's own
-        // click (re-clicking a chip you already reacted with removes it,
-        // same toggle semantics the server enforces via the unique
-        // (note_id, user_id) constraint — see toggle_reaction()).
+        // Shared by the quick-react popover and reaction chips; re-picking removes it.
         function toggleReaction(noteId, emoji) {
             postJson(`/projects/notes/${noteId}/react`, { emoji: emoji }).then(({ ok, data }) => {
                 if (!ok || !data.success) {
@@ -194,13 +122,8 @@ window.ProjectChatPanel = (function () {
             renderReplyPreview();
         }
 
-        // Re-checks the text immediately before the cursor for an
-        // in-progress "@word" — matches only when the "@" is at the very
-        // start of the composer or preceded by whitespace (so an email
-        // address or "user@host" typed mid-sentence doesn't pop this
-        // open), and re-filters mentionableUsers by that word. Called on
-        // every keystroke/click/cursor-move in the textarea; cheap enough
-        // (a handful of names, one regex) not to worry about debouncing.
+        // Checks the text before the cursor for an in-progress "@word" and
+        // re-filters mentionableUsers by it.
         function updateMentionPicker() {
             const input = contentEl.querySelector('#overlay-chat-input');
             const picker = contentEl.querySelector('#overlay-chat-mention-picker');
@@ -228,10 +151,7 @@ window.ProjectChatPanel = (function () {
             picker.classList.remove('hidden');
         }
 
-        // Replaces the in-progress "@word" (tracked by mentionQuery) with
-        // "@Name " and records the pick — deliberately does NOT close the
-        // rest of the composer or clear replyState/stagedAttachment, this
-        // is purely a text-insertion + bookkeeping step.
+        // Replaces the in-progress "@word" with "@Name " and records the pick.
         function insertMention(userId, name) {
             const input = contentEl.querySelector('#overlay-chat-input');
             const picker = contentEl.querySelector('#overlay-chat-mention-picker');
@@ -256,13 +176,8 @@ window.ProjectChatPanel = (function () {
             return parts.length > 1 ? parts.pop().toLowerCase() : '';
         }
 
-        // Client-side image compression (Ezekiel, 21 Aug 2026: "Images get
-        // compressed") — resizes to a 1600px longest edge and re-encodes
-        // as JPEG, same "hand-roll it with canvas" approach this codebase
-        // already uses for avatars (Cropper.js), just without a cropping
-        // UI here. GIFs are deliberately routed around this entirely (see
-        // handleFileSelected) — canvas re-encoding flattens an animated
-        // GIF to its first frame.
+        // Resizes to a 1600px longest edge and re-encodes as JPEG.
+        // GIFs skip this entirely (see handleFileSelected) — re-encoding flattens animation.
         function compressImage(file) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -354,9 +269,7 @@ window.ProjectChatPanel = (function () {
                     const compressedName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
                     stageAttachment(blob, compressedName, 'image');
                 }).catch(() => {
-                    // Compression failed (corrupt file, browser quirk) —
-                    // fall back to the original rather than blocking the
-                    // send entirely; the server's own size cap still applies.
+                    // Compression failed — fall back to the original; server still caps size.
                     stageAttachment(file, file.name, 'image');
                 });
                 return;
@@ -370,21 +283,9 @@ window.ProjectChatPanel = (function () {
             return thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
         }
 
-        // Full-fragment refetch on every send/delete/pin/SSE-triggered live
-        // update — same tradeoff every other overlay section already makes
-        // (project_notes_card.js's own reload()): the routes only hand back
-        // ids/flags, not formatted bubble markup, so re-fetching the
-        // rendered thread avoids duplicating that formatting (day labels,
-        // Dubai-local times, own-vs-other bubble side, reply quotes, pinned
-        // strip) in JS.
-        //
-        // {live: true} (SSE-triggered, someone ELSE's action) is gentler
-        // than the plain reload send/delete/pin already use for your own
-        // actions: it carries your in-progress draft text across the DOM
-        // swap instead of silently discarding it, and only auto-scrolls to
-        // the new bottom if you were already reading near the bottom —
-        // scrolled up through history, an incoming message doesn't yank you
-        // back down, same as WhatsApp/Slack.
+        // Full-fragment refetch on every send/delete/pin/live update. {live: true}
+        // (someone else's action) preserves your draft and only auto-scrolls if
+        // you were already near the bottom.
         function reload(afterReload, opts) {
             var isLive = !!(opts && opts.live);
             var threadBefore = contentEl.querySelector('#overlay-chat-thread');
@@ -422,27 +323,19 @@ window.ProjectChatPanel = (function () {
             if (sendBtn) sendBtn.disabled = true;
             if (errorEl) errorEl.classList.add('hidden');
 
-            // Only send mentions whose "@Name" text is STILL actually in
-            // the message — if it got deleted/edited out after picking it
-            // from the dropdown, don't notify someone about a mention that
-            // no longer exists in what's being sent (Phase 5, 21 Aug 2026).
+            // Only send mentions whose "@Name" text is still actually in the message.
             const activeMentionIds = mentionedUsers
                 .filter((u) => body.indexOf(`@${u.name}`) !== -1)
                 .map((u) => u.id);
 
-            // Attachment present — post multipart/form-data instead of JSON
-            // (matches the branch create_note() checks server-side: `if
-            // upload and upload.filename` reads request.files, otherwise it
-            // reads request.get_json()). No Content-Type header set here on
-            // purpose — the browser fills in the multipart boundary itself;
-            // setting it manually breaks the boundary and the upload.
+            // Attachment present — post multipart/form-data instead of JSON.
+            // No Content-Type header — the browser sets the multipart boundary itself.
             let request;
             if (stagedAttachment) {
                 const formData = new FormData();
                 formData.append('body', body);
                 if (replyState) formData.append('reply_to_id', replyState.noteId);
-                // FormData can't carry a real array — JSON-encode it, same
-                // as create_note() already expects for this multipart path.
+                // FormData can't carry a real array — JSON-encode it instead.
                 if (activeMentionIds.length) formData.append('mentioned_ids', JSON.stringify(activeMentionIds));
                 formData.append('file', stagedAttachment.blob, stagedAttachment.filename);
                 request = fetch(`/projects/${projectId}/overlay/notes/create`, { method: 'POST', body: formData })
@@ -527,30 +420,20 @@ window.ProjectChatPanel = (function () {
             if (sendBtn) sendBtn.addEventListener('click', sendMessage);
 
             if (input) {
-                // Enter sends, Shift+Enter inserts a newline — standard
-                // chat-app convention (WhatsApp/Messenger/Slack all do this).
+                // Enter sends, Shift+Enter inserts a newline.
                 input.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         sendMessage();
                     }
                 });
-                // Auto-grow with typed content up to the CSS max-height —
-                // plain textarea resize, no library, same "hand-roll it"
-                // call this codebase already made for the date-range picker.
+                // Auto-grow with typed content up to the CSS max-height.
                 input.addEventListener('input', () => {
                     input.style.height = 'auto';
                     input.style.height = input.scrollHeight + 'px';
                     updateMentionPicker();
                 });
-                // keyup (not click) so arrow-key cursor movement within an
-                // in-progress "@word" re-filters correctly — deliberately
-                // NOT wired on 'click' too: a raw mouse click bubbles up to
-                // contentEl's own click listener (closeAllPopups, since the
-                // mention picker is in its hidden-list for consistency with
-                // every other popover here), which would immediately hide
-                // whatever this handler just showed. Typing is the primary
-                // way this picker opens anyway.
+                // Not 'click' too — that bubbles to contentEl's closeAllPopups and would re-hide it.
                 input.addEventListener('keyup', updateMentionPicker);
             }
 
@@ -573,10 +456,7 @@ window.ProjectChatPanel = (function () {
                 item.addEventListener('click', () => jumpToMessage(item.getAttribute('data-jump-to')));
             });
 
-            // Pinned strip's own chevron — opens a one-item Unpin menu.
-            // Both handlers stopPropagation so they don't also trigger the
-            // pinned-item's own click-to-jump listener above (the menu and
-            // its button live nested inside that same element).
+            // Opens a one-item Unpin menu; stopPropagation avoids the click-to-jump listener above.
             contentEl.querySelectorAll('.overlay-chat-pinned-menu-btn').forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -595,11 +475,7 @@ window.ProjectChatPanel = (function () {
                 });
             });
 
-            // Hover toolbar: smiley opens the quick-react popover directly,
-            // chevron opens the Copy/Reply/React/Pin/Delete dropdown — same
-            // per-item open/close-on-outside-click convention as project_
-            // list.js's saved-view "⋯" menu (stopPropagation on the toggle,
-            // one document-level listener closes everything else).
+            // Hover toolbar: smiley opens the quick-react popover, chevron opens the dropdown.
             contentEl.querySelectorAll('.overlay-chat-react-btn').forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -632,10 +508,7 @@ window.ProjectChatPanel = (function () {
                 });
             });
 
-            // Quick-react emoji buttons — real backend now (Phase 4, 21 Aug
-            // 2026): posts the reaction and reloads. The provision from the
-            // message-interactions pass just opened/closed this popover;
-            // this is what actually makes a click count.
+            // Quick-react emoji buttons — post the reaction and reload.
             contentEl.querySelectorAll('.overlay-chat-react-option').forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -644,11 +517,7 @@ window.ProjectChatPanel = (function () {
                 });
             });
 
-            // Reaction chips under a bubble — clicking one toggles YOUR OWN
-            // reaction with that emoji (not "add another"), same semantics
-            // as picking it from the popover. Only rendered as a <button>
-            // (vs. a read-only <span>) for people who can chat here — see
-            // _overlay_chat.html.
+            // Reaction chips — clicking one toggles your own reaction with that emoji.
             contentEl.querySelectorAll('button.overlay-chat-reaction-chip').forEach((chip) => {
                 chip.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -657,8 +526,7 @@ window.ProjectChatPanel = (function () {
                 });
             });
 
-            // Composer emoji picker trigger — same open/close-on-outside-
-            // click convention as every other popover in this file.
+            // Composer emoji picker trigger.
             const emojiTrigger = contentEl.querySelector('#overlay-chat-emoji-trigger');
             const emojiPicker = contentEl.querySelector('#overlay-chat-emoji-picker');
             if (emojiTrigger && emojiPicker) {
@@ -668,15 +536,11 @@ window.ProjectChatPanel = (function () {
                     closeAllPopups();
                     if (willOpen) emojiPicker.classList.remove('hidden');
                 });
-                // Keep clicks inside the picker itself from bubbling to the
-                // document-level outside-click listener below, which would
-                // otherwise close the picker on every category-tab click.
+                // Stop clicks inside from bubbling to the outside-click listener below.
                 emojiPicker.addEventListener('click', (e) => e.stopPropagation());
             }
 
-            // Category tabs just scroll the grid to that section — no
-            // separate "active tab" state to track, same lightweight
-            // approach as a simple in-page anchor jump.
+            // Category tabs just scroll the grid to that section.
             contentEl.querySelectorAll('.overlay-chat-emoji-tab').forEach((tab) => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -686,11 +550,7 @@ window.ProjectChatPanel = (function () {
                 });
             });
 
-            // Picking an emoji inserts it into the composer at the cursor
-            // and DELIBERATELY LEAVES THE PICKER OPEN — multi-select-
-            // friendly (WhatsApp/Slack both keep the picker open across
-            // consecutive picks), unlike the quick-react popover which
-            // closes immediately because that's a one-shot per message.
+            // Inserts the emoji at the cursor and leaves the picker open for multi-select.
             contentEl.querySelectorAll('.overlay-chat-emoji-option').forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -703,21 +563,13 @@ window.ProjectChatPanel = (function () {
                     const cursor = start + emoji.length;
                     input.selectionStart = input.selectionEnd = cursor;
                     input.focus();
-                    // Re-trigger auto-grow (mirrors the plain typing 'input'
-                    // handler above) since setting .value programmatically
-                    // doesn't fire that event on its own.
+                    // Re-trigger auto-grow — setting .value doesn't fire 'input' on its own.
                     input.style.height = 'auto';
                     input.style.height = input.scrollHeight + 'px';
                 });
             });
 
-            // @-mention picker (Phase 5, 21 Aug 2026) — its contents are
-            // rebuilt from scratch on every keystroke (updateMentionPicker),
-            // so this is a single delegated listener on the container
-            // rather than per-option binding. stopPropagation keeps the
-            // click from also bubbling to contentEl's outside-click
-            // listener, which would otherwise re-hide it a tick after
-            // insertMention() already did.
+            // @-mention picker — delegated listener since its contents rebuild every keystroke.
             const mentionPicker = contentEl.querySelector('#overlay-chat-mention-picker');
             if (mentionPicker) {
                 mentionPicker.addEventListener('click', (e) => {
@@ -729,35 +581,19 @@ window.ProjectChatPanel = (function () {
             }
         }
 
-        // Outside-click closes any open dropdown/popover — added once here
-        // (not inside wire(), which reruns on every reload) so a reload
-        // never stacks a second document-level-style listener. contentEl
-        // itself is stable across reload() calls (only its innerHTML is
-        // replaced), and gets discarded for free when the overlay closes.
+        // Outside-click closes any open dropdown/popover — added once, not in wire().
         contentEl.addEventListener('click', closeAllPopups);
 
         wire();
         scrollToBottom();
-        // Composer (and so the mention picker) only renders for
-        // can_manage_notes viewers — skip the fetch entirely for a read-
-        // only viewer rather than firing a request that'll just 403.
+        // Composer only renders for can_manage_notes viewers — skip the fetch otherwise.
         if (contentEl.querySelector('#overlay-chat-input')) fetchMentionableUsers();
 
         return {
-            // Nothing to explicitly tear down — the one listener this
-            // module owns lives on contentEl, which is discarded along
-            // with the rest of the overlay's DOM on close. Kept as a real
-            // function (not omitted) so project_list.js's
-            // closeProjectOverlay() can call it unconditionally, same
-            // shape as every other card module's handle.
+            // Nothing to tear down; contentEl is discarded when the overlay closes.
             destroy: function () { },
-            // SSE hook (Phase 2, 21 Aug 2026) — project_list.js's live-
-            // update stream calls this when the drawer is open and some
-            // OTHER change touched this project (a message from someone
-            // else, a pin/unpin, a delete). {live: true} is what makes
-            // reload() preserve your draft and respect your scroll
-            // position instead of the more aggressive always-scroll-and-
-            // discard behaviour your own send/delete/pin actions want.
+            // SSE hook — project_list.js calls this on a live update; {live: true}
+            // preserves the draft and scroll position.
             liveRefresh: function () { return reload(null, { live: true }); }
         };
     }

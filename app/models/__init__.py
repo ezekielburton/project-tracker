@@ -761,17 +761,8 @@ class ProjectFile(db.Model):
         return f'<ProjectFile {self.original_filename} project={self.project_id}>'
     
 class ProjectNote(db.Model):
-    """
-    Freeform, attributed, timestamped note on a project — the deliberate
-    escape hatch for documenting workflow outliers (e.g. "Ibrahim — early
-    draft of 1x1 stand technical — 4 Aug 10AM — [link]") without trying to
-    model every out-of-scope case in the status/data model itself. Distinct
-    from ActivityLog, which is machine-written; these are human-written.
-    Tags set up the future chat features (Projects Redesign Architecture.md §11).
-    reply_to_id/is_pinned power the WhatsApp-style message interactions in
-    the chat drawer (M10 chat redesign, 21 Aug 2026) — quoting a message
-    when replying, and pinning one to the top of the thread.
-    """
+    """A project chat message. Human-written, unlike the machine-written
+    ActivityLog. reply_to_id/is_pinned back the reply-quote and pin features."""
     __tablename__ = 'project_notes'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -779,17 +770,12 @@ class ProjectNote(db.Model):
     author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     body = db.Column(db.Text, nullable=False)
     file_link = db.Column(db.String(500), nullable=True)
-    tags = db.Column(db.JSON, nullable=True)
-    # ON DELETE SET NULL: deleting the original message a reply quoted should
-    # orphan the quote (it just stops rendering), not cascade-delete the reply.
+    tags = db.Column(db.JSON, nullable=True)  # {'mentions': [user_id, ...]}
+    # SET NULL: deleting the quoted message orphans the reply, doesn't delete it.
     reply_to_id = db.Column(db.Integer, db.ForeignKey('project_notes.id', ondelete='SET NULL'), nullable=True)
     is_pinned = db.Column(db.Boolean, nullable=False, default=False)
-    # Attachments (Phase 3 — images/videos, 21 Aug 2026). attachment_filename
-    # is the UUID-based name it's actually stored under on the NAS (see
-    # app.nas.build_chat_file_path); attachment_original_filename is what
-    # the sender's device called it, kept only for display/download-name
-    # purposes. attachment_type is 'image' | 'video' | None — None for an
-    # ordinary text-only note, same as today.
+    # attachment_filename is the UUID-based name on the NAS; original_filename is
+    # the sender's own filename, kept for display only.
     attachment_filename = db.Column(db.String(255), nullable=True)
     attachment_original_filename = db.Column(db.String(255), nullable=True)
     attachment_type = db.Column(db.String(10), nullable=True)
@@ -797,16 +783,11 @@ class ProjectNote(db.Model):
 
     project = db.relationship('Project', backref=db.backref('notes', cascade='all, delete-orphan'))
     author = db.relationship('User', foreign_keys=[author_id])
-    # remote_side=[id] tells SQLAlchemy which side of this self-referential
-    # FK is the "one" (the quoted original) vs. the "many" (replies to it).
     reply_to = db.relationship('ProjectNote', remote_side=[id], foreign_keys=[reply_to_id])
 
     def display_text(self):
-        """Text to show in the bubble/quote when there's no caption — an
-        attachment sent with no message still needs SOMETHING to render as
-        the bubble's text (and as the quoted snippet if someone replies to
-        it), same as WhatsApp showing "Photo"/"Video" for a caption-less
-        attachment."""
+        """Text for the bubble/quote when there's no caption — 'Photo'/'Video'
+        placeholder for a caption-less attachment."""
         if self.body:
             return self.body
         if self.attachment_type == 'image':
@@ -820,16 +801,8 @@ class ProjectNote(db.Model):
 
 
 class ProjectNoteReaction(db.Model):
-    """
-    One person's emoji reaction to one chat message (M10 chat redesign —
-    Phase 4, 21 Aug 2026) — the real backend behind the quick-react
-    popover, which until now only opened/closed as a UI-only provision
-    (see project_chat_panel.js's earlier TODO). One reaction per person
-    per message, enforced by the unique constraint below: picking a
-    different emoji replaces your previous one, picking the same emoji
-    again removes it — the same toggle behaviour WhatsApp uses, not
-    unlimited reactions per person.
-    """
+    """One person's emoji reaction to one chat message. Unique (note_id, user_id)
+    caps it at one reaction per person per message — toggled, not stacked."""
     __tablename__ = 'project_note_reactions'
     __table_args__ = (
         db.UniqueConstraint('note_id', 'user_id', name='uq_project_note_reactions_note_user'),
@@ -862,7 +835,8 @@ class SiteVisit(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     start_at = db.Column(db.DateTime, nullable=False)
     end_at = db.Column(db.DateTime, nullable=False)
-    location = db.Column(db.String(255), nullable=True)
+    location = db.Column(db.String(255), nullable=True)   # location name, shown as plain text or (if location_link is set) as link text
+    location_link = db.Column(db.String(500), nullable=True)   # optional maps/address URL
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

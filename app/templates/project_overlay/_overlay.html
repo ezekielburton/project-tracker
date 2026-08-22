@@ -16,19 +16,10 @@ active section. See project_overlay.js. #}
                 id="project-overlay-cancel-btn">Cancel</button>
             <button type="button" class="project-overlay-save-btn is-hidden" id="project-overlay-save-btn">Save</button>
             {% endif %}
-            {# Chat (M10 chat redesign, 21 Aug 2026) — a persistent drawer
-            reachable from any rail tab, not a section of its own. Toggling
-            it both slides #project-overlay-chat-drawer open from the right
-            AND widens .project-overlay-sheet (see project_overlay.js), so
-            opening chat gives the thread real room instead of squeezing
-            whatever's already on screen. Visible to anyone who can open
-            this overlay — same as the old Notes card, only sending is
-            permission-gated (see _overlay_chat.html). #}
+            {# Chat — a persistent drawer reachable from any rail tab, not a section of its own. #}
             <button type="button" class="project-overlay-chat-btn" id="project-overlay-chat-btn"
                 aria-label="Chat">
-                {# lucide "message-circle-more" — stroke set to currentColor (was a hardcoded
-                   #000000) so it picks up .project-overlay-chat-btn's own color/hover states,
-                   same as every other icon in this header. #}
+                {# lucide "message-circle-more", stroke set to currentColor. #}
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/>
                     <path d="M8 12h.01"/>

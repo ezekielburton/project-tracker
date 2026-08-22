@@ -7,27 +7,17 @@ from app.utils import log_activity
 
 project_notes_bp = Blueprint('project_notes', __name__)
 
-# Chat attachments (Phase 3 — images/videos, 21 Aug 2026). Video list is
-# deliberately narrower than Reference Files' (project_overlay.py) — this
-# has to actually play inline in a <video> tag in-browser, not just be
-# downloadable, so formats Chrome won't natively play (avi, wmv) are left
-# off rather than uploaded and then silently unplayable in the thread.
+# Narrower video list than Reference Files' — must play inline in <video>.
 _CHAT_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 _CHAT_VIDEO_EXTENSIONS = {'mp4', 'mov', 'webm', 'm4v'}
-# Images are compressed client-side before they ever reach this route (see
-# project_chat_panel.js) — this is just a server-side backstop, not the
-# real limit. Video gets no compression at all (Ezekiel, 21 Aug 2026:
-# "Hard cap for videos is fine"), so 16MB here IS the real limit.
+# Image cap is a backstop (client already compresses); video cap is the real limit.
 _CHAT_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 _CHAT_VIDEO_MAX_BYTES = 16 * 1024 * 1024
 
 
 def _save_chat_attachment(project, upload):
     """Validates and uploads one chat attachment to the NAS. Returns
-    (True, (stored_filename, original_filename, attachment_type)) on
-    success, or (False, error_message) on failure — never raises, so
-    create_note() can turn a failure straight into a 400 response without
-    its own try/except around this call."""
+    (True, (stored_filename, original_filename, type)) or (False, error_message)."""
     import uuid
     from app.nas import upload_app_file, build_chat_file_path
 
@@ -48,11 +38,8 @@ def _save_chat_attachment(project, upload):
         label = 'Video' if attachment_type == 'video' else 'Image'
         return False, f'{label} is too large (max {max_bytes // (1024 * 1024)}MB).'
 
-    # UUID-based stored filename — unlike Reference Files (which keeps the
-    # original filename as-is, one project's files uploaded by a handful of
-    # CS/designers), a busy project chat can pull in "IMG_1234.jpg" from
-    # many different people's phones into the SAME shared per-project NAS
-    # folder (see build_chat_file_path) — collisions are a real risk here.
+    # UUID-based filename — a busy chat can pull in "IMG_1234.jpg" from many
+    # phones into the same folder, so plain filenames risk collisions.
     stored_filename = f'{uuid.uuid4().hex}.{ext}'
     nas_file_path = build_chat_file_path(project, stored_filename)
     nas_folder = nas_file_path.rsplit('/', 1)[0]
@@ -66,10 +53,7 @@ def _save_chat_attachment(project, upload):
 
 
 def _get_actor():
-    # Same emulation-aware pattern used everywhere else in the overlay routes
-    # (project_overlay.py, project_preproduction.py) — admins can "view as"
-    # another user, and every action should attribute to whoever they're
-    # emulating, not the literal logged-in admin account.
+    # Emulation-aware: admin "viewing as" another user attributes actions to them.
     from flask import session
     from flask_login import current_user
     from app.models import User
@@ -78,10 +62,7 @@ def _get_actor():
 
 
 def _can_manage_notes(project, actor):
-    # Same "who's actually working on this project" set used for Reference
-    # Files elsewhere — CS lead, secondary CS, assigned project owner, or
-    # admin/management. Broad on purpose: a note is low-stakes, unlike
-    # deleting a deliverable.
+    # Who's actually working on this project: CS lead, secondary CS, owner, designers, admin.
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
     return (
         actor.role in ('admin', 'management')
@@ -92,15 +73,8 @@ def _can_manage_notes(project, actor):
     )
 
 def _get_mentionable_users(project):
-    """The concrete set of people you can @-mention in this project's chat
-    (Phase 5 — mentions, 21 Aug 2026): CS lead, secondary CS, project
-    owner, and assigned designers — same roster _can_manage_notes checks
-    a single actor against, just resolved to actual User rows instead of
-    a membership test. Deliberately does NOT include "any admin/
-    management" — that's every admin in the company, not people actually
-    on this project, and notify_* functions elsewhere in this app always
-    build an explicit per-project recipient list rather than querying by
-    role for exactly this reason."""
+    """Concrete @-mentionable roster: CS lead, secondary CS, project owner,
+    assigned designers. Excludes admin/management — too broad a set to mention."""
     seen_ids = set()
     users = []
 
@@ -118,7 +92,6 @@ def _get_mentionable_users(project):
     return users
 
 
-# becomes:
 def _is_designer(user):
     return user.role in ('designer', 'team_lead')
 
@@ -137,12 +110,8 @@ def _overlapping_site_visit(visit_user, start_at, end_at, exclude_id=None):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/notes')
 @login_required
 def overlay_notes(project_id):
-    """Site Visits tab (M10 chat redesign, 21 Aug 2026) — this used to also
-    render a merged Notes feed; notes now live in the persistent chat
-    drawer instead (see overlay_chat() below), so this route only builds
-    the site-visit log + logging form. URL kept as /overlay/notes rather
-    than renamed to /overlay/site-visits so the existing JS call site
-    (project_list.js's loadNotesSection) didn't need to change."""
+    """Site Visits tab — notes now live in the chat drawer (see overlay_chat()
+    below); URL kept as /overlay/notes so the existing JS call site still works."""
     from app.models import User
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -161,20 +130,8 @@ def overlay_notes(project_id):
 
 
 def _highlight_mentions(text, mentioned_users):
-    """Wraps every literal "@Name" occurrence — for a user actually
-    recorded in this note's tags['mentions'], not just any "@word" — in a
-    highlight span, HTML-escaping everything else (Phase 5 — mentions, 21
-    Aug 2026). Matches on each mentioned user's CURRENT name, not
-    whatever was typed at send time — same "always derive display text
-    from the live User row" convention this app uses everywhere else, so
-    a later name change re-renders correctly instead of freezing the old
-    name into the message forever.
-
-    Plain substring matching, not regex — a handful of names per message,
-    no user-controlled pattern involved, so this is simpler and safer
-    than building a dynamic regex out of names that could contain regex
-    metacharacters. Longest names checked first so e.g. "@Ali" can't
-    shadow a match inside "@Ali Khan" when both are mentioned."""
+    """Wraps each mentioned user's "@Name" in a highlight span, escaping the rest.
+    Matches on their current name; longest names checked first to avoid partial shadowing."""
     from markupsafe import Markup, escape
     if not text:
         return Markup('')
@@ -195,36 +152,9 @@ def _highlight_mentions(text, mentioned_users):
 
 
 def _build_chat_rows(notes, actor, is_admin):
-    """Turns a chronological ProjectNote list into template-ready rows —
-    each note's Dubai-local send time, plus a day_label set only on the
-    first message of a new local day (None the rest of that day), so
-    _overlay_chat.html can render a WhatsApp-style day divider with one
-    flat loop instead of a nested group-by in Jinja. Dubai time, not raw
-    UTC, so "Today"/"Yesterday" match what the person actually sees as
-    today — same fixed-offset convention profile.py's _format_earned_date
-    already uses for the same reason.
-
-    Also computes, per row, is_own (which side the bubble renders on) and
-    can_delete — the 5-minute self-delete window (message-interactions
-    adjustment, 21 Aug 2026): an author can delete their own message only
-    within 5 minutes of sending it; admin/management stay exempt, same
-    override every other permission gate in this file already makes.
-
-    reaction_groups (Phase 4, 21 Aug 2026) — note.reactions (one row per
-    person per emoji, see ProjectNoteReaction) collapsed into one entry
-    per distinct emoji with a count and whether the CURRENT actor is one
-    of the reactors, so _overlay_chat.html can render WhatsApp-style
-    "👍 3" chips under a bubble with one flat loop instead of grouping in
-    Jinja. Insertion order preserved (first person to use an emoji decides
-    where its chip sits), matching how reactions visually settle in most
-    chat apps rather than re-sorting on every reload.
-
-    body_html (Phase 5 — mentions, 21 Aug 2026) — note.body with any
-    "@Name" the sender actually mentioned (note.tags['mentions'], set by
-    create_note()) wrapped for highlighting; see _highlight_mentions().
-    All mentioned users across the whole thread are fetched in one query
-    up front rather than per-row, same batch-not-N+1 shape as everything
-    else in this file that touches a relationship per note."""
+    """Turns notes into template-ready rows: Dubai-local time, day_label (day
+    dividers), is_own/can_delete (5-min self-delete window), reaction_groups
+    (emoji -> count/reacted_by_me), and body_html (mentions highlighted)."""
     from datetime import datetime, timezone, timedelta
     from collections import OrderedDict
     dubai_tz = timezone(timedelta(hours=4))
@@ -287,17 +217,12 @@ def _build_chat_rows(notes, actor, is_admin):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/chat')
 @login_required
 def overlay_chat(project_id):
-    """Persistent chat drawer (M10 chat redesign) — replaces the old Notes
-    card. Every ProjectNote for this project, oldest first (a chat thread
-    reads top-to-bottom with the newest message at the bottom — the
-    opposite order the old merged Notes feed used)."""
+    """Persistent chat drawer — every ProjectNote for this project, oldest first."""
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     notes = ProjectNote.query.filter_by(project_id=project.id).order_by(ProjectNote.created_at.asc()).all()
     is_admin = actor.role in ('admin', 'management')
-    # Pinned strip — at most one note per project (enforced in
-    # toggle_pin_note), found from the same already-fetched notes list
-    # rather than a second query.
+    # At most one pinned note per project (enforced in toggle_pin_note).
     pinned_note = next((n for n in notes if n.is_pinned), None)
 
     return render_template(
@@ -313,12 +238,7 @@ def overlay_chat(project_id):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/chat/mentionable')
 @login_required
 def chat_mentionable_users(project_id):
-    """Backs the composer's @-mention picker (Phase 5, 21 Aug 2026) —
-    fetched once by project_chat_panel.js when the drawer opens and
-    filtered client-side as you type, same shape as any other typeahead.
-    The actor themself is left off the list (mentioning yourself isn't
-    useful) but everyone else is returned regardless of whether they've
-    sent a message here before."""
+    """Backs the composer's @-mention picker. Excludes the actor themself."""
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     if not _can_manage_notes(project, actor):
@@ -335,11 +255,8 @@ def create_note(project_id):
     if not _can_manage_notes(project, actor):
         abort(403)
 
-    # Attachments (Phase 3, 21 Aug 2026) post as multipart/form-data so the
-    # raw file bytes can ride alongside the other fields; a plain text
-    # message still posts JSON exactly as before. request.files only gets
-    # populated on a multipart request, so that's what tells the two paths
-    # apart — everything below reads from `data` either way.
+    # Attachments post multipart/form-data; plain text posts JSON. request.files
+    # only populates on multipart, so that's what tells the two paths apart.
     upload = request.files.get('file')
     if upload and upload.filename:
         data = request.form
@@ -350,10 +267,7 @@ def create_note(project_id):
     if not body and not (upload and upload.filename):
         return jsonify({'success': False, 'error': 'Note text is required.'}), 400
 
-    # Reply-to (WhatsApp-style quote, 21 Aug 2026) — only honoured when it
-    # actually points at a message in this same project; a stale/cross-
-    # project id (e.g. leftover composer state from a different overlay)
-    # is silently dropped rather than failing the whole send over it.
+    # Only honoured when it points at a message in this same project.
     reply_to_id = data.get('reply_to_id')
     if reply_to_id:
         reply_to_note = ProjectNote.query.get(reply_to_id)
@@ -367,15 +281,8 @@ def create_note(project_id):
             return jsonify({'success': False, 'error': result}), 400
         attachment_filename, attachment_original_filename, attachment_type = result
 
-    # @-mentions (Phase 5, 21 Aug 2026) — the composer sends back whichever
-    # user ids it inserted "@Name" text for (project_chat_panel.js already
-    # drops a mention client-side if its "@Name" text got deleted before
-    # send). Re-validated against the project's real mentionable set here
-    # rather than trusted outright — a stale/tampered id should silently
-    # drop, not notify or store someone who isn't actually on this project.
-    # A plain multipart form can't carry a real array, so the attachment
-    # path sends it as a JSON-encoded string instead; the plain-JSON path
-    # already gets a real list from request.get_json().
+    # Re-validated against the real mentionable set — never trust client ids outright.
+    # Multipart form can't carry a real array, so it arrives JSON-encoded there.
     raw_mentioned_ids = data.get('mentioned_ids')
     if isinstance(raw_mentioned_ids, str):
         import json
@@ -420,10 +327,8 @@ def create_note(project_id):
 @project_notes_bp.route('/projects/notes/<int:note_id>/attachment')
 @login_required
 def chat_attachment(note_id):
-    """Serves a chat image/video inline (as_attachment=False) so a bubble's
-    <img>/<video> tag can point straight at this URL — same NAS proxy-
-    download shape as download_project_file (project_overlay.py), just
-    inline instead of forcing a Save As dialog."""
+    """Serves a chat image/video inline so a bubble's <img>/<video> tag can
+    point straight at this URL, instead of forcing a Save As dialog."""
     import io
     import mimetypes
     from flask import send_file
@@ -449,16 +354,11 @@ def chat_attachment(note_id):
         download_name=note.attachment_original_filename or note.attachment_filename,
     )
 
-# app/routes/project_notes.py (continued)
-
 from datetime import datetime as _dt
 
 
 def _can_log_site_visit(actor):
-    # management, technical designers/team leads, or project owners — per
-    # Ezekiel. Admin included too, matching every other permission gate in
-    # this codebase (admin is always a superset elsewhere) — flag this if
-    # you actually want admin excluded, easy one-line change.
+    # Admin, management, project owners, or Technical-team designers/leads.
     if actor.role in ('admin', 'management', 'project_owner'):
         return True
     return actor.role in ('designer', 'team_lead') and actor.team == 'Technical'
@@ -508,6 +408,11 @@ def create_site_visit(project_id):
         return jsonify({'success': False, 'error_type': 'invalid_range',
                         'error': 'Please ensure the end time is after the start time'}), 400
 
+    location = (data.get('location') or '').strip()
+    if not location:
+        return jsonify({'success': False, 'error_type': 'invalid_location',
+                        'error': 'Please enter a location name.'}), 400
+
     conflict = _overlapping_site_visit(visit_user, start_at, end_at)
     if conflict:
         return jsonify({
@@ -523,7 +428,8 @@ def create_site_visit(project_id):
 
     visit = SiteVisit(
         project_id=project.id, user_id=visit_user.id, start_at=start_at, end_at=end_at,
-        location=(data.get('location') or '').strip() or None,
+        location=location,
+        location_link=(data.get('location_link') or '').strip() or None,
         notes=(data.get('notes') or '').strip() or None,
     )
     db.session.add(visit)
@@ -533,8 +439,6 @@ def create_site_visit(project_id):
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True, 'visit_id': visit.id})
-
-# app/routes/project_notes.py (continued)
 
 @project_notes_bp.route('/projects/<int:project_id>/overlay/notes/<int:note_id>/delete', methods=['POST'])
 @login_required
@@ -549,16 +453,11 @@ def delete_note(project_id, note_id):
     if not (is_admin or is_author):
         abort(403)
 
-    # 5-minute self-delete window (message-interactions adjustment, 21 Aug
-    # 2026) — WhatsApp's "delete for everyone" cutoff. Admin/management
-    # stay exempt, same override every other gate in this file makes.
+    # 5-minute self-delete window; admin/management exempt.
     if is_author and not is_admin and (datetime.utcnow() - note.created_at) > timedelta(minutes=5):
         return jsonify({'success': False, 'error': 'This message can no longer be deleted (5-minute window has passed).'}), 403
 
-    # Clean up the NAS file too, not just the DB row — delete_app_file
-    # already logs-and-swallows any failure internally (see its docstring
-    # in app/nas.py), so a NAS hiccup here never blocks deleting the
-    # message itself.
+    # delete_app_file logs-and-swallows its own failures, so a NAS hiccup never blocks this.
     if note.attachment_filename:
         from app.nas import delete_app_file, build_chat_file_path
         delete_app_file(build_chat_file_path(note.project, note.attachment_filename))
@@ -571,17 +470,8 @@ def delete_note(project_id, note_id):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/notes/<int:note_id>/pin', methods=['POST'])
 @login_required
 def toggle_pin_note(project_id, note_id):
-    """Pin/unpin a message to the top of the chat thread (message-
-    interactions adjustment, 21 Aug 2026) — toggled from the same
-    dropdown as Reply/Copy/Delete, or from the pinned strip's own chevron
-    menu, gated the same as sending a note (not restricted to the
-    message's own author, so anyone who can chat in this project can pin
-    something worth surfacing).
-
-    One pin per project at a time (Ezekiel, 21 Aug 2026) — pinning a new
-    message replaces whichever one was pinned before, same as WhatsApp's
-    single-pin-per-chat behaviour. Only matters on the way IN: unpinning
-    is always just clearing this one note's own flag."""
+    """Pin/unpin a message. One pin per project — pinning a new message
+    replaces whichever one was pinned before."""
     note = ProjectNote.query.get_or_404(note_id)
     if note.project_id != project_id:
         abort(404)
@@ -605,14 +495,8 @@ def toggle_pin_note(project_id, note_id):
 @project_notes_bp.route('/projects/notes/<int:note_id>/react', methods=['POST'])
 @login_required
 def toggle_reaction(note_id):
-    """Add/replace/remove the caller's own reaction on a message (Phase 4,
-    21 Aug 2026) — real backend behind the quick-react popover, which
-    until now only opened/closed as a UI-only provision. Toggle semantics:
-    the same emoji again removes your reaction, a different emoji
-    replaces it, no existing reaction creates one — one reaction per
-    person per message, enforced by ProjectNoteReaction's unique
-    constraint rather than checked here. Gated the same as sending/pinning
-    a note (not restricted to the message's own author)."""
+    """Add/replace/remove the caller's own reaction. Same emoji again removes it,
+    a different emoji replaces it."""
     from app.models import ProjectNoteReaction
     note = ProjectNote.query.get_or_404(note_id)
     actor = _get_actor()

@@ -35,11 +35,7 @@ class Config:
     NAS_USERNAME = os.environ.get('NAS_USERNAME')
     NAS_PASSWORD = os.environ.get('NAS_PASSWORD')
     NAS_PROJECT_ROOT = os.environ.get('NAS_PROJECT_ROOT', '/Projects')
-    # Chat attachments (M10 chat redesign — Phase 3, 21 Aug 2026) — a
-    # SEPARATE root from NAS_PROJECT_ROOT, per Ezekiel: images/videos sent
-    # in chat go to their own admin-only-access folder (a Synology-side ACL
-    # he sets himself, not enforced by this app), mirroring the Year/
-    # Client/Project structure so it's easy for him to bulk-clean later.
+    # Separate root from NAS_PROJECT_ROOT — chat images/videos get their own folder.
     NAS_CHATS_ROOT = os.environ.get('NAS_CHATS_ROOT', '/Chats')
     # Base URL for File Station deep links — set to QuickConnect URL for external access.
     # e.g. NAS_WEB_URL=https://quickconnect.to/YOUR_QUICKCONNECT_ID

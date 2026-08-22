@@ -20,6 +20,11 @@ window.ProjectOverlay = (function () {
 
         if (!backdrop) return null;
 
+        // Projects table sits behind the overlay in normal page flow — lock
+        // body scroll for as long as the overlay is open so wheel/scroll
+        // can't reach it (e.g. scroll-chaining past a popover's own list).
+        document.body.classList.add('project-overlay-locked');
+
         function requestClose() {
             if (onBeforeNavigate) { onBeforeNavigate(onCloseRequested); } else { onCloseRequested(); }
         }
@@ -190,6 +195,7 @@ window.ProjectOverlay = (function () {
 
         return {
             destroy: function () {
+                document.body.classList.remove('project-overlay-locked');
                 document.removeEventListener('keydown', escHandler);
             },
             restoreView: restoreView,

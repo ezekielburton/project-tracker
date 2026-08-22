@@ -8,7 +8,11 @@ window.AvatarPicker = (function () {
         var popover = pickerEl.querySelector('.avatar-picker-popover');
         if (!trigger || !popover) return null;
 
-        function closeOnScroll() {
+        function closeOnScroll(e) {
+            // Scrolling the popover's own option list also fires a scroll
+            // event (it captures up through window same as any other) —
+            // only close for scrolling OUTSIDE the popover.
+            if (popover.contains(e.target)) return;
             close();
         }
 

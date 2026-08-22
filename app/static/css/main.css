@@ -224,6 +224,12 @@ body {
     flex-direction: column;
 }
 
+/* Applied while the project overlay is open (project_overlay.js) — stops
+   wheel/scroll from reaching the projects table underneath. */
+body.project-overlay-locked {
+    overflow: hidden;
+}
+
 h1,
 h2,
 h3,

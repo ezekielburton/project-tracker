@@ -1,40 +1,7 @@
-{# app/templates/project_overlay/_overlay_chat.html
-Persistent chat drawer content (M10 chat redesign) — a WhatsApp-style
-thread that replaced the old Notes card. project_list.js's loadChatDrawer()
-fetches this once per overlay open (on first open of the drawer) and
-re-fetches wholesale after every send/delete/pin, same reload-the-whole-
-fragment tradeoff every other overlay section already makes (see
-project_notes_card.js's reload()) — simpler than hand-patching a single
-bubble in and out of the DOM. Visible to anyone who can open the overlay
-at all, same as the old Notes card was — only the composer and the per-
-message hover toolbar/dropdown are gated behind can_manage_notes, not the
-thread itself.
-
-Message-interactions adjustment (21 Aug 2026): each message now carries a
-hover-revealed react-smiley + chevron (top right of its bubble); the
-chevron opens a Copy/Reply/React/Pin/Delete dropdown, the smiley jumps
-straight to the quick-react popover. Replies render a quoted snippet
-inside the new bubble; the timestamp moved from its own row into the
-bubble's bottom-right corner (a floated span, last child of the text).
-
-Phase 3 — attachments (21 Aug 2026): a message can carry one image/video
-instead of, or alongside, text (see ProjectNote.display_text() for what
-renders when there's no caption). The composer's attach button and staged-
-attachment preview bar are wired up in project_chat_panel.js.
-
-Phase 4 — emoji + reactions (21 Aug 2026): the composer's emoji picker
-inserts a character into the text you're typing (client-only, no route).
-The quick-react popover above is a DIFFERENT thing — real reactions now,
-POSTing to toggle_reaction() and rendering as the "👍 3"-style chips below
-each bubble (see row.reaction_groups).
-
-Phase 5 — mentions (21 Aug 2026): typing "@" in the composer opens a
-picker over the project's CS lead/secondary CS/project owner/assigned
-designers (project_chat_panel.js, fetched from /overlay/chat/mentionable);
-picking someone inserts "@Name " and notifies them on send. The bubble
-below renders row.body_html (see _highlight_mentions() in
-project_notes.py), not the raw note.body directly, so a sent message's
-"@Name" gets wrapped for highlighting instead of showing as plain text. #}
+{# Persistent chat drawer content — a WhatsApp-style thread. Re-fetched wholesale
+after every send/delete/pin/live-update by project_chat_panel.js's reload().
+Visible to anyone who can open the overlay; composer and hover toolbar are
+gated behind can_manage_notes. #}
 
 {% if pinned_note %}
 <div class="overlay-chat-pinned-strip">
@@ -85,9 +52,7 @@ project_notes.py), not the raw note.body directly, so a sent message's
                     </div>
                     {% endif %}
                     {% if note.attachment_type %}
-                    {# Caption-less attachment: timestamp overlays the media itself (WhatsApp-
-                       style scrim pill) instead of getting its own text line below — see the
-                       {% if note.body %} branch underneath, which is what handles a caption. #}
+                    {# Caption-less attachment: timestamp overlays the media instead of its own line. #}
                     <div class="overlay-chat-attachment-wrap">
                         {% if note.attachment_type == 'image' %}
                         <a href="{{ url_for('project_notes.chat_attachment', note_id=note.id) }}" target="_blank">
@@ -126,12 +91,7 @@ project_notes.py), not the raw note.body directly, so a sent message's
                 {% endif %}
             </div>
             {% if row.reaction_groups %}
-            {# Reaction chips (Phase 4, 21 Aug 2026) — always rendered for
-               anyone who can see the thread (reactions are informational),
-               but only clickable (a <button>, toggling your own reaction)
-               for people who can actually chat here; a plain <span> for
-               read-only viewers, same distinction the rest of this file
-               draws around can_manage_notes. #}
+            {# Clickable chip for people who can chat here; read-only <span> otherwise. #}
             <div class="overlay-chat-reactions">
                 {% for group in row.reaction_groups %}
                 {% if can_manage_notes %}
@@ -178,14 +138,7 @@ project_notes.py), not the raw note.body directly, so a sent message's
                 <line x1="15" x2="15.01" y1="9" y2="9"/>
             </svg>
         </button>
-        {# Composer emoji picker (Phase 4, 21 Aug 2026) — separate from the
-           per-message quick-react popover above: this one inserts a
-           character into the text you're typing, doesn't touch the
-           server. Fully static/server-rendered (no per-note data needed),
-           unlike everything else in this file — picking an emoji here
-           stays open (WhatsApp lets you pick several in a row); it only
-           closes via its own trigger or an outside click, same as every
-           other popover in this drawer. #}
+        {# Composer emoji picker — inserts into the text you're typing, client-only. #}
         <div class="overlay-chat-emoji-picker hidden" id="overlay-chat-emoji-picker">
             <div class="overlay-chat-emoji-tabs">
                 <button type="button" class="overlay-chat-emoji-tab" data-target="emoji-cat-smileys" aria-label="Smileys">😀</button>
@@ -249,12 +202,7 @@ project_notes.py), not the raw note.body directly, so a sent message's
     </div>
     <div class="overlay-chat-input-wrap">
         <textarea id="overlay-chat-input" class="overlay-chat-composer-input" placeholder="Message… (@ to mention)" rows="1"></textarea>
-        {# @-mention picker (Phase 5, 21 Aug 2026) — built and populated
-           entirely client-side (project_chat_panel.js fetches the
-           project's mentionable roster once per drawer-open from
-           /overlay/chat/mentionable, then filters it live as you type
-           after an "@"). Empty/hidden until there's a match — unlike the
-           emoji picker, there's no fixed list to server-render here. #}
+        {# @-mention picker — populated client-side, filtered live as you type after "@". #}
         <div class="overlay-chat-mention-picker hidden" id="overlay-chat-mention-picker"></div>
     </div>
     <button type="button" class="overlay-chat-send-btn" id="overlay-chat-send-btn" aria-label="Send">➤</button>

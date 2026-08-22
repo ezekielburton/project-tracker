@@ -421,13 +421,7 @@
                 // already covers that case safely at Save time instead.
                 if (window.helixPolling) {
                     window.helixPolling.startOverlayStream(projectId, function () {
-                        // Chat drawer (Phase 2, 21 Aug 2026) — independent of
-                        // whichever rail section is showing underneath (the
-                        // branches below), since the drawer can be open on
-                        // top of any of them. Checked first and unconditionally:
-                        // someone else sending/deleting/pinning a chat message
-                        // should refresh the thread live regardless of what
-                        // else this NOTIFY's payload also touched.
+                        // Chat drawer — independent of whichever rail section is showing underneath.
                         if (activeChatPanel && activeOverlay && activeOverlay.isChatOpen && activeOverlay.isChatOpen()) {
                             activeChatPanel.liveRefresh();
                         }

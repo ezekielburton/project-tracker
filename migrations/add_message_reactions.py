@@ -1,22 +1,5 @@
-"""
-Migration: add project_note_reactions table (M10 chat redesign — Phase 4,
-21 Aug 2026) — the real backend behind the quick-react popover, which
-until now only opened/closed as a UI-only provision.
-
-One reaction per person per message: the unique constraint on
-(note_id, user_id) is what makes toggle_reaction() safe to just check-
-and-upsert instead of needing separate dedup logic — picking a different
-emoji overwrites the row, picking the same emoji again is treated as
-"remove."
-
-note_id cascades on delete at the DB level — deleting a message should
-silently drop its reactions with it, not orphan them. This is a backstop
-for a delete that bypasses the app; the app's own delete_note() already
-gets this for free from ProjectNote.reactions' ORM-level
-cascade='all, delete-orphan'.
-
-Run via migrate.py
-"""
+"""Migration: add project_note_reactions table — one reaction per person per
+message, enforced by the unique (note_id, user_id) constraint. Run via migrate.py."""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app, db
