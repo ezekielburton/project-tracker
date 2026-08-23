@@ -5,13 +5,22 @@ markup can't drift between brief types. Expects `row` (see
 _build_preproduction_row() in project_preproduction.py) and `can_act`
 (whether the viewer is Project Owner/admin/management) in scope. `project`
 and, for C&CM only, `c` (the current customer dict) are inherited from the
-including template's own scope — used here to build the NAS folder link. #}
-{% from '_shared_macros.html' import tag, status_pill, person_chip, avatar_picker %}
+including template's own scope — used here to build the NAS folder link.
+
+Reworked to match Site Visits' "clean and organised" card language (23 Aug
+2026, per Ezekiel, wireframed by hand) — see _overlay_notes.html for the
+reference. The row-level status pill and the row-level read-only "Designer"
+line are both gone: the status pill was redundant here (this whole tab is
+already scoped to in-Pre-Production deliverables only, see
+_in_preproduction_scope() in project_preproduction.py), and the designer
+assignment is now folded directly into each stream's own box instead of
+living in one shared line above all three — every stream (2D/3D/Technical
+alike) gets its own picker now, scoped to that stream's own team. #}
+{% from '_shared_macros.html' import person_chip, avatar_picker %}
 
 {# Mark Done/Approve/Flag for one stream — factored out (21 Aug 2026, per
-Ezekiel) so Technical can render this block AFTER its assignment picker
-("selector on top, mark done below") while 2D/3D keep it inline in the
-header, without duplicating the button markup for both positions. Takes
+Ezekiel) so every stream can render this block in the same spot, below its
+assignment picker, without duplicating the button markup per stream. Takes
 can_act explicitly rather than relying on it closing over the calling
 scope. #}
 {% macro _stream_actions(stream, can_act) %}
@@ -35,7 +44,6 @@ scope. #}
     data-deliverable-id="{{ row.deliverable.id }}">
     <div class="overlay-preprod-row-header">
         <span class="overlay-preprod-name">{{ row.deliverable.name }}</span>
-        {{ status_pill(row.status_label, row.status_class) }}
         {% if row.flag_count %}
         <button type="button" class="overlay-preprod-flag-count-btn" data-deliverable-id="{{ row.deliverable.id }}">{{
             row.flag_count }} flag{{ '' if row.flag_count == 1
@@ -56,26 +64,6 @@ scope. #}
         </button>
     </div>
 
-    {% if row.design_assignments %}
-    {# Read-only — these carried over from Design automatically, nothing to
-    do with them here. Renamed from "From Design" to "Designer" (21 Aug
-    2026, per Ezekiel) — this only ever shows the 2D/3D assignment (see
-    design_assignments in _build_preproduction_row(), which deliberately
-    excludes Technical), and whoever made the design is assumed to be the
-    one releasing the artwork too, so there's no separate per-stream
-    picker for 2D/3D any more (see the streams loop below) — this IS the
-    one and only place a 2D/3D designer shows up on this tab now. #}
-    <div class="overlay-preprod-design-context">
-        <span class="overlay-field-label">Designer</span>
-        <div class="overlay-preprod-design-chips">
-            {% for a in row.design_assignments %}
-            <span class="overlay-preprod-design-chip">{{ tag(a.team, a.team|lower) }}{{ person_chip(a.designer)
-                }}</span>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-
     {% if row.batch_note %}
     {# CS's note from Client Approval, about the batch this deliverable was
     part of — context from a prior step, collapsed since it's not
@@ -90,25 +78,27 @@ scope. #}
         {% for stream in row.streams %}
         <div class="overlay-preprod-stream{% if stream.is_flagged %} is-flagged{% endif %}"
             data-deliverable-id="{{ row.deliverable.id }}" data-stream="{{ stream.key }}">
-            {# Header + actions merged into one row (21 Aug 2026, per Ezekiel
-            — Mark Done used to sit stacked at the bottom of the card; now
-            it's inline on the right, same height as the label/status, so
-            there's no longer a separate stacked "actions" section below. #}
+            {# Label + status only. Actions render below the assignment
+            picker for every stream uniformly (see _stream_actions() call
+            further down), not inline here — that inline placement was
+            2D/3D-only before this rework. No status text at all for the
+            plain not-started case any more (23 Aug 2026, per Ezekiel — "We
+            dont need 'To be done' text, mark done already implies that")
+            — Uploaded/Approved/Flagged still show, since those aren't
+            implied by the button state the way "not started yet" is. #}
             <div class="overlay-preprod-stream-header">
                 <span class="overlay-preprod-stream-label-group">
-                    <span class="overlay-field-label">{{ 'Technical Assignment' if stream.key == 'technical' else stream.label }}</span>
+                    <span class="overlay-field-label">{{ stream.label }}</span>
+                    {% if stream.is_flagged or stream.status %}
                     <span
-                        class="overlay-preprod-stream-status overlay-preprod-stream-status--{{ 'flagged' if stream.is_flagged else (stream.status or 'none') }}">
+                        class="overlay-preprod-stream-status overlay-preprod-stream-status--{{ 'flagged' if stream.is_flagged else stream.status }}">
                         {% if stream.status == 'approved' %}Approved
                         {% elif stream.status == 'uploaded' %}Uploaded — awaiting review
                         {% elif stream.is_flagged %}Flagged — needs reupload
-                        {% else %}To be done.
                         {% endif %}
                     </span>
+                    {% endif %}
                 </span>
-                {% if stream.key != 'technical' %}
-                {{ _stream_actions(stream, can_act) }}
-                {% endif %}
             </div>
 
             {% if stream.is_flagged and stream.flag_message %}
@@ -120,29 +110,34 @@ scope. #}
             <p class="overlay-notes-text overlay-preprod-flag-message">{{ stream.flag_message }}</p>
             {% endif %}
 
-            {# 2D/3D no longer show a per-stream designer at all — that's the
-            row-level "Designer" line above now (21 Aug 2026, per Ezekiel:
-            whoever made the design releases the artwork, so a second picker
-            here was redundant). Technical is the one exception: it doesn't
-            necessarily have a Design-phase assignee, so it keeps an actual
-            picker (not just a read-only chip) to assign it here. Gated on
-            can_act — same viewer set as Approve/Flag above. #}
-            {% if stream.key == 'technical' %}
+            {# Assignment picker, folded into every stream's own box (23 Aug
+            2026, per Ezekiel — "we fold the designer pill into it... If a
+            deliverable happens to be unassigned, it can be assigned here via
+            the picker. Scoped to the relevant team that div owns"). Used to
+            be Technical-only, with 2D/3D showing a shared read-only "Designer"
+            line above all three streams instead — every stream gets its own
+            interactive picker now, scoped to that stream's own team (see
+            assign_options in _build_preproduction_row()). Gated on can_act —
+            same viewer set as Approve/Flag below. #}
             <div class="overlay-preprod-stream-assignment">
                 {% if can_act %}
-                {{ avatar_picker('technical-picker-' ~ row.deliverable.id,
+                {{ avatar_picker('stream-picker-' ~ stream.key ~ '-' ~ row.deliverable.id,
                 stream.assignment.designer if stream.assignment else None,
-                stream.technical_options, missing_label='Unassigned') }}
+                stream.assign_options, missing_label='Unassigned') }}
                 {% else %}
                 {{ person_chip(stream.assignment.designer if stream.assignment else None,
                 missing_label='Unassigned', missing_class='overlay-field-empty') }}
                 {% endif %}
             </div>
-            {# Technical's actions render here, below the picker, instead of
-            inline in the header (21 Aug 2026, per Ezekiel — "selector on
-            top, the mark done below"). #}
+
+            {# Mark Done, or Approve/Flag for Reupload once uploaded — takes
+            the picker's place in the same box once there's nothing left to
+            assign (23 Aug 2026, per Ezekiel: "When marked as done the same
+            approve and flag for reupload buttons take its place, sized
+            correctly and do the same actions as they do now"). Sits below
+            the picker uniformly for every stream now, same "selector on top,
+            mark done below" layout Technical already used. #}
             {{ _stream_actions(stream, can_act) }}
-            {% endif %}
 
             {% if can_act %}
             <div class="overlay-flag-revision-form is-hidden overlay-preprod-flag-form">

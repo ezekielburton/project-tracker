@@ -860,6 +860,27 @@ def _build_details_context(project, actor):
     # project.project_status == 'on_hold' itself rather than a second flag.
     can_toggle_hold = _can_toggle_hold(project, actor)
 
+    # Cancel Customer (23 Aug 2026, per Ezekiel — "we need a way to cancel
+    # a customer") — C&CM only. Deliberately built from project.
+    # project_customers directly, NOT the same all_customers() every other
+    # C&CM tab builds (_build_ccm_deliverable_sections etc.) — those all
+    # filter OUT cancelled customers, since that exclusion is what "freezes"
+    # a customer everywhere else on this tab. This card needs the opposite:
+    # every customer, cancelled or not, since it's the one place a
+    # cancelled customer can still be seen and reactivated. Reuses
+    # can_cancel_project as the permission gate — same people who can
+    # cancel the whole project can cancel one customer within it.
+    customer_rows = []
+    if project.brief_type == 'ccm':
+        from app.status_vocabulary import derive_customer_pipeline_status
+        for pc in sorted(project.project_customers, key=lambda x: x.customer.name):
+            label, css_class = derive_customer_pipeline_status(pc)
+            customer_rows.append({
+                'project_customer': pc,
+                'status_label': label,
+                'status_class': css_class,
+            })
+
     # Brief Flags (task #42) — Details' Flags card covers 'project' plus
     # the old page's separate 'concept'/'kv' flag types (folded in here
     # per Ezekiel, 18 Aug 2026, rather than a third toggle location —
@@ -921,6 +942,7 @@ def _build_details_context(project, actor):
         can_start_project=can_start_project,
         can_cancel_project=can_cancel_project,
         can_toggle_hold=can_toggle_hold,
+        customer_rows=customer_rows,
         project_open_flags=project_open_flags,
         can_manage_flags=can_manage_flags,
         client_options=client_options,
@@ -1774,6 +1796,92 @@ def overlay_uncancel_project(project_id):
     return jsonify({'success': True})
 
 
+@project_overlay_bp.route('/project-customers/<int:project_customer_id>/cancel', methods=['POST'])
+@login_required
+def overlay_cancel_customer(project_customer_id):
+    """Cancel one C&CM customer within a project (23 Aug 2026, per Ezekiel
+    — "we need a way to cancel a customer. Cancelling a customer freezes
+    its state for invoicing -> it can be undone"). Same shape as
+    overlay_cancel_project() above, just scoped to a ProjectCustomer
+    instead of the whole Project — reuses the exact same permission gate
+    (_can_cancel_project), since who's allowed to cancel a customer within
+    a project is the same set of people allowed to cancel the project
+    itself.
+
+    "Freezes its state" is mostly free: pc.cancelled already existed and
+    every read site that builds the Deliverables/Submissions/Pre-
+    Production customer scope-select (_build_ccm_deliverable_sections,
+    _build_submission_regions, and the Pre-Production equivalents) already
+    excludes a cancelled customer from `all_customers` — so once cancelled,
+    that customer simply stops appearing anywhere further work would
+    happen, without a single extra guard needed. What was actually missing
+    was a way to SET the flag at all; this route (and overlay_uncancel_
+    customer below) is that."""
+    from datetime import datetime as dt
+    from app import db
+    from app.models import ProjectCustomer
+    from app.utils import log_activity
+
+    pc = ProjectCustomer.query.get_or_404(project_customer_id)
+    project = Project.query.get_or_404(pc.project_id)
+    actor = _get_actor()
+
+    if not _can_cancel_project(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to cancel this customer.'}), 403
+    if pc.cancelled:
+        return jsonify({'success': False, 'error': 'This customer is already cancelled.'}), 400
+
+    reason = ((request.get_json(silent=True) or {}).get('reason') or '').strip()
+    if not reason:
+        return jsonify({'success': False, 'error': 'A reason is required to cancel a customer.'}), 400
+
+    pc.cancelled = True
+    pc.cancel_reason = reason
+    pc.cancelled_at = dt.utcnow()
+    pc.cancelled_by_id = actor.id
+    db.session.commit()
+
+    log_activity(
+        'customer_cancelled',
+        f'{actor.name} cancelled "{pc.customer.name}" on "{project.name}": {reason}',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/project-customers/<int:project_customer_id>/uncancel', methods=['POST'])
+@login_required
+def overlay_uncancel_customer(project_customer_id):
+    """Reactivate — clears the four cancel columns, same asymmetry as
+    Project's Reactivate (no reason required, only cancelling itself
+    needs one)."""
+    from app import db
+    from app.models import ProjectCustomer
+    from app.utils import log_activity
+
+    pc = ProjectCustomer.query.get_or_404(project_customer_id)
+    project = Project.query.get_or_404(pc.project_id)
+    actor = _get_actor()
+
+    if not _can_cancel_project(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to reactivate this customer.'}), 403
+    if not pc.cancelled:
+        return jsonify({'success': False, 'error': 'This customer is not cancelled.'}), 400
+
+    pc.cancelled = False
+    pc.cancel_reason = None
+    pc.cancelled_at = None
+    pc.cancelled_by_id = None
+    db.session.commit()
+
+    log_activity(
+        'customer_reactivated',
+        f'{actor.name} reactivated "{pc.customer.name}" on "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    return jsonify({'success': True})
+
+
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/nas-folder-link')
 @login_required
 def overlay_nas_folder_link(project_id):
@@ -2253,12 +2361,16 @@ def assign_deliverable_team(project_id):
       Management/Project Owner, or this team's own team lead, setting it
       to anyone on the team, reassigning, or clearing it outright.
 
-    Separate from project_preproduction.py's assign_technical() — that one
-    governs who does the LATER Pre-Production Technical stream; this one
-    governs who's actually doing the Design-phase work a deliverable's
-    2D/3D/Technical tags say it needs (which Pre-Production's own "2D/3D
-    don't need their own assignment step" reasoning already assumes
-    exists — see the comment above assign_technical())."""
+    Separate from project_preproduction.py's assign_stream() — that one
+    governs who does the LATER Pre-Production 2D/3D/Technical stream work
+    (each stream independently assignable/reassignable there too, since 23
+    Aug 2026 — see the comment above assign_stream()); this one governs
+    who's actually doing the EARLIER Design-phase work a deliverable's
+    2D/3D/Technical tags say it needs. The same DeliverableAssignment row
+    carries straight through from Design into Pre-Production for a given
+    team (see assign_stream()'s docstring), so this route is what seeds it
+    — assign_stream() just picks up from wherever this one left off, or
+    fills it in if Design left it unassigned."""
     from app import db
     from app.models import Deliverable, DeliverableAssignment, User
     from app.utils import log_activity
@@ -3419,7 +3531,7 @@ def overlay_submissions_approve(project_id):
     overlay_submissions_client_revision. "Fully approved" no longer gets
     its own pill label anywhere (22 Aug 2026 simplification, per Ezekiel —
     the project pill reads Pre-Production at this point; a channel's own
-    per-customer row reads the same, fixed 23 Aug 2026 after it was
+    per-customer row reads the same, fixed 22 Aug 2026 after it was
     initially missed), but the moment itself is still real and still
     timestamped, non-destructively, via ProjectStatusLog.
     """

@@ -1416,6 +1416,28 @@ button.overlay-chat-reaction-chip:hover {
     flex: 1 1 100%;
 }
 
+/* Flags panel + Cancel Customer toggle share one row (23 Aug 2026, per
+   Ezekiel — "a cancel customer button next to flag history - blue"). The
+   flags panel (a whole _flag_project_panel.html include, not just its
+   button) takes the row's flex space; the toggle button sits fixed-width
+   at the end, top-aligned with the Flag History button rather than
+   centered against the panel's full (possibly taller, once a flag is
+   open) height. */
+.overlay-ccm-top-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+.overlay-ccm-top-row-flags {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.overlay-cancel-customer-toggle-btn {
+    flex-shrink: 0;
+}
+
 .overlay-card-third {
     min-width: 0;
 }
@@ -1473,6 +1495,56 @@ button.overlay-chat-reaction-chip:hover {
 
 .overlay-designer-table-row {
     padding: var(--space-2) 0;
+}
+
+/* Customers card (23 Aug 2026, per Ezekiel — "we need a way to cancel a
+   customer") — reuses .overlay-designer-table's grid/header look as-is,
+   just wrapped in .overlay-customer-item so each row can carry its own
+   optional cancel-reason line + inline cancel form underneath its grid
+   row (see _details_ccm.html) without breaking the 3-column grid itself. */
+.overlay-customer-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.overlay-customer-item + .overlay-customer-item {
+    border-top: 1px solid var(--border-subtle);
+}
+
+.overlay-customer-name {
+    font-weight: 600;
+}
+
+.overlay-customer-region {
+    margin-left: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--grey-mid);
+}
+
+.overlay-customer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+/* Dimmed, not hidden — a cancelled customer stays visible here (this card
+   is the one place it still shows up at all, see the customer_rows
+   comment in _build_details_context) but reads as inactive at a glance. */
+.overlay-customer-item.is-cancelled .overlay-customer-name {
+    color: var(--grey-mid);
+}
+
+.overlay-customer-cancel-note {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-dark);
+    margin: 0 0 var(--space-2);
+}
+
+.overlay-customer-cancel-form {
+    margin-bottom: var(--space-2);
 }
 
 .overlay-notes {
@@ -3095,11 +3167,18 @@ button.overlay-chat-reaction-chip:hover {
     font-weight: 700;
 }
 
+/* Divider lives here now, not per-stream (23 Aug 2026, per Ezekiel — "The
+   divider should be between the Name of the deliverable + files and the
+   rest of the elements") — one line under the deliverable's own name/Files
+   row, separating it from the streams below, instead of one repeated
+   inside every stream box. */
 .overlay-preprod-row-header {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 /* ------- Brief Flags (task #42) -------
@@ -3406,78 +3485,51 @@ margin here, so an empty panel (just the History button) stays tiny. */
     border-color: var(--salmon);
 }
 
-.overlay-preprod-design-context,
 .overlay-preprod-batch-note {
     margin-bottom: var(--space-3);
 }
 
-.overlay-preprod-design-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: var(--space-3);
-}
-
-.overlay-preprod-design-chip {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    border: 1px solid var(--border-subtle);
-    background: var(--white);
-    overflow: hidden;
-}
-
-.overlay-preprod-design-chip .tag {
-    border-radius: 0;
-    align-self: stretch;
-    display: inline-flex;
-    align-items: center;
-    padding: 4px var(--space-2);
-}
-
-.overlay-preprod-design-chip .person-chip {
-    border: none;
-    background: transparent;
-    padding: 3px var(--space-3) 3px var(--space-2);
-}
-
-/* Two stream blocks side by side — matches the earlier "picker left, note
-   right" split from Client Approval, same reasoning: a deliverable with
-   both streams active needs to compare them at a glance. */
+/* Three stream blocks side by side — one per team (2D/3D/Technical), same
+   reasoning as the earlier "picker left, note right" split from Client
+   Approval: a deliverable with multiple streams active needs to compare
+   them at a glance. */
 .overlay-preprod-streams {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-3);
 }
 
-/* Background reworked 21 Aug 2026, per Ezekiel — the earlier --sandstone
-   fill read as "ugly" (too beige/dated). --surface-hover is a subtler step
-   down from the already-white .overlay-preprod-row this is nested inside —
-   still reads as a distinct nested block, just not a sandy one — paired
-   with a real --border (not --border-subtle) so it's clearly delineated
-   against a background this close to it. */
+/* Restyled to match Site Visits' "clean and organised" card language (23
+   Aug 2026, per Ezekiel, wireframed by hand — see .overlay-note-item /
+   .overlay-note-item--visit in the Site Visits block of this file for the
+   reference), then re-sized the same day once Ezekiel saw it live — a lone
+   stream (flex-grow:1) was stretching to fill the ENTIRE row on a
+   single-team deliverable ("One deliverable should be one div, the work
+   done cards within should be smaller like they used to be... Dont fill
+   the entire div if there is just one team"). flex-grow back to 0 (a
+   fixed-ish 220px box that can still shrink on a narrow screen, not one
+   that expands to fill spare row width) — with 2 or 3 streams, flex-wrap on
+   the parent (.overlay-preprod-streams) still lays them out side by side,
+   it's just that a single one no longer balloons to the full row. Padding
+   trimmed back to one value (var(--space-3), not --space-4 on the sides)
+   for the same "smaller, like they used to be" reason — this is a compact
+   sub-section of the row card, not a second full card floating inside it. */
 .overlay-preprod-stream {
     flex: 0 1 220px;
     padding: var(--space-3);
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
+    box-shadow: var(--shadow);
 }
 
-/* Header now carries BOTH the label/status and the action button(s) in one
-   row (21 Aug 2026, per Ezekiel — Mark Done used to sit stacked at the
-   bottom of the card; now it's to the right, same height as the label).
-   flex-wrap fixes a real bug Ezekiel found: with Approve + Flag for
-   Reupload both showing (the "uploaded" state) there isn't room for them
-   next to the label group in a 220px card, and without wrap they were
-   rendering on TOP of the label/status text instead of pushing it aside.
-   Now the actions cluster drops to its own full-width line instead. */
+/* Label + status only — no divider here any more (23 Aug 2026, per Ezekiel:
+   the divider moved up to sit under the deliverable's own name/Files row —
+   see .overlay-preprod-row-header — instead of repeating inside every
+   stream box). Just enough margin to separate the label from the picker
+   below it. */
 .overlay-preprod-stream-header {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-2);
     margin-bottom: var(--space-2);
 }
 
@@ -3489,14 +3541,15 @@ margin here, so an empty panel (just the History button) stays tiny. */
     flex: 1 1 auto;
 }
 
+/* No --none variant any more (23 Aug 2026, per Ezekiel — "We dont need
+   'To be done' text, mark done already implies that") — the not-started
+   state now renders no status line at all (see _preproduction_row.html),
+   so this only ever needs to style the three states that ARE worth calling
+   out: uploaded/approved/flagged. */
 .overlay-preprod-stream-status {
     font-family: var(--font-body);
     font-size: var(--text-xs);
     font-weight: 600;
-}
-
-.overlay-preprod-stream-status--none {
-    color: var(--grey-mid);
 }
 
 .overlay-preprod-stream-status--uploaded {
@@ -3511,14 +3564,17 @@ margin here, so an empty panel (just the History button) stays tiny. */
     color: var(--salmon);
 }
 
-/* No more margin-top — this now sits inline in .overlay-preprod-stream-header
-   (right side) instead of stacked below it. flex-wrap + justify-content:
-   flex-end so Approve + Flag for Reupload (two buttons) wrap onto a second
-   line, still right-aligned, rather than overflowing the 220px card. */
+/* Renders below the assignment picker now, for every stream uniformly (23
+   Aug 2026, per Ezekiel — "the same approve and flag for reupload buttons
+   take its place, sized correctly"). Left-aligned (flex-start, not the old
+   flex-end) since it's no longer sharing a row with the label/status over
+   on the right — it's its own full-width line under the picker, same
+   left edge. flex-wrap still lets Approve + Flag for Reupload (two
+   buttons) wrap onto a second line rather than overflowing the card. */
 .overlay-preprod-stream-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: var(--space-2);
     flex-shrink: 0;
 }
@@ -3527,18 +3583,18 @@ margin here, so an empty panel (just the History button) stays tiny. */
     display: none;
 }
 
-/* Technical Assignment picker slot (21 Aug 2026, per Ezekiel) — sits below
-   the header row, same spot the old read-only person_chip used to occupy
-   for every stream before 2D/3D's was removed in favor of the row-level
-   Designer line. */
+/* Assignment picker slot (21 Aug 2026, per Ezekiel; folded into every
+   stream's own box 23 Aug 2026) — sits below the header row, same spot the
+   old read-only person_chip used to occupy before 2D/3D's was replaced by
+   this same interactive picker Technical already had. */
 .overlay-preprod-stream-assignment {
     margin-top: var(--space-1);
 }
 
-/* Technical's Mark Done/Approve/Flag render after the assignment picker now
-   ("selector on top, mark done below" — 21 Aug 2026, per Ezekiel), instead
-   of inline in the header the way 2D/3D still do — needs its own top
-   margin here since it's no longer sharing the header row's gap. */
+/* Mark Done/Approve/Flag render after the assignment picker for every
+   stream now ("selector on top, mark done below" — 21 Aug 2026, per
+   Ezekiel, extended to 2D/3D 23 Aug 2026) — needs its own top margin here
+   since it's no longer sharing a row's gap with anything. */
 .overlay-preprod-stream-assignment + .overlay-preprod-stream-actions {
     margin-top: var(--space-2);
 }

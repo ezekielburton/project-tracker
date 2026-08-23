@@ -46,20 +46,22 @@ window.ProjectPreproductionCard = (function () {
             btn.addEventListener('click', function () { openNasLink(btn); });
         });
 
-        // ── Technical Assignment picker (21 Aug 2026, per Ezekiel) — only
-        // the Technical stream gets an interactive picker (2D/3D show the
-        // row-level Designer chip instead, see _preproduction_row.html).
-        // Same AvatarPicker.init(el, onSelect) recipe as the Design Leads
+        // ── Stream Assignment picker (21 Aug 2026, per Ezekiel; folded into
+        // every stream's own box 23 Aug 2026) — every stream (2D/3D/
+        // Technical alike) now gets an interactive picker, scoped to that
+        // stream's own team (see _preproduction_row.html). Same
+        // AvatarPicker.init(el, onSelect) recipe as the Design Leads
         // per-team picker in project_details_card.js — the containing
-        // .overlay-preprod-stream carries data-deliverable-id already
-        // (rendered for every stream, not just Technical's), so no need to
-        // encode it into the picker's own id. ──
+        // .overlay-preprod-stream carries both data-deliverable-id and
+        // data-stream already, so both come straight off the same element
+        // the picker lives in. ──
         var pickerHandles = [];
-        rootEl.querySelectorAll('.overlay-preprod-stream[data-stream="technical"] .avatar-picker').forEach(function (pickerEl) {
+        rootEl.querySelectorAll('.overlay-preprod-stream .avatar-picker').forEach(function (pickerEl) {
             var streamEl = pickerEl.closest('.overlay-preprod-stream');
             if (!streamEl) return;
             pickerHandles.push(window.AvatarPicker.init(pickerEl, function (userId) {
-                postJson(`/deliverables/${streamEl.dataset.deliverableId}/preproduction/assign-technical`, {
+                postJson(`/deliverables/${streamEl.dataset.deliverableId}/preproduction/assign`, {
+                    stream: streamEl.dataset.stream,
                     designer_id: userId,
                 }).then(function (data) {
                     if (!data.success) { alert(data.error || 'Could not update this assignment.'); return; }

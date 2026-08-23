@@ -826,7 +826,7 @@
             // read from whichever chip rows currently carry .is-selected —
             // replaces the old checkbox :checked reads now that these are
             // buttons, not inputs.
-            const chipGroups = ['cs_lead', 'designers', 'client', 'brief_type', 'status', 'urgency', 'team'];
+            const chipGroups = ['cs_lead', 'designers', 'client', 'brief_type', 'status', 'urgency', 'team', 'design_type'];
             chipGroups.forEach((name) => {
                 const selected = Array.from(
                     filterPanel.querySelectorAll(`.filter-chip-row[data-filter-group="${name}"].is-selected`)

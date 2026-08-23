@@ -365,6 +365,68 @@ def notify_cs_of_revision_submitted(project, triggered_by):
                             pref_key='revision_submitted')
 
 
+def notify_project_owner_of_stream_uploaded(deliverable, project, stream_label, triggered_by):
+    """
+    Notify the Project Owner when a Pre-Production stream (2D/3D/Technical) is
+    marked done and ready for their review/Approve-or-Flag decision. Fired
+    from mark_stream_done() in project_preproduction.py — the only route that
+    puts a stream in front of the Project Owner this way (23 Aug 2026, per
+    Ezekiel: "does pressing mark done notify the project owner?" — it didn't,
+    this is what closes that gap).
+
+    No secondary-CS/region fan-out here (unlike notify_secondary_cs_of_
+    deliverable_status) — Approve/Flag for Reupload is scoped to
+    _can_manage_preproduction() (admin/management/Project Owner/CS Lead), but
+    the Project Owner specifically is who this stream is now waiting on, so
+    they're the one who needs the nudge. Self-triggered case (a Project Owner
+    who is also the one marking their own upload done) is excluded, same
+    "don't notify people about their own actions" rule every other notify_*
+    function here follows.
+    """
+    owner = User.query.get(project.project_owner_id) if project.project_owner_id else None
+    if not owner or owner.id == triggered_by.id:
+        return
+
+    message = f'{triggered_by.name} marked {stream_label} ready for review on "{deliverable.name}" in "{project.name}".'
+    create_notification(
+        recipient=owner,
+        message=message,
+        notification_type='preprod_stream_uploaded',
+        project=project,
+        triggered_by=triggered_by,
+        pref_key='preprod_stream_uploaded',
+    )
+
+
+def notify_designer_of_stream_approved(deliverable, project, stream_label, designer, triggered_by):
+    """
+    Notify the assigned designer when the Project Owner approves their
+    Pre-Production stream (2D/3D/Technical) — fired from approve_stream() in
+    project_preproduction.py (23 Aug 2026, per Ezekiel: "on approval the
+    designer should be notified, as they need to share the files by email
+    until we add production access to file storage and the app later in the
+    year"). The message says as much, since there's no in-app hand-off yet —
+    this is a manual step for the designer until that access lands.
+
+    designer can be None (a stream can technically be approved with no
+    DeliverableAssignment row — nothing forces one to exist first) — no-op
+    in that case, same as the self-triggered guard below, since there's no
+    one to notify either way."""
+    if not designer or designer.id == triggered_by.id:
+        return
+
+    message = (f'{stream_label} on "{deliverable.name}" in "{project.name}" has been approved — '
+               f'please share the files with Production by email.')
+    create_notification(
+        recipient=designer,
+        message=message,
+        notification_type='preprod_stream_approved',
+        project=project,
+        triggered_by=triggered_by,
+        pref_key='preprod_stream_approved',
+    )
+
+
 def notify_cs_lead_of_assignment(project, designer, team_name, triggered_by):
     """
     Notify the CS lead of a project when a designer has been assigned to a team.

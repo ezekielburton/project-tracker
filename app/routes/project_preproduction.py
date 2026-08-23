@@ -222,11 +222,9 @@ def _cascade_client_approval(project, channel, actor, now):
 
 def _build_preproduction_row(d, actor, can_act):
     """Per-deliverable data the Pre-Production tab needs: per-stream
-    assignment/status/candidate-picker options, the 2D/3D assignments
-    carried over from Design (read-only here — nothing to do, they just
-    already exist), the CS batch note from Client Approval, and the
-    flag-history count. Shared by Standard + C&CM so the two branches in
-    overlay_preproduction() can't drift on this.
+    assignment/status/candidate-picker options, the CS batch note from
+    Client Approval, and the flag-history count. Shared by Standard + C&CM
+    so the two branches in overlay_preproduction() can't drift on this.
 
     is_flagged (per stream and rolled up per row) is True when a stream's
     status is currently None AND it has at least one logged flag event —
@@ -238,10 +236,10 @@ def _build_preproduction_row(d, actor, can_act):
     the flag is why it's None.
 
     can_act (21 Aug 2026, per Ezekiel) — new param, same value the caller
-    already computed via _can_manage_preproduction(). Only used to decide
-    whether the Technical stream gets an interactive picker vs. a read-only
-    chip (see technical_options below) — every other field here is
-    unaffected by who's viewing."""
+    already computed via _can_manage_preproduction(). Decides whether each
+    stream gets an interactive assignment picker vs. a read-only chip (see
+    assign_options below, 23 Aug 2026 — every stream gets one now, not just
+    Technical) — every other field here is unaffected by who's viewing."""
     from app.status_vocabulary import derive_deliverable_status
     from app.models import ProjectSubmissionEvent, ProjectSubmissionEventDeliverable, DeliverablePreproductionEvent, User
 
@@ -282,25 +280,25 @@ def _build_preproduction_row(d, actor, can_act):
             # progress (21 Aug 2026, per Ezekiel).
             'flag_message': latest_flag_message.get(stream_key) if is_flagged else None,
         }
-        # Technical Assignment picker (21 Aug 2026, per Ezekiel) — 2D/3D
-        # deliberately do NOT get this; that designer already shows once,
-        # read-only, in design_assignments below ("whoever made the design
-        # releases the artwork"). Technical has no such guarantee of a
-        # Design-phase assignee, so it's the one stream assignable here.
-        # Options mirror _details_design_leads.html's own per-team picker
-        # (User.team == the stream's team, designer/team_lead only) — same
-        # precedent, just scoped to one deliverable instead of one project.
-        # Only queried when can_act, and only for the technical stream —
-        # no point building an options list nobody can use, or for streams
-        # that never render a picker regardless.
-        if stream_key == 'technical' and can_act:
-            stream_row['technical_options'] = User.query.filter(
+        # Assignment picker (folded into every stream's own box — 23 Aug
+        # 2026, per Ezekiel: "we fold the designer pill into it... If a
+        # deliverable happens to be unassigned, it can be assigned here via
+        # the picker. Scoped to the relevant team that div owns." Used to be
+        # Technical-only, with 2D/3D showing a row-level read-only "Designer"
+        # chip instead (whoever Design assigned was assumed to release the
+        # artwork too) — now every stream gets the same interactive picker,
+        # scoped to its own team, folded directly into its box. Options
+        # mirror _details_design_leads.html's own per-team picker (User.team
+        # == the stream's team, designer/team_lead only) — same precedent,
+        # just scoped to one deliverable instead of one project. Only
+        # queried when can_act — no point building an options list nobody
+        # can use.
+        if can_act:
+            stream_row['assign_options'] = User.query.filter(
                 User.team == cfg['team'],
                 User.role.in_(['designer', 'team_lead'])
             ).order_by(User.name).all()
         streams.append(stream_row)
-
-    design_assignments = [a for a in d.disciplines if a.team in ('2D', '3D')]
 
     # Most recent CS note left when this deliverable was approved into
     # Pre-Production (Client Approval's client_approval event) — collapsed
@@ -323,7 +321,6 @@ def _build_preproduction_row(d, actor, can_act):
     return {
         'deliverable': d,
         'streams': streams,
-        'design_assignments': design_assignments,
         'batch_note': batch_note_row.message if batch_note_row else None,
         'flag_count': flag_count,
         'is_flagged': is_flagged,
@@ -517,9 +514,16 @@ def mark_stream_done(deliverable_id):
     scoped to the stream's own team either — fully open by design.
     deliverable.status is untouched (stays 'approved' from Client
     Approval/Skip) — only the stream-specific column advances, so each
-    stream can be done while the others are still in progress."""
+    stream can be done while the others are still in progress.
+
+    Notifies the Project Owner (23 Aug 2026, per Ezekiel) — this is the
+    ONLY event that puts a stream in front of them for Approve/Flag for
+    Reupload, so it's the one Pre-Production action that fires a
+    notification at all; assign/approve/flag stay silent (see
+    notify_project_owner_of_stream_uploaded's docstring)."""
     from app import db
     from app.utils import log_activity
+    from app.notifications import notify_project_owner_of_stream_uploaded
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
@@ -541,6 +545,8 @@ def mark_stream_done(deliverable_id):
                  f'{actor.name} marked {_STREAM_FIELDS[stream]["label"]} uploaded for "{deliverable.name}" on "{project.name}"',
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
+    notify_project_owner_of_stream_uploaded(deliverable, project, _STREAM_FIELDS[stream]['label'], actor)
+
     return jsonify({'success': True})
 
 
@@ -552,9 +558,17 @@ def approve_stream(deliverable_id):
     _post_approval_deliverable_status() reads to show Handed to
     Production. Checks the channel/project cascade afterward — this is
     the ONLY place that cascade fires from; there is no separate manual
-    "Handed to Production" action anywhere."""
+    "Handed to Production" action anywhere.
+
+    Notifies the assigned designer (23 Aug 2026, per Ezekiel) — until
+    Production has its own access to file storage/the app later in the
+    year, sharing the approved files with them is a manual, designer-side
+    email step, so the designer needs to know the moment it's approved
+    (see notify_designer_of_stream_approved's docstring)."""
     from app import db
+    from app.models import DeliverableAssignment
     from app.utils import log_activity
+    from app.notifications import notify_designer_of_stream_approved
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
@@ -578,6 +592,14 @@ def approve_stream(deliverable_id):
     log_activity('preprod_stream_approved',
                  f'{actor.name} approved {_STREAM_FIELDS[stream]["label"]} for "{deliverable.name}" on "{project.name}"',
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    assignment = DeliverableAssignment.query.filter_by(
+        deliverable_id=deliverable.id, team=_STREAM_FIELDS[stream]['team']
+    ).first()
+    notify_designer_of_stream_approved(
+        deliverable, project, _STREAM_FIELDS[stream]['label'],
+        assignment.designer if assignment else None, actor
+    )
 
     return jsonify({'success': True})
 
@@ -638,21 +660,21 @@ def flag_stream(deliverable_id):
     return jsonify({'success': True})
 
 
-# ── Technical Assignment (21 Aug 2026, per Ezekiel) ─────────────────────
-# Technical is the one stream that gets an interactive picker here (see
-# _build_preproduction_row's technical_options / _preproduction_row.html) —
-# 2D/3D don't need one, since whoever Design already assigned is assumed to
-# release the artwork too (that's the row-level "Designer" line, read-only).
-# Technical has no such guaranteed Design-phase assignee, so this is the
-# first place a DeliverableAssignment(team='Technical') row can actually be
-# created or changed through the UI, rather than only via project transfer
-# (projects_transfer.py) or never at all.
-
-@project_preproduction_bp.route('/deliverables/<int:deliverable_id>/preproduction/assign-technical', methods=['POST'])
+# ── Stream Assignment (21 Aug 2026, per Ezekiel; generalized to all three
+# streams 23 Aug 2026) ───────────────────────────────────────────────────
+# Used to be Technical-only, with 2D/3D showing a row-level read-only
+# "Designer" chip instead (whoever Design already assigned was assumed to
+# release the artwork too). Now every stream gets the same interactive
+# picker, folded into its own box and scoped to its own team (see
+# _build_preproduction_row's assign_options / _preproduction_row.html) —
+# same shape as mark_stream_done/approve_stream/flag_stream above, which
+# already take `stream` in the POST body rather than being one route per
+# stream.
+@project_preproduction_bp.route('/deliverables/<int:deliverable_id>/preproduction/assign', methods=['POST'])
 @login_required
-def assign_technical(deliverable_id):
-    """Sets (or clears) who's doing the Technical stream on one deliverable.
-    Same permission gate as Approve/Flag (_can_manage_preproduction) — the
+def assign_stream(deliverable_id):
+    """Sets (or clears) who's doing one stream on one deliverable. Same
+    permission gate as Approve/Flag (_can_manage_preproduction) — the
     picker itself is only ever rendered for someone who passes that check
     (see _build_preproduction_row/_preproduction_row.html), but the route
     re-checks server-side rather than trusting the client got here honestly.
@@ -672,11 +694,17 @@ def assign_technical(deliverable_id):
         return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
 
     data = request.get_json() or {}
+    stream = data.get('stream')
+    cfg = _STREAM_FIELDS.get(stream)
+    if not cfg:
+        return jsonify({'success': False, 'error': 'Unknown stream.'}), 400
+    team = cfg['team']
+
     raw_designer_id = data.get('designer_id')
     designer_id = int(raw_designer_id) if raw_designer_id else None
 
     assignment = DeliverableAssignment.query.filter_by(
-        deliverable_id=deliverable.id, team='Technical'
+        deliverable_id=deliverable.id, team=team
     ).first()
 
     if designer_id is None:
@@ -687,13 +715,13 @@ def assign_technical(deliverable_id):
         assignment.assigned_by_id = actor.id
     else:
         db.session.add(DeliverableAssignment(
-            deliverable_id=deliverable.id, team='Technical',
+            deliverable_id=deliverable.id, team=team,
             designer_id=designer_id, assigned_by_id=actor.id,
         ))
     db.session.commit()
 
-    log_activity('preprod_technical_assigned',
-                 f'{actor.name} updated the Technical assignment for "{deliverable.name}" on "{project.name}"',
+    log_activity('preprod_stream_assigned',
+                 f'{actor.name} updated the {cfg["label"]} assignment for "{deliverable.name}" on "{project.name}"',
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})

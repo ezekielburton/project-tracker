@@ -1022,16 +1022,24 @@ body.is-resizing-column * {
     position: absolute;
     top: calc(100% + var(--space-2));
     left: 0;
-    width: min(90vw, 780px);
+    /* Widened from 780px (22 Aug 2026, per Ezekiel — "the options are
+    actually [not] readable") alongside the .filter-columns/.filter-chip-text
+    changes below: 780px across 7 (now 8) columns left labels like "Handed
+    to Production" or a full client name truncated to "Han..."/"Ac...".
+    1180px is sized so 8 columns at their new 130px floor (see
+    .filter-columns) fit without horizontal scroll on a normal desktop
+    viewport; overflow-x below is the fallback for anything narrower. */
+    width: min(95vw, 1180px);
     max-height: 70vh;
     overflow-y: auto;
+    overflow-x: auto;
     background: var(--white);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
     padding: var(--space-4);
     z-index: 20;
-}   
+}
 
 .project-filter-toggle.is-active,
 .project-filter-toggle.is-open,
@@ -1225,7 +1233,15 @@ body.is-resizing-column * {
 
 .filter-columns {
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    /* 8 columns now (Design Type added 22 Aug 2026, per Ezekiel), each with
+    a real minimum instead of minmax(0, ...) — the old bare-0 minimum let
+    the grid squeeze every column down arbitrarily far on top of an
+    already-narrow 780px panel, which is what made every label truncate.
+    130px is enough for "Handed to Production" to sit on two lines (see
+    .filter-chip-text's wrap change below) without looking cramped; if the
+    panel is ever narrower than 8*130px it scrolls horizontally
+    (.project-filter-panel's overflow-x) rather than re-shrinking below this. */
+    grid-template-columns: repeat(8, minmax(130px, 1fr));
     gap: 0;
     margin-top: var(--space-3);
 }
@@ -1267,7 +1283,7 @@ body.is-resizing-column * {
 
 .filter-chip-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-2);
     width: 100%;
@@ -1291,9 +1307,17 @@ body.is-resizing-column * {
 }
 
 .filter-chip-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* Was overflow:hidden + ellipsis + nowrap — on a narrow column that
+    cut "Handed to Production"/a full client name/designer name down to a
+    few unreadable characters ("Han...", "Ac...") no matter how the count
+    badge next to it was sized (22 Aug 2026 fix, per Ezekiel). Wrapping
+    instead means every label is always fully readable; align-items:
+    flex-start above (was center) keeps a wrapped 2-line label's count
+    badge pinned to its top line rather than vertically re-centering
+    against the taller row. */
+    overflow-wrap: break-word;
+    white-space: normal;
+    line-height: 1.25;
 }
 
 .filter-chip-count {
@@ -1301,6 +1325,7 @@ body.is-resizing-column * {
     font-size: var(--text-xs);
     color: var(--grey-mid);
     flex-shrink: 0;
+    padding-top: 1px;
 }
 
 .filter-chip-row.is-selected .filter-chip-count {

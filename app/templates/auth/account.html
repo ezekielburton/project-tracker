@@ -92,6 +92,12 @@
                     {{ pref_row('Assigned to Concept / KV', 'concept_kv_assigned') }}
                     {{ pref_row('Project was started', 'project_started') }}
                     {{ pref_row('Deliverable flagged for revision', 'revision_flag') }}
+                    {# 23 Aug 2026, per Ezekiel — notify_designer_of_stream_approved in
+                    notifications.py, fired from approve_stream() in
+                    project_preproduction.py: until Production has its own access to
+                    file storage/the app, the designer has to manually email the files
+                    over once approved, so they need to know the moment that happens. #}
+                    {{ pref_row('Pre-Production stream approved (share files)', 'preprod_stream_approved') }}
                 {% endif %}
 
                 {# CS / Management / Admin #}
@@ -100,6 +106,15 @@
                     {{ pref_row('Designer resubmitted for review', 'revision_submitted') }}
                     {{ pref_row('Project was started', 'project_started') }}
                     {{ pref_row('Deliverable status changed', 'deliverable_status') }}
+                {% endif %}
+
+                {# Project Owner (23 Aug 2026, per Ezekiel — notify_project_owner_of_
+                stream_uploaded in notifications.py, fired from mark_stream_done in
+                project_preproduction.py). project_owner is its own role, separate
+                from cs/admin/management, so it needs its own gate even though a
+                project's actual Project Owner is very often also one of those. #}
+                {% if current_user.role in ['project_owner', 'cs', 'admin', 'management'] %}
+                    {{ pref_row('Pre-Production stream ready for review', 'preprod_stream_uploaded') }}
                 {% endif %}
 
                 {# All roles #}

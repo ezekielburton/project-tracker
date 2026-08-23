@@ -176,6 +176,35 @@ base.html's <head> instead of here — see the comment there for why. #}
                             </div>
                         </div>
 
+                        {# Design Type — backend (filter_options.design_types /
+                        filter_counts.design_type / _apply_row_filters's
+                        design_type branch) has existed since the original
+                        build of this panel; this column itself was missing
+                        from the template the whole time, so the filter was
+                        silently uneffective no matter what a caller sent as
+                        ?design_type=... (added 22 Aug 2026, per Ezekiel — "add
+                        any filters that are missing"). Same Undefined-chip
+                        pattern as Team above. #}
+                        <div class="filter-column">
+                            <div class="filter-column-label">Design Type</div>
+                            <div class="filter-column-list">
+                                {% for value, label in filter_options.design_types %}
+                                <button type="button"
+                                    class="filter-chip-row{% if value in active_filters.design_type %} is-selected{% endif %}"
+                                    data-filter-group="design_type" data-filter-value="{{ value }}">
+                                    <span class="filter-chip-text">{{ label }}</span>
+                                    <span class="filter-chip-count">{{ filter_counts.design_type.get(value, 0) }}</span>
+                                </button>
+                                {% endfor %}
+                                <button type="button"
+                                    class="filter-chip-row{% if active_filters.design_type_undefined %} is-selected{% endif %}"
+                                    data-filter-group="design_type" data-filter-value="undefined">
+                                    <span class="filter-chip-text">Undefined</span>
+                                    <span class="filter-chip-count">{{ filter_counts.design_type.get(None, 0) }}</span>
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
 
                     <div class="filter-date-row">

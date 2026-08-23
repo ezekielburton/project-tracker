@@ -148,6 +148,107 @@ window.ProjectDetailsCard = (function () {
         // elements are in the fresh HTML.
         if (window.ProjectFlags) window.ProjectFlags.init(rootEl, projectId, onChanged);
 
+        // ── Cancel Customer panel toggle (23 Aug 2026, per Ezekiel — "a
+        // cancel customer button next to flag history - blue. becomes
+        // cancel when pressed to go back") — swaps the whole Properties/
+        // Design Leads/Reference Files body for the Customers card in
+        // place, same "Edit -> Save/Cancel" label-swap vocabulary the
+        // overlay header's own Edit button already uses (see
+        // project_overlay_edit.js), just a single toggle button here
+        // instead of a three-button set since there's no draft state to
+        // save — flipping is-hidden on both views is instant either way.
+        var cancelCustomerToggleBtn = rootEl.querySelector('#overlay-cancel-customer-toggle-btn');
+        var detailsMainView = rootEl.querySelector('#overlay-details-main-view');
+        var detailsCancelView = rootEl.querySelector('#overlay-details-cancel-view');
+        if (cancelCustomerToggleBtn && detailsMainView && detailsCancelView) {
+            cancelCustomerToggleBtn.addEventListener('click', function () {
+                var showingCancelView = detailsCancelView.classList.contains('is-hidden');
+                detailsMainView.classList.toggle('is-hidden', showingCancelView);
+                detailsCancelView.classList.toggle('is-hidden', !showingCancelView);
+                cancelCustomerToggleBtn.textContent = showingCancelView
+                    ? cancelCustomerToggleBtn.dataset.labelActive
+                    : cancelCustomerToggleBtn.dataset.labelDefault;
+            });
+        }
+
+        // ── Cancel/Reactivate Customer (23 Aug 2026, per Ezekiel) — C&CM
+        // only, one .overlay-customer-item per row in the Customers card
+        // (_details_ccm.html). Same reveal-form/confirm/cancel shape as
+        // Cancel Project in project_list.js's wireProjectLifecycleActions,
+        // just scoped per-row here instead of once for the whole sidebar —
+        // each row carries its own project-customer-id via the closest
+        // .overlay-customer-item, and each row's own cancel form/error box
+        // rather than one shared pair. Lives here (not project_list.js)
+        // since the Customers card is part of the Details sub-tab's own
+        // content, which reruns init() on every load same as everything
+        // else in this file.
+        rootEl.querySelectorAll('.overlay-customer-cancel-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var item = btn.closest('.overlay-customer-item');
+                var form = item ? item.querySelector('.overlay-customer-cancel-form') : null;
+                if (!form) return;
+                btn.classList.add('is-hidden');
+                form.classList.remove('is-hidden');
+            });
+        });
+        rootEl.querySelectorAll('.overlay-customer-cancel-cancel').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var item = btn.closest('.overlay-customer-item');
+                if (!item) return;
+                var form = item.querySelector('.overlay-customer-cancel-form');
+                var cancelBtn = item.querySelector('.overlay-customer-cancel-btn');
+                var errorEl = item.querySelector('.overlay-customer-cancel-error');
+                if (form) form.classList.add('is-hidden');
+                if (cancelBtn) cancelBtn.classList.remove('is-hidden');
+                if (errorEl) errorEl.classList.add('hidden');
+            });
+        });
+        rootEl.querySelectorAll('.overlay-customer-cancel-confirm').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var item = btn.closest('.overlay-customer-item');
+                if (!item) return;
+                var pcId = item.dataset.projectCustomerId;
+                var reasonInput = item.querySelector('.overlay-customer-cancel-reason-input');
+                var errorEl = item.querySelector('.overlay-customer-cancel-error');
+                var reason = reasonInput ? reasonInput.value.trim() : '';
+                if (!reason) {
+                    if (errorEl) { errorEl.textContent = 'A reason is required.'; errorEl.classList.remove('hidden'); }
+                    return;
+                }
+                btn.disabled = true;
+                if (errorEl) errorEl.classList.add('hidden');
+                fetch(`/project-customers/${pcId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason }),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        btn.disabled = false;
+                        if (!data.success) {
+                            if (errorEl) { errorEl.textContent = data.error || 'Could not cancel this customer.'; errorEl.classList.remove('hidden'); }
+                            return;
+                        }
+                        onChanged();
+                    });
+            });
+        });
+        rootEl.querySelectorAll('.overlay-customer-uncancel-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var item = btn.closest('.overlay-customer-item');
+                if (!item) return;
+                var pcId = item.dataset.projectCustomerId;
+                btn.disabled = true;
+                fetch(`/project-customers/${pcId}/uncancel`, { method: 'POST' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        btn.disabled = false;
+                        if (!data.success) { alert(data.error || 'Could not reactivate this customer.'); return; }
+                        onChanged();
+                    });
+            });
+        });
+
         return { destroy: function () { pickerHandles.forEach(function (h) { if (h) h.destroy(); }); } };
     }
     return { init: init };

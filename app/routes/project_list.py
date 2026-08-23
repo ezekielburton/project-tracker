@@ -974,6 +974,7 @@ GROUP_FIELDS = [
     ('team', 'Team'),
     ('urgency', 'Urgency'),
     ('status', 'Status'),
+    ('next_deadline_month', 'Month'),
 ]
 
 def _group_key_and_label(row, field):
@@ -994,6 +995,25 @@ def _group_key_and_label(row, field):
         return ((order,), label)
     if field == 'status':
         return ((row['blanket_status'].lower(),), row['blanket_status'])
+    if field == 'next_deadline_month':
+        # Buckets by the month of the SAME next_deadline the Next Deadline
+        # column/sort/filter already use — the earliest design_deadline
+        # among the project's own non-Approved deliverables
+        # (_bulk_deliverable_aggregates in this file), i.e. "the closest
+        # deadline deliverable assigned within it" (per Ezekiel, 22 Aug
+        # 2026). A project with no such deliverable (everything already
+        # Approved, or nothing assigned at all) has no next_deadline and
+        # goes in a trailing "No Deadline" box rather than being dropped —
+        # same "never silently disappear a row" rule every other group
+        # field here already follows (see cs_lead/client's "No CS Lead"/
+        # "No Client" boxes above). Sort key is (0, year, month) for a real
+        # month so chronological order comes for free from the label sort
+        # below, vs. (1, ...) for the undefined box so it always sorts last.
+        next_deadline = row['next_deadline']
+        if next_deadline:
+            d = next_deadline['date']
+            return ((0, d.year, d.month), d.strftime('%B %Y'))
+        return ((1, 0, 0), 'No Deadline')
     return None
 
 def _group_rows(rows, field):

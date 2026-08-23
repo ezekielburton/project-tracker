@@ -508,12 +508,25 @@ class ProjectCustomer(db.Model):
     design_deadline = db.Column(db.Date, nullable=True)
     design_deadline_time = db.Column(db.Time, nullable=True)
     cancelled = db.Column(db.Boolean, default=False, nullable=False)
+    # Reason/who/when trio (23 Aug 2026, per Ezekiel — "we need a way to
+    # cancel a customer... freezes its state for invoicing -> can be
+    # undone") — same shape as Project's cancel_reason/cancelled_at/
+    # cancelled_by_id (see add_project_lifecycle_fields.py), just scoped to
+    # one customer within a C&CM project. `cancelled` stays the single
+    # source of truth every existing read site (dashboard.py, project_list.
+    # py, project_overlay.py, project_preproduction.py) already filters on
+    # — these three are additive, for audit/display only; see migrations/
+    # add_customer_cancel_lifecycle_fields.py.
+    cancel_reason = db.Column(db.Text, nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    cancelled_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     installation_date = db.Column(db.Date, nullable=True)
     status = db.Column(db.String(50), default='briefed', nullable=False)
     posm_revision_count = db.Column(db.Integer, default=0, nullable=False)
 
     customer = db.relationship('Customer', backref='customer_projects')
     deliverables = db.relationship('Deliverable', backref='project_customer', cascade='all, delete-orphan')
+    cancelled_by = db.relationship('User', foreign_keys=[cancelled_by_id])
 
     def __repr__(self):
         return f'<ProjectCustomer project={self.project_id} customer={self.customer_id}>'

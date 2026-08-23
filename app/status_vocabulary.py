@@ -32,7 +32,7 @@ Handed to Production is what the Projects list's Design Completed tab
 shows (project_list.py), nothing else does. "Client Approved" is gone as a
 label entirely now, everywhere — project pill, deliverable pill, AND
 C&CM's per-customer expand rows (_pipeline_stage_for() below, corrected
-23 Aug 2026 after it was missed in the first pass — Ezekiel: "why am I
+22 Aug 2026 after it was missed in the first pass — Ezekiel: "why am I
 still seeing client approved on customer channels?"). The raw 'approved'
 status value still means exactly what it always did (client signed off,
 ready for Pre-Production), it just no longer gets its own pill text
@@ -127,7 +127,7 @@ def _post_approval_deliverable_status(deliverable):
 # per-customer expand rows still do, unchanged: that per-channel state
 # tracking is genuinely independent and stays exactly as it was. The
 # LABEL VOCABULARY it renders through does not get its own exception,
-# though (fixed 23 Aug 2026, per Ezekiel — the per-customer table was
+# though (fixed 22 Aug 2026, per Ezekiel — the per-customer table was
 # still showing "Client Approved" pills after that label was supposed to
 # be gone everywhere): 'approved' now reads "Pre-Production" here too,
 # same text/colour as 'pre_production' below and as the project/
@@ -216,7 +216,17 @@ def derive_customer_pipeline_status(project_customer):
     NULL) — so multiple customers under the same Gulf country resolve to
     the same channel, and therefore the same status. Mirrors the matching
     logic used in the M1 workflow_status backfill and in approve_submission().
+
+    Cancelled check added 23 Aug 2026, per Ezekiel ("cancel a customer") —
+    same shape as derive_project_status()'s cancelled_at check above, and
+    for the same reason: cancelled overrides whatever the underlying
+    pipeline stage was, checked first, ahead of the channel lookup, so
+    cancelling never needs to touch (and reactivating never needs to
+    restore) the channel's actual status.
     """
+    if project_customer.cancelled:
+        return ('Cancelled', 'salmon')
+
     channel = ProjectPosmChannel.query.filter_by(
         project_id=project_customer.project_id,
         posm_customer_id=project_customer.id
