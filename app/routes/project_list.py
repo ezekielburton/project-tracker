@@ -409,24 +409,30 @@ def _base_query_for_view(view, user):
 
     else:  # 'my' - default
         if user.role in ('cs', 'admin', 'management', 'project_owner'):
-            if user.role == 'admin':
-                query = Project.query.filter(
-                    Project.project_status != 'draft',
-                    Project.project_status != 'handed_to_production'
-                )
-            else:
-                secondary_project_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(
-                    user_id=user.id
-                ).subquery()
-                query = Project.query.filter(
-                    db.or_(
-                        Project.cs_lead_id == user.id,
-                        Project.id.in_(secondary_project_ids),
-                        Project.project_owner_id == user.id
-                    ),
-                    Project.project_status != 'draft',
-                    Project.project_status != 'handed_to_production'
-                )
+            # "My Projects" means projects this person is actually on —
+            # cs_lead, secondary CS, or project owner — same rule for every
+            # role in this bucket (23 Aug 2026, per Ezekiel — "as admin I am
+            # seeing all projects on my projects. Only projects ive added
+            # myself to I should see"). Admin used to get an unfiltered
+            # "everything, non-draft, non-handed-to-production" query here
+            # instead of this same-as-everyone-else filter — that's what
+            # made My Projects effectively identical to All/Team Projects
+            # for an admin. Management already fell into this branch
+            # correctly; only admin's special case was wrong. Admin/
+            # management still see every project via the All/Team Projects
+            # tab (the 'all' view branch above), unaffected by this fix.
+            secondary_project_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(
+                user_id=user.id
+            ).subquery()
+            query = Project.query.filter(
+                db.or_(
+                    Project.cs_lead_id == user.id,
+                    Project.id.in_(secondary_project_ids),
+                    Project.project_owner_id == user.id
+                ),
+                Project.project_status != 'draft',
+                Project.project_status != 'handed_to_production'
+            )
         else:
             assigned_project_ids = db.session.query(ProjectDesigner.project_id).filter_by(
                 user_id=user.id
