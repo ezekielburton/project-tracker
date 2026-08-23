@@ -1,14 +1,9 @@
 from flask import Flask, g, request
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-from flask_mail import Mail
 from config import Config
 from datetime import timezone, timedelta, datetime
 import os
 
-db = SQLAlchemy()
-login_manager = LoginManager()
-mail = Mail()
+from app.modules.core.shared.extensions import db, login_manager, mail
 
 def create_app():
     app = Flask(__name__)
