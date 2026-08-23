@@ -140,6 +140,6 @@ def init_sse_relay(app):
     psycopg2 patching — since this loop's cooperative blocking only
     behaves correctly once that patching is active. Under the plain local
     dev server (no gevent), this is a no-op: live updates simply don't
-    run, same as before this feature existed."""
+    run."""
     if os.environ.get('GEVENT_WORKER') == '1':
         spawn(_listen_loop, app)

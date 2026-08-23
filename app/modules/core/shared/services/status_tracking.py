@@ -1,17 +1,15 @@
-# app/status_tracking.py
-#
 # Single funnel for every project / customer / deliverable status change.
-# Replaces raw `.project_status = X` / `.status = X` assignments so every
-# transition is captured in the matching *StatusLog table (app/models) —
-# one place instead of scattered across every route that used to set the
-# field directly.
+# Every transition sets the status column AND writes a row to the matching
+# *StatusLog table (app/models) from one place, so status history is
+# captured consistently rather than scattered across the routes that change
+# status.
 #
-# Each public function still sets the actual status column itself, so a
-# call site just swaps the raw assignment for the matching wrapper call —
-# no extra step, no risk of forgetting to also update the field.
+# Each public function sets the actual status column itself, so a call site
+# swaps a raw `.status = X` assignment for the matching wrapper call — no
+# extra step, no risk of forgetting to update the field.
 #
 # None of these call db.session.commit() — that stays the caller's job,
-# same as before, usually alongside other changes in the same transaction.
+# usually alongside other changes in the same transaction.
 
 from datetime import datetime
 
@@ -38,26 +36,15 @@ def _record_status_change(entity, new_status, actor, log_cls, fk_field):
 
 def record_project_status(project, new_status, actor):
     """
-    Time-tracking note (13 Jul 2026): this function's ProjectStatusLog
-    rows (started_at/ended_at per status) are the ONLY thing the
-    project/deliverable hours feature reads — see
-    app/time_tracking_logic.py. There is no separate hours-accumulator
-    write here; hours are recomputed from this log history on demand, so
-    there's exactly one source of truth for "how long was this project in
-    status X" rather than a running counter that could drift from it.
+    This function's ProjectStatusLog rows (started_at/ended_at per status)
+    are the only thing the project/deliverable hours feature reads — see
+    time_tracking_logic.py. There is no separate hours accumulator; hours
+    are recomputed from this log history on demand, so there is one source
+    of truth for "how long was this project in status X" rather than a
+    running counter that could drift from it.
 
-    (Historical note: earlier the same day, a live hours_accumulated/
-    timer_started_at accumulator WAS spliced in right here, re-wiring
-    logic that used to live dead/unreachable in
-    app/routes/projects_old.py's update_status route. It used plain
-    wall-clock hours and a narrow 2-status "active" set. Per Ezekiel's
-    fuller spec later the same day — business hours only, weekend
-    discard rule, per-status breakdown for a new drill-down page — that
-    approach was superseded by the StatusLog-derived computation in
-    time_tracking_logic.py before it ever went live, so it was removed
-    again rather than left running alongside the new logic. The
-    Project.hours_accumulated/timer_started_at columns are no longer
-    written to by anything; left in place on the model, unused.)
+    (The Project.hours_accumulated/timer_started_at columns are unused —
+    left in place on the model but written to by nothing.)
     """
     from app.models import ProjectStatusLog
     _record_status_change(project, new_status, actor, ProjectStatusLog, 'project_id')
@@ -78,38 +65,24 @@ def record_deliverable_status(deliverable, new_status, actor):
 
 def sync_project_pipeline_status(project, actor):
     """
-    Project status simplification (22 Aug 2026, per Ezekiel) — the project
-    pill is now a pure, live roll-up of its deliverables, computed the same
-    way for Standard AND C&CM (one project-wide check across every
-    deliverable regardless of which C&CM customer/channel it's under — no
-    more separate per-channel aggregate for this top-level pill). Nothing
-    else decides it: not the Start Project button, not Submit to Client,
-    not Concept/KV approval, not the old per-channel Client Approval
-    cascade — those still exist and still gate their own actions/
-    notifications, but none of them write project_status directly anymore.
-    This is the ONLY place that does, called after any action that can
-    change what a deliverable's status_vocabulary.py label reads:
-    record_deliverable_status(), a Pre-Production stream approve/flag, or
-    an admin deliverable-status override.
+    Writes project.project_status as a pure, live roll-up of its
+    deliverables, computed the same way for Standard and C&CM (one
+    project-wide check across every deliverable regardless of which C&CM
+    customer/channel it's under). This is the only place that writes
+    project_status from the deliverable roll-up; it's called after any
+    action that can change a deliverable's derived label —
+    record_deliverable_status(), a Pre-Production stream approve/flag, or an
+    admin deliverable-status override.
 
-    Deliberately a no-op for 'draft' / 'briefed' / 'on_hold' and once
-    cancelled_at is set — those stay exactly what they are today (Start
-    Project / Put on Hold / Cancel are still the only things that move a
-    project into or out of them). Only the three deliverable-driven stages
-    (In Design / Pre-Production / Handed to Production — raw values
-    'in_progress' / 'approved' / 'handed_to_production', unchanged from
-    before this simplification, and unchanged again by the later-same-day
-    removal of "Client Approved" as the raw 'approved' value's label — see
-    status_vocabulary.py — so every existing SQL filter keyed on
-    project_status keeps working) are ever written here.
+    A no-op for 'draft' / 'briefed' / 'on_hold' and once cancelled_at is set
+    — Start Project / Put on Hold / Cancel are the only things that move a
+    project into or out of those. Only the three deliverable-driven stages
+    are written here: In Design / Pre-Production / Handed to Production (raw
+    values 'in_progress' / 'approved' / 'handed_to_production').
 
-    Safe to call after every deliverable-affecting action, even ones that
-    don't actually change anything — record_project_status() no-ops
-    cleanly (still opens a fresh ProjectStatusLog row) when the target
-    already matches project.project_status... actually it doesn't
-    early-return, so this function checks first and skips the call
-    entirely when nothing would change, same guard record_project_status's
-    callers have always been expected to apply themselves.
+    Safe to call after every deliverable-affecting action: it checks the
+    computed target against the current project_status and skips the write
+    entirely when nothing would change.
     """
     from app.status_vocabulary import derive_deliverable_status
 
@@ -133,11 +106,9 @@ def sync_project_pipeline_status(project, actor):
 
 
 # ── Read helpers — "when did this status last change" ──────────────────
-# Pure reads, companions to the *StatusLog tables the functions above
-# write to — nothing here writes anything. Added 22 Aug 2026 (per Ezekiel:
-# "All status changes need to be time stamped") to surface the started_at
-# data these tables already capture in the UI next to status pills,
-# rather than adding any new tracking. Note this is the raw column's own
+# Pure reads, companions to the *StatusLog tables the functions above write
+# to — nothing here writes. They surface the started_at these tables
+# capture, for display next to status pills. Note this is the raw column's own
 # started_at, not "since the derived pill label started reading this" —
 # a deliverable can cycle through several raw Submissions-flow statuses
 # (internal_review/revision_in_queue/etc.) that all collapse into the same
@@ -191,11 +162,8 @@ def bulk_project_status_started_at(project_ids):
 
 
 # ── Read helpers — "when was this last client-approved" ─────────────────
-# Added 22 Aug 2026, later the same day (per Ezekiel, dropping "Client
-# Approved" as its own pill stage): "ensure anything that ever does go to
-# preproduction gets its client approved time stamped for the future
-# dashboard updates. If something gets reverted, the timestamp for the
-# previous approval stays and an addition is added."
+# Timestamp the moment an entity's raw status entered 'approved', so a
+# reverted-then-re-approved entity keeps its earlier approval times too.
 #
 # Different from *_status_started_at above on purpose. Those answer "since
 # when has the CURRENT status been true" — fine for a deliverable, whose

@@ -56,14 +56,14 @@ def _get_session():
     (ConnectionError/Timeout) — the real case this covers is the app running
     off the office network (a local dev instance elsewhere), where NAS_HOST
     is simply unreachable. NAS_WEB_URL is used as a full base URL, no port
-    appended (Ezekiel's call, M10, 20 Aug 2026) — see _nas_url() above.
+    appended — see _nas_url() above.
 
     A bad login (wrong credentials) is NOT a connection failure — it still
     raises the existing RuntimeError below without ever trying the fallback,
     since QuickConnect wouldn't fix bad credentials either.
 
     Whichever host succeeds is cached in _NAS_HOST_OVERRIDE for the rest of
-    this process's life (Ezekiel's call) — so a confirmed-unreachable LAN IP
+    this process's life — so a confirmed-unreachable LAN IP
     doesn't eat a fresh ~10s timeout on every single NAS call for the rest
     of the run.
     """
@@ -73,7 +73,7 @@ def _get_session():
 def _login_with_session(session_name):
     """
     Shared LAN-IP/NAS_TUNNEL_HOST fallback + _NAS_HOST_OVERRIDE caching
-    logic behind _get_session() — extracted 21 Aug 2026 so
+    logic behind _get_session() — shared so
     resolve_drive_file_id() (Synology Drive) can reuse the exact same
     tested fallback path instead of a second inline copy that could drift
     out of sync. session_name is the Synology 'session' login param —
@@ -113,9 +113,9 @@ def _login_with_session(session_name):
         # same tech as app.vitamin-e.work / ssh.vitamin-e.work, gated by a
         # Cloudflare Access Service Token instead of the interactive login
         # those use, since this is a script talking to it, not a browser.
-        # (QuickConnect was tried first, 20 Aug 2026 — it only serves a
-        # browser-oriented relay landing page to plain HTTP clients, not a
-        # usable webapi proxy, so it was replaced with this.)
+        # (QuickConnect only serves a browser-oriented relay landing page to
+        # plain HTTP clients, not a usable webapi proxy, so this tunnel host
+        # is used instead.)
         tunnel_host = current_app.config.get('NAS_TUNNEL_HOST')
         client_id = current_app.config.get('CF_ACCESS_CLIENT_ID')
         client_secret = current_app.config.get('CF_ACCESS_CLIENT_SECRET')
@@ -140,7 +140,7 @@ def _login_with_session(session_name):
     # misconfigured Access policy or bad service token hands back an HTML
     # error page instead of proxying to auth.cgi (see the CF-Access-Client-*
     # env vars above). Surface what came back instead of letting a raw
-    # JSONDecodeError bubble up as an unhandled 500 (added 20 Aug 2026).
+    # JSONDecodeError bubble up as an unhandled 500.
     try:
         data = resp.json()
     except ValueError:
@@ -577,17 +577,15 @@ def delete_app_file(nas_file_path):
         current_app.logger.warning(f'NAS delete failed for {nas_file_path}: {e}')
 
 
-# --------- Synology Drive deep-links (M10 NAS migration, 21 Aug 2026) ------
+# --------- Synology Drive deep-links ------
 #
-# Every user-facing "open this folder" button now points at Synology Drive
-# instead of File Station — Ezekiel's call, since Drive is the app people
-# actually browse in day to day now. Upload/download/rename/create-folder
-# (above) stay on the File Station API untouched; this section only builds
-# the clickable "open folder in browser" links.
+# Every user-facing "open this folder" button points at Synology Drive
+# instead of File Station, since Drive is the app people browse day to day.
+# Upload/download/rename/create-folder (above) stay on the File Station API;
+# this section only builds the clickable "open folder in browser" links.
 #
 # Drive addresses content by its own opaque internal file_id
-# (https://{host}/drive/#file_id={id}), and — confirmed 21 Aug 2026 against
-# Ezekiel's real DevTools capture — it has NO API that resolves a path
+# (https://{host}/drive/#file_id={id}) and has NO API that resolves a path
 # string straight to a file_id. Drive's own web client walks an ID tree:
 # SYNO.SynologyDrive.TeamFolders.list (method=list, version=1, no `path`
 # param — that response IS the root, each item already carries its own
@@ -595,10 +593,7 @@ def delete_app_file(nas_file_path):
 # Projects, etc). From there, SYNO.SynologyDrive.Files.list (method=list,
 # version=2) with path="id:{parent_file_id}" lists one folder's contents;
 # matching a child by `name` and taking ITS file_id lets you descend one
-# more level. Repeat per path segment. This replaces two earlier wrong
-# guesses: SYNO.SynologyDrive.Files method=get version=3 (doesn't exist),
-# and a '/team-folders/' path-string prefix (Drive doesn't resolve path
-# strings at all, so there was nothing for that prefix to fix).
+# more level. Repeat per path segment.
 
 def _path_to_segments(path):
     """Splits a File Station-style path ('/Docs and Templates/Templates/
@@ -623,7 +618,7 @@ def resolve_drive_file_id(folder_path):
 
     Returns None on any failure (unreachable NAS, a path segment not
     found, bad auth, unexpected response shape) — callers treat None as
-    "no Drive link available," same as the old File Station builders did
+    "no Drive link available," same as the File Station builders do
     when NAS_WEB_URL wasn't configured. Every failure is logged via
     current_app.logger so a None return isn't a dead end when debugging.
     """
@@ -639,7 +634,7 @@ def resolve_drive_file_id(folder_path):
         return None
 
     def _list(params):
-        # cookies={'id': sid} added 21 Aug 2026 alongside the existing _sid
+        # cookies={'id': sid} is sent alongside the existing _sid
         # query param — mirrors download_app_file()'s FileStation.Download
         # call elsewhere in this file. Some Synology webapi endpoints (Drive
         # included, it seems) check the session cookie, not just _sid, and
@@ -671,10 +666,9 @@ def resolve_drive_file_id(folder_path):
         for depth, segment in enumerate(segments):
             match = next((it for it in items if it['name'] == segment), None)
             if not match:
-                # Dumps the actual item names Drive returned at this level —
-                # added 21 Aug 2026 so a mismatch (wrong session scope, wrong
-                # root, a renamed folder) shows itself in one log line
-                # instead of another round of blind guessing.
+                # Dumps the actual item names Drive returned at this level,
+                # so a mismatch (wrong session scope, wrong root, a renamed
+                # folder) shows itself in one log line.
                 current_app.logger.warning(
                     f'Drive path segment {segment!r} not found (resolving {folder_path!r}, '
                     f'matched so far: {segments[:depth]!r}) — items actually returned: '

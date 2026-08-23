@@ -73,13 +73,12 @@ _PROJECT_ID_GETTERS = {
     # this to be caught too, or "assignments down to the deliverable level"
     # would silently never trigger a live update.
     'DeliverableAssignment': lambda obj: obj.deliverable.project_id,
-    # Added 17 Jul 2026 — this was the actual root cause of "resolved
-    # escalations don't auto-populate, requires a refresh": raising,
-    # replying to, or resolving a DecisionFlag never touched any OTHER
-    # watched model in the same commit (unlike POSM channels, which usually
-    # got lucky via a co-committed Deliverable row), so exactly zero NOTIFYs
-    # ever fired for any decision-flag action, for any viewer, including the
-    # acting user's own other open tabs. DecisionFlagMessage has no
+    # DecisionFlag is watched directly because raising, replying to, or
+    # resolving one never touches any OTHER watched model in the same commit
+    # (unlike POSM channels, which usually got a co-committed Deliverable
+    # row), so without this no NOTIFY would fire for any decision-flag
+    # action, for any viewer, including the acting user's own other open
+    # tabs. DecisionFlagMessage has no
     # project_id column of its own (same shape as DeliverableAssignment
     # above) — it hangs off a DecisionFlag via the `flag` backref
     # (`messages = db.relationship('DecisionFlagMessage', backref='flag',

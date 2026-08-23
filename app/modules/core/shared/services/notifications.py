@@ -370,9 +370,7 @@ def notify_project_owner_of_stream_uploaded(deliverable, project, stream_label, 
     Notify the Project Owner when a Pre-Production stream (2D/3D/Technical) is
     marked done and ready for their review/Approve-or-Flag decision. Fired
     from mark_stream_done() in project_preproduction.py — the only route that
-    puts a stream in front of the Project Owner this way (23 Aug 2026, per
-    Ezekiel: "does pressing mark done notify the project owner?" — it didn't,
-    this is what closes that gap).
+    puts a stream in front of the Project Owner this way.
 
     No secondary-CS/region fan-out here (unlike notify_secondary_cs_of_
     deliverable_status) — Approve/Flag for Reupload is scoped to
@@ -402,11 +400,9 @@ def notify_designer_of_stream_approved(deliverable, project, stream_label, desig
     """
     Notify the assigned designer when the Project Owner approves their
     Pre-Production stream (2D/3D/Technical) — fired from approve_stream() in
-    project_preproduction.py (23 Aug 2026, per Ezekiel: "on approval the
-    designer should be notified, as they need to share the files by email
-    until we add production access to file storage and the app later in the
-    year"). The message says as much, since there's no in-app hand-off yet —
-    this is a manual step for the designer until that access lands.
+    project_preproduction.py. The designer needs to share the files by email
+    until production gets access to file storage in the app; the message says
+    as much, since there's no in-app hand-off yet.
 
     designer can be None (a stream can technically be approved with no
     DeliverableAssignment row — nothing forces one to exist first) — no-op
