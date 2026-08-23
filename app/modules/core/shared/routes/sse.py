@@ -1,21 +1,17 @@
-# app/routes/sse.py
+# Thin streaming routes that tell the browser "something changed, go fetch"
+# — they do NOT push data themselves. All the role-based visibility logic
+# (who can see which projects, tab assignment, fingerprint diffing) lives in
+# api.py's poll endpoints and in notifications.py's poll endpoint;
+# duplicating any of it here would be a second place for it to drift out of
+# sync. So each SSE endpoint below is just a doorbell: it blocks on a
+# subscriber queue (see sse_relay.py) and emits a tiny SSE event whenever
+# that queue gets something, and the client's polling.js / notifications.js
+# fetch logic runs in response — driven by a push instead of a timer.
 #
-# Stage 4 of the SSE redesign: thin streaming routes that tell the browser
-# "something changed, go fetch" — they do NOT push data themselves. All the
-# role-based visibility logic (who can see which projects, tab assignment,
-# fingerprint diffing) already lives correctly in app/routes/api.py's poll
-# endpoints and in notifications.py's poll endpoint; duplicating any of
-# that here would be a second place for it to drift out of sync. So each
-# SSE endpoint below is just a doorbell: it blocks on a Stage 3 subscriber
-# queue and emits a tiny SSE event whenever that queue gets something, and
-# the client's EXISTING polling.js / notifications.js fetch logic
-# (unchanged) runs in response — same as it already does today on a timer,
-# just now triggered by a push instead of an interval.
-#
-# Needs gevent workers to actually help at any scale — see run.py /
-# GEVENT_WORKER. On the plain sync Flask dev server this still works for
-# a single connection (fine for local testing) but each open SSE stream
-# would occupy one entire sync worker in production, defeating the point.
+# Needs gevent workers to help at any scale — see run.py / GEVENT_WORKER. On
+# the plain sync Flask dev server this works for a single connection (fine
+# for local testing) but each open SSE stream would occupy one entire sync
+# worker in production, defeating the point.
 
 from flask import Blueprint, Response, session
 from flask_login import login_required, current_user

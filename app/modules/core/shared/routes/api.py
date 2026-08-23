@@ -43,19 +43,10 @@ def client_contacts(client_id):
 
     Returns the contacts belonging to one Client as a plain JSON list:
     [{"id": 1, "name": "John Smith"}, ...] - deliberately just id + name,
-    nothing more, because the only planned consumer right now is a cascading
-    <select> on the brief form (pick a Client, this list populates the
-    contact dropdown) which only needs an id to submit and a name to display.
-
-    This route used to be /api/companies/<company_id>/contacts, querying a
-    standalone Company model. That model was retired (9 Jul 2026) once it
-    became clear the brief form's existing Client dropdown already served
-    as "the company" - so this endpoint now keys off Client directly instead
-    of a second, parallel concept. Renamed the URL and the function itself
-    (company_contacts -> client_contacts) to match, rather than leaving a
-    "client_id" parameter behind a URL that still said "companies" - a
-    mismatched name there would be a small but real trap for whoever reads
-    this route next.
+    nothing more, because the consumer is a cascading <select> on the brief
+    form (pick a Client, this list populates the contact dropdown) which only
+    needs an id to submit and a name to display. Keys off Client directly,
+    which serves as "the company" a brief is for.
 
     login_required only, no role check - any logged-in user filling out a
     brief needs to be able to hit this, unlike the /admin/api/* routes in

@@ -10,18 +10,13 @@ main = Blueprint('main', __name__)
 
 @main.route('/')
 def index():
-    # Default landing page — new role-based dashboard (16 Jul 2026), per
-    # Ezekiel: "dashboard is good to go. Make the default page of the app
-    # the dashboard." Was main.projects (the old legacy per-role dashboard —
-    # cs.html/designer.html/team_lead.html templates); that route/those
-    # templates were deleted at M10 cutover (20 Aug 2026) since the sidebar
-    # had already been repointed to project_list.index and nothing referenced
-    # them anymore. `projects.index` is the NEW dashboard blueprint's endpoint
-    # (registered as Blueprint('projects', ..., url_prefix='/dashboard') in
-    # dashboard.py — confusingly named after the old system it replaced, not
-    # the "Projects" sidebar link) — it already branches internally by
-    # layout_role (dashboard_cs.html/_leadership.html/_designer.html), so no
-    # role logic is needed here.
+    # Default landing page: redirect to the role-based dashboard. The
+    # dashboard's endpoint is `projects.index` — its blueprint is
+    # Blueprint('projects', ..., url_prefix='/dashboard') in dashboard.py,
+    # named 'projects' for historical reasons, not the "Projects" sidebar
+    # link. It branches internally by layout_role
+    # (dashboard_cs.html / _leadership.html / _designer.html), so no role
+    # logic is needed here.
     return redirect(url_for('projects.index'))
 
 
