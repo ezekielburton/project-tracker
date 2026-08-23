@@ -2,6 +2,11 @@ from app.modules.core.shared.extensions import db
 from datetime import datetime
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Achievement system (gamification). These tables are registered here so
+# create_tables.py picks them up automatically.
+# ═══════════════════════════════════════════════════════════════════════
+
 class AchievementCategory(db.Model):
     """
     Groups related achievements together for display (e.g. "Submissions",
@@ -25,7 +30,7 @@ class AchievementBorder(db.Model):
     must match a real class defined in achievements.css — this table only
     stores the *name* of that class, not any actual styling, so adding a
     new border is: write the CSS class, then register it here via the
-    admin panel (Phase 7).
+    admin panel.
     """
     __tablename__ = 'achievement_borders'
 
@@ -64,9 +69,8 @@ class Achievement(db.Model):
     border_id = db.Column(db.Integer, db.ForeignKey('achievement_borders.id'), nullable=True)
     display_order = db.Column(db.Integer, default=0)
 
-    # foreign_keys= spelled out explicitly on both relationships below,
-    # matching the style already used for NotificationSound.uploaded_by —
-    # avoids SQLAlchemy needing to guess which FK a relationship refers to.
+    # foreign_keys spelled out explicitly on both relationships so
+    # SQLAlchemy doesn't have to guess which FK each one refers to.
     category = db.relationship('AchievementCategory', foreign_keys=[category_id])
     border = db.relationship('AchievementBorder', foreign_keys=[border_id])
 
@@ -112,9 +116,9 @@ class UserDisplaySettings(db.Model):
     key — there's only ever one "current" set of display choices, unlike
     UserPinnedAchievement below which is deliberately one-row-per-slot).
     Each of the three fields points at something the user has actually
-    earned; the admin panel / settings page (Phase 5) is responsible for
-    only ever offering earned items as choices, but this table doesn't
-    enforce that itself the DB constraint.
+    earned; the admin panel / settings page is responsible for
+    only ever offering earned items as choices, but this table itself
+    does not enforce that.
     """
     __tablename__ = 'user_display_settings'
 
@@ -139,7 +143,7 @@ class UserDisplaySettings(db.Model):
 class UserPinnedAchievement(db.Model):
     """
     Up to 5 achievements a user has chosen to feature at the top of their
-    profile card (Phase 4/5). One row per pinned slot, rather than a
+    profile card. One row per pinned slot, rather than a
     single row with 5 columns — this makes "drag to reorder" a matter of
     updating pin_order values, and "unpin one" a single DELETE, instead of
     shuffling values between fixed columns.
@@ -163,13 +167,3 @@ class UserPinnedAchievement(db.Model):
 
     def __repr__(self):
         return f'<UserPinnedAchievement user={self.user_id} slot={self.pin_order}>'
-
-
-# ------ Client Directory ------
-# Originally built as a separate Company/Contact system, distinct from Client
-# above. Decided (9 Jul 2026) to fold that back into the existing Client
-# model instead of maintaining two parallel "who is this brief for" concepts:
-# the brief form's Client dropdown already IS the company, so Contact simply
-# hangs off Client directly. The standalone Company model/table has been
-# removed entirely (see migrations/retire_company_directory.py) - if you're
-# looking for it in git history, that's why it's gone.

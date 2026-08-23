@@ -2,6 +2,7 @@ from app.modules.core.shared.extensions import db
 from datetime import datetime
 
 
+# DeliverableType Class. Handles relationships for deliverable types, which are linked to clients and customers. Also stores reference images for deliverable types, which can be used in the project brief to help designers understand the requirements.
 class DeliverableType(db.Model):
     __tablename__ = 'deliverable_types'
 
@@ -22,9 +23,8 @@ class DeliverableType(db.Model):
     def __repr__(self):
         return f'<DeliverableType {self.name}>'
 
-# Child class, links deliverable types to disciplines/teams. This allows us to specify which teams are needed for each deliverable type, which can then be used in the project brief to help designers understand the requirements and ensure the right teams are assigned to each project.
 
-
+# Child class, links deliverable types to disciplines/teams. This allows us to specify which teams are needed for each deliverable type, which can then be used in the project brief to help designers understand the requirements and ensure the right teams are assigned to each project.  
 class DeliverableTypeDiscipline(db.Model):
     __tablename__ = 'deliverable_type_disciplines'
 
@@ -35,9 +35,10 @@ class DeliverableTypeDiscipline(db.Model):
     def __repr__(self):
         return f'<DeliverableTypeDiscipline {self.team} for type {self.deliverable_type_id}>'
 
-# Project Region Class. Handles region data for projects, allowing us to specify which regions are relevant for each project.
 
-
+# Represents an individual deliverable within a project. revision_comment
+# holds the free-text feedback CS sends when requesting a revision, shown to
+# the designer so they know what to change.
 class Deliverable(db.Model):
     __tablename__ = 'deliverables'
 
@@ -59,11 +60,9 @@ class Deliverable(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     needs_technical = db.Column(db.Boolean, default=False, nullable=False)
     technical_status = db.Column(db.String(50), nullable=True)
-    # 2D/3D split out from the old combined needs_artwork/artwork_status pair
-    # (17 Aug 2026) — each is now its own independent Pre-Production stream,
-    # matching how Design already treats 2D/3D/Technical as three separate
-    # teams. needs_artwork/artwork_status were dropped from the DB in the
-    # M10 cutover (20 Aug 2026) — this comment stays as the historical why.
+    # 2D and 3D are independent Pre-Production streams, each with its own
+    # needs_* flag and status, matching how Design treats 2D/3D/Technical as
+    # three separate teams.
     needs_2d = db.Column(db.Boolean, default=False, nullable=False)
     needs_3d = db.Column(db.Boolean, default=False, nullable=False)
     status_2d = db.Column(db.String(50), nullable=True)
@@ -80,9 +79,8 @@ class Deliverable(db.Model):
     def __repr__(self):
         return f'<Deliverable {self.name} status={self.status}>'
 
+
 # DeliverableAssignment Class, records who is assigned to each deliverable, and who made that assignment.
-
-
 class DeliverableAssignment(db.Model):
     __tablename__ = 'deliverable_assignments'
 
@@ -109,10 +107,10 @@ class DeliverablePreproductionEvent(db.Model):
     reasons: (1) pre-production isn't submission-scoped, a deliverable can
     land here via Skip to Pre-Production with no ProjectSubmission
     involved at all, so a submission_id FK wouldn't always have anything
-    to point at; (2) Ezekiel wants this history kept separate from
-    Submissions' own event log, not filtered out of a shared one.
+    to point at; (2) this history is kept separate from Submissions' own
+    event log rather than filtered out of a shared one.
 
-    event_type is 'preprod_flag' for now (a stream got bounced back for reupload, message required) — its own distinct value so
+    event_type is 'preprod_flag' (a stream bounced back for reupload, message required) — a distinct value so
     later KPI queries ("average revision rounds") can filter cleanly
     without guessing from free text. stream distinguishes which release
     stream ('technical'/'artwork') the flag was about, for KPI breakdowns

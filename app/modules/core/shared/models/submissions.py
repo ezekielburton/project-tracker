@@ -40,9 +40,7 @@ class ProjectSubmission(db.Model):
     posm_customer_id = db.Column(db.Integer, db.ForeignKey('project_customers.id'), nullable=True)
     posm_country     = db.Column(db.String(50), nullable=True)  # 'uae','kuwait' etc. for Gulf projects
     phase = db.Column(db.String(20), default='concept_kv', nullable=False)  # 'concept_kv' or 'posm'
-    # Explicit workflow lifecycle — see Projects Redesign Architecture.md §C.
-    # Backfilled from existing signals in a dedicated follow-up script (not
-    # yet run) rather than assumed correct from this column definition alone.
+    # Explicit workflow lifecycle state for this submission.
     workflow_status = db.Column(db.String(30), nullable=True)
     last_internal_review_notified_at = db.Column(db.DateTime, nullable=True)
     cs_note = db.Column(db.Text, nullable=True)
@@ -56,8 +54,7 @@ class ProjectSubmission(db.Model):
     # locked (workflow_status='internal_review') submission — a modifier on
     # top of that phase, not a new phase itself, since CS already knows to
     # look and shouldn't be silently un-notified by an edit in progress.
-    # Cleared when the designer re-submits for review. The later SSE work
-    # (M4) will watch this to show CS a live "currently being edited" marker.
+    # Cleared when the designer re-submits for review.
     is_being_edited = db.Column(db.Boolean, default=False, nullable=False)
     editing_started_at = db.Column(db.DateTime, nullable=True)
 
@@ -70,6 +67,126 @@ class ProjectSubmission(db.Model):
 
     def __repr__(self):
         return f'<ProjectSubmission {self.original_filename} project={self.project_id} active={self.is_active}>'
+
+
+class ProjectSubmissionDeliverable(db.Model):
+    """Junction table — records which deliverables were included in a given submission.
+    When a designer submits for internal review they select deliverables; those
+    selections are stored here so CS knows what's being reviewed, and so the
+    flag/revision cycle can update exactly those deliverables' statuses."""
+    __tablename__ = 'project_submission_deliverables'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # The submission this link belongs to
+    submission_id = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
+
+    # The deliverable that was included
+    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
+
+    # cascade ensures links are removed when the parent submission is deleted
+    submission = db.relationship('ProjectSubmission',
+                                 backref=db.backref('included_deliverables', cascade='all, delete-orphan'))
+    deliverable = db.relationship('Deliverable', backref=db.backref('submission_links', cascade='all, delete-orphan'))
+
+    def __repr__(self):
+        return f'<ProjectSubmissionDeliverable submission={self.submission_id} deliverable={self.deliverable_id}>'
+
+
+class ProjectSubmissionFile(db.Model):
+    """Supplementary files attached to a ProjectSubmission.
+
+    Multiple files can be attached to the same active submission — the first
+    file is on ProjectSubmission.filename; any additional attachments live
+    here. Deleting the parent submission cascades to these rows.
+    Files are stored on the NAS under the project's Submissions/ folder."""
+    __tablename__ = 'project_submission_files'
+
+    id               = db.Column(db.Integer, primary_key=True)
+    submission_id    = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
+    project_id       = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    file_type        = db.Column(db.String(10), nullable=False)
+    uploaded_by_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    uploaded_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+    submission  = db.relationship('ProjectSubmission',
+                                  backref=db.backref('extra_files', cascade='all, delete-orphan'))
+    project     = db.relationship('Project',
+                                  backref=db.backref('submission_extra_files', cascade='all, delete-orphan'))
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+    # Draft-stage cache tracking.
+    # 'cache' = sitting in the local draft-cache folder, not yet on the NAS.
+    # 'nas'   = confirmed on the NAS (either zipped at Submit to Client, or
+    #           a post-submission "Attach Supporting File" upload, which
+    #           always goes straight to 'nas' and never touches the cache).
+    storage_location = db.Column(db.String(10), default='nas', nullable=False)
+    local_cache_path = db.Column(db.String(500), nullable=True)
+    # Exactly one file per active draft can be True at a time (app-enforced,
+    # not a DB constraint — same pattern as "only one active draft per
+    # channel"). Decides which file gets the canonical auto-generated name
+    # when the draft is zipped and moved to the NAS.
+    is_main_deck     = db.Column(db.Boolean, default=False, nullable=False)
+
+    def __repr__(self):
+        return f'<ProjectSubmissionFile {self.original_filename} submission={self.submission_id}>'
+
+
+class ProjectSubmissionEvent(db.Model):
+    """Append-only history log for one submission's internal-review cycle
+    (Submit for Review / Edit / Flag Internal Revision).
+
+    One row per action: a designer's optional note when first submitting
+    for review, a designer's required reason when editing an already-locked
+    submission, or CS's required message (rich HTML, may include inline
+    images via the existing rich-editor.js / /inline-image route) when
+    flagging an internal revision. Rendered as a flat timeline — same
+    pattern as the Dashboard's .decision-flag-thread, not the nested
+    .flag-thread reply system, since this is a straight append-only log
+    with no replies-to-replies.
+
+    Distinct from ProjectRevision: that is a revision CS sends back to the
+    designer *after* a deck has already gone to the client, not this
+    pre-client internal-review loop."""
+    __tablename__ = 'project_submission_events'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
+    event_type    = db.Column(db.String(30), nullable=False)  # 'submitted_for_review' | 'edited' | 'internal_revision'
+    author_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message       = db.Column(db.Text, nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    submission = db.relationship('ProjectSubmission',
+                                 backref=db.backref('events', cascade='all, delete-orphan',
+                                                    order_by='ProjectSubmissionEvent.created_at'))
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<ProjectSubmissionEvent submission={self.submission_id} type={self.event_type}>'
+
+
+class ProjectSubmissionEventDeliverable(db.Model):
+    """Junction table — records which deliverables were part of a given
+    ProjectSubmissionEvent. Used for event_type='client_approval'
+    (Mark Approved): CS's note about that batch lives on the event's own
+    message column, this table just says which deliverables it covered, so a
+    submission approved in several separate batches keeps a distinct note +
+    deliverable list per batch rather than one note being overwritten. Same
+    shape as ProjectSubmissionDeliverable, just pointed at the event instead
+    of the submission itself."""
+    __tablename__ = 'project_submission_event_deliverables'
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('project_submission_events.id'), nullable=False)
+    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
+
+    event = db.relationship('ProjectSubmissionEvent',
+                            backref=db.backref('deliverable_links', cascade='all, delete-orphan'))
+    deliverable = db.relationship('Deliverable', backref=db.backref('approval_event_links', cascade='all, delete-orphan'))
+
+    def __repr__(self):
+        return f'<ProjectSubmissionEventDeliverable event={self.event_id} deliverable={self.deliverable_id}>'
 
 
 class ProjectRevision(db.Model):
@@ -117,127 +234,6 @@ class ProjectRevisionDeliverable(db.Model):
 
     def __repr__(self):
         return f'<ProjectRevisionDeliverable revision={self.revision_id} deliverable={self.deliverable_id}>'
-
-
-class ProjectSubmissionDeliverable(db.Model):
-    """Junction table — records which deliverables were included in a given submission.
-    When a designer submits for internal review they select deliverables; those
-    selections are stored here so CS knows what's being reviewed, and so the
-    flag/revision cycle can update exactly those deliverables' statuses."""
-    __tablename__ = 'project_submission_deliverables'
-
-    id = db.Column(db.Integer, primary_key=True)
-
-    # The submission this link belongs to
-    submission_id = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
-
-    # The deliverable that was included
-    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
-
-    # cascade ensures links are removed when the parent submission is deleted
-    submission = db.relationship('ProjectSubmission',
-                                 backref=db.backref('included_deliverables', cascade='all, delete-orphan'))
-    deliverable = db.relationship('Deliverable', backref=db.backref('submission_links', cascade='all, delete-orphan'))
-
-    def __repr__(self):
-        return f'<ProjectSubmissionDeliverable submission={self.submission_id} deliverable={self.deliverable_id}>'
-
-
-class ProjectSubmissionEvent(db.Model):
-    """Append-only history log for one submission's internal-review cycle —
-    M3 Step 4 sub-step 6 (Submit for Review / Edit / Flag Internal Revision).
-
-    One row per action: a designer's optional note when first submitting
-    for review, a designer's required reason when editing an already-locked
-    submission, or CS's required message (rich HTML, may include inline
-    images via the existing rich-editor.js / /inline-image route) when
-    flagging an internal revision. Rendered as a flat timeline — same
-    pattern as the Dashboard's .decision-flag-thread, not the nested
-    .flag-thread reply system, since this is a straight append-only log
-    with no replies-to-replies.
-
-    Distinct from ProjectRevision just above, which is a separate, later
-    concept: a revision CS sends back to the designer *after* a deck has
-    already gone to the client (M3 Step 4 sub-step 8 territory), not this
-    pre-client internal-review loop."""
-    __tablename__ = 'project_submission_events'
-
-    id            = db.Column(db.Integer, primary_key=True)
-    submission_id = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
-    event_type    = db.Column(db.String(30), nullable=False)  # 'submitted_for_review' | 'edited' | 'internal_revision'
-    author_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    message       = db.Column(db.Text, nullable=True)
-    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
-
-    submission = db.relationship('ProjectSubmission',
-                                 backref=db.backref('events', cascade='all, delete-orphan',
-                                                    order_by='ProjectSubmissionEvent.created_at'))
-    author = db.relationship('User', foreign_keys=[author_id])
-
-    def __repr__(self):
-        return f'<ProjectSubmissionEvent submission={self.submission_id} type={self.event_type}>'
-
-
-class ProjectSubmissionEventDeliverable(db.Model):
-    """Junction table — records which deliverables were part of a given
-    ProjectSubmissionEvent. Currently only used for event_type='client_approval'
-    (Mark Approved): CS's note about that batch lives on the event's own
-    message column, this table just says which deliverables it covered, so a
-    submission approved in several separate batches keeps a distinct note +
-    deliverable list per batch rather than one note being overwritten. Same
-    shape as ProjectSubmissionDeliverable, just pointed at the event instead
-    of the submission itself."""
-    __tablename__ = 'project_submission_event_deliverables'
-
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, db.ForeignKey('project_submission_events.id'), nullable=False)
-    deliverable_id = db.Column(db.Integer, db.ForeignKey('deliverables.id'), nullable=False)
-
-    event = db.relationship('ProjectSubmissionEvent',
-                            backref=db.backref('deliverable_links', cascade='all, delete-orphan'))
-    deliverable = db.relationship('Deliverable', backref=db.backref('approval_event_links', cascade='all, delete-orphan'))
-
-    def __repr__(self):
-        return f'<ProjectSubmissionEventDeliverable event={self.event_id} deliverable={self.deliverable_id}>'
-
-
-class ProjectSubmissionFile(db.Model):
-    """Supplementary files attached to a ProjectSubmission.
-
-    Multiple files can be attached to the same active submission — the first
-    file is on ProjectSubmission.filename as before; any additional attachments
-    live here. Deleting the parent submission cascades to these rows.
-    Files are stored on the NAS under the project's Submissions/ folder."""
-    __tablename__ = 'project_submission_files'
-
-    id               = db.Column(db.Integer, primary_key=True)
-    submission_id    = db.Column(db.Integer, db.ForeignKey('project_submissions.id'), nullable=False)
-    project_id       = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
-    original_filename = db.Column(db.String(255), nullable=False)
-    file_type        = db.Column(db.String(10), nullable=False)
-    uploaded_by_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    uploaded_at      = db.Column(db.DateTime, default=datetime.utcnow)
-
-    submission  = db.relationship('ProjectSubmission',
-                                  backref=db.backref('extra_files', cascade='all, delete-orphan'))
-    project     = db.relationship('Project',
-                                  backref=db.backref('submission_extra_files', cascade='all, delete-orphan'))
-    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
-    # Draft-stage cache tracking (M3 Step 4 — Submissions content build).
-    # 'cache' = sitting in the local draft-cache folder, not yet on the NAS.
-    # 'nas'   = confirmed on the NAS (either zipped at Submit to Client, or
-    #           a post-submission "Attach Supporting File" upload, which
-    #           always goes straight to 'nas' and never touches the cache).
-    storage_location = db.Column(db.String(10), default='nas', nullable=False)
-    local_cache_path = db.Column(db.String(500), nullable=True)
-    # Exactly one file per active draft can be True at a time (app-enforced,
-    # not a DB constraint — same pattern as "only one active draft per
-    # channel"). Decides which file gets the canonical auto-generated name
-    # when the draft is zipped and moved to the NAS.
-    is_main_deck     = db.Column(db.Boolean, default=False, nullable=False)
-
-    def __repr__(self):
-        return f'<ProjectSubmissionFile {self.original_filename} submission={self.submission_id}>'
 
 
 class TechnicalSubmission(db.Model):
@@ -298,8 +294,8 @@ class TechnicalSubmission(db.Model):
     flagged_at = db.Column(db.DateTime, nullable=True)
 
     # Only meaningful when status == 'internally_approved': who approved it
-    # internally and when. This is a terminal state — nothing in this feature
-    # currently moves a row out of 'internally_approved' once set.
+    # internally and when. This is a terminal state — nothing moves a row
+    # out of 'internally_approved' once set.
     internally_approved_at = db.Column(db.DateTime, nullable=True)
     internally_approved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
@@ -308,8 +304,8 @@ class TechnicalSubmission(db.Model):
     # existing code do project.technical_submissions / deliverable.technical_submissions
     # without needing a new query helper. cascade='all, delete-orphan' means
     # deleting a project or a deliverable automatically deletes its technical
-    # submissions too, mirroring the ON DELETE CASCADE set at the DB level in
-    # migrations/add_technical_submissions.py (belt-and-braces: the DB-level
+    # submissions too, mirroring the ON DELETE CASCADE set at the DB level
+    # (belt-and-braces: the DB-level
     # cascade protects raw SQL/other tools, this ORM-level cascade protects
     # anything done through SQLAlchemy that hasn't flushed yet).
     project = db.relationship('Project', backref=db.backref('technical_submissions', cascade='all, delete-orphan'))

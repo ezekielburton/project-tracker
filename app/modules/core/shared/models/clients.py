@@ -2,6 +2,7 @@ from app.modules.core.shared.extensions import db
 from datetime import datetime
 
 
+# Client class. Notes who created the client and when, for auditing purposes.
 class Client(db.Model):
     __tablename__ = 'clients'
 
@@ -12,20 +13,14 @@ class Client(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # --- Client Directory fields ---
-    # These three back the Client Directory page's "company" detail view.
-    # Client is doing double duty here: it's still the brand/client entity
-    # used everywhere else in briefs, AND (since the Company model was
-    # retired) it's also "the company" the directory page displays. All
-    # three are nullable/optional - every Client row that predates this
-    # feature has none of them set, and none are required for the rest of
-    # the app (briefs, deliverables, etc.) to keep working.
+    # These back the Client Directory page's "company" detail view. Client
+    # serves double duty: the brand/client entity used in briefs AND the
+    # "company" the directory displays. All three are optional and not
+    # required elsewhere in the app.
 
     # Comma-separated alternate names/nicknames for this client, e.g.
-    # "Acme, Acme Corp, Acme Industries" - matched against by the directory
-    # page's search box. This existed on the old standalone Company model
-    # and is being added here now that Client has absorbed that role -
-    # without it, the directory's "search by alias" feature would have
-    # nothing to search.
+    # "Acme, Acme Corp, Acme Industries" — matched against by the directory
+    # page's search box for its "search by alias" feature.
     aliases = db.Column(db.String(500), nullable=True)
 
     # Free-text office address/location, e.g. "DIFC, Dubai". Deliberately a
@@ -44,19 +39,11 @@ class Client(db.Model):
     def __repr__(self):
         return f'<Client {self.name}>'
 
-# Customer Class, stores customer and their region.
 
-
-class Customer(db.Model):
-    __tablename__ = 'customers'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    region = db.Column(db.String(50), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# DeliverableType Class. Handles relationships for deliverable types, which are linked to clients and customers. Also stores reference images for deliverable types, which can be used in the project brief to help designers understand the requirements.
-
+# ------ Client Directory ------
+# A Contact is a person at a Client (company). Client doubles as "the
+# company" a brief is for — the brief form's Client dropdown IS the company —
+# so a Contact hangs off Client directly.
 
 class Contact(db.Model):
     __tablename__ = 'contacts'
@@ -80,14 +67,21 @@ class Contact(db.Model):
 
     # backref='contacts' lets any Client instance do `my_client.contacts` to get
     # its list of Contact rows, without declaring that side separately on Client.
-    # No cascade='all, delete-orphan' here (unlike the old Company relationship) -
-    # deliberately left as the SQLAlchemy default (nullable/no cascade), since
-    # Client is a much older, more heavily-referenced model and automatically
-    # deleting Contacts as a side effect of deleting a Client felt like more
-    # surprising, harder-to-reverse behavior to bolt on quietly. If bulk-deleting
-    # a Client's contacts along with it turns out to be desired later, this is
-    # the line to revisit.
+    # No cascade='all, delete-orphan' here — deliberately the SQLAlchemy
+    # default. Client is a heavily-referenced model, and auto-deleting
+    # Contacts when a Client is deleted would be surprising, hard-to-reverse
+    # behavior. Revisit this line if that bulk-delete becomes desired.
     client = db.relationship('Client', backref='contacts')
 
     def __repr__(self):
         return f'<Contact {self.name}>'
+
+
+# Customer Class, stores customer and their region.
+class Customer(db.Model):
+    __tablename__ = 'customers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    region = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

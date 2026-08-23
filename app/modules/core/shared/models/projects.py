@@ -51,13 +51,10 @@ class Project(db.Model):
     brief_file = db.Column(db.String(255), nullable=True)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
 
-    # --- Client Directory field ---
     # contact_id: which Contact (a person at project.client_brand) this brief
-    # is for. There's no separate company_id anymore - client_id above already
-    # identifies "the company" for this project, so a second column pointing
-    # at the same concept would just be redundant data that could drift out
-    # of sync with client_id. Nullable because every project that predates
-    # this feature has no contact set, and most projects still won't need one.
+    # is for. client_id already identifies "the company" for this project, so
+    # there is no separate company_id — a second column for the same concept
+    # could drift out of sync. Nullable: not every project has a contact.
     contact_id = db.Column(db.Integer, db.ForeignKey('contacts.id'), nullable=True)
 
     brief_type = db.Column(db.String(50), nullable=True)
@@ -85,8 +82,9 @@ class Project(db.Model):
     concept_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     kv_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    # Decision escalation — CS/designer/team-lead can flag a project as needing a management decision. decision_needed is stil lthe sentinel the dashboard queries on
-    # (cheap bolean filter, used all over dashboard.p). The other three columns below are DEPRECATED as of the DecisionFlag/DecisionFlagMessage system.
+    # Sentinel the dashboard filters on to find projects awaiting a
+    # management decision. The full flag data lives in DecisionFlag /
+    # DecisionFlagMessage.
     decision_needed = db.Column(db.Boolean, default=False, nullable=True)
  
 
@@ -122,7 +120,7 @@ class Project(db.Model):
     is_production_only = db.Column(db.Boolean, default=False, nullable=False)
     preproduction_requirements = db.Column(db.Text, nullable=True)
 
-    # Cancel/Archive (reversible) — see Projects Redesign Architecture.md §9
+    # Cancel/Archive — reversible removal from active lists.
     cancel_reason = db.Column(db.Text, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -206,9 +204,8 @@ class ProjectApproval(db.Model):
     reviewed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# Client class. Notes who created the client and when, for auditing purposes.
 
-
+# Project Region Class. Handles region data for projects, allowing us to specify which regions are relevant for each project.
 class ProjectRegion(db.Model):
     __tablename__ = 'project_regions'
 
@@ -220,9 +217,7 @@ class ProjectRegion(db.Model):
         return f'<ProjectRegion {self.region} for project {self.project_id}>'
 
 
-# ProjectCustomer Class, Links projects to customers, allowing customers to be assigned to projects.
-
-
+# ProjectCustomer Class, Links projects to customers, allowing customers to be assigned to projects.  
 class ProjectCustomer(db.Model):
     __tablename__ = 'project_customers'
 
@@ -233,15 +228,11 @@ class ProjectCustomer(db.Model):
     design_deadline = db.Column(db.Date, nullable=True)
     design_deadline_time = db.Column(db.Time, nullable=True)
     cancelled = db.Column(db.Boolean, default=False, nullable=False)
-    # Reason/who/when trio (23 Aug 2026, per Ezekiel — "we need a way to
-    # cancel a customer... freezes its state for invoicing -> can be
-    # undone") — same shape as Project's cancel_reason/cancelled_at/
-    # cancelled_by_id (see add_project_lifecycle_fields.py), just scoped to
-    # one customer within a C&CM project. `cancelled` stays the single
-    # source of truth every existing read site (dashboard.py, project_list.
-    # py, project_overlay.py, project_preproduction.py) already filters on
-    # — these three are additive, for audit/display only; see migrations/
-    # add_customer_cancel_lifecycle_fields.py.
+    # Cancel a single customer within a C&CM project — freezes its state
+    # for invoicing, and is reversible. Same shape as Project's
+    # cancel_reason/cancelled_at/cancelled_by_id. `cancelled` stays the
+    # source of truth every read site filters on; these three are additive,
+    # for audit/display only.
     cancel_reason = db.Column(db.Text, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -255,90 +246,6 @@ class ProjectCustomer(db.Model):
 
     def __repr__(self):
         return f'<ProjectCustomer project={self.project_id} customer={self.customer_id}>'
-    
-
-
-# Deliverable Class, represents individual deliverables within a project.
-# Old brief-flag fields (brief_flag/brief_flag_resolved) dropped in the M10
-# cutover (20 Aug 2026) — superseded by the BriefFlag/BriefFlagMessage system.
-# Revision comments allows CS to request revisions for deliverables and free type the feedback, which can then be viewed by designers to understand what changes are needed.
-
-
-class ProjectFile(db.Model):
-    __tablename__ = 'project_files'
-
-    id = db.Column(db.Integer, primary_key=True)
-
-    # Which project this file belongs to
-    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
-
-    # The name we saved the file as on disk (UUID-based, avoids collisions)
-    filename = db.Column(db.String(255), nullable=False)
-
-    # The original filename the user uploaded (shown in the UI)
-    original_filename = db.Column(db.String(255), nullable=False)
-
-    # File extension e.g. 'pdf', 'jpg'
-    file_type = db.Column(db.String(20), nullable=False)
-
-    # Who uploaded it and when
-    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # Relationships — cascade='all, delete-orphan' ensures files are deleted from
-    # SQLAlchemy's session when the parent project is deleted, preventing NOT NULL errors
-    project = db.relationship('Project', backref=db.backref('reference_files', cascade='all, delete-orphan'))
-    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
-
-    def __repr__(self):
-        return f'<ProjectFile {self.original_filename} project={self.project_id}>'
-
-
-class SiteVisit(db.Model):
-    """
-    Structured record of a technical person's site visit — start/end
-    times captured precisely (not a freeform note) so the dashboard can
-    compute when a technical designer is out of the building
-    (Projects Redesign Architecture.md §11).
-    """
-    __tablename__ = 'site_visits'
-
-    id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    start_at = db.Column(db.DateTime, nullable=False)
-    end_at = db.Column(db.DateTime, nullable=False)
-    location = db.Column(db.String(255), nullable=True)   # location name, shown as plain text or (if location_link is set) as link text
-    location_link = db.Column(db.String(500), nullable=True)   # optional maps/address URL
-    notes = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    project = db.relationship('Project', backref=db.backref('site_visits', cascade='all, delete-orphan'))
-    user = db.relationship('User', foreign_keys=[user_id])
-
-    def __repr__(self):
-        return f'<SiteVisit project={self.project_id} user={self.user_id}>'
-
-
-class ProjectOverlaySeen(db.Model):
-    """
-    One row per (user, project) marking that user's first visit to the new
-    Detail overlay for that project — drives "first visit defaults to
-    Project Details, later visits default to Deliverables"
-    (Projects Redesign Architecture.md §3). A marker, not a log.
-    """
-    __tablename__ = 'project_overlay_views'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
-    first_viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    user = db.relationship('User', foreign_keys=[user_id])
-    project = db.relationship('Project', foreign_keys=[project_id])
-
-    def __repr__(self):
-        return f'<ProjectOverlaySeen user={self.user_id} project={self.project_id}>'
 
 
 class ProjectSecondaryCS(db.Model):
@@ -408,3 +315,79 @@ class ProjectPosmChannel(db.Model):
 
     def __repr__(self):
         return f'<ProjectPosmChannel {self.posm_country} cust={self.posm_customer_id} status={self.status}>'
+
+
+    # ProjectFile Class — stores reference files uploaded to a project by CS or admin
+class ProjectFile(db.Model):
+    __tablename__ = 'project_files'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Which project this file belongs to
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+
+    # The name we saved the file as on disk (UUID-based, avoids collisions)
+    filename = db.Column(db.String(255), nullable=False)
+
+    # The original filename the user uploaded (shown in the UI)
+    original_filename = db.Column(db.String(255), nullable=False)
+
+    # File extension e.g. 'pdf', 'jpg'
+    file_type = db.Column(db.String(20), nullable=False)
+
+    # Who uploaded it and when
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships — cascade='all, delete-orphan' ensures files are deleted from
+    # SQLAlchemy's session when the parent project is deleted, preventing NOT NULL errors
+    project = db.relationship('Project', backref=db.backref('reference_files', cascade='all, delete-orphan'))
+    uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
+
+    def __repr__(self):
+        return f'<ProjectFile {self.original_filename} project={self.project_id}>'
+
+
+class SiteVisit(db.Model):
+    """
+    Structured record of a technical person's site visit — start/end
+    times captured precisely (not a freeform note) so the dashboard can
+    compute when a technical designer is out of the building.
+    """
+    __tablename__ = 'site_visits'
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    start_at = db.Column(db.DateTime, nullable=False)
+    end_at = db.Column(db.DateTime, nullable=False)
+    location = db.Column(db.String(255), nullable=True)   # location name, shown as plain text or (if location_link is set) as link text
+    location_link = db.Column(db.String(500), nullable=True)   # optional maps/address URL
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    project = db.relationship('Project', backref=db.backref('site_visits', cascade='all, delete-orphan'))
+    user = db.relationship('User', foreign_keys=[user_id])
+
+    def __repr__(self):
+        return f'<SiteVisit project={self.project_id} user={self.user_id}>'
+
+
+class ProjectOverlaySeen(db.Model):
+    """
+    One row per (user, project) marking that user's first visit to the new
+    Detail overlay for that project — drives "first visit defaults to
+    Project Details, later visits default to Deliverables". A marker, not a log.
+    """
+    __tablename__ = 'project_overlay_views'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    first_viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    project = db.relationship('Project', foreign_keys=[project_id])
+
+    def __repr__(self):
+        return f'<ProjectOverlaySeen user={self.user_id} project={self.project_id}>'

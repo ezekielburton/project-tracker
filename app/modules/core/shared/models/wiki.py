@@ -2,6 +2,8 @@ from app.modules.core.shared.extensions import db
 from datetime import datetime
 
 
+#  ---- Wiki -------------------------------
+
 class WikiSection(db.Model):
     """
     Top level Sections in the wiki (E.G Cs View, Designer View).
@@ -53,12 +55,3 @@ class WikiArticle(db.Model):
 
     def __repr__(self):
         return f'<WikiArticle {self.slug} in section {self.section_id}>'
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Achievement system (gamification) — added 3 Jul 2026
-# Six new tables, no changes to any existing table. Registered here so
-# create_tables.py picks them up automatically (same as NotificationSound
-# and RoleTitle above) — no separate migration script needed since none
-# of this touches an existing table's columns.
-# ═══════════════════════════════════════════════════════════════════════

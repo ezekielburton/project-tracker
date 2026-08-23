@@ -3,29 +3,6 @@ from flask_login import UserMixin
 from datetime import datetime
 
 
-@login_manager.user_loader
-def load_user(token):
-    """
-    Token format: "{user_id}:{password_fingerprint}"
-    The fingerprint is the last 12 chars of the password hash.
-    If the password changes, the fingerprint changes, killing all active sessions.
-    """
-    parts = token.split(':', 1)
-    try:
-        user_id = int(parts[0])
-    except (ValueError, IndexError):
-        return None
-    user = User.query.get(user_id)
-    if user is None:
-        return None
-    # Validate fingerprint — returns None (forces logout) if password was changed
-    if len(parts) == 2 and parts[1] != user.password_hash[-12:]:
-        return None
-    return user
-
-# User Class
-
-
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
 
@@ -41,10 +18,10 @@ class User(db.Model, UserMixin):
 
     # JSON string storing per-type email notification opt-outs.
     # Format: '{"new_project": false, "revision_flag": true}'
-    # Missing key = enabled (default on, so existing users get everything).
+    # Missing key = enabled (default on).
     notification_prefs = db.Column(db.String(2000), nullable=True)
 
-    # Profile page fields (added for the profile redesign)
+    # Profile fields shown on the user's profile page
     bio = db.Column(db.Text, nullable=True)
     avatar_filename = db.Column(db.String(255), nullable=True)   # app/static/avatars/<filename>
     banner_filename = db.Column(db.String(255), nullable=True)   # app/static/banners/<filename>
@@ -70,9 +47,8 @@ class User(db.Model, UserMixin):
         return f"{self.id}:{self.password_hash[-12:]}"
 
     def wants_notification(self, key):
-        """Return True if this user wants to receive email for the given pref key.
-        Defaults to True when no prefs are saved or the key is absent — so all
-        existing users continue to receive every notification after the migration.
+        """Return True if this user wants email for the given pref key.
+        Defaults to True when no prefs are saved or the key is absent.
         """
         import json
         if not self.notification_prefs:
@@ -86,15 +62,33 @@ class User(db.Model, UserMixin):
     def __repr__(self):
         return f'<User {self.email}>'
 
-# Notification Class
+
+@login_manager.user_loader
+def load_user(token):
+    """
+    Token format: "{user_id}:{password_fingerprint}"
+    The fingerprint is the last 12 chars of the password hash.
+    If the password changes, the fingerprint changes, killing all active sessions.
+    """
+    parts = token.split(':', 1)
+    try:
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        return None
+    user = User.query.get(user_id)
+    if user is None:
+        return None
+    # Validate fingerprint — returns None (forces logout) if password was changed
+    if len(parts) == 2 and parts[1] != user.password_hash[-12:]:
+        return None
+    return user
 
 
 class RoleTitle(db.Model):
     """
     Admin-editable "fun title" shown per role on the profile page
-    (e.g. cs -> "Client Shepherd"). If a role has no row here yet,
-    DEFAULT_ROLE_TITLES below is used instead — so the feature works
-    out of the box before any admin edits it.
+    (e.g. cs -> "Client Shepherd"). When a role has no row here, the
+    DEFAULT_ROLE_TITLES fallback is used instead.
     """
     __tablename__ = 'role_titles'
 
@@ -104,6 +98,17 @@ class RoleTitle(db.Model):
 
     def __repr__(self):
         return f'<RoleTitle {self.role}: {self.title}>'
+
+
+# Fallback role titles, used when no RoleTitle row exists for a role.
+# Overridden per role through the Role Titles admin panel.
+DEFAULT_ROLE_TITLES = {
+    'admin': 'System Overlord',
+    'cs': 'Client Shepherd',
+    'designer': 'Pixel Architect',
+    'team_lead': 'Design Captain',
+    'management': 'The Big Picture',
+}
 
 
 class UserTableLayout(db.Model):
@@ -138,20 +143,6 @@ class UserTableLayout(db.Model):
         return f'<UserTableLayout user={self.user_id} table_key={self.table_key}>'
 
 
-# Fallback titles — used whenever no RoleTitle row exists yet for a given role.
-# Keeps the feature working immediately after this deploy, before any admin
-# has visited the new "Role Titles" admin panel section to override them.
-
-
-DEFAULT_ROLE_TITLES = {
-    'admin': 'System Overlord',
-    'cs': 'Client Shepherd',
-    'designer': 'Pixel Architect',
-    'team_lead': 'Design Captain',
-    'management': 'The Big Picture',
-}
-
-
 class ProjectTableView(db.Model):
     """ A user's saved custom view on the Projects page. This consists of a name plus a remembered filter selectin,
     which is layered on top of the three fixed presets. Also saves sorting options"""
@@ -160,7 +151,7 @@ class ProjectTableView(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    base_view = db.Column(db.String(20), nullable=False) # my / all / design_complete (renamed from 'approved' 18 Aug 2026 — see migrations/_backfill_project_table_view_base_view.py)
+    base_view = db.Column(db.String(20), nullable=False) # my / all / design_complete
     filters = db.Column(db.JSON, nullable=True) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

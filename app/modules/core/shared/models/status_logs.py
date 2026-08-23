@@ -2,6 +2,15 @@ from app.modules.core.shared.extensions import db
 from datetime import datetime
 
 
+# ── Status tracking logs ─────────────────────────────────────────────────
+# One row per status *period*, not per change: started_at/ended_at bracket
+# how long an entity sat in a given status. ended_at is NULL for exactly one
+# row per entity at any time — that's the "current" period, still running.
+# A transition closes the open row (sets ended_at) and opens a new one; this
+# happens through the record_*_status() funnel in app/status_tracking.py,
+# never as a raw assignment, so every project/customer/deliverable's full
+# status history is captured in one place instead of scattered across
+# every route that used to set .project_status / .status directly.
 class ProjectStatusLog(db.Model):
     __tablename__ = 'project_status_logs'
 
@@ -51,5 +60,3 @@ class DeliverableStatusLog(db.Model):
 
     def __repr__(self):
         return f'<DeliverableStatusLog deliverable={self.deliverable_id} status={self.status} open={self.ended_at is None}>'
-
-    # ProjectFile Class — stores reference files uploaded to a project by CS or admin

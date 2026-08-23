@@ -25,6 +25,21 @@ class BriefFlag(db.Model):
         return f'<BriefFlag project={self.project_id} type={self.flag_type} resolved={self.is_resolved}>'
 
 
+class BriefFlagMessage(db.Model):
+    __tablename__ = 'brief_flag_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    flag_id = db.Column(db.Integer, db.ForeignKey('brief_flags.id'), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    author = db.relationship('User', foreign_keys=[author_id])
+
+    def __repr__(self):
+        return f'<BriefFlagMessage flag={self.flag_id} author={self.author_id}>'
+
+
 class DecisionFlag(db.Model):
     __tablename__ = 'decision_flags'
 
@@ -60,18 +75,3 @@ class DecisionFlagMessage(db.Model):
 
     def __repr__(self):
         return f'<DecisionFlagMessage flag={self.flag_id} author={self.author_id}>'
-
-
-class BriefFlagMessage(db.Model):
-    __tablename__ = 'brief_flag_messages'
-
-    id = db.Column(db.Integer, primary_key=True)
-    flag_id = db.Column(db.Integer, db.ForeignKey('brief_flags.id'), nullable=False)
-    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    message = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    author = db.relationship('User', foreign_keys=[author_id])
-
-    def __repr__(self):
-        return f'<BriefFlagMessage flag={self.flag_id} author={self.author_id}>'

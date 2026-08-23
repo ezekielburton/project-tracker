@@ -100,5 +100,3 @@ class BugReportComment(db.Model):
 
     def __repr__(self):
         return f'<BugReportComment {self.id} on bug {self.bug_id}>'
-    
-#  ---- Wiki -------------------------------
