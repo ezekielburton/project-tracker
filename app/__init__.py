@@ -5,9 +5,9 @@ import os
 
 from app.modules.core.shared.extensions import db, login_manager, mail
 
-def create_app():
+def create_app(config=Config):
     app = Flask(__name__)
-    app.config.from_object(Config)
+    app.config.from_object(config)
 
     db.init_app(app)
     login_manager.init_app(app)

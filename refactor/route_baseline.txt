@@ -148,6 +148,8 @@
 /projects-new/views	POST	project_list.create_view
 /projects-new/views/<int:view_id>/delete	POST	project_list.delete_view
 /projects-new/views/<int:view_id>/rename	POST	project_list.rename_view
+/projects/<int:project_id>/assign-concept-kv	POST	project_overlay.assign_concept_kv
+/projects/<int:project_id>/assign-lead	POST	project_overlay.assign_lead
 /projects/<int:project_id>/deliverables/<int:deliverable_id>/transfer	POST	transfer.transfer_deliverable
 /projects/<int:project_id>/draft	DELETE	project_overlay.delete_draft
 /projects/<int:project_id>/overlay	GET	project_overlay.overlay
@@ -177,6 +179,7 @@
 /projects/<int:project_id>/overlay/site-visits/<int:visit_id>/delete	POST	project_notes.delete_site_visit
 /projects/<int:project_id>/overlay/site-visits/create	POST	project_notes.create_site_visit
 /projects/<int:project_id>/overlay/start	POST	project_overlay.overlay_start_project
+/projects/<int:project_id>/overlay/status/override	POST	project_overlay.override_project_status
 /projects/<int:project_id>/overlay/submissions	GET	project_overlay.overlay_submissions
 /projects/<int:project_id>/overlay/submissions/approve	POST	project_overlay.overlay_submissions_approve
 /projects/<int:project_id>/overlay/submissions/client-revision	POST	project_overlay.overlay_submissions_client_revision
@@ -193,7 +196,10 @@
 /projects/<int:project_id>/overlay/uncancel	POST	project_overlay.overlay_uncancel_project
 /projects/<int:project_id>/preproduction/events	GET	project_preproduction.preproduction_events
 /projects/<int:project_id>/preproduction/skip	POST	project_preproduction.skip_to_preproduction
+/projects/<int:project_id>/reassign-cs-lead	POST	project_overlay.reassign_cs_lead
 /projects/<int:project_id>/reference-files/download-all	GET	project_overlay.download_all_reference_files
+/projects/<int:project_id>/secondary-cs	POST	project_overlay.add_secondary_cs
+/projects/<int:project_id>/secondary-cs/<int:user_id>/remove	POST	project_overlay.remove_secondary_cs
 /projects/<int:project_id>/set-project-owner	POST	project_overlay.set_project_owner
 /projects/<int:project_id>/upload-file	POST	project_overlay.upload_project_file
 /projects/deliverable-types/upload-image	POST	admin.upload_deliverable_type_image

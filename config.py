@@ -59,3 +59,12 @@ class Config:
     # Dev-only tools — set DEV_TOOLS_ENABLED=true in .env on your local machine only.
     # NEVER set this on the production server — it exposes destructive data operations.
     DEV_TOOLS_ENABLED = os.environ.get('DEV_TOOLS_ENABLED', 'false').lower() == 'true'
+
+
+class TestingConfig(Config):
+    """Configuration for the pytest suite. Points at a dedicated test database
+    so tests never touch dev or production data, and disables outbound mail."""
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL')
+    MAIL_ENABLED = False
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'test-secret-key')
