@@ -140,7 +140,7 @@ def create_app(config=Config):
     from app.routes.feedback import feedback_bp
     from app.routes.wiki import wiki_bp
     from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
-    from app.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
+    from app.modules.profile.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
     from app.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel (Phase 7)
     from app.routes.wizard import wizard_bp
     from app.routes.file_templates import file_templates_bp

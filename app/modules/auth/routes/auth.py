@@ -152,7 +152,7 @@ def account():
     # Imported inline (used only in this route). Achievement-domain logic
     # lives in the profile module; this pulls the Active Rewards + pinning
     # data shown in the account page's rewards sections.
-    from app.routes.profile import _build_account_achievement_context
+    from app.modules.profile.routes.profile import _build_account_achievement_context
     achievement_context = _build_account_achievement_context(current_user)
 
     return render_template(

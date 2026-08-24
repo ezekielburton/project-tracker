@@ -1,21 +1,17 @@
 """
-Profile blueprint — viewing (own + other users') and editing profile data.
-
-Split out of auth.py on 3 Jul 2026 so that viewing another user's profile
-(needed by the achievement system's clickable avatars and leaderboard,
-built in later phases) has a natural home. auth.py keeps only
-login/logout/register/account-settings routes — nothing here overlaps
-with those.
+Profile blueprint — viewing (own and other users') and editing profile data.
+Covers the profile page and its achievement display; auth and account
+settings live in the auth module.
 """
 import os
 import uuid
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, url_for
 from flask_login import login_required, current_user
-from app import db
-from app.models import User
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import User
 
-profile_bp = Blueprint('profile', __name__)
+profile_bp = Blueprint('profile', __name__, template_folder='../templates')
 
 
 AVATAR_UPLOAD_FOLDER = os.path.join('app', 'static', 'avatars')
@@ -67,8 +63,7 @@ def _build_achievement_tile(achievement, user_achievement):
     (own profile), and for the pinned-only view on someone else's profile.
 
     Every achievement that reaches this function is already earned —
-    pinning only ever references earned UserAchievement rows (Phase 5:
-    "Pinned achievements... Shows all earned achievements"), and "recent"
+    pinning only ever references earned UserAchievement rows, and "recent"
     is filtered to earned_at IS NOT NULL before this is ever called. So
     unlike the full checklist below, there's no locked/hidden state to
     represent here — a hidden achievement that's been earned always fully
@@ -95,7 +90,7 @@ def _build_achievement_context(profile_user, is_own_profile):
     branch on whether a key exists at all — only on whether it's empty,
     and on is_own_profile for which sections to show in the first place.
     """
-    from app.models import Achievement, AchievementCategory, UserAchievement, UserPinnedAchievement
+    from app.modules.core.shared.models import Achievement, AchievementCategory, UserAchievement, UserPinnedAchievement
 
     # ── Pinned tiles — shown on BOTH own and other-user profiles ───────────
     pinned_rows = (
@@ -128,10 +123,9 @@ def _build_achievement_context(profile_user, is_own_profile):
 
     if not is_own_profile:
         # Visitors only ever see pinned tiles — no Recent tab, no expandable
-        # checklist, no progress bars (Phase 4 spec). If this user hasn't
-        # pinned anything, the template shows an empty-state message rather
-        # than falling back to their recent achievements — per Ezekiel's
-        # call: "for everyone else, it shows their pinned" (nothing else).
+        # checklist, no progress bars. If this user hasn't pinned anything,
+        # the template shows an empty-state message rather than falling back
+        # to their recent achievements.
         return context
 
     # ── Recent tiles (own profile only) ─────────────────────────────────────
@@ -164,9 +158,9 @@ def _build_achievement_context(profile_user, is_own_profile):
             .all()
         )
         if not category_achievements:
-            # Skip empty categories entirely — until Phase 7's admin page
-            # exists, a category can easily have zero achievements in it,
-            # and a heading with nothing underneath just looks broken.
+            # Skip empty categories entirely — a category can have zero
+            # achievements in it, and a heading with nothing underneath just
+            # looks broken.
             continue
         rows = []
         for achievement in category_achievements:
@@ -213,8 +207,8 @@ def view(user_id=None):
     /profile with no id — consistent with how emulation is handled
     everywhere else in the app.
     """
-    from app.models import RoleTitle, DEFAULT_ROLE_TITLES, UserDisplaySettings, UserAchievement, AchievementBorder
-    from app.utils import get_actor
+    from app.modules.core.shared.models import RoleTitle, DEFAULT_ROLE_TITLES, UserDisplaySettings, UserAchievement, AchievementBorder
+    from app.modules.core.shared.lib.utils import get_actor
 
     actor = get_actor()
     profile_user = User.query.get_or_404(user_id) if user_id is not None else actor
@@ -225,10 +219,9 @@ def view(user_id=None):
     role_title = RoleTitle.query.filter_by(role=profile_user.role).first()
     fun_title = role_title.title if role_title else DEFAULT_ROLE_TITLES.get(profile_user.role, '')
 
-    # Active Rewards (Phase 5) override the defaults above, based on
-    # profile_user's own saved choices — NOT the viewer's. Visiting someone
-    # else's profile always shows THEIR active title/border, same as their
-    # pinned achievements already do.
+    # Active Rewards override the defaults above, based on profile_user's own
+    # saved choices — NOT the viewer's. Visiting someone else's profile always
+    # shows THEIR active title/border, same as their pinned achievements do.
     active_border_class = None
     display_settings = UserDisplaySettings.query.filter_by(user_id=profile_user.id).first()
     if display_settings:
@@ -254,7 +247,7 @@ def view(user_id=None):
         customize_context = _build_account_achievement_context(profile_user)
 
     return render_template(
-        'auth/profile.html',
+        'profile/profile.html',
         profile_user=profile_user,
         is_own_profile=is_own_profile,
         fun_title=fun_title,
@@ -394,18 +387,17 @@ def update_profile_bio():
 
 def _build_account_achievement_context(user):
     """
-    Assembles everything the Account page's two new Phase 5 sections need:
-    the dropdown choices for Active Rewards, the user's current selections
-    (to pre-select those dropdowns), and the data the drag-and-drop pinning
-    UI needs (every earned achievement, plus which ones are currently
-    pinned and in what order).
+    Assembles everything the Account page's Active Rewards + pinning sections
+    need: the dropdown choices for Active Rewards, the user's current
+    selections (to pre-select those dropdowns), and the data the
+    drag-and-drop pinning UI needs (every earned achievement, plus which ones
+    are currently pinned and in what order).
 
-    Lives here in profile.py rather than auth.py — same reasoning as the
-    Phase 3 split: every achievement-domain read/write stays in one place,
-    even though this particular data ends up rendered on the Account page
-    (auth.account()), not the profile page itself.
+    Lives in the profile module rather than auth: every achievement-domain
+    read/write stays in one place, even though this data is rendered on the
+    Account page (the auth module's account view), not the profile page.
     """
-    from app.models import UserAchievement, UserDisplaySettings, UserPinnedAchievement, AchievementBorder
+    from app.modules.core.shared.models import UserAchievement, UserDisplaySettings, UserPinnedAchievement, AchievementBorder
 
     # Every achievement this user has actually earned — the single source
     # every dropdown and the pinning UI below all filter down from. Ordered
@@ -474,7 +466,7 @@ def save_display_settings():
     shouldn't silently corrupt the badge selection too, so we validate
     everything BEFORE writing anything.
     """
-    from app.models import UserDisplaySettings, UserAchievement, AchievementBorder
+    from app.modules.core.shared.models import UserDisplaySettings, UserAchievement, AchievementBorder
 
     data = request.get_json(silent=True)
     if data is None:
@@ -552,7 +544,7 @@ def save_pinned_achievements():
     by replacing the set wholesale, and it sidesteps any need to reconcile
     adds/removes/reorders as three separate operations.
     """
-    from app.models import UserAchievement, UserPinnedAchievement
+    from app.modules.core.shared.models import UserAchievement, UserPinnedAchievement
 
     data = request.get_json(silent=True)
     if data is None or 'pinned_ids' not in data:
