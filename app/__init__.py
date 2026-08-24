@@ -70,6 +70,7 @@ def create_app():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
+    from app.modules.core.shared.blueprint import core as core_bp
     from app.routes import main
     from app.routes.auth import auth
     from app.routes.notifications import notifications_bp
@@ -95,6 +96,7 @@ def create_app():
     from app.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
 
 
+    app.register_blueprint(core_bp)  # shared templates (later static) on the Jinja search path
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
     app.register_blueprint(auth)
