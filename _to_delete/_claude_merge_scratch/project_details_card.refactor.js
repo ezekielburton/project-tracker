@@ -1,12 +1,4 @@
 window.ProjectDetailsCard = (function () {
-    // Tracks the cleanup/backdrop handlers from the last bespoke #confirm-modal
-    // customization this file made (see the "last active customer" branch of
-    // the Cancel Customer confirm below), same pattern project_submissions_
-    // draft_card.js uses — so re-opening the shared modal a second time
-    // doesn't stack a duplicate listener on top of the previous one.
-    var _lastCancelCleanup = null;
-    var _lastBackdropCleanup = null;
-
     function init(rootEl, projectId, onChanged) {
         if (!rootEl) return null;
         var pickerHandles = [];
@@ -237,21 +229,6 @@ window.ProjectDetailsCard = (function () {
                 if (errorEl) errorEl.classList.add('hidden');
             });
         });
-        // A reason was already required to even get here (the inline form),
-        // but that's not the same as a confirmation — nothing stopped a
-        // stray click on "Confirm Cancel" from firing immediately. 24 Aug
-        // 2026 (per Ezekiel, "add redundancy to the cancel process"): gate
-        // the actual request behind window.showConfirm() same as every
-        // other destructive action in the app (Put on Hold, delete draft,
-        // etc.). When this is the project's last still-active customer,
-        // cancelling it is very likely the same moment the whole project
-        // should be cancelled too — so that specific case gets a bespoke,
-        // wider confirm (mirrors project_submissions_draft_card.js's
-        // showResolveStep/showEditReasonStep pattern: reuse the shared
-        // #confirm-modal shell via showConfirm(), then inject a second
-        // message plus an extra button directly) offering to do both in
-        // one step instead of a separate trip to the sidebar's Cancel
-        // Project afterward.
         rootEl.querySelectorAll('.overlay-customer-cancel-confirm').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var item = btn.closest('.overlay-customer-item');
@@ -264,121 +241,22 @@ window.ProjectDetailsCard = (function () {
                     if (errorEl) { errorEl.textContent = 'A reason is required.'; errorEl.classList.remove('hidden'); }
                     return;
                 }
-
-                function doCancel(alsoCancelProject) {
-                    btn.disabled = true;
-                    if (errorEl) errorEl.classList.add('hidden');
-                    fetch(`/project-customers/${pcId}/cancel`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ reason: reason }),
-                    })
-                        .then(function (r) { return r.json(); })
-                        .then(function (data) {
-                            btn.disabled = false;
-                            if (!data.success) {
-                                if (errorEl) { errorEl.textContent = data.error || 'Could not cancel this customer.'; errorEl.classList.remove('hidden'); }
-                                return;
-                            }
-                            if (!alsoCancelProject) { onChanged(); return; }
-                            // Best-effort follow-up — the customer cancel already
-                            // succeeded either way, so a failure here just falls
-                            // back to the normal sidebar Cancel Project action
-                            // rather than losing the customer cancel too.
-                            fetch(`/projects/${projectId}/overlay/cancel`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ reason: reason }),
-                            })
-                                .then(function (r2) { return r2.json(); })
-                                .then(function (data2) {
-                                    if (!data2.success) {
-                                        alert('The customer was cancelled, but the project could not be cancelled automatically (' + (data2.error || 'unknown error') + '). Use "Cancel Project" in the sidebar to finish.');
-                                    }
-                                    onChanged();
-                                });
-                        });
-                }
-
-                // Is any OTHER customer on this project still active? If not,
-                // this cancel would leave the project with zero active
-                // customers.
-                var otherActiveCustomers = 0;
-                rootEl.querySelectorAll('.overlay-customer-item').forEach(function (el) {
-                    if (el !== item && !el.classList.contains('is-cancelled')) otherActiveCustomers++;
-                });
-
-                if (otherActiveCustomers > 0) {
-                    window.showConfirm('Cancel this customer? This freezes their state for invoicing until reactivated.', function () { doCancel(false); }, 'Cancel Customer');
-                    return;
-                }
-
-                // Last active customer — bespoke wider confirm with a third
-                // button, following project_submissions_draft_card.js's
-                // established pattern for one-off #confirm-modal content:
-                // hide the shared OK button entirely and provide bespoke
-                // buttons instead (rather than layering an extra click
-                // handler onto the shared OK button — that button is a
-                // singleton reused by every confirm dialog in the app, so a
-                // handler left attached past this one dialog's lifetime
-                // would fire doCancel() again on some later, unrelated
-                // confirm; every bespoke button below owns its own full
-                // cleanup instead, exactly like showResolveStep/
-                // showEditReasonStep do).
-                window.showConfirm('', function () { }, 'Cancel Customer');
-                var modal = document.getElementById('confirm-modal');
-                var modalBody = document.getElementById('confirm-modal-body');
-                var okBtn = document.getElementById('confirm-modal-ok');
-                var cancelBtnModal = document.getElementById('confirm-modal-cancel');
-                var actions = modal ? modal.querySelector('.confirm-modal-actions') : null;
-                var card = modal ? modal.querySelector('.confirm-modal-card') : null;
-                if (!modal || !modalBody || !actions || !okBtn) { doCancel(false); return; }
-
-                modalBody.innerHTML =
-                    '<span class="confirm-modal-message">Cancel this customer? This freezes their state for invoicing until reactivated.</span>' +
-                    '<span class="confirm-modal-message">This is the only active customer left on this project — you can cancel the project at the same time instead of doing it as a separate step afterward.</span>';
-                modalBody.classList.add('confirm-modal-body--options');
-                if (card) card.classList.add('confirm-modal-card--wide');
-                okBtn.style.display = 'none';
-
-                var customerOnlyBtn = document.createElement('button');
-                customerOnlyBtn.type = 'button';
-                customerOnlyBtn.className = 'btn-primary';
-                customerOnlyBtn.id = 'overlay-cancel-customer-only-btn';
-                customerOnlyBtn.textContent = 'Cancel Customer Only';
-                actions.insertBefore(customerOnlyBtn, okBtn);
-
-                var bothBtn = document.createElement('button');
-                bothBtn.type = 'button';
-                bothBtn.className = 'btn-danger';
-                bothBtn.id = 'overlay-cancel-customer-and-project-btn';
-                bothBtn.textContent = 'Cancel Customer & Project';
-                actions.insertBefore(bothBtn, okBtn);
-
-                function cleanupModalState() {
-                    modalBody.classList.remove('confirm-modal-body--options');
-                    if (card) card.classList.remove('confirm-modal-card--wide');
-                    okBtn.style.display = '';
-                    if (customerOnlyBtn.parentNode) customerOnlyBtn.parentNode.removeChild(customerOnlyBtn);
-                    if (bothBtn.parentNode) bothBtn.parentNode.removeChild(bothBtn);
-                }
-                function backdropCleanup(e) { if (e.target === modal) cleanupModalState(); }
-
-                if (_lastCancelCleanup && cancelBtnModal) cancelBtnModal.removeEventListener('click', _lastCancelCleanup);
-                if (_lastBackdropCleanup && modal) modal.removeEventListener('click', _lastBackdropCleanup);
-                _lastCancelCleanup = cleanupModalState;
-                _lastBackdropCleanup = backdropCleanup;
-                if (cancelBtnModal) cancelBtnModal.addEventListener('click', cleanupModalState);
-                modal.addEventListener('click', backdropCleanup);
-
-                function closeAndRun(alsoCancelProject) {
-                    cleanupModalState();
-                    modal.classList.add('hidden');
-                    if (window.helixPolling) window.helixPolling.resume();
-                    doCancel(alsoCancelProject);
-                }
-                customerOnlyBtn.addEventListener('click', function () { closeAndRun(false); });
-                bothBtn.addEventListener('click', function () { closeAndRun(true); });
+                btn.disabled = true;
+                if (errorEl) errorEl.classList.add('hidden');
+                fetch(`/project-customers/${pcId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason }),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        btn.disabled = false;
+                        if (!data.success) {
+                            if (errorEl) { errorEl.textContent = data.error || 'Could not cancel this customer.'; errorEl.classList.remove('hidden'); }
+                            return;
+                        }
+                        onChanged();
+                    });
             });
         });
         rootEl.querySelectorAll('.overlay-customer-uncancel-btn').forEach(function (btn) {

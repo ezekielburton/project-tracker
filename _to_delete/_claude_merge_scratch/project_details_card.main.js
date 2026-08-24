@@ -32,38 +32,12 @@ window.ProjectDetailsCard = (function () {
             }));
         });
 
-        // Project-level admin status override picker (back 24 Aug 2026, per
-        // Ezekiel — see _details_top_cards.html/project_overlay.py's
-        // override_project_status() for what this actually does: a bulk
-        // WRITE to every deliverable + C&CM channel on the project, not a
-        // stored override of this pill). Only renders at all for an admin
-        // (can_override_project_status). Same StatusPicker component and
-        // same fetch-on-select shape as project_deliverables_card.js's
-        // wireStatusOverridePickers() — just one picker here instead of
-        // one per row, and onChanged() re-fetches the whole Details tab on
-        // success same as every other mutation in this file.
-        var projectStatusPicker = rootEl.querySelector('#project-status-picker');
-        if (projectStatusPicker && window.StatusPicker) {
-            var projectStatusHandle = window.StatusPicker.init(projectStatusPicker, function (statusValue, el) {
-                fetch(el.dataset.targetUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: statusValue }),
-                })
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (!data.success) {
-                            alert(data.error || 'Could not update this status.');
-                            return;
-                        }
-                        onChanged();
-                    })
-                    .catch(function () {
-                        alert('Something went wrong. Please try again.');
-                    });
-            });
-            if (projectStatusHandle) pickerHandles.push(projectStatusHandle);
-        }
+        // Project-level admin status override picker was removed (22 Aug
+        // 2026 simplification, per Ezekiel) — #project-status-picker no
+        // longer renders (see _details_top_cards.html), the pill is now a
+        // pure live roll-up of the project's deliverables. Only the
+        // deliverable-level override picker remains (see
+        // project_deliverables_card.js), unaffected by this removal.
 
         rootEl.querySelectorAll('.overlay-secondary-cs-remove').forEach(function (btn) {
             btn.addEventListener('click', function () { postForm(`/projects/${projectId}/secondary-cs/${btn.dataset.userId}/remove`, ''); });
