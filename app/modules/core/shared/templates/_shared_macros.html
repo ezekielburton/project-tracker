@@ -98,8 +98,12 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     _DELIVERABLE_STATUS_OVERRIDE_OPTIONS passes in, so the popover can
     never offer a status that doesn't render as a real pill. `target_url`
     is the POST endpoint status_picker.js sends { status: <label> } to on
-    selection. This macro is used only for a deliverable's own status — the
-    project pill is a pure live roll-up (see project_deliverables_card.js). #}
+    selection. Used for a deliverable's own status (project_deliverables_card.js)
+    and, for the project pill itself (project_details_card.js), as a bulk
+    write — target_url there is project_overlay.override_project_status(),
+    which applies the picked status to every deliverable (and, for C&CM,
+    every ProjectPosmChannel) on the project; the pill is still a pure live
+    roll-up either way, never stored directly. #}
     {% macro status_override_picker(picker_id, current_label, current_class, options, target_url) %}
     <div class="status-picker" id="{{ picker_id }}" data-target-url="{{ target_url }}">
         <button type="button" class="status-picker-trigger">
