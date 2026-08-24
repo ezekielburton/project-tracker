@@ -193,56 +193,6 @@ def _parse_values(param_name):
         return []
     return [v for v in raw.split(',') if v]
 
-def _apply_sql_filters(query, exclude=None):
-    """
-    Filters that map onto the real Project columns. Cheap to push into SQL,
-    rather than fetching every row.
-
-    `exclude` optionally names one filter to skip applying — used when
-    computing that filter's own option counts, so a dimension's current
-    selection doesn't shrink its own option counts to just itself.
-    """
-    if exclude != 'cs_lead':
-        cs_lead_ids = _parse_ids('cs_lead')
-        if cs_lead_ids:
-            query = query.filter(Project.cs_lead_id.in_(cs_lead_ids))
-
-    if exclude != 'client':
-        client_ids = _parse_ids('client')
-        want_client_undefined = _has_undefined('client')
-        if client_ids or want_client_undefined:
-            conditions = []
-            if client_ids:
-                conditions.append(Project.client_id.in_(client_ids))
-            if want_client_undefined:
-                conditions.append(Project.client_id.is_(None))
-            query = query.filter(db.or_(*conditions))
-
-    if exclude != 'brief_type':
-        brief_types = _parse_values('brief_type')
-        if brief_types:
-            query = query.filter(Project.brief_type.in_(brief_types))
-
-    if exclude != 'initial_deadline':
-        initial_from = _parse_date('initial_deadline_from')
-        if initial_from:
-            query = query.filter(Project.first_output_deadline >= initial_from)
-
-        initial_to = _parse_date('initial_deadline_to')
-        if initial_to:
-            query = query.filter(Project.first_output_deadline <= initial_to)
-
-    if exclude != 'search':
-        search = request.args.get('search', '').strip()
-        if search:
-            like = f'%{search}%'
-            query = query.filter(db.or_(
-                Project.name.ilike(like),
-                Project.job_number.ilike(like)
-            ))
-
-    return query
-
 def _parse_date(param_name):
     """
     Reads a query param expected to be an ISO date string
@@ -257,11 +207,75 @@ def _parse_date(param_name):
     except ValueError:
         return None
 
-def _apply_row_filters(rows, exclude=None):
+def _filter_rows(rows, exclude=None):
     """
-    Filters that depend on computed values rather than a single column...
-    Same `exclude` idea as _apply_sql_filters.
+    Applies every active filter dimension to an already-fetched,
+    already-serialized row list, skipping whichever one dimension
+    `exclude` names — used when computing that dimension's own option
+    counts, so a dimension's current selection doesn't shrink its own
+    option counts to just itself.
+
+    Used to be two functions: _apply_sql_filters (cs_lead/client/
+    brief_type/initial_deadline/search — cheap to push into the WHERE
+    clause, so that's where they lived) and _apply_row_filters (designers/
+    status/urgency/team/design_type/next_deadline — computed values with
+    no single column to filter on, so always Python-side). Merged into one
+    Python-only function 24 Aug 2026 (per Ezekiel — "clearing filters is
+    really slow"): _build_filter_counts calls this once per filter
+    dimension (8 dimensions) plus once more for the visible row list, and
+    every one of those 9 calls used to mean _rows_excluding re-running the
+    SQL-filtered half as a fresh, fully eager-loaded DB query — 9 full
+    fetch-and-serialize passes over the view's projects on every single
+    page load, each exactly as expensive as the others with NO filters
+    active, which is exactly the case that was slow (every dimension
+    scoped to the whole view instead of some filtered-down subset).
+
+    Now _fetch_all_view_rows() runs the DB fetch exactly once per request
+    (shared by _compute_rows_and_groups and _build_filter_counts — see
+    table_rows()/index()), and every dimension, former-SQL ones included,
+    is a cheap Python list comprehension over rows already sitting in
+    memory. The cs_lead/client/brief_type/initial_deadline/search blocks
+    below are a straight port of the old SQL conditions onto the row
+    dict's equivalent fields (_serialize_row already carries all of
+    them for display) — a project with no cs_lead/client/deadline set
+    just never matches an id/date filter, same as SQL comparing against
+    NULL never matches either.
     """
+    if exclude != 'cs_lead':
+        cs_lead_ids = _parse_ids('cs_lead')
+        if cs_lead_ids:
+            rows = [r for r in rows if r['cs_lead'] and r['cs_lead']['id'] in cs_lead_ids]
+
+    if exclude != 'client':
+        client_ids = _parse_ids('client')
+        want_client_undefined = _has_undefined('client')
+        if client_ids or want_client_undefined:
+            rows = [r for r in rows if
+                    (client_ids and r['client_id'] in client_ids)
+                    or (want_client_undefined and r['client_id'] is None)]
+
+    if exclude != 'brief_type':
+        brief_types = _parse_values('brief_type')
+        if brief_types:
+            rows = [r for r in rows if r['brief_type'] in brief_types]
+
+    if exclude != 'initial_deadline':
+        initial_from = _parse_date('initial_deadline_from')
+        if initial_from:
+            rows = [r for r in rows if r['initial_deadline'] and r['initial_deadline'] >= initial_from]
+
+        initial_to = _parse_date('initial_deadline_to')
+        if initial_to:
+            rows = [r for r in rows if r['initial_deadline'] and r['initial_deadline'] <= initial_to]
+
+    if exclude != 'search':
+        search = request.args.get('search', '').strip()
+        if search:
+            needle = search.lower()
+            rows = [r for r in rows if
+                    needle in (r['name'] or '').lower()
+                    or needle in (r['job_number'] or '').lower()]
+
     if exclude != 'designers':
         designer_ids = _parse_ids('designers')
         want_undefined = _has_undefined('designers')
@@ -454,28 +468,40 @@ def _base_query_for_view(view, user):
 
     return query, order_by
 
-def _rows_excluding(view, user, exclude):
+def _fetch_all_view_rows(view, user):
     """
-    Rebuilds the row list for the current view, with every active filter
-    applied EXCEPT `exclude`. Used to compute one filter's own option
-    counts — a project should still count toward "Client: Acme" even
-    while Client is the very filter being counted, as long as it matches
-    every OTHER active filter.
+    The one and only DB fetch-and-serialize pass per request: every
+    project in this view (the fixed preset's own static conditions from
+    _base_query_for_view — draft/handed-to-production/cancelled
+    exclusions — already applied), with NONE of the combinable filter
+    dimensions applied yet. table_rows()/index() call this exactly once
+    and hand the same in-memory row list to both _compute_rows_and_groups
+    (the visible list) and _build_filter_counts (every filter chip's own
+    count) — see _filter_rows()'s docstring for why this replaced 9
+    separate fetches.
     """
-    sql_dims = ('cs_lead', 'client', 'brief_type', 'initial_deadline', 'search')
-    row_dims = ('designers', 'status', 'urgency', 'next_deadline', 'team', 'design_type')
-
     query, order_by = _base_query_for_view(view, user)
     if query is None:
         return []
 
-    query = _apply_sql_filters(query, exclude=exclude if exclude in sql_dims else None)
     projects = _eager_load(query).order_by(order_by).all()
+    project_ids = [p.id for p in projects]
+    rollups, next_deadlines = _bulk_deliverable_aggregates(project_ids)
+    status_started_at = bulk_project_status_started_at(project_ids)
+    client_approved_at = bulk_project_client_approved_at(project_ids)
+    return [_serialize_row(p, rollups, next_deadlines, status_started_at, client_approved_at) for p in projects]
 
-    rollups, next_deadlines = _bulk_deliverable_aggregates([p.id for p in projects])
-    rows = [_serialize_row(p, rollups, next_deadlines) for p in projects]
-    rows = _apply_row_filters(rows, exclude=exclude if exclude in row_dims else None)
-    return rows
+
+def _rows_excluding(all_rows, exclude):
+    """
+    `all_rows` with every active filter applied EXCEPT `exclude`. Used to
+    compute one filter's own option counts — a project should still count
+    toward "Client: Acme" even while Client is the very filter being
+    counted, as long as it matches every OTHER active filter. Thin wrapper
+    over _filter_rows so each call site in _build_filter_counts below
+    reads as "this dimension's rows", not a bare _filter_rows call.
+    """
+    return _filter_rows(all_rows, exclude=exclude)
 
 def _count_by_id(rows, key):
     """Counts rows by a single-person field (e.g. row['cs_lead']). Rows
@@ -516,8 +542,8 @@ def _show_cancelled():
     the Cancelled chip in the filter panel by hand), so it composes with
     every other filter dimension for free, and doubles as "cancelled
     projects ONLY" rather than "cancelled mixed in with everything else" —
-    the row-level status filter (_apply_row_filters) already narrows to
-    exactly the selected status value(s)."""
+    the status filter (_filter_rows) already narrows to exactly the
+    selected status value(s)."""
     return 'Cancelled' in _parse_values('status')
 
 def _has_undefined(param_name):
@@ -554,14 +580,17 @@ def _count_by_list_membership(rows, key):
     return counts
 
 
-def _build_filter_counts(view, user):
+def _build_filter_counts(all_rows):
     """
     Computes every filter option's live count, each scoped to "this view
-    plus every other currently active filter."
+    plus every other currently active filter." Takes the shared
+    _fetch_all_view_rows() result now (see its docstring / _filter_rows's)
+    instead of re-fetching per dimension — the 8 _rows_excluding calls
+    below are all cheap in-memory filtering of the same list.
     """
-    client_rows = _rows_excluding(view, user, 'client')
-    designer_rows = _rows_excluding(view, user, 'designers')
-    design_type_rows = _rows_excluding(view, user, 'design_type')
+    client_rows = _rows_excluding(all_rows, 'client')
+    designer_rows = _rows_excluding(all_rows, 'designers')
+    design_type_rows = _rows_excluding(all_rows, 'design_type')
 
     client_counts = _count_by_value(client_rows, 'client_id')
     client_counts[None] = _count_undefined(client_rows, 'client_id')
@@ -572,19 +601,19 @@ def _build_filter_counts(view, user):
     design_type_counts = _count_by_value(design_type_rows, 'design_type')
     design_type_counts[None] = _count_undefined(design_type_rows, 'design_type')
 
-    team_rows = _rows_excluding(view, user, 'team')
+    team_rows = _rows_excluding(all_rows, 'team')
     team_counts = _count_by_list_membership(team_rows, 'design_teams')
     team_counts[None] = _count_undefined(team_rows, 'design_teams')
-    
+
 
     return {
-        'cs_lead': _count_by_id(_rows_excluding(view, user, 'cs_lead'), 'cs_lead'),
+        'cs_lead': _count_by_id(_rows_excluding(all_rows, 'cs_lead'), 'cs_lead'),
         'designers': designer_counts,
         'client': client_counts,
-        'brief_type': _count_by_value(_rows_excluding(view, user, 'brief_type'), 'brief_type'),
-        'status': _count_by_value(_rows_excluding(view, user, 'status'), 'blanket_status'),
-        'urgency': _count_by_value(_rows_excluding(view, user, 'urgency'), 'urgency'),
-        'team': _count_by_list_membership(_rows_excluding(view, user, 'team'), 'design_teams'),
+        'brief_type': _count_by_value(_rows_excluding(all_rows, 'brief_type'), 'brief_type'),
+        'status': _count_by_value(_rows_excluding(all_rows, 'status'), 'blanket_status'),
+        'urgency': _count_by_value(_rows_excluding(all_rows, 'urgency'), 'urgency'),
+        'team': _count_by_list_membership(_rows_excluding(all_rows, 'team'), 'design_teams'),
         'design_type': design_type_counts,
     }
 
@@ -624,7 +653,7 @@ def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_ap
         'urgency': _urgency_for(next_deadline, date.today()),
     }
 
-def _compute_rows_and_groups(view, user):
+def _compute_rows_and_groups(all_rows):
     """
     The rows -> filter -> sort -> group pipeline, shared by index() and
     table_rows() (added for task #55's SSE-triggered live table refresh —
@@ -633,27 +662,22 @@ def _compute_rows_and_groups(view, user):
     never quietly drift out of sync with what a real page load computes —
     same principle as _base_query_for_view/_rows_excluding already being
     shared rather than re-derived per caller.
+
+    Takes the shared _fetch_all_view_rows() result (all_rows) rather than
+    fetching itself — 24 Aug 2026, see _filter_rows()'s docstring: this
+    used to run its own query + eager load here, on top of _build_filter_
+    counts' 8 more, on every page load. Filtering is now the only thing
+    this function still does to the fetched rows.
+
+    No post-serialize "Design Completed" filtering needed (22 Aug 2026
+    simplification, per Ezekiel) — that separate label is gone, and the
+    SQL-level exclusion _fetch_all_view_rows inherits from
+    _base_query_for_view (Project.project_status != 'handed_to_production'
+    for My/All, == 'handed_to_production' for design_complete) is already
+    exact now that the project pill is a plain live roll-up with no
+    in-between C&CM-only state to reconcile against a computed field.
     """
-    query, order_by = _base_query_for_view(view, user)
-
-    if query is None:
-        rows = []
-    else:
-        query = _apply_sql_filters(query)
-        projects = _eager_load(query).order_by(order_by).all()
-        rollups, next_deadlines = _bulk_deliverable_aggregates([p.id for p in projects])
-        status_started_at = bulk_project_status_started_at([p.id for p in projects])
-        client_approved_at = bulk_project_client_approved_at([p.id for p in projects])
-        rows = [_serialize_row(p, rollups, next_deadlines, status_started_at, client_approved_at) for p in projects]
-        rows = _apply_row_filters(rows)
-
-        # No post-serialize "Design Completed" filtering needed anymore
-        # (22 Aug 2026 simplification, per Ezekiel) — that separate label
-        # is gone, and the SQL-level exclusion in _base_query_for_view
-        # (Project.project_status != 'handed_to_production' for My/All,
-        # == 'handed_to_production' for design_complete) is already exact
-        # now that the project pill is a plain live roll-up with no
-        # in-between C&CM-only state to reconcile against a computed field.
+    rows = _filter_rows(all_rows)
 
     # Sort is applied last, after every filter — it re-orders whatever
     # subset of rows is already showing, it never changes which rows show.
@@ -705,7 +729,8 @@ def table_rows():
     """
     user = _effective_user()
     view = request.args.get('view') or session.get('last_project_view', 'my')
-    rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(view, user)
+    all_rows = _fetch_all_view_rows(view, user)
+    rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(all_rows)
     return render_template('project_list/_table_rows.html', rows=rows, groups=groups, today=date.today())
 
 
@@ -753,9 +778,14 @@ def index():
     customer_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:customer_table').first()
     saved_customer_layout = customer_layout_row.layout if customer_layout_row else None
     
-    rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(view, user)
+    # Single DB fetch for the whole request (24 Aug 2026, see _filter_
+    # rows()'s docstring) — the visible row list and every filter chip's
+    # own count are both just Python-side filtering of this same list now,
+    # instead of each re-querying and re-serializing the view from scratch.
+    all_rows = _fetch_all_view_rows(view, user)
+    rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(all_rows)
 
-    filter_counts = _build_filter_counts(view, user)
+    filter_counts = _build_filter_counts(all_rows)
 
     view_total_query, _ = _base_query_for_view(view, user)
     view_total = view_total_query.count() if view_total_query is not None else 0

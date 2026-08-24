@@ -10,6 +10,50 @@ db = SQLAlchemy()
 login_manager = LoginManager()
 mail = Mail()
 
+
+def _compute_static_version():
+    """Cache-busting stamp for STATIC_VERSION — see the long comment in
+    create_app() for the git-hash and time.time() history. This is the
+    24 Aug 2026 fix for the bug those two attempts left in place: gunicorn
+    runs multiple worker processes in production, and time.time() at
+    process startup gives EACH worker its own value a few seconds apart
+    (whenever they happened to boot). polling.js's init() (fires on every
+    page load AND every SPA nav) compares the STATIC_VERSION baked into
+    the page against a fresh /api/version fetch, and reloads on any
+    mismatch — with requests round-robining across workers, the page-
+    render worker and the /api/version-answering worker frequently
+    disagreed, so real users saw a "refresh loop" and everything felt
+    slow (constant full-page reloads instead of the app's normal SPA
+    partial-swap nav). Never showed up locally because `python run.py` is
+    a single process — nothing for it to disagree with.
+
+    Fix: derive the stamp from the source tree's own newest file mtime
+    instead of wall-clock time at process start. Every worker reads the
+    same files off the same disk, so they always compute the identical
+    value — no more cross-worker mismatch — and it still changes on the
+    next deploy, since `git pull` rewrites the mtime of anything that
+    changed. No new env var or GEVENT_WORKER branch needed, so it doesn't
+    reintroduce either problem the two earlier attempts ran into.
+    """
+    import time
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    newest = 0.0
+    for root, dirs, files in os.walk(app_dir):
+        dirs[:] = [d for d in dirs if d not in ('__pycache__', '.git')]
+        for fname in files:
+            if fname.endswith('.pyc'):
+                continue
+            try:
+                mtime = os.path.getmtime(os.path.join(root, fname))
+            except OSError:
+                continue
+            if mtime > newest:
+                newest = mtime
+    # Fallback only if the walk somehow found nothing (shouldn't happen) —
+    # keeps STATIC_VERSION from ever being empty/zero.
+    return str(int(newest)) if newest else str(int(time.time()))
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -53,21 +97,31 @@ def create_app():
     # first attempted fix (branching on GEVENT_WORKER) still showed the
     # frozen hash, traced to Ezekiel's local GEVENT_WORKER=1 export.
     #
-    # Fix: always use the current timestamp at process startup, everywhere,
-    # no GEVENT_WORKER branch at all. Production deploys are always
-    # `git pull && systemctl restart` together anyway (see Infrastructure
-    # section below), so a restart-time timestamp changes exactly when a
-    # deploy happens there too — the git hash's only actual benefit was
-    # cosmetic traceability (eyeballing which commit a running instance's
-    # assets match), never something anything else in the app depends on,
-    # and it's not worth reintroducing a second env-var signal just to get
-    # it back. Still requires restarting the local Flask process to pick up
-    # new CSS/JS (there's no cheaper fix without moving to per-request
-    # computation, which would kill browser caching for stable assets too)
-    # — but a restart is something Ezekiel already does periodically,
-    # whereas a new git commit is not.
-    import time
-    app.config['STATIC_VERSION'] = str(int(time.time()))
+    # Fix (16 Jul 2026): always use the current timestamp at process
+    # startup, everywhere, no GEVENT_WORKER branch at all. Production
+    # deploys are always `git pull && systemctl restart` together anyway
+    # (see Infrastructure section below), so a restart-time timestamp
+    # changes exactly when a deploy happens there too — the git hash's
+    # only actual benefit was cosmetic traceability (eyeballing which
+    # commit a running instance's assets match), never something anything
+    # else in the app depends on, and it's not worth reintroducing a
+    # second env-var signal just to get it back. Still requires
+    # restarting the local Flask process to pick up new CSS/JS (there's
+    # no cheaper fix without moving to per-request computation, which
+    # would kill browser caching for stable assets too) — but a restart
+    # is something Ezekiel already does periodically, whereas a new git
+    # commit is not.
+    #
+    # Second fix (24 Aug 2026): time.time() at process startup turned out
+    # to have the SAME class of bug the git hash fix above was solving
+    # for — just triggered by multiple gunicorn workers instead of by
+    # git commits. See _compute_static_version() above for the full
+    # story; short version is every worker computed its own timestamp a
+    # few seconds apart, and polling.js's cross-worker version check
+    # treated that disagreement as "the app was redeployed," causing
+    # constant spurious full-page reloads in production only (local dev
+    # is a single process, so there was nothing to disagree with).
+    app.config['STATIC_VERSION'] = _compute_static_version()
 
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'
