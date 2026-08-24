@@ -1168,7 +1168,14 @@
     <script src="{{ url_for('static', filename='js/preview.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/notifications.js') }}?v={{ config.STATIC_VERSION }}"></script>
-    <script src="{{ url_for('static', filename='js/detail.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    {# detail.js tag removed 24 Aug 2026 — the file itself was deleted along
+    with the old pre-redesign detail page (app/static/js/detail.js, gone
+    since the "Old detail page removed" commit), but this <script> tag was
+    left behind loading it globally on every page. Same class of gap as the
+    assign-lead routes found the same day: a leftover reference to
+    something the cutover deleted, quietly 404ing (console-only, harmless —
+    the file's been gone since the cutover, so nothing has executed from it
+    in a long time) until someone actually looked at network requests. #}
     <script src="{{ url_for('static', filename='js/drag-drop.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/rich-editor.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}

@@ -7,7 +7,7 @@ from app.modules.core.shared.extensions import db, login_manager, mail
 
 def create_app(config=Config):
     app = Flask(__name__)
-    app.config.from_object(config)
+    app.config.from_object(Config)
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -72,7 +72,7 @@ def create_app(config=Config):
     from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
     from app.modules.core.shared.blueprint import core as core_bp
     from app.routes import main
-    from app.routes.auth import auth
+    from app.modules.auth.routes.auth import auth
     from app.routes.notifications import notifications_bp
     from app.models import Notification
     from flask_login import current_user

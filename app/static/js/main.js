@@ -7,7 +7,9 @@
 // block went with it in task #8, since it referenced an element that no
 // longer exists anywhere. Briefing is now the overlay's Create mode
 // (project_overlay_create.js).
-// main.js must be loaded first; notifications.js, detail.js, admin.js depend on it.
+// main.js must be loaded first; notifications.js, admin.js depend on it. (detail.js
+// is gone too, same M10 cutover as create.html above — base.html's <script> tag for
+// it was only found and removed 24 Aug 2026, see base.html's comment at that spot.)
 
 // main.js - Vitamin-E
 console.log("Vitamin-E loaded.");

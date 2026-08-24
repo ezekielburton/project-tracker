@@ -2,20 +2,17 @@ import json
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from app import db
-from app.models import User, NotificationSound
-from app.decorators import role_required
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import User, NotificationSound
+from app.modules.core.shared.lib.decorators import role_required
 from app.achievements import check_achievements
 
 
-auth = Blueprint('auth', __name__)
+auth = Blueprint('auth', __name__, template_folder='../templates')
 
 
-# NOTE: avatar/banner/details/bio profile-editing routes, the _save_profile_image
-# helper, and the /profile view route all moved to app/routes/profile.py on
-# 3 Jul 2026 (Achievement System Phase 3 — profile blueprint split, needed so
-# other users' profiles can be viewed via profile.view(user_id)). See that
-# file for anything that used to live here.
+# Profile view/edit routes and the profile-image helpers live in the profile
+# module, not here — this blueprint covers auth and account settings only.
 
 
 @auth.route('/register', methods=['GET', 'POST'])
@@ -102,24 +99,11 @@ def login():
         if next_page and next_page.startswith('/'):
             return redirect(next_page)
 
-        # Default landing page after login — new role-based dashboard (16
-        # Jul 2026), per Ezekiel: "dashboard is good to go. Make the
-        # default page of the app the dashboard." Was main.projects (the
-        # old legacy per-role dashboard), matching main.index's own switch
-        # right below in __init__.py — see that route's comment for the
-        # endpoint-naming explanation (projects.index is the NEW dashboard).
-        #
-        # Superseded here: the old `role_views` -> `?view=<card_key>` deep-
-        # link mapping from 9 Jul 2026 (back when this was TEMPORARILY
-        # DISABLED pending a management demo) is gone, not just re-enabled
-        # as-is — it targeted card keys ('decisions'/'due'/'my-week') from
-        # the single-dashboard.html tab-strip system that existed at the
-        # time. Since then the dashboard split into three fully separate,
-        # self-contained role templates (dashboard_cs.html/_leadership.html/
-        # _designer.html) that dashboard.py's index() already selects via
-        # layout_role internally — a `?view=` deep link has nothing left to
-        # select between for those three roles, so passing one would be
-        # dead weight, not a bug fix.
+        # Land on the role-based dashboard after login. Its endpoint is
+        # projects.index (the dashboard blueprint; see main.index in the app
+        # factory for the endpoint-naming note). dashboard.py's index()
+        # selects the right role template (dashboard_cs/_leadership/_designer)
+        # internally via layout_role, so no per-role deep link is needed here.
         return redirect(url_for('projects.index'))
 
     return render_template('auth/login.html', next=request.args.get('next', ''))
@@ -165,13 +149,9 @@ def account():
 
     available_sounds = NotificationSound.query.order_by(NotificationSound.name).all()
 
-    # Imported inline rather than at module level — matches the existing
-    # convention in this file (see check_achievements at the top of the
-    # file, which IS imported at module level since it's used everywhere;
-    # this one is used in exactly one route, so it stays scoped to it).
-    # Achievement-domain logic lives in profile.py per the Phase 3 split;
-    # this just pulls in the Active Rewards + pinning data for the two new
-    # Phase 5 sections on this page.
+    # Imported inline (used only in this route). Achievement-domain logic
+    # lives in the profile module; this pulls the Active Rewards + pinning
+    # data shown in the account page's rewards sections.
     from app.routes.profile import _build_account_achievement_context
     achievement_context = _build_account_achievement_context(current_user)
 

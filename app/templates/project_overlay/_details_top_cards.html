@@ -1,7 +1,7 @@
 {# Core property rows, shared by both brief types. No wrapper div here —
 the calling template wraps this include plus its own brief-specific
 rows in one .overlay-properties list, so it reads as continuous. #}
-{% from '_shared_macros.html' import status_pill %}
+{% from '_shared_macros.html' import status_pill, status_override_picker %}
 
 <div class="overlay-property-row">
     <span class="overlay-property-label">Job Number</span>
@@ -10,13 +10,27 @@ rows in one .overlay-properties list, so it reads as continuous. #}
 <div class="overlay-property-row">
     <span class="overlay-property-label">Project Status</span>
     <span class="overlay-property-value overlay-status-row">
-        {# No admin override for this pill anymore (22 Aug 2026
-        simplification, per Ezekiel) — status_label/status_class are a
-        pure live roll-up of the project's deliverables now, so an
-        override would just get silently clobbered by the next
-        deliverable change. Only the deliverable-level pill still has an
-        override (see _deliverables_standard.html/_deliverables_ccm.html). #}
+        {# status_label/status_class are a pure live roll-up of the
+        project's own deliverables (status_vocabulary.py's
+        derive_project_status) — this pill is never itself stored, even
+        with the picker below. can_override_project_status (admin-only,
+        24 Aug 2026, per Ezekiel — "I need to be able to set a project
+        status as admin... changing the overall status should update all
+        customers and deliverables to be the same") swaps in a bulk-WRITE
+        picker that pushes the picked status onto every deliverable (and,
+        for C&CM, every ProjectPosmChannel) on the project — see
+        project_overlay.override_project_status() and
+        _write_deliverable_status_override(). This pill just reads back
+        whatever the roll-up computes from that write, same as always.
+        Built for backfilling old projects onto the new vocabulary in one
+        click, not as an everyday substitute for Approve/Mark Done/etc. #}
+        {% if can_override_project_status %}
+        {{ status_override_picker('project-status-picker', status_label, status_class,
+        project_status_override_options,
+        url_for('project_overlay.override_project_status', project_id=project.id)) }}
+        {% else %}
         {{ status_pill(status_label, status_class) }}
+        {% endif %}
         {% if status_started_at %}
         {# "All status changes need to be time stamped" (22 Aug 2026, per
         Ezekiel) — when this project's raw status last changed

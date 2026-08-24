@@ -192,30 +192,71 @@ def _serialize_flag(flag, actor):
 
 
 # ── Admin status override (22 Aug 2026, per Ezekiel; deliverable-only as of
-# the same-day simplification a few hours later) ────────────────────────────
+# the same-day simplification a few hours later; project-level BULK version
+# added back 24 Aug 2026, see override_project_status() below) ─────────────
 # Originally offered both a project-level and a deliverable-level override.
 # The project-level one was retired the same day the status vocabulary got
 # simplified: project.project_status is now a pure live roll-up of the
 # project's own deliverables (status_vocabulary.py's derive_project_status /
 # status_tracking.py's sync_project_pipeline_status — "nothing else decides
-# it", per Ezekiel), recomputed after every deliverable-affecting action. An
-# admin override of the PROJECT pill would just get silently clobbered the
-# next time any deliverable on it changed, so there's nothing left for that
-# control to usefully do — override the deliverables instead and the
-# project follows automatically, same as every other action already does.
+# it", per Ezekiel), recomputed after every deliverable-affecting action. A
+# STORED override of the PROJECT pill would just get silently clobbered the
+# next time any deliverable on it changed, so there was nothing left for a
+# control like that to usefully do.
 #
-# The deliverable-level override still writes the same real underlying
-# fields a normal status change would (record_deliverable_status(), the
-# needs_2d/3d/technical + per-stream status fields) rather than a cosmetic
-# "display override" flag — every other piece of code that reads those
-# fields (the project roll-up above, project_preproduction.py's cascades,
-# dashboards, revision tracking) stays correct afterward instead of quietly
-# disagreeing with what's shown.
+# What came back 24 Aug 2026 (per Ezekiel — "I need to go and update some
+# old projects status's so the new system is fresh") is not that stored
+# override — it's a bulk WRITE: pick a status once, at the project level,
+# and override_project_status() applies it to every deliverable on the
+# project (C&CM: every ProjectPosmChannel too), through the exact same
+# per-deliverable field-writing logic override_deliverable_status() below
+# already uses one row at a time. The project pill still isn't stored
+# anywhere — it's recomputed by sync_project_pipeline_status() at the end,
+# same as always — this control just reaches every scope that pill (and,
+# for C&CM, the per-customer pills) are actually built from, in one action,
+# instead of clicking each deliverable's own picker one at a time. Built
+# for cleaning up old projects created before this vocabulary existed, not
+# as a everyday substitute for the real status-changing actions (Approve,
+# Mark Done, Client Approval, etc.) — those still exist and still work
+# exactly as before; this is a shortcut for the backlog, not a replacement.
+#
+# Both the deliverable-level and the project-level override still write the
+# same real underlying fields a normal status change would
+# (record_deliverable_status(), the needs_2d/3d/technical + per-stream
+# status fields — see _write_deliverable_status_override() below) rather
+# than a cosmetic "display override" flag — every other piece of code that
+# reads those fields (the project roll-up above, project_preproduction.py's
+# cascades, dashboards, revision tracking) stays correct afterward instead
+# of quietly disagreeing with what's shown.
 _DELIVERABLE_STATUS_OVERRIDE_OPTIONS = [
     ('In Design', 'coral'),
     ('Pre-Production', 'oak'),
     ('Handed to Production', 'clover'),
 ]
+
+# Same three options, reused verbatim for the project-level bulk picker
+# (_details_top_cards.html) — one shared option list so the two pickers can
+# never offer different choices.
+_PROJECT_STATUS_OVERRIDE_OPTIONS = _DELIVERABLE_STATUS_OVERRIDE_OPTIONS
+
+# Raw ProjectPosmChannel.status an override_project_status() bulk write sets
+# every channel on a C&CM project to, so the per-customer expand rows
+# (status_vocabulary.py's derive_customer_pipeline_status /
+# _pipeline_stage_for) read back as the same target label the deliverables
+# were just set to. 'in_queue' matches the column's own real default value
+# (a channel that's never advanced past creation) rather than borrowing
+# 'in_progress' from the deliverable side — _pipeline_stage_for's default
+# branch reads either as "In Design" so it makes no visible difference, but
+# 'in_queue' is the more honest "nothing happened yet" value for this
+# specific column. 'approved' (not 'pre_production', which is a dead value
+# no real channel ever writes — see _pipeline_stage_for's own comment) is
+# what a real Client Approval writes on approval, so it's what this reuses
+# for "Pre-Production" too — same raw value, same rendered label.
+_PROJECT_STATUS_OVERRIDE_CHANNEL_WRITE = {
+    'In Design': 'in_queue',
+    'Pre-Production': 'approved',
+    'Handed to Production': 'handed_to_production',
+}
 
 # Raw Deliverable.status value an "In Design" override writes — reuses
 # 'in_progress' as a generic "back to in design" reset, since every
@@ -782,12 +823,16 @@ def _build_details_context(project, actor):
     else:
         owner_options = []
 
-    # No admin override for this pill anymore (22 Aug 2026 simplification,
-    # per Ezekiel) — status_label/status_class are now a pure live roll-up
-    # of the project's own deliverables (status_vocabulary.py's
-    # derive_project_status), so there's nothing here left to override;
-    # override the deliverables instead and this follows automatically.
+    # status_label/status_class are a pure live roll-up of the project's
+    # own deliverables (status_vocabulary.py's derive_project_status) — this
+    # pill itself is never written directly, even by the admin override
+    # below (24 Aug 2026, per Ezekiel — see the block comment above
+    # override_project_status() in this file). can_override_project_status
+    # gates a bulk WRITE to every deliverable (+ C&CM channel), not a
+    # stored override of this pill; the value below still just reads back
+    # whatever that bulk write leaves the roll-up computing.
     status_label, status_class = derive_project_status(project)
+    can_override_project_status = actor.role == 'admin'
     # "All status changes need to be time stamped" (22 Aug 2026, per
     # Ezekiel) — when this project's raw status last changed, straight
     # from ProjectStatusLog; None if it pre-dates that table.
@@ -925,6 +970,8 @@ def _build_details_context(project, actor):
     return dict(
         status_label=status_label,
         status_class=status_class,
+        can_override_project_status=can_override_project_status,
+        project_status_override_options=_PROJECT_STATUS_OVERRIDE_OPTIONS,
         status_started_at=status_started_at,
         client_approved_at=client_approved_at,
         can_reassign_cs_lead=can_reassign_cs_lead,
@@ -1661,17 +1708,20 @@ def overlay_start_project(project_id):
     return jsonify({'success': True})
 
 
-@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/<int:deliverable_id>/status/override', methods=['POST'])
-@login_required
-def override_deliverable_status(project_id, deliverable_id):
-    """Admin-only status override (22 Aug 2026, per Ezekiel; simplified to
-    the 3-stage vocabulary the same day — see _DELIVERABLE_STATUS_OVERRIDE_
-    OPTIONS above). The two post-approval labels both write raw
-    status='approved' underneath; which one actually displays is entirely a
-    function of needs_2d/3d/technical + status_2d/status_3d/technical_status
+def _write_deliverable_status_override(deliverable, label, actor):
+    """Writes the raw fields behind one deliverable-status override target —
+    factored out of override_deliverable_status() (24 Aug 2026) so
+    override_project_status() below can apply the exact same per-deliverable
+    logic in bulk without the two ever drifting apart. Does NOT call
+    sync_project_pipeline_status() or commit — callers do that once, after
+    every deliverable in scope has been written, not once per row.
+
+    The two post-approval labels both write raw status='approved'
+    underneath; which one actually displays is entirely a function of
+    needs_2d/3d/technical + status_2d/status_3d/technical_status
     (status_vocabulary.py's _post_approval_deliverable_status), so those
-    three fields are what this route actually varies per target, not the
-    status column itself.
+    three fields are what this actually varies per target, not the status
+    column itself.
 
     Note: picking "Pre-Production" on a deliverable that structurally
     needs no 2D/3D/Technical follow-up (derive_preproduction_needs finds
@@ -1679,21 +1729,10 @@ def override_deliverable_status(project_id, deliverable_id):
     same honest behavior a real approval would produce now, not a bug in
     this override.
 
-    Calls sync_project_pipeline_status() at the end — an admin overriding a
-    deliverable is exactly the kind of "deliverable-affecting action" that
-    can flip the project's own pill, same as a real approval/revision would."""
-    from app import db
-    from app.models import Deliverable
-    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
-    from app.status_vocabulary import derive_deliverable_status, derive_preproduction_needs
-
-    deliverable = Deliverable.query.filter_by(id=deliverable_id, project_id=project_id).first_or_404()
-    actor = _get_actor()
-    if actor.role != 'admin':
-        return jsonify({'success': False, 'error': 'Admin only.'}), 403
-
-    data = request.get_json(silent=True) or {}
-    label = data.get('status')
+    Returns False if `label` isn't one of the three real vocabulary
+    stages (fields left untouched); True otherwise."""
+    from app.status_tracking import record_deliverable_status
+    from app.status_vocabulary import derive_preproduction_needs
 
     if label in _DELIVERABLE_STATUS_WRITE:
         record_deliverable_status(deliverable, _DELIVERABLE_STATUS_WRITE[label], actor)
@@ -1718,11 +1757,115 @@ def override_deliverable_status(project_id, deliverable_id):
         if needs_technical:
             deliverable.technical_status = stream_value
     else:
+        return False
+    return True
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/<int:deliverable_id>/status/override', methods=['POST'])
+@login_required
+def override_deliverable_status(project_id, deliverable_id):
+    """Admin-only status override (22 Aug 2026, per Ezekiel; simplified to
+    the 3-stage vocabulary the same day — see _DELIVERABLE_STATUS_OVERRIDE_
+    OPTIONS above). See _write_deliverable_status_override() above for what
+    fields this actually writes and why.
+
+    Calls sync_project_pipeline_status() at the end — an admin overriding a
+    deliverable is exactly the kind of "deliverable-affecting action" that
+    can flip the project's own pill, same as a real approval/revision would."""
+    from app import db
+    from app.models import Deliverable
+    from app.status_tracking import sync_project_pipeline_status
+    from app.status_vocabulary import derive_deliverable_status
+
+    deliverable = Deliverable.query.filter_by(id=deliverable_id, project_id=project_id).first_or_404()
+    actor = _get_actor()
+    if actor.role != 'admin':
+        return jsonify({'success': False, 'error': 'Admin only.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    label = data.get('status')
+
+    if not _write_deliverable_status_override(deliverable, label, actor):
         return jsonify({'success': False, 'error': 'Not a valid status for this deliverable.'}), 400
 
     sync_project_pipeline_status(deliverable.project, actor)
     db.session.commit()
     status_label, status_class = derive_deliverable_status(deliverable)
+    return jsonify({'success': True, 'status_label': status_label, 'status_class': status_class})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/status/override', methods=['POST'])
+@login_required
+def override_project_status(project_id):
+    """Admin-only, project-wide version of override_deliverable_status()
+    above — sets EVERY deliverable on the project (and, for C&CM, every
+    ProjectPosmChannel) to the same one of the three real vocabulary stages
+    in one action (24 Aug 2026, per Ezekiel — "I need to go and update
+    some old projects status's so the new system is fresh"). Standard:
+    deliverables only, per Ezekiel's own scoping ("if it's standard, same
+    behaviour just scoped to deliverables only") — there's no channel
+    concept to touch on a Standard project anyway.
+
+    Not a stored project-level override — see the block comment above
+    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS for why that was retired 22 Aug
+    2026 and stays retired. This writes the exact same real underlying
+    fields override_deliverable_status() would, at every deliverable (and
+    channel) the project has, then lets sync_project_pipeline_status()
+    recompute the pill fresh at the end, same as any other bulk action.
+
+    C&CM's per-customer expand rows read ProjectPosmChannel.status
+    independently of the deliverable-driven roll-up (status_vocabulary.py's
+    derive_customer_pipeline_status) — without also writing every channel
+    here, the project pill would update immediately while every customer
+    row underneath kept showing whatever stale status prompted this in the
+    first place. A cancelled customer's channel is written too rather than
+    skipped — harmless, since derive_customer_pipeline_status checks
+    .cancelled first and never looks at the channel for a cancelled
+    customer either way.
+
+    Briefed is bumped to 'in_progress' first, same raw transition Start
+    Project performs (see overlay_start_project() above), whenever the
+    project is still sitting there — sync_project_pipeline_status() is a
+    deliberate no-op while project_status == 'briefed' (see its own
+    docstring), so without this bump every deliverable underneath could
+    read Handed to Production and the project pill would still just sit
+    at Briefed, silently defeating the entire point of this action. On
+    Hold and Cancelled are NOT bumped the same way — those are deliberate,
+    reason-logged states with their own dedicated toggle (Sidebar
+    lifecycle actions), not a default unstarted gate, so this bulk action
+    leaves them alone: the deliverables/channels still get written, the
+    pill just keeps reading On Hold/Cancelled until someone clears that
+    state through the real control, exactly as sync_project_pipeline_status
+    already behaves for every other deliverable-affecting action."""
+    from app import db
+    from app.models import Project
+    from app.status_tracking import record_project_status, sync_project_pipeline_status
+    from app.status_vocabulary import derive_project_status
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if actor.role != 'admin':
+        return jsonify({'success': False, 'error': 'Admin only.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    label = data.get('status')
+    if label not in _PROJECT_STATUS_OVERRIDE_CHANNEL_WRITE:
+        return jsonify({'success': False, 'error': 'Not a valid status.'}), 400
+
+    for deliverable in project.project_deliverables:
+        _write_deliverable_status_override(deliverable, label, actor)
+
+    if project.brief_type == 'ccm':
+        channel_status = _PROJECT_STATUS_OVERRIDE_CHANNEL_WRITE[label]
+        for channel in project.posm_channels:
+            channel.status = channel_status
+
+    if project.project_status == 'briefed':
+        record_project_status(project, 'in_progress', actor)
+
+    sync_project_pipeline_status(project, actor)
+    db.session.commit()
+    status_label, status_class = derive_project_status(project)
     return jsonify({'success': True, 'status_label': status_label, 'status_class': status_class})
 
 
@@ -2509,6 +2652,304 @@ def set_project_owner(project_id):
     )
 
     return jsonify({'success': True, 'owner_name': new_owner.name})
+
+
+# ── Details tab person-assignment routes recovered 24 Aug 2026 ─────────────
+# reassign_cs_lead / add_secondary_cs / remove_secondary_cs / assign_concept_kv
+# / assign_lead below all existed on the pre-redesign detail page
+# (app/routes/projects_detail.py, deleted in commit 5a714d4 "Old detail page
+# removed") but were never rebuilt here when the new Design > Details tab
+# replaced it — project_details_card.js kept POSTing to the same old URLs
+# (reassign-cs-lead / secondary-cs / assign-concept-kv / assign-lead) the
+# whole time, 404ing on every one of them. Found 24 Aug 2026, per Ezekiel:
+# "Designers cannot reassign themselves as a lead designer" (console showed
+# a 404 on assign-lead specifically) — checking the other three picker/
+# button targets in the same file turned up the same gap on all of them,
+# not just Design Leads. Recovered from git history
+# (`git show 5a714d4^:app/routes/projects_detail.py`) and adapted to this
+# file's current conventions: _get_actor() instead of duplicating the
+# emulation lookup, JSON error responses everywhere instead of abort() —
+# abort(403) would render Flask's HTML 403 page, which is exactly the
+# failure mode that made this gap hard to diagnose from the browser
+# console in the first place (a non-JSON response into
+# `.then(r => r.json())` reads as "SyntaxError: Unexpected token '<'",
+# with nothing pointing at the real 404/403 underneath).
+@project_overlay_bp.route('/projects/<int:project_id>/reassign-cs-lead', methods=['POST'])
+@login_required
+def reassign_cs_lead(project_id):
+    """CS Lead picker at the top of the Details tab (avatar_picker(
+    'cs-lead-picker', ...) in _details_top_cards.html), gated on
+    can_reassign_cs_lead = admin/management only — a real ownership
+    change, not something a CS/designer/team_lead should trigger on
+    someone else's behalf."""
+    from app.models import User
+    from app import db
+    from app.utils import log_activity
+    from app.notifications import create_notification
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if actor.role not in ('admin', 'management'):
+        return jsonify({'success': False, 'error': 'Only admin/management can reassign a CS lead.'}), 403
+
+    new_cs_lead_id = (request.get_json(silent=True) or {}).get('new_cs_lead_id')
+    if not new_cs_lead_id:
+        return jsonify({'success': False, 'error': 'A new CS lead is required.'}), 400
+
+    new_cs_lead = User.query.get(int(new_cs_lead_id))
+    if not new_cs_lead or new_cs_lead.role != 'cs':
+        return jsonify({'success': False, 'error': 'CS lead not found.'}), 404
+
+    previous_cs_lead = project.cs_lead
+    project.cs_lead_id = new_cs_lead.id
+    db.session.commit()
+
+    create_notification(
+        recipient=new_cs_lead,
+        message=f'You have been assigned as CS lead on "{project.name}" by {actor.name}.',
+        notification_type='cs_lead_reassigned',
+        project=project,
+        triggered_by=actor,
+    )
+    if previous_cs_lead and previous_cs_lead.id != new_cs_lead.id:
+        create_notification(
+            recipient=previous_cs_lead,
+            message=f'{new_cs_lead.name} has taken over as CS lead on "{project.name}" (reassigned by {actor.name}).',
+            notification_type='cs_lead_reassigned',
+            project=project,
+            triggered_by=actor,
+        )
+
+    log_activity(
+        'cs_lead_reassigned',
+        f'{actor.name} reassigned CS lead on "{project.name}" to {new_cs_lead.name}'
+        + (f' (previously {previous_cs_lead.name})' if previous_cs_lead else ''),
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
+    )
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/secondary-cs', methods=['POST'])
+@login_required
+def add_secondary_cs(project_id):
+    """Add a secondary CS. Permission matches _build_details_context's
+    can_manage_cs exactly (admin/management, or this project's own CS
+    Lead) — NOT the old projects_detail.py version of this route, which
+    gated on role_required('admin','cs','management') but then rejected
+    any non-lead 'management' user in the body anyway (role_required said
+    yes, the manual check said no). The template's picker/remove buttons
+    are gated on can_manage_cs today, so the backend needs to agree with
+    that gate exactly, not the old file's inconsistent one."""
+    from app.models import User, ProjectSecondaryCS
+    from app import db
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if actor.role not in ('admin', 'management') and actor.id != project.cs_lead_id:
+        return jsonify({'success': False, 'error': 'You do not have permission to add a secondary CS.'}), 403
+
+    user_id = request.form.get('user_id', type=int)
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Please select a CS member.'}), 400
+
+    if user_id == project.cs_lead_id:
+        return jsonify({'success': False, 'error': 'The CS lead is already the primary CS on this project.'}), 400
+
+    user = User.query.get(user_id)
+    if not user or user.role not in ('cs', 'admin', 'management'):
+        return jsonify({'success': False, 'error': 'Only CS & Management members can be added as secondary CS.'}), 400
+
+    if ProjectSecondaryCS.query.filter_by(project_id=project_id, user_id=user_id).first():
+        return jsonify({'success': False, 'error': 'Already a secondary CS on this project.'}), 400
+
+    db.session.add(ProjectSecondaryCS(project_id=project_id, user_id=user_id, added_by_id=actor.id))
+    db.session.commit()
+
+    log_activity('secondary_cs_added', f'{user.name} added as secondary CS on "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/secondary-cs/<int:user_id>/remove', methods=['POST'])
+@login_required
+def remove_secondary_cs(project_id, user_id):
+    """Remove a secondary CS — same permission as add_secondary_cs()
+    above. Also clears any ProjectSecondaryCsRegion rows for this person
+    (per-region notification subscriptions from the old detail page's own
+    UI, which the new overlay never rebuilt a picker for — cleaning them
+    up on removal just avoids leaving orphaned subscriptions for someone
+    no longer on the project; nothing in the current UI writes new ones)."""
+    from app.models import User, ProjectSecondaryCS, ProjectSecondaryCsRegion
+    from app import db
+    from app.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if actor.role not in ('admin', 'management') and actor.id != project.cs_lead_id:
+        return jsonify({'success': False, 'error': 'You do not have permission to remove a secondary CS.'}), 403
+
+    assignment = ProjectSecondaryCS.query.filter_by(project_id=project_id, user_id=user_id).first()
+    if not assignment:
+        return jsonify({'success': False, 'error': 'Not a secondary CS on this project.'}), 404
+
+    user = User.query.get(user_id)
+    ProjectSecondaryCsRegion.query.filter_by(project_id=project_id, user_id=user_id).delete()
+    db.session.delete(assignment)
+    db.session.commit()
+
+    log_activity('secondary_cs_removed',
+                 f'{user.name if user else "User"} removed as secondary CS on "{project.name}"',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/assign-concept-kv', methods=['POST'])
+@login_required
+def assign_concept_kv(project_id):
+    """Concept & KV Designer picker on the Details tab
+    (avatar_picker('concept-kv-designer-picker', ...)). Admin/management
+    can assign anyone; designer/team_lead can only self-claim — matches
+    can_manage_concept_kv_full / can_self_claim_concept_kv in
+    _build_details_context, which already gates whether this picker even
+    renders and what options it offers."""
+    from app.models import User
+    from app import db
+    from app.utils import log_activity
+    from app.notifications import notify_designer_of_concept_kv_assignment
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    full_control = actor.role in ('admin', 'management')
+    self_claim_only = actor.role in ('designer', 'team_lead')
+    if not full_control and not self_claim_only:
+        return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
+
+    concept_id = request.form.get('concept_designer_id')
+    kv_id = request.form.get('kv_designer_id')
+
+    if self_claim_only:
+        if concept_id and int(concept_id) != actor.id:
+            return jsonify({'success': False, 'error': 'You can only assign yourself.'}), 403
+        if kv_id and int(kv_id) != actor.id:
+            return jsonify({'success': False, 'error': 'You can only assign yourself.'}), 403
+
+    if concept_id:
+        project.concept_designer_id = int(concept_id)
+    if kv_id:
+        project.kv_designer_id = int(kv_id)
+    db.session.commit()
+
+    if concept_id:
+        concept_designer = User.query.get(int(concept_id))
+        if concept_designer:
+            notify_designer_of_concept_kv_assignment(project, concept_designer, 'Concept', triggered_by=actor)
+            log_activity('designer_assigned', f'{concept_designer.name} assigned as Concept designer on "{project.name}"',
+                         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    if kv_id:
+        kv_designer = User.query.get(int(kv_id))
+        if kv_designer:
+            notify_designer_of_concept_kv_assignment(project, kv_designer, 'Key Visual', triggered_by=actor)
+            log_activity('designer_assigned', f'{kv_designer.name} assigned as KV designer on "{project.name}"',
+                         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/assign-lead', methods=['POST'])
+@login_required
+def assign_lead(project_id):
+    """Design Leads per-team picker on the Details tab (`.avatar-picker
+    [data-team]` in _details_design_leads.html) — the specific endpoint
+    the 24 Aug 2026 bug report named ("Designers cannot reassign
+    themselves as a lead designer"). See the block comment above
+    reassign_cs_lead() for why this and three siblings were all 404ing.
+
+    Ported from the old route with one real fix, not just a straight
+    port: the old detail page had a SEPARATE self-assign control that
+    posted with no new_designer_id at all, so "new_designer_id present"
+    was a reliable proxy for "targeting someone else, not myself". The
+    new AvatarPicker always sends a real id, even when the id picked is
+    the actor's own — so a straight port of the old "new_designer_id
+    present -> must already be the current lead" check would 403 a
+    designer trying to claim their own team's UNASSIGNED lead slot,
+    reproducing this exact bug under a different name instead of fixing
+    it. Fixed by keying off whether the TARGET is the actor themselves,
+    not whether an id was sent at all: picking yourself is always allowed
+    for your own team (fill an empty slot or take over from someone
+    else); picking a specific teammate is a TRANSFER, only allowed for
+    the current lead (or admin/management), same restriction the old
+    system had.
+
+    ProjectDesigner has no ORM-level unique constraint declared, but
+    there's a real one on (project_id, team) in the database — delete the
+    existing row and flush before inserting the new one, or the INSERT
+    raises a UniqueViolation instead of cleanly replacing it."""
+    from app.models import User, ProjectDesigner
+    from app import db
+    from app.utils import log_activity
+    from app.notifications import notify_cs_of_lead_change
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    data = request.get_json(silent=True) or {}
+    team = (data.get('team') or '').strip()
+    raw_target_id = data.get('new_designer_id')
+
+    if not team:
+        return jsonify({'success': False, 'error': 'Team is required.'}), 400
+
+    if actor.role in ('designer', 'team_lead') and actor.team != team:
+        return jsonify({'success': False, 'error': 'You can only assign yourself to your own team.'}), 403
+
+    target_id = int(raw_target_id) if raw_target_id else actor.id
+    is_self = (target_id == actor.id)
+
+    current_assignment = ProjectDesigner.query.filter_by(project_id=project.id, team=team).first()
+    previous_designer = current_assignment.designer if current_assignment else None
+
+    if not is_self:
+        # Handing the lead role to someone ELSE — only the current lead
+        # may do this, unless the actor is admin/management.
+        if actor.role not in ('admin', 'management'):
+            if not current_assignment or current_assignment.user_id != actor.id:
+                return jsonify({'success': False, 'error': 'Only the current lead can transfer ownership.'}), 403
+        new_designer = User.query.get(target_id)
+        if not new_designer:
+            return jsonify({'success': False, 'error': 'Designer not found.'}), 404
+        if current_assignment:
+            db.session.delete(current_assignment)
+            db.session.flush()
+        db.session.add(ProjectDesigner(project_id=project.id, user_id=new_designer.id, team=team))
+        db.session.commit()
+        notify_cs_of_lead_change(project, new_designer, team, triggered_by=actor, previous_designer=previous_designer)
+        log_activity('lead_transferred',
+                     f'{actor.name} transferred {team} lead to {new_designer.name} on "{project.name}"',
+                     user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+    else:
+        # Self-claim/takeover — always allowed for the actor's own team,
+        # whether the slot is empty or currently held by someone else.
+        if current_assignment:
+            db.session.delete(current_assignment)
+            db.session.flush()
+        db.session.add(ProjectDesigner(project_id=project.id, user_id=actor.id, team=team))
+        db.session.commit()
+        notify_cs_of_lead_change(project, actor, team, triggered_by=actor, previous_designer=previous_designer)
+        action = 'lead_transferred' if previous_designer else 'lead_assigned'
+        description = (
+            f'{actor.name} took over as {team} lead on "{project.name}" (previously {previous_designer.name})'
+            if previous_designer
+            else f'{actor.name} self-assigned as {team} lead on "{project.name}"'
+        )
+        log_activity(action, description, user=actor,
+                     entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({'success': True})
+
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions')
 @login_required
