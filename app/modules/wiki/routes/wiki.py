@@ -2,11 +2,11 @@ import json, re, uuid, os
 from datetime import datetime
 from flask import (Blueprint, render_template, request, jsonify, abort, redirect, url_for, current_app)
 from flask_login import login_required, current_user
-from app import db
-from app.models import WikiSection, WikiArticle
-from app.decorators import role_required
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import WikiSection, WikiArticle
+from app.modules.core.shared.lib.decorators import role_required
 
-wiki_bp = Blueprint('wiki', __name__)
+wiki_bp = Blueprint('wiki', __name__, template_folder='../templates')
 
 # ------ Helper ------
 
