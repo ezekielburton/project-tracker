@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, url_for
 from flask_login import login_required, current_user
-from app import db
-from app.models import Notification
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Notification
 from datetime import datetime
 
 notifications_bp = Blueprint('notifications', __name__)

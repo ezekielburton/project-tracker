@@ -132,7 +132,7 @@ def create_app(config=Config):
     from app.modules.core.shared.blueprint import core as core_bp
     from app.routes import main
     from app.modules.auth.routes.auth import auth
-    from app.routes.notifications import notifications_bp
+    from app.modules.notifications.routes.notifications import notifications_bp
     from app.models import Notification
     from flask_login import current_user
     from app.routes.admin import admin_bp
