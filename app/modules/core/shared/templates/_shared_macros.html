@@ -90,7 +90,7 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     status_override_picker(picker_id, current_label, current_class, options, target_url)
     ───────────────────────────────────────────────────────────────────────────────────
     Admin-only "click the pill, pick a different status, it overrides"
-    control (22 Aug 2026, per Ezekiel) — same toggle-button + popover
+    control — same toggle-button + popover
     recipe as avatar_picker() below, just swapping person rows for status
     pills. `options` is a list of (label, css_modifier) pairs — the exact
     shape status_vocabulary.py's own derive_*_status() functions return,
@@ -98,11 +98,8 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     _DELIVERABLE_STATUS_OVERRIDE_OPTIONS passes in, so the popover can
     never offer a status that doesn't render as a real pill. `target_url`
     is the POST endpoint status_picker.js sends { status: <label> } to on
-    selection. The project-level override this macro used to also serve
-    was retired the same day (22 Aug 2026 simplification, per Ezekiel) —
-    the project pill is a pure live roll-up now, so this macro is only
-    ever used for a deliverable's own status (see
-    project_deliverables_card.js). #}
+    selection. This macro is used only for a deliverable's own status — the
+    project pill is a pure live roll-up (see project_deliverables_card.js). #}
     {% macro status_override_picker(picker_id, current_label, current_class, options, target_url) %}
     <div class="status-picker" id="{{ picker_id }}" data-target-url="{{ target_url }}">
         <button type="button" class="status-picker-trigger">
@@ -192,11 +189,9 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {#
     deliverable_assign_tag(deliverable_id, team, person, options, mode)
     ──────────────────────────────────────────────────────────────────
-    One team-tag cell in the Deliverables roster's Team column (added 22
-    Aug 2026 — the roster always showed which teams a deliverable NEEDS,
-    but nothing let anyone say who's actually ON it; DeliverableAssignment
-    existed and was already read elsewhere (the Focused toggle) but had no
-    write path anywhere in the UI). `mode` is computed server-side per
+    One team-tag cell in the Deliverables roster's Team column: it shows who
+    is assigned to a deliverable's team (a DeliverableAssignment), with a
+    write path in the UI. `mode` is computed server-side per
     deliverable/team in _build_deliverable_focus_context
     (app/routes/project_overlay.py) and picks one of three renderings:
 

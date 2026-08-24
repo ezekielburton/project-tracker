@@ -36,21 +36,18 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
     {% block extra_css %}{% endblock %}
 
-    {# Local-dev safety net (found 20 Aug 2026, Ezekiel): the Werkzeug
-       reloader restarting mid-session (a code edit while someone's browsing)
-       leaves a split-second window where the old process has died and the
-       new one isn't listening yet. If a stylesheet <link> request races
-       that window it fails outright, and browsers don't retry a failed
-       stylesheet load on their own - the page renders with fully correct
-       HTML but zero CSS applied, which reads as "the whole page broke" even
-       though it's just a transient timing miss. Doesn't meaningfully apply
-       in production (systemd-managed gunicorn restarts aren't tied to live
-       edits the way the dev reloader is), but costs nothing to have there.
-       Scoped to same-origin /static/ stylesheets only - a flaky CDN hiccup
-       on the Quill/Cropper <link>s above shouldn't trigger a full reload.
-       Time-windowed (not a one-shot flag) so it keeps protecting across
-       multiple restarts in one browsing session, but won't reload-loop if
-       a stylesheet is genuinely broken rather than just racing a restart. #}
+    {# Local-dev safety net: the Werkzeug reloader restarting mid-session (a
+       code edit while someone's browsing) leaves a split-second window where
+       the old process has died and the new one isn't listening yet. A
+       stylesheet <link> request that races that window fails outright, and
+       browsers don't retry a failed stylesheet load on their own — the page
+       renders with correct HTML but zero CSS, which reads as "the whole page
+       broke" even though it's just a transient timing miss. The script below
+       reloads once on such a failure. Scoped to same-origin /static/
+       stylesheets only (a flaky CDN hiccup on the Quill/Cropper <link>s above
+       shouldn't trigger a reload), and time-windowed so it protects across
+       multiple restarts in a session but won't reload-loop if a stylesheet is
+       genuinely broken rather than just racing a restart. #}
     <script>
         (function () {
             var FLAG = 'helix_css_reload_at';
@@ -119,11 +116,7 @@
                 <span class="sidebar-section-label">Internal Tools</span>
                 <div class="sidebar-grid">
 
-                            {# Dashboard — re-enabled for all roles 16 Jul 2026 (was temporarily
-                               unlinked for testing; swapped the placeholder <span>/
-                               sidebar-item--unlinked back to a real <a>/sidebar-item--nav,
-                               exactly as the prior version of this comment already
-                               instructed). No role gate here — every role gets this link,
+                            {# Dashboard link — no role gate, every role gets it,
                                same as Projects/Wiki below. #}
                             <a href="{{ url_for('projects.index') }}" class="sidebar-item sidebar-item--nav"
                                 data-link="dashboard" title="Dashboard">
@@ -371,11 +364,8 @@
                     </a>
 
                     {# Design Outing Board — visible to designers, team leads, and admin.
-                       team_lead added 16 Jul 2026, per Ezekiel: "add the design team
-                       outing sidebar link (it's greyed out now keep it that way) to be
-                       visible for team leads also as it is not there right now." Still
-                       sidebar-item--unlinked (greyed out/non-clickable) for everyone it's
-                       shown to — that part is unchanged, only the role gate widened. #}
+                       Rendered sidebar-item--unlinked (greyed out / non-clickable) for
+                       everyone it's shown to. #}
                     {% if effective_user.role in ['designer', 'team_lead', 'admin'] %}
                     <span class="sidebar-item sidebar-item--unlinked" data-link="outing-board"
                         title="Design Outing Board">
