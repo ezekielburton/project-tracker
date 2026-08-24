@@ -323,18 +323,27 @@
                     if (cancelErrorEl) { cancelErrorEl.textContent = 'A reason is required.'; cancelErrorEl.classList.remove('hidden'); }
                     return;
                 }
-                cancelConfirmBtn.disabled = true;
-                if (cancelErrorEl) cancelErrorEl.classList.add('hidden');
-                postJson(`/projects/${projectId}/overlay/cancel`, { reason: reason }, () => {
-                    cancelConfirmBtn.disabled = false;
-                    cancelForm.classList.add('is-hidden');
-                    cancelBtn.classList.add('is-hidden');
-                    if (uncancelBtn) uncancelBtn.classList.remove('is-hidden');
-                    refreshDetailsIfActive();
-                }, (err) => {
-                    cancelConfirmBtn.disabled = false;
-                    if (cancelErrorEl) { cancelErrorEl.textContent = err || 'Could not cancel this project.'; cancelErrorEl.classList.remove('hidden'); }
-                });
+                // A reason was already required, but that's not the same as a
+                // confirmation — nothing stopped a stray click on "Confirm
+                // Cancel" from firing immediately. 24 Aug 2026 (per Ezekiel,
+                // "add redundancy to the cancel process"): gate the actual
+                // request behind window.showConfirm(), same as every other
+                // destructive action here (Put on Hold above, delete draft,
+                // etc.).
+                window.showConfirm('Cancel this project? This freezes it for invoicing until reactivated.', () => {
+                    cancelConfirmBtn.disabled = true;
+                    if (cancelErrorEl) cancelErrorEl.classList.add('hidden');
+                    postJson(`/projects/${projectId}/overlay/cancel`, { reason: reason }, () => {
+                        cancelConfirmBtn.disabled = false;
+                        cancelForm.classList.add('is-hidden');
+                        cancelBtn.classList.add('is-hidden');
+                        if (uncancelBtn) uncancelBtn.classList.remove('is-hidden');
+                        refreshDetailsIfActive();
+                    }, (err) => {
+                        cancelConfirmBtn.disabled = false;
+                        if (cancelErrorEl) { cancelErrorEl.textContent = err || 'Could not cancel this project.'; cancelErrorEl.classList.remove('hidden'); }
+                    });
+                }, 'Cancel Project');
             });
         }
         if (uncancelBtn) {
