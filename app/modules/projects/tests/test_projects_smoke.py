@@ -26,3 +26,23 @@ def test_project_list_requires_auth(app, client):
 
 def test_project_list_template_resolves(app):
     assert app.jinja_env.get_template('project_list/index.html') is not None
+
+
+# ── Stage D: project_overlay + project_preproduction + helpers ─────────────
+def test_project_overlay_templates_resolve(app):
+    for name in ('project_overlay/_overlay.html', 'project_overlay/_overlay_create.html'):
+        assert app.jinja_env.get_template(name) is not None
+
+
+def test_project_helpers_importable(app):
+    from app.modules.projects.lib.pptx_convert import convert_pptx_to_pdf
+    from app.modules.projects.lib.submission_cache import cache_submission_file
+    assert callable(convert_pptx_to_pdf)
+    assert callable(cache_submission_file)
+
+
+def test_overlay_uses_shared_achievements_service(app):
+    # The last app.achievements shim consumer was repointed here.
+    import app.modules.projects.routes.project_overlay as ov
+    import app.modules.core.shared.services.achievements as svc
+    assert ov is not None and hasattr(svc, 'check_achievements')

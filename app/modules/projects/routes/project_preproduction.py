@@ -1,57 +1,47 @@
 """
 Project Pre-Production Route File.
 
-Own file per the standing rule that any brand-new feature gets its own
-JS/route file. Stream assignment (2D/3D/Technical — three fully
-independent streams, each with its own assignee/status/flag cycle), mark-
-done/approve/flag on a stream, Skip to Pre-Production, and the Handed to
-Production cascade.
+Stream assignment (2D/3D/Technical — three fully independent streams, each
+with its own assignee/status/flag cycle), mark-done/approve/flag on a
+stream, Skip to Pre-Production, and the Handed to Production cascade.
 
-Design recap (locked with Ezekiel, 13 Aug 2026, extended 17 Aug 2026):
-- No new "gate" between client approval and Pre-Production — a deliverable
-  reaching status='approved' with any needs_2d/needs_3d/needs_technical set
-  is already effectively in Pre-Production; DeliverableStatusLog already
-  timestamps that moment for free (see record_deliverable_status, and
-  status_tracking.py's deliverable_client_approved_at() for reading it back
-  — added 22 Aug 2026 once "Client Approved" stopped being its own pill
-  label, project and deliverable alike).
-- status_2d/status_3d/technical_status each get a 3-state vocabulary: None
+Design:
+- No separate "gate" between client approval and Pre-Production: a
+  deliverable reaching status='approved' with any
+  needs_2d/needs_3d/needs_technical set is already effectively in
+  Pre-Production; DeliverableStatusLog already timestamps that moment (see
+  record_deliverable_status, and the shared status-tracking helper
+  deliverable_client_approved_at() for reading it back).
+- status_2d/status_3d/technical_status each use a 3-state vocabulary: None
   (not started, or flagged and waiting on reupload) -> 'uploaded' (releaser
   marked their upload done) -> 'approved' (Project Owner signed off — the
   ONLY thing that advances a stream to done; _post_approval_deliverable_
-  status already reads this). A flag resets the stream back to None and
-  logs why.
-- 2D/3D/Technical are three fully independent streams (17 Aug 2026,
-  supersedes the original two-stream "technical"/"artwork" split) —
-  Design already treats 2D/3D/Technical as three separate teams a
-  deliverable can simultaneously need, each with its own assignee; Pre-
-  Production now matches that instead of collapsing 2D+3D into one
-  combined "artwork" bucket. Each stream reuses the SAME DeliverableAssignment
-  team value Design already uses ('2D'/'3D'/'Technical') rather than a
-  separate pseudo-team — a designer already on a deliverable's 2D/3D/
-  Technical team during Design carries straight into that same stream
-  here for free, no separate row needed.
+  status reads this). A flag resets the stream back to None and logs why.
+- 2D/3D/Technical are three fully independent streams. Design already
+  treats them as three separate teams a deliverable can simultaneously
+  need, each with its own assignee; Pre-Production matches that instead of
+  collapsing 2D+3D into one "artwork" bucket. Each stream reuses the SAME
+  DeliverableAssignment team value Design uses ('2D'/'3D'/'Technical'), so
+  a designer already on a deliverable's stream during Design carries
+  straight into it here, no separate row needed.
 - Handed to Production (deliverable pill) is purely derived. The CASCADE:
   once every deliverable in a channel/project has every stream it needs
   approved, the channel/project itself advances to 'handed_to_production'
-  automatically — no manual "Handed to Production" button anywhere; same
-  "only advance once EVERY deliverable in scope is done" rule Client
-  Approval already uses, one stage further down. Minimizing admin work is
-  the explicit point (17 Aug 2026) — the Project Owner's job is entirely
-  upload-review-approve/flag per stream; the project/customer-level status
-  update is a side effect of that, never its own action.
-- Skip to Pre-Production reuses the exact same cascade rule as real
-  Client Approval — it's just a second way for deliverables to reach
-  'approved', not a different completion rule.
+  automatically — no manual button, the same "only advance once EVERY
+  deliverable in scope is done" rule Client Approval uses, one stage
+  further down. The Project Owner's job is entirely upload-review-approve/
+  flag per stream; the project/customer status update is a side effect.
+- Skip to Pre-Production reuses the same cascade rule as real Client
+  Approval — just a second way for deliverables to reach 'approved'.
 """
 
 from flask import Blueprint, request, jsonify, render_template
 from flask_login import login_required, current_user
 from datetime import datetime
 
-from app.models import Project, Deliverable
+from app.modules.core.shared.models import Project, Deliverable
 
-project_preproduction_bp = Blueprint('project_preproduction', __name__)
+project_preproduction_bp = Blueprint('project_preproduction', __name__, template_folder='../templates')
 
 # Single source of truth for the three Pre-Production streams — every
 # function below reads this instead of hardcoding technical/2d/3d
@@ -72,7 +62,7 @@ def _get_actor():
     """Same emulation-aware actor lookup as project_overlay.py — kept as
     its own copy here rather than a cross-file import, matching this
     codebase's existing one-helper-per-route-file convention."""
-    from app.models import User
+    from app.modules.core.shared.models import User
     from flask import session
     emulating_id = session.get('emulating_user_id')
     return User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
@@ -91,9 +81,8 @@ def _can_manage_preproduction(project, actor):
 
 def _can_skip_preproduction(project, actor):
     """Who can use Skip to Pre-Production — CS Lead, Secondary CS,
-    Management, Admin, or the assigned Project Owner (per Ezekiel, 18 Aug
-    2026 — replaces an earlier "any cs-role user" broadening that let
-    someone with no relationship to this specific project skip it).
+    Management, Admin, or the assigned Project Owner (not any cs-role user —
+    only someone with a relationship to this specific project).
     Duplicated in project_overlay.py (not cross-imported), matching this
     codebase's existing one-helper-per-route-file convention — keep the
     two in sync if this ever changes."""
@@ -112,10 +101,8 @@ def _stream_done(deliverable):
     or it never needed any Pre-Production stream in the first place.
     Either way _post_approval_deliverable_status() reports that as
     'Handed to Production' — a no-needs deliverable has had nothing to
-    hand off since the 22 Aug 2026 deliverable simplification (it used to
-    park at a permanent 'Client Approved' before that; see
-    status_vocabulary.py), so a single equality check is enough here now."""
-    from app.status_vocabulary import _post_approval_deliverable_status
+    hand off, so a single equality check is enough here."""
+    from app.modules.core.shared.lib.status_vocabulary import _post_approval_deliverable_status
     label, _ = _post_approval_deliverable_status(deliverable)
     return label == 'Handed to Production'
 
@@ -124,18 +111,18 @@ def _cascade_handed_to_production(project, actor, now):
     """Once every deliverable in a channel/project now has every stream it
     needs approved, advances the channel/project itself to
     'handed_to_production' — automatically, no manual confirmation step
-    (17 Aug 2026: minimizing admin work is the point). C&CM: per-channel
+    (minimizing admin work is the point). C&CM: per-channel
     first (same UAE/Gulf-region matching the Client Approval cascade
     uses) — that per-channel status is real, independent state (still
     read by C&CM's per-customer expand rows), kept exactly as before. The
-    project-level pill itself is no longer decided here directly (22 Aug
-    2026 simplification, per Ezekiel) — it's a live roll-up computed by
+    project-level pill itself is no longer decided here directly — it's a
+    live roll-up computed by
     sync_project_pipeline_status() from every deliverable's own status,
     called unconditionally at the end for both brief types. Safe to call
     after every single stream approval — it just no-ops until the last
     one lands."""
-    from app.models import ProjectPosmChannel
-    from app.status_tracking import sync_project_pipeline_status
+    from app.modules.core.shared.models import ProjectPosmChannel
+    from app.modules.core.shared.services.status_tracking import sync_project_pipeline_status
 
     if project.brief_type == 'ccm':
         channels = ProjectPosmChannel.query.filter_by(project_id=project.id).all()
@@ -169,14 +156,14 @@ def _cascade_client_approval(project, channel, actor, now):
     that already-verified, live route while wiring up a second entry
     point (Skip to Pre-Production) into the same completion rule. channel
     is None for Standard; a resolved ProjectPosmChannel for C&CM POSM.
-    The project-level pill itself is no longer set directly here (22 Aug
-    2026 simplification, per Ezekiel) — sync_project_pipeline_status()
+    The project-level pill itself is no longer set directly here —
+    sync_project_pipeline_status()
     recomputes it as a live roll-up from every deliverable, called
     unconditionally at the end, independent of the ckv_gate below (that
     gate still controls only the official approved_at/approved_by_id
     business-approval timestamp and the concept/kv sync, not the pill)."""
-    from app.models import ProjectPosmChannel
-    from app.status_tracking import sync_project_pipeline_status
+    from app.modules.core.shared.models import ProjectPosmChannel
+    from app.modules.core.shared.services.status_tracking import sync_project_pipeline_status
 
     if channel is not None:
         if channel.posm_customer_id:
@@ -235,13 +222,13 @@ def _build_preproduction_row(d, actor, can_act):
     flag event has ever been logged for a stream that's currently None,
     the flag is why it's None.
 
-    can_act (21 Aug 2026, per Ezekiel) — new param, same value the caller
-    already computed via _can_manage_preproduction(). Decides whether each
-    stream gets an interactive assignment picker vs. a read-only chip (see
-    assign_options below, 23 Aug 2026 — every stream gets one now, not just
-    Technical) — every other field here is unaffected by who's viewing."""
-    from app.status_vocabulary import derive_deliverable_status
-    from app.models import ProjectSubmissionEvent, ProjectSubmissionEventDeliverable, DeliverablePreproductionEvent, User
+    can_act — same value the caller already computed via
+    _can_manage_preproduction(). Decides whether each stream gets an
+    interactive assignment picker vs. a read-only chip (see assign_options
+    below — every stream gets one, not just Technical). Every other field
+    here is unaffected by who's viewing."""
+    from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
+    from app.modules.core.shared.models import ProjectSubmissionEvent, ProjectSubmissionEventDeliverable, DeliverablePreproductionEvent, User
 
     flag_events = DeliverablePreproductionEvent.query.filter_by(
         deliverable_id=d.id, event_type='preprod_flag'
@@ -249,8 +236,7 @@ def _build_preproduction_row(d, actor, can_act):
     flag_count = len(flag_events)
     flagged_streams = {e.stream for e in flag_events}
     # Newest-first, so the first hit per stream is that stream's most recent
-    # flag comment (21 Aug 2026, per Ezekiel — the flag message wasn't shown
-    # anywhere once logged; this is what the stream card below renders).
+    # flag comment — the flag message is what the stream card below renders.
     latest_flag_message = {}
     for e in flag_events:
         latest_flag_message.setdefault(e.stream, e.message)
@@ -263,9 +249,8 @@ def _build_preproduction_row(d, actor, can_act):
         status_val = getattr(d, cfg['status'])
         is_flagged = status_val is None and stream_key in flagged_streams
         # Read-only context — whoever Design put on this team, shown for
-        # info only. No longer gates who can act (17 Aug 2026: assignment
-        # step removed — any designer can pick up any stream and mark it
-        # done, see mark_stream_done).
+        # info only. Does not gate who can act — any designer can pick up
+        # any stream and mark it done (see mark_stream_done).
         assignment = next((a for a in d.disciplines if a.team == cfg['team']), None)
         can_mark_done = actor.role in ('designer', 'team_lead', 'admin', 'management')
         stream_row = {
@@ -277,13 +262,12 @@ def _build_preproduction_row(d, actor, can_act):
             'can_mark_done': can_mark_done,
             # The comment left on this stream's most recent flag — only set
             # when is_flagged, so the card can show why it's back in
-            # progress (21 Aug 2026, per Ezekiel).
+            # progress.
             'flag_message': latest_flag_message.get(stream_key) if is_flagged else None,
         }
-        # Assignment picker (folded into every stream's own box — 23 Aug
-        # 2026, per Ezekiel: "we fold the designer pill into it... If a
-        # deliverable happens to be unassigned, it can be assigned here via
-        # the picker. Scoped to the relevant team that div owns." Used to be
+        # Assignment picker, folded into every stream's own box. If a
+        # deliverable is unassigned it can be assigned here via the picker,
+        # scoped to the relevant team that div owns. Used to be
         # Technical-only, with 2D/3D showing a row-level read-only "Designer"
         # chip instead (whoever Design assigned was assumed to release the
         # artwork too) — now every stream gets the same interactive picker,
@@ -344,10 +328,10 @@ def _in_preproduction_scope(d):
 def overlay_preproduction(project_id):
     """Design > Pre-Production sub-tab. A filtered work-surface, not the
     roster — only deliverables that have actually crossed in are shown
-    (architecture doc §5's "roster vs. work-surface" split). Mirrors
+    (the "roster vs. work-surface" split). Mirrors
     overlay_deliverables()'s exact branching/scope-select shape so the two
     tabs stay visually and structurally consistent."""
-    from app.routes.project_overlay import _build_ccm_deliverable_sections
+    from app.modules.projects.routes.project_overlay import _build_ccm_deliverable_sections
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -399,16 +383,16 @@ def overlay_preproduction(project_id):
 def _apply_skip_to_preproduction(project, deliverables, actor):
     """Core mutation shared by skip_to_preproduction() (manual, per-
     deliverable-selection) and the create flow's Production Only finalize
-    (project_overlay.py's overlay_create_finalize(), task #64) — moves
+    (project_overlay's overlay_create_finalize()) — moves
     every given deliverable straight to Pre-Production, bypassing
     Submissions/Client Approval, functionally identical to a real Client
-    Approval. Extracted 18 Aug 2026 so the two call sites can't drift on
-    this logic. Caller handles permission checks, request parsing, and the
+    Approval. Kept as one helper so the two call sites can't drift on this
+    logic. Caller handles permission checks, request parsing, and the
     commit/response — this only mutates and cascades, doesn't commit.
     """
-    from app.models import ProjectPosmChannel
-    from app.status_tracking import record_deliverable_status
-    from app.status_vocabulary import derive_preproduction_needs
+    from app.modules.core.shared.models import ProjectPosmChannel
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status
+    from app.modules.core.shared.lib.status_vocabulary import derive_preproduction_needs
 
     now = datetime.utcnow()
     for d in deliverables:
@@ -462,11 +446,11 @@ def skip_to_preproduction(project_id):
     skipped deliverable ends up in exactly the same state one that went
     through the normal flow would.
     """
-    from app import db
-    from app.models import ProjectPosmChannel
-    from app.status_tracking import record_deliverable_status
-    from app.status_vocabulary import derive_preproduction_needs
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectPosmChannel
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status
+    from app.modules.core.shared.lib.status_vocabulary import derive_preproduction_needs
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -509,21 +493,21 @@ def skip_to_preproduction(project_id):
 @login_required
 def mark_stream_done(deliverable_id):
     """Any designer/team lead (or admin/management) marks a stream's
-    upload ready for review — no assignment step (17 Aug 2026: removed,
-    "just allow any designer to upload/mark something as done"). Not
+    upload ready for review — no assignment step; any designer can
+    upload/mark something as done. Not
     scoped to the stream's own team either — fully open by design.
     deliverable.status is untouched (stays 'approved' from Client
     Approval/Skip) — only the stream-specific column advances, so each
     stream can be done while the others are still in progress.
 
-    Notifies the Project Owner (23 Aug 2026, per Ezekiel) — this is the
+    Notifies the Project Owner — this is the
     ONLY event that puts a stream in front of them for Approve/Flag for
     Reupload, so it's the one Pre-Production action that fires a
     notification at all; assign/approve/flag stay silent (see
     notify_project_owner_of_stream_uploaded's docstring)."""
-    from app import db
-    from app.utils import log_activity
-    from app.notifications import notify_project_owner_of_stream_uploaded
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import notify_project_owner_of_stream_uploaded
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
@@ -560,15 +544,15 @@ def approve_stream(deliverable_id):
     the ONLY place that cascade fires from; there is no separate manual
     "Handed to Production" action anywhere.
 
-    Notifies the assigned designer (23 Aug 2026, per Ezekiel) — until
-    Production has its own access to file storage/the app later in the
-    year, sharing the approved files with them is a manual, designer-side
+    Notifies the assigned designer — until Production has its own access
+    to file storage/the app, sharing the approved files with them is a
+    manual, designer-side
     email step, so the designer needs to know the moment it's approved
     (see notify_designer_of_stream_approved's docstring)."""
-    from app import db
-    from app.models import DeliverableAssignment
-    from app.utils import log_activity
-    from app.notifications import notify_designer_of_stream_approved
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import DeliverableAssignment
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import notify_designer_of_stream_approved
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
@@ -614,10 +598,10 @@ def flag_stream(deliverable_id):
     quarter) will count and filter on, and it's also what
     _build_preproduction_row reads to tell "flagged, waiting on the
     designer" apart from "never started" for the Needs Attention section."""
-    from app import db
-    from app.models import DeliverablePreproductionEvent
-    from app.status_tracking import sync_project_pipeline_status
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import DeliverablePreproductionEvent
+    from app.modules.core.shared.services.status_tracking import sync_project_pipeline_status
+    from app.modules.core.shared.lib.utils import log_activity
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
@@ -640,11 +624,10 @@ def flag_stream(deliverable_id):
     # Flagging a stream can revert a project that had reached Handed to
     # Production back down to Pre-Production (the deliverable's raw status
     # stays 'approved' — flagging never sends it all the way back to In
-    # Design, only its post-approval label moves) — this was a real
-    # pre-existing gap (flag_stream never called any cascade before the 22
-    # Aug 2026 simplification), fixed here rather than left in place. The
-    # client-approval timestamp itself isn't touched by this either way —
-    # see status_tracking.py's deliverable_client_approved_at().
+    # Design, only its post-approval label moves). This fixes a gap where
+    # flag_stream never called any cascade. The client-approval timestamp
+    # itself isn't touched either way (see the shared status-tracking helper
+    # deliverable_client_approved_at()).
     sync_project_pipeline_status(project, actor)
 
     db.session.add(DeliverablePreproductionEvent(
@@ -660,8 +643,7 @@ def flag_stream(deliverable_id):
     return jsonify({'success': True})
 
 
-# ── Stream Assignment (21 Aug 2026, per Ezekiel; generalized to all three
-# streams 23 Aug 2026) ───────────────────────────────────────────────────
+# ── Stream Assignment (all three streams) ──────────────────────────────
 # Used to be Technical-only, with 2D/3D showing a row-level read-only
 # "Designer" chip instead (whoever Design already assigned was assumed to
 # release the artwork too). Now every stream gets the same interactive
@@ -683,9 +665,9 @@ def assign_stream(deliverable_id):
     today, so this is reachable only by a future clear-affordance or a
     direct API call for now; wired up regardless since "un-assign" is the
     obvious complement to "assign" and costs nothing extra here."""
-    from app import db
-    from app.models import DeliverableAssignment
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import DeliverableAssignment
+    from app.modules.core.shared.lib.utils import log_activity
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project
@@ -736,7 +718,7 @@ def preproduction_events(project_id):
     deliverables, newest first — the data behind the "All" + per-
     deliverable dropdown history view. Its own endpoint/table per
     Ezekiel: doesn't touch or return anything from Submissions' event log."""
-    from app.models import DeliverablePreproductionEvent
+    from app.modules.core.shared.models import DeliverablePreproductionEvent
 
     project = Project.query.get_or_404(project_id)
     deliverable_ids = [d.id for d in project.project_deliverables]
@@ -759,7 +741,7 @@ def preproduction_events(project_id):
     ]})
 
 
-# ── NAS deep-link (M10 NAS migration, 21 Aug 2026) ──────────────────────
+# ── NAS deep-link ──────────────────────────────────────────────────────
 
 @project_preproduction_bp.route('/deliverables/<int:deliverable_id>/nas-folder-link')
 @login_required
@@ -772,7 +754,7 @@ def deliverable_nas_folder_link(deliverable_id):
     nas_deliverable_url() Jinja global this replaces, so the frontend
     doesn't need to pass anything beyond the deliverable id."""
     from flask import current_app, jsonify
-    from app.nas import build_drive_folder_url, REGION_DISPLAY
+    from app.modules.core.shared.services.nas import build_drive_folder_url, REGION_DISPLAY
 
     deliverable = Deliverable.query.get_or_404(deliverable_id)
     project = deliverable.project

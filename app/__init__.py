@@ -150,8 +150,8 @@ def create_app(config=Config):
     from app.modules.time_tracking.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
     from app.modules.projects.routes.transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
     from app.modules.projects.routes.project_list import project_list_bp # Projects page list
-    from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
-    from app.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
+    from app.modules.projects.routes.project_overlay import project_overlay_bp # Projects detail overlay
+    from app.modules.projects.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
     from app.modules.projects.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
 
 

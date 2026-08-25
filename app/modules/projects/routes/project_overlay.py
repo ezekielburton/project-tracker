@@ -6,16 +6,16 @@ New blueprint for file hygiene, easier to work on chunks rather than one long fi
 from flask import Blueprint, render_template, abort, request, jsonify
 from flask_login import login_required, current_user
 
-from app.models import Project
-from app.decorators import role_required
+from app.modules.core.shared.models import Project
+from app.modules.core.shared.lib.decorators import role_required
 
-project_overlay_bp = Blueprint('project_overlay', __name__)
+project_overlay_bp = Blueprint('project_overlay', __name__, template_folder='../templates')
 
 def _get_actor():
     """Emulation-aware actor lookup — an admin viewing-as another user acts
     (and gets logged) as that user; everyone else acts as themselves. Every
     overlay route uses this, not just overlay() itself."""
-    from app.models import User
+    from app.modules.core.shared.models import User
     from flask import session
     emulating_id = session.get('emulating_user_id')
     return User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
@@ -28,12 +28,10 @@ def _can_manage_deliverables(project, actor):
     it's identical to can_manage_reference_files today, same reasoning as
     can_edit_project — they may diverge later.
 
-    25 Aug 2026 (per Ezekiel — a CS building a project on behalf of a
-    DIFFERENT CS Lead got a hard 403 the instant she opened the
-    Deliverables step of her own still-in-progress draft: cs_lead_id was
-    already set to that other person, and none of the checks above cover
-    "I'm the one actually building this"): also allow the draft's own
-    creator, but ONLY while it's still a draft — once finalized,
+    Also allow the draft's own creator, but ONLY while it's still a draft.
+    This covers a CS building a project on behalf of a different CS Lead:
+    cs_lead_id is already set to that other person, so none of the checks
+    above cover "I'm the one actually building this". Once finalized,
     deliverables management goes back to being purely CS Lead/Secondary
     CS/Project Owner/admin's call, same as everything else on a live
     project. Mirrors _can_finalize_create()'s reachability rule above,
@@ -55,17 +53,17 @@ def ensure_posm_channels(project, brief_sections):
     UAE *and* Gulf customer (never per-region-only anymore). The one
     deliberate exception: Oman's handful of pre-migration legacy
     region-level channels (posm_customer_id IS NULL) are frozen read-only
-    history per the 4 Aug 2026 Gulf-per-customer migration — this function
+    history from the Gulf-per-customer migration — this function
     must never delete or touch those, only ever add genuinely new
     per-customer channels alongside them.
     Commits if it adds anything. Returns True if it added any channels.
 
-    Relocated from projects_detail.py (M10) — this was the old detail
+    Relocated from the old detail page — this was the old detail
     page's own helper, but the overlay's Submissions tab (overlay_submissions
     below) was already the only live caller by the time of the move.
     """
-    from app import db
-    from app.models import ProjectPosmChannel
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectPosmChannel
 
     GULF_REGION_KEYS = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman']
 
@@ -108,7 +106,7 @@ def ensure_posm_channels(project, brief_sections):
 
 def _can_cancel_project(project, actor):
     """Cancel/Reactivate — CS Lead, Secondary CS, assigned Project Owner,
-    Management, Admin (per Ezekiel, 18 Aug 2026). Same shape as
+    Management, Admin. Same shape as
     _can_manage_deliverables — identical today, kept separate since Cancel
     is a bigger action and the two may diverge later."""
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
@@ -137,9 +135,8 @@ def _can_toggle_hold(project, actor):
 
 def _can_skip_preproduction(project, actor):
     """Who can use Skip to Pre-Production — CS Lead, Secondary CS,
-    Management, Admin, or the assigned Project Owner (per Ezekiel, 18 Aug
-    2026 — replaces an earlier "any cs-role user" broadening that let
-    someone with no relationship to this specific project skip it). Same
+    Management, Admin, or the assigned Project Owner (not any cs-role user —
+    only someone with a relationship to this specific project). Same
     shape as _can_cancel_project. Kept as its own function rather than
     widening _can_manage_preproduction over in project_preproduction.py —
     Mark Done/Approve/Flag keep their existing, narrower gate. Duplicated
@@ -156,9 +153,9 @@ def _can_skip_preproduction(project, actor):
 
 def _can_create_project(actor):
     """Who can start a new project — admin/cs/management (same as the old
-    /projects/create page's role_required) plus Project Owner (per Ezekiel,
-    18 Aug 2026 — Project Owner is a first-class role in this rework, not
-    just something a project gets assigned after the fact). Role-only, not
+    /projects/create page's role_required) plus Project Owner (a first-class
+    role in this rework, not just something assigned after the fact).
+    Role-only, not
     project-scoped — there's no project yet to scope against."""
     return actor.role in ('admin', 'cs', 'management', 'project_owner')
 
@@ -204,27 +201,20 @@ def _serialize_flag(flag, actor):
     }
 
 
-# ── Admin status override (22 Aug 2026, per Ezekiel; deliverable-only as of
-# the same-day simplification a few hours later; project-level BULK version
-# added back 24 Aug 2026, see override_project_status() below) ─────────────
-# Originally offered both a project-level and a deliverable-level override.
-# The project-level one was retired the same day the status vocabulary got
-# simplified: project.project_status is now a pure live roll-up of the
-# project's own deliverables (status_vocabulary.py's derive_project_status /
-# status_tracking.py's sync_project_pipeline_status — "nothing else decides
-# it", per Ezekiel), recomputed after every deliverable-affecting action. A
-# STORED override of the PROJECT pill would just get silently clobbered the
-# next time any deliverable on it changed, so there was nothing left for a
-# control like that to usefully do.
+# ── Admin status override (deliverable-level, plus a project-level bulk
+# version; see override_project_status() below) ───────────────────────────
+# There is no STORED project-pill override: project.project_status is a pure
+# live roll-up of the project's own deliverables (the shared
+# derive_project_status / sync_project_pipeline_status), recomputed after
+# every deliverable-affecting action, so a stored override would just get
+# clobbered the next time any deliverable changed.
 #
-# What came back 24 Aug 2026 (per Ezekiel — "I need to go and update some
-# old projects status's so the new system is fresh") is not that stored
-# override — it's a bulk WRITE: pick a status once, at the project level,
-# and override_project_status() applies it to every deliverable on the
-# project (C&CM: every ProjectPosmChannel too), through the exact same
-# per-deliverable field-writing logic override_deliverable_status() below
-# already uses one row at a time. The project pill still isn't stored
-# anywhere — it's recomputed by sync_project_pipeline_status() at the end,
+# The project-level control is instead a bulk WRITE: pick a status once at
+# the project level and override_project_status() applies it to every
+# deliverable on the project (C&CM: every ProjectPosmChannel too), through
+# the same per-deliverable field-writing logic override_deliverable_status()
+# below uses one row at a time. The project pill still isn't stored — it's
+# recomputed by sync_project_pipeline_status() at the end,
 # same as always — this control just reaches every scope that pill (and,
 # for C&CM, the per-customer pills) are actually built from, in one action,
 # instead of clicking each deliverable's own picker one at a time. Built
@@ -295,7 +285,7 @@ def _canonical_team(raw):
     (set via the admin Deliverable Types editor) and the free-text
     Deliverable.teams field aren't guaranteed to be saved in that casing —
     the edit form in admin.js stored them lowercase ('2d'/'3d'/'technical')
-    until 22 Aug 2026, so plenty of existing rows still are. Nothing before
+    historically, so plenty of existing rows still are. Nothing before
     the team-tag assignment feature (this file) cared about exact casing —
     display always went through .lower() anyway for the CSS class name —
     so this mismatch was invisible until an exact `User.team == team`
@@ -329,25 +319,23 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project):
     that both the Standard and C&CM Deliverables views need, so the two
     branches in overlay_deliverables() can't drift out of sync on this.
 
-    Also builds `assign_by_deliverable` (added 22 Aug 2026) — per
+    Also builds `assign_by_deliverable` — per
     deliverable, per needed team, who's assigned (if anyone) and what
     clicking that team's tag should do for the viewing actor. This is the
     read side of the Team column's click-to-assign feature; the write
     side is assign_deliverable_team() below.
     """
-    from app.status_vocabulary import derive_deliverable_status
-    from app.status_tracking import bulk_deliverable_status_started_at
-    from app.models import User
+    from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
+    from app.modules.core.shared.services.status_tracking import bulk_deliverable_status_started_at
+    from app.modules.core.shared.models import User
     status_by_id = {}
     assigned_ids = set()
     for d in deliverables:
         status_by_id[d.id] = derive_deliverable_status(d)
         if any(a.designer_id == actor.id for a in d.disciplines):
             assigned_ids.add(d.id)
-    # "All status changes need to be time stamped" (22 Aug 2026, per
-    # Ezekiel) — one bulk query for the whole roster rather than one per
-    # deliverable, same pattern _bulk_deliverable_aggregates uses in
-    # project_list.py.
+    # One bulk query for the whole roster rather than one per deliverable,
+    # same pattern _bulk_deliverable_aggregates uses in project_list.
     status_started_at_by_id = bulk_deliverable_status_started_at([d.id for d in deliverables])
 
     # Options are per-team, not per-deliverable/per-row — one small query
@@ -393,12 +381,12 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project):
         # Admin's toggle doesn't filter anything either way, per your call —
         # defaulting it to All just means it starts in the "off" position.
         'default_focus': actor.role in ('designer', 'team_lead'),
-        # Status override (22 Aug 2026, per Ezekiel) — admin-only, click the
-        # pill / pick a different status. One shared option list regardless
-        # of brief type: derive_deliverable_status is identical for
-        # Standard and C&CM deliverables. This is the only status override
-        # left in the overlay — the project-level one was retired the same
-        # day (see the comment above _DELIVERABLE_STATUS_OVERRIDE_OPTIONS).
+        # Status override — admin-only, click the pill / pick a different
+        # status. One shared option list regardless of brief type:
+        # derive_deliverable_status is identical for Standard and C&CM
+        # deliverables. This is the deliverable-level override (the
+        # project-level one is a bulk write; see the comment above
+        # _DELIVERABLE_STATUS_OVERRIDE_OPTIONS).
         'can_override_status': actor.role == 'admin',
         'deliverable_status_options': _DELIVERABLE_STATUS_OVERRIDE_OPTIONS,
     }
@@ -411,7 +399,7 @@ def _build_ccm_deliverable_sections(project):
     region isn't one of the five known keys land in a single 'other' bucket rather
     than being silently dropped.
     """
-    from app.models import Deliverable
+    from app.modules.core.shared.models import Deliverable
 
     by_region = {}
     for pc in project.project_customers:
@@ -485,7 +473,7 @@ def _resolve_submission_scope(project, scope, customer_id=None):
     Returns {'channel': ProjectPosmChannel|None, 'phase': str,
     'posm_country': str|None, 'posm_customer_id': int|None}.
     """
-    from app.models import ProjectPosmChannel
+    from app.modules.core.shared.models import ProjectPosmChannel
 
     if scope == 'customer' and customer_id:
         channel = ProjectPosmChannel.query.filter_by(
@@ -515,7 +503,7 @@ def _get_active_draft(project, resolved):
     creation), so restricting to these three values still correctly
     excludes stale legacy rows the old detail page's routes in
     projects_submission.py left with workflow_status=NULL."""
-    from app.models import ProjectSubmission
+    from app.modules.core.shared.models import ProjectSubmission
     return ProjectSubmission.query.filter_by(
         project_id=project.id,
         phase=resolved['phase'],
@@ -534,7 +522,7 @@ def _get_sent_submission(project, resolved):
     show it (read-only) rather than snapping back to an empty upload state.
     Standard Brief today; the scope filter already covers channel/customer for
     the later C&CM/Gulf pass."""
-    from app.models import ProjectSubmission
+    from app.modules.core.shared.models import ProjectSubmission
     return ProjectSubmission.query.filter_by(
         project_id=project.id,
         phase=resolved['phase'],
@@ -552,7 +540,7 @@ def _get_submission_history(project, resolved):
     history. NOT filtered by is_active (past revisions get deactivated but must
     still appear); includes the current sent deck too, so History is the full
     record rather than 'older than current'."""
-    from app.models import ProjectSubmission
+    from app.modules.core.shared.models import ProjectSubmission
     return ProjectSubmission.query.filter_by(
         project_id=project.id,
         phase=resolved['phase'],
@@ -590,15 +578,14 @@ def _build_draft_card_context(project, actor, resolved):
     history timeline. can_review mirrors the old flag_submission gating
     (admin/cs/management) — the "Flag Internal Revision" side.
 
-    is_editable / is_locked state machine (confirmed with Ezekiel,
-    5 Aug 2026): draft -> fully editable. internal_review -> locked,
+    is_editable / is_locked state machine: draft -> fully editable. internal_review -> locked,
     unless is_being_edited (designer clicked Edit). internal_revision ->
     immediately editable again, no separate unlock click needed, since
     CS's flag message IS the reason. Submitting for review — whether it's
     the first time or after an edit/flag cycle — always re-locks to
     internal_review and clears is_being_edited.
     """
-    from app.models import ProjectSubmissionFile, Deliverable
+    from app.modules.core.shared.models import ProjectSubmissionFile, Deliverable
 
     draft = _get_active_draft(project, resolved)
     cached_files = []
@@ -703,14 +690,14 @@ def _build_draft_card_context(project, actor, resolved):
     # revision already pending against it); the two are mutually-exclusive
     # actions on the same indicator. Partial approval: CS picks which of the
     # sent deck's still-pending deliverables are ready (already-approved ones
-    # aren't offered again — see architecture doc §5, per-deliverable is the
+    # aren't offered again — per-deliverable is the
     # model so some can move to Pre-Production while others stay in design).
     # C&CM Concept & KV has no deliverable list to pick from — approved as a
     # pair, so no picker options needed for that scope.
     can_mark_approved = can_request_client_revision
     approvable_deliverables = []
     if can_mark_approved and sent_submission and not is_ckv_toggle_scope:
-        from app.status_vocabulary import derive_deliverable_status
+        from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
         approvable_deliverables = [
             {'deliverable': link.deliverable, 'pill': derive_deliverable_status(link.deliverable)}
             for link in sent_submission.included_deliverables
@@ -729,7 +716,7 @@ def _build_draft_card_context(project, actor, resolved):
 
     revisable_deliverables = []
     if can_request_client_revision and sent_submission and not is_ckv_toggle_scope:
-        from app.status_vocabulary import derive_deliverable_status
+        from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
         revisable_deliverables = [
             {'deliverable': link.deliverable, 'pill': derive_deliverable_status(link.deliverable)}
             for link in sent_submission.included_deliverables
@@ -800,9 +787,9 @@ def _build_details_context(project, actor):
     standalone /overlay/details fetch (used when navigating back to
     Details after visiting another sub-tab), so the two can never drift
     apart from each other."""
-    from app.models import User
-    from app.status_vocabulary import derive_project_status
-    from app.status_tracking import project_status_started_at, project_client_approved_at
+    from app.modules.core.shared.models import User
+    from app.modules.core.shared.lib.status_vocabulary import derive_project_status
+    from app.modules.core.shared.services.status_tracking import project_status_started_at, project_client_approved_at
 
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
 
@@ -839,21 +826,18 @@ def _build_details_context(project, actor):
     # status_label/status_class are a pure live roll-up of the project's
     # own deliverables (status_vocabulary.py's derive_project_status) — this
     # pill itself is never written directly, even by the admin override
-    # below (24 Aug 2026, per Ezekiel — see the block comment above
-    # override_project_status() in this file). can_override_project_status
+    # below (see the block comment above override_project_status() in this
+    # file). can_override_project_status
     # gates a bulk WRITE to every deliverable (+ C&CM channel), not a
     # stored override of this pill; the value below still just reads back
     # whatever that bulk write leaves the roll-up computing.
     status_label, status_class = derive_project_status(project)
     can_override_project_status = actor.role == 'admin'
-    # "All status changes need to be time stamped" (22 Aug 2026, per
-    # Ezekiel) — when this project's raw status last changed, straight
-    # from ProjectStatusLog; None if it pre-dates that table.
+    # When this project's raw status last changed, straight from
+    # ProjectStatusLog; None if it pre-dates that table.
     status_started_at = project_status_started_at(project)
-    # Client-approval moment specifically (22 Aug 2026, later the same
-    # day, per Ezekiel — "Client Approved" removed as its own pill stage:
-    # "ensure anything that ever does go to preproduction gets its client
-    # approved time stamped"). Only worth showing separately from
+    # The client-approval moment specifically. Only worth showing
+    # separately from
     # status_started_at once the project's moved on to Handed to
     # Production — at Pre-Production they're the same moment, and at In
     # Design there's no current approval to show.
@@ -897,7 +881,7 @@ def _build_details_context(project, actor):
 
     concept_kv_designer = project.concept_designer or project.kv_designer
 
-    # Start Project (13 Aug 2026) — the one manual gate that moves a project
+    # Start Project — the one manual gate that moves a project
     # off "Briefed" (status_vocabulary.py's derive_project_status checks
     # project.project_status == 'briefed' explicitly, ahead of the
     # deliverable roll-up). Same button, same underlying action for both
@@ -907,19 +891,18 @@ def _build_details_context(project, actor):
     # Reuses can_edit_project's permission tier rather than a new one.
     can_start_project = can_edit_project and project.project_status == 'briefed'
 
-    # Cancel/Reactivate (18 Aug 2026) — see _can_cancel_project. Project
+    # Cancel/Reactivate — see _can_cancel_project. Project
     # Status row shows Cancel Project when active, Reactivate Project once
     # project.cancelled_at is set — the template branches on that column
     # directly rather than a second flag, so there's only one source of truth.
     can_cancel_project = _can_cancel_project(project, actor)
 
-    # On Hold (18 Aug 2026) — see _can_toggle_hold. Same branch-on-the-
+    # On Hold — see _can_toggle_hold. Same branch-on-the-
     # column-directly approach as Cancel: the template checks
     # project.project_status == 'on_hold' itself rather than a second flag.
     can_toggle_hold = _can_toggle_hold(project, actor)
 
-    # Cancel Customer (23 Aug 2026, per Ezekiel — "we need a way to cancel
-    # a customer") — C&CM only. Deliberately built from project.
+    # Cancel Customer — C&CM only. Deliberately built from project.
     # project_customers directly, NOT the same all_customers() every other
     # C&CM tab builds (_build_ccm_deliverable_sections etc.) — those all
     # filter OUT cancelled customers, since that exclusion is what "freezes"
@@ -930,7 +913,7 @@ def _build_details_context(project, actor):
     # cancel the whole project can cancel one customer within it.
     customer_rows = []
     if project.brief_type == 'ccm':
-        from app.status_vocabulary import derive_customer_pipeline_status
+        from app.modules.core.shared.lib.status_vocabulary import derive_customer_pipeline_status
         for pc in sorted(project.project_customers, key=lambda x: x.customer.name):
             label, css_class = derive_customer_pipeline_status(pc)
             customer_rows.append({
@@ -939,12 +922,12 @@ def _build_details_context(project, actor):
                 'status_class': css_class,
             })
 
-    # Brief Flags (task #42) — Details' Flags card covers 'project' plus
-    # the old page's separate 'concept'/'kv' flag types (folded in here
-    # per Ezekiel, 18 Aug 2026, rather than a third toggle location —
+    # Brief Flags — Details' Flags card covers 'project' plus the
+    # 'concept'/'kv' flag types (folded in here rather than a third toggle
+    # location —
     # Concept & KV is project-level info in the new system, not its own
     # flaggable entity like a deliverable is).
-    from app.models import BriefFlag
+    from app.modules.core.shared.models import BriefFlag
     project_open_flags = (
         BriefFlag.query
         .filter_by(project_id=project.id, is_resolved=False)
@@ -956,22 +939,22 @@ def _build_details_context(project, actor):
         f.can_resolve = _can_resolve_flag(f, actor)
     can_manage_flags = _can_manage_flags(actor)
 
-    # Edit mode (M4, task #33) — Client/Type of Design are FKs, not free
+    # Edit mode — Client/Type of Design are FKs, not free
     # text, so the edit-mode dropdown needs the full option list, same
     # shape as cs_lead_options/owner_options above. Only fetched for
     # someone who can actually edit — no point loading these for a
     # read-only viewer.
-    from app.models import Client, DesignType
+    from app.modules.core.shared.models import Client, DesignType
     client_options = Client.query.order_by(Client.name).all() if can_edit_project else []
     design_type_options = DesignType.query.order_by(DesignType.name).all() if can_edit_project else []
 
-    # Edit mode (task #34) — concurrent-edit check reuses the latest
+    # Edit mode — concurrent-edit check reuses the latest
     # ActivityLog row for this project as a "last modified" signal rather
     # than a new updated_at column (Project doesn't have one). Snapshotted
     # here when the section loads, sent back with Save, compared server-
     # side — if someone else's write logged a newer entry in between, the
     # save is rejected as a conflict instead of silently overwriting it.
-    from app.models import ActivityLog
+    from app.modules.core.shared.models import ActivityLog
     latest_activity = (
         ActivityLog.query
         .filter_by(entity_type='project', entity_id=project.id)
@@ -1029,7 +1012,7 @@ def _scoped_deliverables_query(project):
     the OTHER brief type can coexist on a draft right up until finalize
     (see _drop_unselected_brief_data), so all three need to agree on what
     to ignore."""
-    from app.models import Deliverable
+    from app.modules.core.shared.models import Deliverable
     query = Deliverable.query.filter_by(project_id=project.id)
     if project.brief_type == 'ccm':
         return query.filter(Deliverable.project_customer_id.isnot(None))
@@ -1042,7 +1025,7 @@ def _drop_unselected_brief_data(project):
     coexist freely up to this point (see overlay_create_draft()) precisely
     so switching back and forth never loses work; this is the one place
     that actually commits to one side."""
-    from app import db
+    from app.modules.core.shared.extensions import db
     if project.brief_type == 'standard':
         # ProjectCustomer.deliverables cascades ('all, delete-orphan'), so
         # deleting the ProjectCustomer rows takes their C&CM deliverables
@@ -1057,8 +1040,8 @@ def _drop_unselected_brief_data(project):
         project.kv_options_required = None
         project.kv_requirements = None
         project.urgency = None
-    else:  # ccm
-        from app.models import Deliverable
+    else: # ccm
+        from app.modules.core.shared.models import Deliverable
         Deliverable.query.filter_by(project_id=project.id, project_customer_id=None).delete()
         project.design_type_id = None
         project.client_expectation = None
@@ -1079,7 +1062,7 @@ def _create_mode_context(project, actor):
     the create-mode Details step after an autosave — the picklists/options a
     blank project needs are the same regardless of how it got here.
     """
-    from app.models import User, Client, Customer, DesignType, DesignDirection
+    from app.modules.core.shared.models import User, Client, Customer, DesignType, DesignDirection
 
     customers_by_region = {
         region: Customer.query.filter_by(region=region).order_by(Customer.name).all()
@@ -1124,9 +1107,9 @@ def overlay_create_draft():
     project_overlay_create.js for what keys this actually receives.
     """
     from datetime import datetime as _dt
-    from app import db
-    from app.models import Scope, ProjectCustomer, Customer
-    from app.status_tracking import record_project_status
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import Scope, ProjectCustomer, Customer
+    from app.modules.core.shared.services.status_tracking import record_project_status
 
     actor = _get_actor()
     if not _can_create_project(actor):
@@ -1197,7 +1180,7 @@ def overlay_create_draft():
     if 'design_teams' in data:
         draft.design_teams_requested = ','.join(data.get('design_teams') or [])
     # first_output_deadline (Initial Deadline) is no longer a directly-set
-    # field (per Ezekiel, 18 Aug 2026) — see _recompute_initial_deadline()
+    # field — see _recompute_initial_deadline()
     # below, called unconditionally at the end of this route instead.
     if 'execution_date' in data:
         draft.execution_date = _parse_edit_date(data.get('execution_date'))
@@ -1219,8 +1202,8 @@ def overlay_create_draft():
         draft.additional_information = data.get('additional_information') or None
 
     # C&CM-only fields. Concept and KV collapsed into ONE tickbox/deadline/
-    # requirements/options set in create mode (18 Aug 2026, per Ezekiel —
-    # "they are always together"). The model still has two separate sets of
+    # requirements/options set in create mode (concept and KV always go
+    # together). The model still has two separate sets of
     # columns (has_concept/concept_deadline/concept_options_required vs.
     # has_kv/kv_deadline/kv_requirements/kv_options_required — kv_requirements
     # is the only one of the two with a free-text field at all) — rather than
@@ -1277,7 +1260,7 @@ def overlay_create_draft():
         # never wrote ProjectRegion at all until now, so C&CM folder trees
         # came out region-less. Full replace, same pattern as the customer
         # set above.
-        from app.models import ProjectRegion
+        from app.modules.core.shared.models import ProjectRegion
         wanted_regions = {
             c.region for c in Customer.query.filter(Customer.id.in_(wanted_ids)).all() if c.region
         }
@@ -1301,7 +1284,7 @@ def overlay_create_draft():
 def overlay_create_shell(project_id):
     """The create-mode overlay shell — Details then Deliverables only, no
     lifecycle sidebar (Cancel/Hold/Flag don't apply to a project that
-    doesn't exist yet), opened by the "+ New Project" button per task #61.
+    doesn't exist yet), opened by the "+ New Project" button.
     Only reachable for the draft's own creator (or admin/management), and
     only while it's still actually a draft — once finalized (#64), the
     normal /overlay route takes over and this one no longer applies.
@@ -1328,7 +1311,7 @@ def _can_finalize_create(project, actor):
 
 def _validate_for_finalize(project):
     """Returns an error string, or None if the project is ready to become a
-    real project. Task #64, per Ezekiel: Standard needs at least one
+    real project. Standard needs at least one
     deliverable; C&CM needs EITHER Concept & KV info with a deadline OR at
     least one deliverable — "C&CM doesn't need deliverables to submit, only
     concept & KV info and dates" reads as an alternative path, not a ban on
@@ -1339,7 +1322,7 @@ def _validate_for_finalize(project):
     if not project.name or not project.client_id or not project.cs_lead_id or not project.brief_type:
         return 'Fill in Name, Client, CS Lead, and Brief Type before creating this project.'
 
-    from app.models import Deliverable
+    from app.modules.core.shared.models import Deliverable
     has_deliverables = _scoped_deliverables_query(project).first() is not None
 
     if project.brief_type == 'standard':
@@ -1357,14 +1340,14 @@ def _validate_for_finalize(project):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/create/summary')
 @login_required
 def overlay_create_summary(project_id):
-    """Renders the confirm-and-create modal (task #64) — "Add New Project"
+    """Renders the confirm-and-create modal — "Add New Project"
     calls this first; a validation failure here comes back as JSON so the
     frontend can show it as a toast instead of opening a modal at all (per
     Ezekiel: Standard's missing-deliverables case specifically should be "a
     toast saying to add deliverables before they can submit", not a modal
     with an error inside it).
     """
-    from app.models import Deliverable
+    from app.modules.core.shared.models import Deliverable
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1389,16 +1372,16 @@ def overlay_create_summary(project_id):
 @login_required
 def overlay_create_finalize(project_id):
     """Confirm button on the summary modal — turns the draft into a real
-    project (task #64). Re-validates server-side (the summary render and
+    project. Re-validates server-side (the summary render and
     this click can be minutes apart; someone could've deleted the one
     deliverable that made this valid in between) rather than trusting the
     client got this far honestly.
     """
-    from app import db
-    from app.models import Deliverable
-    from app.status_tracking import record_project_status
-    from app.routes.project_preproduction import _apply_skip_to_preproduction
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import Deliverable
+    from app.modules.core.shared.services.status_tracking import record_project_status
+    from app.modules.projects.routes.project_preproduction import _apply_skip_to_preproduction
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1411,7 +1394,7 @@ def overlay_create_finalize(project_id):
 
     record_project_status(project, 'briefed', actor)
 
-    _drop_unselected_brief_data(project)   # NEW
+    _drop_unselected_brief_data(project) # NEW
 
     # Production Only (Standard-only — see _details_create.html's toggle,
     # scoped to the Standard card) — every deliverable this project has
@@ -1429,7 +1412,7 @@ def overlay_create_finalize(project_id):
 
 
     from flask import current_app as _app
-    from app.nas import _run_in_background, create_project_folders
+    from app.modules.core.shared.services.nas import _run_in_background, create_project_folders
     _pid = project.id
     _app_obj = _app._get_current_object()
     _run_in_background(_app_obj, lambda: create_project_folders(
@@ -1442,7 +1425,7 @@ def overlay_create_finalize(project_id):
 @project_overlay_bp.route('/projects/overlay/drafts')
 @login_required
 def list_drafts():
-    """Resumable-drafts entry point (task #65). "+ New Project" calls this
+    """Resumable-drafts entry point. "+ New Project" calls this
     first — if it comes back with any drafts, the frontend shows a picker
     instead of immediately starting a fresh one. Creators always see their
     own drafts; admin/management additionally see everyone's, per
@@ -1454,7 +1437,7 @@ def list_drafts():
     path for the old drafts list page. Namespacing under '/projects/
     overlay/...' matches this route's sibling '/projects/overlay/new' and
     sidesteps the collision entirely rather than touching legacy code
-    that's slated for removal in task #67 anyway.
+    that's slated for removal later anyway.
     """
     actor = _get_actor()
     query = Project.query.filter_by(project_status='draft')
@@ -1479,7 +1462,7 @@ def list_drafts():
 @project_overlay_bp.route('/projects/<int:project_id>/draft', methods=['DELETE'])
 @login_required
 def delete_draft(project_id):
-    """Discards an abandoned draft (task #65) — creator or admin/management
+    """Discards an abandoned draft — creator or admin/management
     only, and only while it's still actually a draft (a project that's
     since been finalized should go through Cancel, not this). Cleans up
     any reference files it accumulated from NAS storage before deleting
@@ -1488,9 +1471,9 @@ def delete_draft(project_id):
     cascade='all, delete-orphan' on Project.reference_files only removes
     the DB rows, not the actual files on the NAS.
     """
-    from app import db
-    from app.utils import log_activity
-    from app.nas import delete_app_file, build_file_path
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.nas import delete_app_file, build_file_path
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1578,11 +1561,11 @@ def _display_value_for_log(field_name, value):
     if value is None:
         return None
     if field_name == 'client_id':
-        from app.models import Client
+        from app.modules.core.shared.models import Client
         c = Client.query.get(value)
         return c.name if c else value
     if field_name == 'design_type_id':
-        from app.models import DesignType
+        from app.modules.core.shared.models import DesignType
         dt = DesignType.query.get(value)
         return dt.name if dt else value
     if hasattr(value, 'isoformat'):
@@ -1593,14 +1576,14 @@ def _display_value_for_log(field_name, value):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/details/save', methods=['POST'])
 @login_required
 def overlay_details_save(project_id):
-    """Edit mode Save (task #34). Whitelisted field-by-field update, not a
+    """Edit mode Save. Whitelisted field-by-field update, not a
     generic setattr — every accepted field is named explicitly so this
     route can never be tricked into writing a column the frontend didn't
     actually render an editable row for. Logs which fields changed by name
-    (task #36) plus a structured old/new diff in ActivityLog.changes."""
-    from app import db
-    from app.models import ActivityLog
-    from app.utils import log_activity
+    plus a structured old/new diff in ActivityLog.changes."""
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ActivityLog
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1698,8 +1681,8 @@ def overlay_start_project(project_id):
     from 'briefed' to 'in_progress', which the unified derivation reads as
     "In Design" — no brief_type-specific logic needed here."""
     from flask import jsonify
-    from app import db
-    from app.status_tracking import record_project_status
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.services.status_tracking import record_project_status
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1723,7 +1706,7 @@ def overlay_start_project(project_id):
 
 def _write_deliverable_status_override(deliverable, label, actor):
     """Writes the raw fields behind one deliverable-status override target —
-    factored out of override_deliverable_status() (24 Aug 2026) so
+    factored out of override_deliverable_status() so
     override_project_status() below can apply the exact same per-deliverable
     logic in bulk without the two ever drifting apart. Does NOT call
     sync_project_pipeline_status() or commit — callers do that once, after
@@ -1744,8 +1727,8 @@ def _write_deliverable_status_override(deliverable, label, actor):
 
     Returns False if `label` isn't one of the three real vocabulary
     stages (fields left untouched); True otherwise."""
-    from app.status_tracking import record_deliverable_status
-    from app.status_vocabulary import derive_preproduction_needs
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status
+    from app.modules.core.shared.lib.status_vocabulary import derive_preproduction_needs
 
     if label in _DELIVERABLE_STATUS_WRITE:
         record_deliverable_status(deliverable, _DELIVERABLE_STATUS_WRITE[label], actor)
@@ -1777,18 +1760,18 @@ def _write_deliverable_status_override(deliverable, label, actor):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/<int:deliverable_id>/status/override', methods=['POST'])
 @login_required
 def override_deliverable_status(project_id, deliverable_id):
-    """Admin-only status override (22 Aug 2026, per Ezekiel; simplified to
-    the 3-stage vocabulary the same day — see _DELIVERABLE_STATUS_OVERRIDE_
-    OPTIONS above). See _write_deliverable_status_override() above for what
+    """Admin-only status override (uses the 3-stage vocabulary — see
+    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS above). See
+    _write_deliverable_status_override() above for what
     fields this actually writes and why.
 
     Calls sync_project_pipeline_status() at the end — an admin overriding a
     deliverable is exactly the kind of "deliverable-affecting action" that
     can flip the project's own pill, same as a real approval/revision would."""
-    from app import db
-    from app.models import Deliverable
-    from app.status_tracking import sync_project_pipeline_status
-    from app.status_vocabulary import derive_deliverable_status
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import Deliverable
+    from app.modules.core.shared.services.status_tracking import sync_project_pipeline_status
+    from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
 
     deliverable = Deliverable.query.filter_by(id=deliverable_id, project_id=project_id).first_or_404()
     actor = _get_actor()
@@ -1813,15 +1796,12 @@ def override_project_status(project_id):
     """Admin-only, project-wide version of override_deliverable_status()
     above — sets EVERY deliverable on the project (and, for C&CM, every
     ProjectPosmChannel) to the same one of the three real vocabulary stages
-    in one action (24 Aug 2026, per Ezekiel — "I need to go and update
-    some old projects status's so the new system is fresh"). Standard:
-    deliverables only, per Ezekiel's own scoping ("if it's standard, same
-    behaviour just scoped to deliverables only") — there's no channel
-    concept to touch on a Standard project anyway.
+    in one action. Standard: deliverables only (there's no channel concept
+    to touch on a Standard project anyway).
 
     Not a stored project-level override — see the block comment above
-    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS for why that was retired 22 Aug
-    2026 and stays retired. This writes the exact same real underlying
+    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS for why that is retired. This
+    writes the exact same real underlying
     fields override_deliverable_status() would, at every deliverable (and
     channel) the project has, then lets sync_project_pipeline_status()
     recompute the pill fresh at the end, same as any other bulk action.
@@ -1850,10 +1830,10 @@ def override_project_status(project_id):
     pill just keeps reading On Hold/Cancelled until someone clears that
     state through the real control, exactly as sync_project_pipeline_status
     already behaves for every other deliverable-affecting action."""
-    from app import db
-    from app.models import Project
-    from app.status_tracking import record_project_status, sync_project_pipeline_status
-    from app.status_vocabulary import derive_project_status
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import Project
+    from app.modules.core.shared.services.status_tracking import record_project_status, sync_project_pipeline_status
+    from app.modules.core.shared.lib.status_vocabulary import derive_project_status
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1885,16 +1865,15 @@ def override_project_status(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/cancel', methods=['POST'])
 @login_required
 def overlay_cancel_project(project_id):
-    """Cancel Project (§9 of the architecture doc, finally wired up 18 Aug
-    2026) — cancel_reason/cancelled_at/cancelled_by_id already existed on
-    the model unused. Deliberately doesn't touch project_status at all:
-    status_vocabulary.py's derive_project_status() checks cancelled_at
+    """Cancel Project — cancel_reason/cancelled_at/cancelled_by_id already
+    existed on the model unused. Deliberately doesn't touch project_status
+    at all: derive_project_status() checks cancelled_at
     first, ahead of the underlying pipeline stage, so cancelling never
     overwrites (and reactivating never needs to restore) whatever stage the
     project was actually in."""
     from datetime import datetime as dt
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1928,8 +1907,8 @@ def overlay_uncancel_project(project_id):
     same asymmetry as On Hold's Resume (no confirm/note either): reversing
     a cancellation is the safe direction, only cancelling itself needs the
     reason and the confirm gate."""
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -1955,9 +1934,8 @@ def overlay_uncancel_project(project_id):
 @project_overlay_bp.route('/project-customers/<int:project_customer_id>/cancel', methods=['POST'])
 @login_required
 def overlay_cancel_customer(project_customer_id):
-    """Cancel one C&CM customer within a project (23 Aug 2026, per Ezekiel
-    — "we need a way to cancel a customer. Cancelling a customer freezes
-    its state for invoicing -> it can be undone"). Same shape as
+    """Cancel one C&CM customer within a project. Cancelling a customer
+    freezes its state for invoicing and can be undone. Same shape as
     overlay_cancel_project() above, just scoped to a ProjectCustomer
     instead of the whole Project — reuses the exact same permission gate
     (_can_cancel_project), since who's allowed to cancel a customer within
@@ -1974,9 +1952,9 @@ def overlay_cancel_customer(project_customer_id):
     was a way to SET the flag at all; this route (and overlay_uncancel_
     customer below) is that."""
     from datetime import datetime as dt
-    from app import db
-    from app.models import ProjectCustomer
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectCustomer
+    from app.modules.core.shared.lib.utils import log_activity
 
     pc = ProjectCustomer.query.get_or_404(project_customer_id)
     project = Project.query.get_or_404(pc.project_id)
@@ -2011,9 +1989,9 @@ def overlay_uncancel_customer(project_customer_id):
     """Reactivate — clears the four cancel columns, same asymmetry as
     Project's Reactivate (no reason required, only cancelling itself
     needs one)."""
-    from app import db
-    from app.models import ProjectCustomer
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectCustomer
+    from app.modules.core.shared.lib.utils import log_activity
 
     pc = ProjectCustomer.query.get_or_404(project_customer_id)
     project = Project.query.get_or_404(pc.project_id)
@@ -2042,13 +2020,13 @@ def overlay_uncancel_customer(project_customer_id):
 @login_required
 def overlay_nas_folder_link(project_id):
     """Resolves the project's root NAS folder to a Synology Drive deep-link
-    (M10 NAS migration, 21 Aug 2026) — click-triggered rather than baked
+    — click-triggered rather than baked
     into the sidebar at render time, since Drive needs a live API resolve
     per folder (see app/nas.py's build_drive_folder_url()). Same path-
     building this route replaces from the old nas_project_url() Jinja
     global."""
     from flask import current_app, jsonify
-    from app.nas import build_drive_folder_url
+    from app.modules.core.shared.services.nas import build_drive_folder_url
 
     project = Project.query.get_or_404(project_id)
     root = current_app.config.get('NAS_PROJECT_ROOT', '/Projects')
@@ -2068,9 +2046,9 @@ def overlay_toggle_hold(project_id):
     toggle_hold (JSON instead of a full-page redirect+flash). Same
     held_from_status bracket/restore logic and permission set (see
     _can_toggle_hold) as the route this replaces for overlay use."""
-    from app import db
-    from app.utils import log_activity
-    from app.status_tracking import record_project_status
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.status_tracking import record_project_status
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -2098,7 +2076,7 @@ def overlay_toggle_hold(project_id):
     return jsonify({'success': True})
 
 
-# ── Brief Flags (task #42) — port of projects_detail.py's create_flag /
+# ── Brief Flags — port of projects_detail.py's create_flag /
 # reply_flag / resolve_flag, JSON instead of form-post+redirect, plus a
 # new history endpoint the old full-page detail view didn't need (it just
 # rendered every flag inline). ─────────────────────────────────────────
@@ -2106,10 +2084,10 @@ def overlay_toggle_hold(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/flags/create', methods=['POST'])
 @login_required
 def overlay_create_flag(project_id):
-    from app import db
-    from app.models import BriefFlag, BriefFlagMessage
-    from app.notifications import notify_cs_of_brief_flag
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import BriefFlag, BriefFlagMessage
+    from app.modules.core.shared.services.notifications import notify_cs_of_brief_flag
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -2128,7 +2106,7 @@ def overlay_create_flag(project_id):
     # out (not project/concept/kv) and Deliverables would never match it to
     # a row. Guard server-side rather than trusting the client-side check.
     if flag_type == 'deliverable':
-        from app.models import Deliverable
+        from app.modules.core.shared.models import Deliverable
         deliverable = Deliverable.query.get(deliverable_id) if deliverable_id else None
         if not deliverable or deliverable.project_id != project_id:
             return jsonify({'success': False, 'error': 'Pick a deliverable to flag first.'}), 400
@@ -2155,10 +2133,10 @@ def overlay_create_flag(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/flags/<int:flag_id>/reply', methods=['POST'])
 @login_required
 def overlay_reply_flag(project_id, flag_id):
-    from app import db
-    from app.models import BriefFlag, BriefFlagMessage
-    from app.notifications import notify_flag_reply
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import BriefFlag, BriefFlagMessage
+    from app.modules.core.shared.services.notifications import notify_flag_reply
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     flag = BriefFlag.query.get_or_404(flag_id)
@@ -2188,10 +2166,10 @@ def overlay_reply_flag(project_id, flag_id):
 @login_required
 def overlay_resolve_flag(project_id, flag_id):
     from datetime import datetime as dt
-    from app import db
-    from app.models import BriefFlag
-    from app.notifications import notify_cs_of_flag_resolved
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import BriefFlag
+    from app.modules.core.shared.services.notifications import notify_cs_of_flag_resolved
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     flag = BriefFlag.query.get_or_404(flag_id)
@@ -2225,7 +2203,7 @@ def overlay_flags_history(project_id):
     for all project-wide flag types); scope 'deliverable' takes an
     optional customer_id so C&CM's per-customer panels only ever see their
     own customer's history, matching the Active view's same scoping."""
-    from app.models import BriefFlag, Deliverable
+    from app.modules.core.shared.models import BriefFlag, Deliverable
 
     project = Project.query.get_or_404(project_id)
     scope = request.args.get('scope', 'project')
@@ -2252,14 +2230,14 @@ def overlay_flags_history(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables')
 @login_required
 def overlay_deliverables(project_id):
-    from app.models import BriefFlag, Deliverable
+    from app.modules.core.shared.models import BriefFlag, Deliverable
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     can_manage = _can_manage_deliverables(project, actor)
     can_manage_flags = _can_manage_flags(actor)
     can_skip_preproduction = _can_skip_preproduction(project, actor)
 
-    # Brief Flags (task #42) — one query for every open deliverable-scoped
+    # Brief Flags — one query for every open deliverable-scoped
     # flag on the project, then grouped by deliverable_id so both branches
     # below can attach "does this row/customer have open flags" without a
     # query per row. Kept as a plain dict (not a defaultdict) so Jinja's
@@ -2282,7 +2260,7 @@ def overlay_deliverables(project_id):
         all_customers = [c for r in regions for c in r['customers']]
         first_customer_id = all_customers[0]['project_customer'].id if all_customers else None
         all_deliverables = [d for c in all_customers for d in c['deliverables']]
-        # Needs Attention is scoped per customer (per Ezekiel, 18 Aug 2026) —
+        # Needs Attention is scoped per customer —
         # each customer only sees flags on its own deliverables, computed
         # here rather than in the template so the CCM and Standard branches
         # can't drift on how "which flags belong to this customer" is worked out.
@@ -2293,7 +2271,7 @@ def overlay_deliverables(project_id):
             project=project,
             regions=regions,
             all_customers=all_customers,
-            all_deliverables=all_deliverables,  # flat list — feeds the Skip to Pre-Production picker
+            all_deliverables=all_deliverables, # flat list — feeds the Skip to Pre-Production picker
             has_gulf_regions=has_gulf_regions,
             first_customer_id=first_customer_id,
             can_manage_deliverables=can_manage,
@@ -2322,7 +2300,7 @@ def overlay_deliverables(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/edit')
 @login_required
 def overlay_deliverables_edit(project_id):
-    from app.models import Deliverable
+    from app.modules.core.shared.models import Deliverable
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     if not _can_manage_deliverables(project, actor):
@@ -2375,9 +2353,9 @@ def save_standard_deliverables(project_id):
     creates/updates/deletes rows rather than assigning designers, so it's
     new rather than reused outright."""
     from datetime import datetime as dt
-    from app.models import Deliverable
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.models import Deliverable
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
     from flask import request, jsonify, session
 
     project = Project.query.get_or_404(project_id)
@@ -2430,7 +2408,7 @@ def save_standard_deliverables(project_id):
 
         name = (row.get('name') or '').strip()
         if not name:
-            continue  # a blank row that was never filled in — skip it rather than fail the whole save
+            continue # a blank row that was never filled in — skip it rather than fail the whole save
 
         design_deadline = parse_date(row.get('design_deadline'))
         design_deadline_time = parse_time(row.get('design_deadline_time'))
@@ -2460,9 +2438,9 @@ def save_standard_deliverables(project_id):
             db.session.add(deliverable)
             created.append(name)
 
-    # Initial Deadline auto-follows deliverable dates in CREATE MODE only
-    # (task #62 follow-up, 18 Aug 2026) — this same route also backs the
-    # LIVE overlay's Save Deliverables (task #44), where Initial Deadline
+    # Initial Deadline auto-follows deliverable dates in CREATE MODE only.
+    # This same route also backs the
+    # LIVE overlay's Save Deliverables, where Initial Deadline
     # may have been deliberately set to something a CS Lead communicated
     # externally and isn't necessarily "whatever the deliverables say" —
     # scoped to project_status == 'draft' so a live project's Save
@@ -2503,10 +2481,9 @@ def _can_write_deliverable_assignment(project, actor, team, target_designer_id, 
 @login_required
 def assign_deliverable_team(project_id):
     """Design-phase team assignment for the Deliverables roster's Team
-    column (added 22 Aug 2026, per Ezekiel — the roster showed which teams
-    a deliverable NEEDS from day one, but DeliverableAssignment had no
-    write path anywhere after the M10 overlay rebuild; the old detail page
-    had this, the new overlay never got it back). Two distinct paths:
+    column. The roster shows which teams a deliverable NEEDS, but
+    DeliverableAssignment had no write path in the overlay (the old detail
+    page had this, the overlay never got it back). Two distinct paths:
 
     - self_toggle: a plain designer's one-click claim/release on their own
       team. Always re-reads the current DB state and only ever touches a
@@ -2517,19 +2494,19 @@ def assign_deliverable_team(project_id):
       Management/Project Owner, or this team's own team lead, setting it
       to anyone on the team, reassigning, or clearing it outright.
 
-    Separate from project_preproduction.py's assign_stream() — that one
+    Separate from project_preproduction's assign_stream() — that one
     governs who does the LATER Pre-Production 2D/3D/Technical stream work
-    (each stream independently assignable/reassignable there too, since 23
-    Aug 2026 — see the comment above assign_stream()); this one governs
+    (each stream independently assignable/reassignable there too — see the
+    comment above assign_stream()); this one governs
     who's actually doing the EARLIER Design-phase work a deliverable's
     2D/3D/Technical tags say it needs. The same DeliverableAssignment row
     carries straight through from Design into Pre-Production for a given
     team (see assign_stream()'s docstring), so this route is what seeds it
     — assign_stream() just picks up from wherever this one left off, or
     fills it in if Design left it unassigned."""
-    from app import db
-    from app.models import Deliverable, DeliverableAssignment, User
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import Deliverable, DeliverableAssignment, User
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -2619,11 +2596,11 @@ def set_project_owner(project_id):
     Assigns/reassigns the Project Owner. Gating: Admin, Management, Project's CS lead or the Project Owner themselves.
     
     """
-    from app.models import Project, User
-    from app import db
+    from app.modules.core.shared.models import Project, User
+    from app.modules.core.shared.extensions import db
     from flask import request, jsonify, session
-    from app.utils import log_activity
-    from app.notifications import create_notification
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import create_notification
 
     project = Project.query.get_or_404(project_id)
 
@@ -2667,14 +2644,14 @@ def set_project_owner(project_id):
     return jsonify({'success': True, 'owner_name': new_owner.name})
 
 
-# ── Details tab person-assignment routes recovered 24 Aug 2026 ─────────────
+# ── Details tab person-assignment routes ──────────────────────────────────
 # reassign_cs_lead / add_secondary_cs / remove_secondary_cs / assign_concept_kv
 # / assign_lead below all existed on the pre-redesign detail page
 # (app/routes/projects_detail.py, deleted in commit 5a714d4 "Old detail page
 # removed") but were never rebuilt here when the new Design > Details tab
 # replaced it — project_details_card.js kept POSTing to the same old URLs
 # (reassign-cs-lead / secondary-cs / assign-concept-kv / assign-lead) the
-# whole time, 404ing on every one of them. Found 24 Aug 2026, per Ezekiel:
+# whole time, 404ing on every one of them. The reported symptom was
 # "Designers cannot reassign themselves as a lead designer" (console showed
 # a 404 on assign-lead specifically) — checking the other three picker/
 # button targets in the same file turned up the same gap on all of them,
@@ -2695,10 +2672,10 @@ def reassign_cs_lead(project_id):
     can_reassign_cs_lead = admin/management only — a real ownership
     change, not something a CS/designer/team_lead should trigger on
     someone else's behalf."""
-    from app.models import User
-    from app import db
-    from app.utils import log_activity
-    from app.notifications import create_notification
+    from app.modules.core.shared.models import User
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import create_notification
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -2754,9 +2731,9 @@ def add_secondary_cs(project_id):
     yes, the manual check said no). The template's picker/remove buttons
     are gated on can_manage_cs today, so the backend needs to agree with
     that gate exactly, not the old file's inconsistent one."""
-    from app.models import User, ProjectSecondaryCS
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.models import User, ProjectSecondaryCS
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -2795,9 +2772,9 @@ def remove_secondary_cs(project_id, user_id):
     UI, which the new overlay never rebuilt a picker for — cleaning them
     up on removal just avoids leaving orphaned subscriptions for someone
     no longer on the project; nothing in the current UI writes new ones)."""
-    from app.models import User, ProjectSecondaryCS, ProjectSecondaryCsRegion
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.models import User, ProjectSecondaryCS, ProjectSecondaryCsRegion
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -2829,10 +2806,10 @@ def assign_concept_kv(project_id):
     can_manage_concept_kv_full / can_self_claim_concept_kv in
     _build_details_context, which already gates whether this picker even
     renders and what options it offers."""
-    from app.models import User
-    from app import db
-    from app.utils import log_activity
-    from app.notifications import notify_designer_of_concept_kv_assignment
+    from app.modules.core.shared.models import User
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import notify_designer_of_concept_kv_assignment
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -2877,8 +2854,8 @@ def assign_concept_kv(project_id):
 def assign_lead(project_id):
     """Design Leads per-team picker on the Details tab (`.avatar-picker
     [data-team]` in _details_design_leads.html) — the specific endpoint
-    the 24 Aug 2026 bug report named ("Designers cannot reassign
-    themselves as a lead designer"). See the block comment above
+    the bug report named ("Designers cannot reassign themselves as a lead
+    designer"). See the block comment above
     reassign_cs_lead() for why this and three siblings were all 404ing.
 
     Ported from the old route with one real fix, not just a straight
@@ -2901,10 +2878,10 @@ def assign_lead(project_id):
     there's a real one on (project_id, team) in the database — delete the
     existing row and flush before inserting the new one, or the INSERT
     raises a UniqueViolation instead of cleanly replacing it."""
-    from app.models import User, ProjectDesigner
-    from app import db
-    from app.utils import log_activity
-    from app.notifications import notify_cs_of_lead_change
+    from app.modules.core.shared.models import User, ProjectDesigner
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import notify_cs_of_lead_change
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -3005,7 +2982,7 @@ def overlay_submissions(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/submissions/content')
 @login_required
 def overlay_submissions_content(project_id):
-    from app.models import ProjectCustomer
+    from app.modules.core.shared.models import ProjectCustomer
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
 
@@ -3046,10 +3023,10 @@ def overlay_submissions_upload(project_id):
     flagged is_main_deck — see ProjectSubmissionFile.is_main_deck's
     comment in app/models/__init__.py for the reasoning.
     """
-    from app.models import ProjectSubmission, ProjectSubmissionFile
-    from app.submission_cache import cache_submission_file
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.models import ProjectSubmission, ProjectSubmissionFile
+    from app.modules.projects.lib.submission_cache import cache_submission_file
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
     from flask import jsonify
 
     project = Project.query.get_or_404(project_id)
@@ -3105,7 +3082,7 @@ def overlay_submissions_upload(project_id):
             workflow_status='draft',
         )
         db.session.add(draft)
-        db.session.flush()  # need draft.id before caching the file under it
+        db.session.flush() # need draft.id before caching the file under it
 
     file_bytes = file.read()
     local_path = cache_submission_file(project.id, draft.id, file_bytes, file.filename)
@@ -3161,13 +3138,13 @@ def overlay_submissions_remove_draft_file(project_id, file_id):
     other files so the frontend can prompt the designer to choose.
 
     If the main-deck file is the ONLY file left, it deletes freely and the
-    draft goes back to empty — per Ezekiel: "If the file is solo, it's fine
-    to revert to a empty draft."
+    draft goes back to empty — if the file is solo, it reverts to an empty
+    draft.
     """
-    from app.models import ProjectSubmissionFile
-    from app.submission_cache import cache_submission_file, delete_cached_file
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.models import ProjectSubmissionFile
+    from app.modules.projects.lib.submission_cache import cache_submission_file, delete_cached_file
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
     from flask import jsonify
 
     project = Project.query.get_or_404(project_id)
@@ -3242,9 +3219,9 @@ def overlay_submissions_set_main_deck(project_id, file_id):
     file currently holds the flag (there's always at most one, so this is a
     simple two-row flip, not a bulk unset).
     """
-    from app.models import ProjectSubmissionFile
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.models import ProjectSubmissionFile
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
     from flask import jsonify
 
     project = Project.query.get_or_404(project_id)
@@ -3284,12 +3261,12 @@ def overlay_submissions_submit_for_review(project_id):
     (list — Standard Brief / C&CM customer scope) or includes_concept /
     includes_kv (bool — C&CM's Concept & KV pill only).
     """
-    from app.models import (Deliverable, ProjectSubmissionDeliverable,
+    from app.modules.core.shared.models import (Deliverable, ProjectSubmissionDeliverable,
                              ProjectSubmissionEvent, ProjectSubmissionFile)
-    from app.status_tracking import record_deliverable_status
-    from app.notifications import create_notification
-    from app.utils import log_activity
-    from app import db
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status
+    from app.modules.core.shared.services.notifications import create_notification
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.extensions import db
     from flask import jsonify
 
     project = Project.query.get_or_404(project_id)
@@ -3383,9 +3360,9 @@ def overlay_submissions_edit_draft(project_id):
     internal_revision needs no equivalent route: it's already editable the
     moment it's flagged, since the flag message itself is the reason.
     """
-    from app.models import ProjectSubmissionEvent
-    from app.utils import log_activity
-    from app import db
+    from app.modules.core.shared.models import ProjectSubmissionEvent
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.extensions import db
     from datetime import datetime as dt
     from flask import jsonify
 
@@ -3436,11 +3413,11 @@ def overlay_submissions_flag_internal_revision(project_id):
     and concept/KV if included, back into internal_revision status —
     mirrors the old flag_submission route exactly.
     """
-    from app.models import ProjectSubmissionEvent
-    from app.status_tracking import record_deliverable_status
-    from app.notifications import create_notification
-    from app.utils import strip_html, log_activity
-    from app import db
+    from app.modules.core.shared.models import ProjectSubmissionEvent
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status
+    from app.modules.core.shared.services.notifications import create_notification
+    from app.modules.core.shared.lib.utils import strip_html, log_activity
+    from app.modules.core.shared.extensions import db
     from flask import jsonify
 
     project = Project.query.get_or_404(project_id)
@@ -3498,11 +3475,11 @@ def _canonical_deck_basename(project, resolved):
     """Canonical deck name WITHOUT extension, for a submission's zip object
     and its main-deck member. Mirrors the old projects_submission.py upload
     route's naming branches exactly, keyed off the resolved scope:
-      - POSM channel, per-customer:  "<Client> - <Project> - <Country> - <Customer> - POSM - <Initial|Revision N>"
+      - POSM channel, per-customer: "<Client> - <Project> - <Country> - <Customer> - POSM - <Initial|Revision N>"
       - POSM channel, per-country (legacy whole-region, posm_customer_id NULL): "... - <Country> - POSM - <label>"
-      - POSM channel, no country:    "... - POSM - <label>"  (project.revision_count)
-      - C&CM Concept & KV:           "<Client> - <Project> - Concept & KV - <Initial|Revision N>"  (project.ckv_revision_count)
-      - Standard Brief:              "<Client> - <Project> - <Initial|Revision N>"  (project.revision_count)
+      - POSM channel, no country: "... - POSM - <label>" (project.revision_count)
+      - C&CM Concept & KV: "<Client> - <Project> - Concept & KV - <Initial|Revision N>" (project.ckv_revision_count)
+      - Standard Brief: "<Client> - <Project> - <Initial|Revision N>" (project.revision_count)
     Revision labels read the CURRENT counters — the CS-confirmed counter bump
     lives in the Client Revision flow (revision cycle), not here."""
     import re
@@ -3520,7 +3497,7 @@ def _canonical_deck_basename(project, resolved):
         country = channel.posm_country or ''
         country_display = GULF_REGION_NAMES.get(country, country.title())
         if channel.posm_customer_id:
-            from app.models import ProjectCustomer
+            from app.modules.core.shared.models import ProjectCustomer
             pc = ProjectCustomer.query.get(channel.posm_customer_id)
             posm_rev = (pc.posm_revision_count or 0) if pc else 0
             label = 'Initial' if posm_rev == 0 else f'Revision {posm_rev}'
@@ -3557,7 +3534,7 @@ def overlay_submissions_submit_to_client(project_id):
 
     Standard Brief scope ONLY in this pass (phase='concept_kv', no channel /
     customer). C&CM Concept & KV and UAE/Gulf per-customer POSM scopes are
-    the next pass — see Projects Rework Workflow.md sub-step 7.
+    the next pass.
 
     Reuses the transition logic the old projects_submission.py
     submit_to_client route's Standard branch already proved (record_project_
@@ -3570,13 +3547,13 @@ def overlay_submissions_submit_to_client(project_id):
     unused for Standard).
     """
     import re
-    from app.models import ProjectSubmissionFile, ProjectSubmissionEvent
-    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
-    from app.notifications import notify_of_submission_to_client
-    from app.utils import log_activity
-    from app.submission_cache import build_zip_bytes, clear_submission_cache
-    from app.nas import build_file_path, upload_app_file
-    from app import db
+    from app.modules.core.shared.models import ProjectSubmissionFile, ProjectSubmissionEvent
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status, sync_project_pipeline_status
+    from app.modules.core.shared.services.notifications import notify_of_submission_to_client
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.projects.lib.submission_cache import build_zip_bytes, clear_submission_cache
+    from app.modules.core.shared.services.nas import build_file_path, upload_app_file
+    from app.modules.core.shared.extensions import db
     from datetime import datetime as dt
     from flask import jsonify, current_app
 
@@ -3703,8 +3680,8 @@ def overlay_submissions_submit_to_client(project_id):
             project.kv_status = 'submitted_to_client'
     else:
         # Standard Brief — included deliverables (unchanged). Project-level
-        # pipeline status is no longer set directly here (22 Aug 2026
-        # simplification, per Ezekiel) — see the sync call below, which
+        # pipeline status is no longer set directly here — see the sync
+        # call below, which
         # covers this branch along with the other two.
         is_revised_submission = (project.revision_count or 0) > 0
         included_ids = {link.deliverable_id for link in draft.included_deliverables if link.deliverable_id}
@@ -3718,7 +3695,7 @@ def overlay_submissions_submit_to_client(project_id):
         if project.kv_status:
             project.kv_status = 'submitted_to_client'
 
-    # Project pill (22 Aug 2026 simplification, per Ezekiel) is now a pure
+    # Project pill is now a pure
     # deliverable roll-up — covers all three branches above uniformly,
     # replacing what used to be a Standard-only direct write here.
     sync_project_pipeline_status(project, actor)
@@ -3745,7 +3722,7 @@ def overlay_submissions_submit_to_client(project_id):
 def overlay_submissions_submit_summary(project_id):
     """
     The deck-summary fragment shown in the modal that opens when CS clicks
-    Submit to Client (locked spec, architecture doc §6): the COMPLETE deck —
+    Submit to Client: the COMPLETE deck —
     the deliverables newly going for decision (this draft's included set),
     PLUS the ones already Client-Approved, shown as read-only indicators
     (they ride along in the deck for client-completeness + invoicing, but
@@ -3755,8 +3732,8 @@ def overlay_submissions_submit_summary(project_id):
 
     GET, read-only — populates the modal on button click (render-on-demand).
     """
-    from app.models import ProjectSubmissionFile, Deliverable
-    from app.status_vocabulary import derive_deliverable_status
+    from app.modules.core.shared.models import ProjectSubmissionFile, Deliverable
+    from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
     from flask import jsonify
 
     project = Project.query.get_or_404(project_id)
@@ -3847,11 +3824,11 @@ def overlay_submissions_client_revision(project_id):
     sent deck — it stays the client record until a new revision actually ships
     (that supersession happens in overlay_submissions_submit_to_client).
     """
-    from app.models import ProjectSubmissionEvent, ProjectDesigner
-    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
-    from app.notifications import create_notification
-    from app.utils import strip_html, log_activity
-    from app import db
+    from app.modules.core.shared.models import ProjectSubmissionEvent, ProjectDesigner
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status, sync_project_pipeline_status
+    from app.modules.core.shared.services.notifications import create_notification
+    from app.modules.core.shared.lib.utils import strip_html, log_activity
+    from app.modules.core.shared.extensions import db
     from flask import jsonify
 
     project = Project.query.get_or_404(project_id)
@@ -3885,7 +3862,7 @@ def overlay_submissions_client_revision(project_id):
         # level status (the C&CM aggregate is derived from channel states).
         channel.status = 'revision_in_queue'
         if channel.posm_customer_id:
-            from app.models import ProjectCustomer
+            from app.modules.core.shared.models import ProjectCustomer
             pc = ProjectCustomer.query.get(channel.posm_customer_id)
             new_rev = ((pc.posm_revision_count or 0) + 1) if pc else 1
             if pc:
@@ -3915,15 +3892,15 @@ def overlay_submissions_client_revision(project_id):
         rev_label = f'#{project.ckv_revision_count}'
     else:
         # Standard Brief - whole project + all deliverables. Project-level
-        # pipeline status is no longer set directly here (22 Aug 2026
-        # simplification, per Ezekiel) — see the sync call below.
+        # pipeline status is no longer set directly here — see the sync
+        # call below.
         project.revision_count = (project.revision_count or 0) + 1
         for deliverable in project.project_deliverables:
             record_deliverable_status(deliverable, 'revision_in_queue', actor)
             deliverable.revision_count = project.revision_count
         rev_label = f'#{project.revision_count}'
 
-    # Project pill (22 Aug 2026 simplification, per Ezekiel) is now a pure
+    # Project pill is now a pure
     # deliverable roll-up — covers all three branches above uniformly. A
     # revision reverts the affected deliverable(s) back to "In Design", so
     # this can revert a project that was already reading Pre-Production/
@@ -3965,7 +3942,7 @@ def overlay_submissions_approve(project_id):
 
     Partial approval is the actual point of this route, not an edge case:
     some deliverables can clear into Pre-Production while others stay in
-    design (architecture doc §5 — per-deliverable is the model, gating at
+    design (per-deliverable is the model, gating at
     the project level would bottleneck).
 
     Body (JSON): scope, customer_id, deliverable_ids (optional list —
@@ -3983,19 +3960,18 @@ def overlay_submissions_approve(project_id):
     deliverable in that channel/project — not just this deck's — is
     approved) into the overlay's scope-resolved shape, mirroring
     overlay_submissions_client_revision. "Fully approved" no longer gets
-    its own pill label anywhere (22 Aug 2026 simplification, per Ezekiel —
-    the project pill reads Pre-Production at this point; a channel's own
-    per-customer row reads the same, fixed 22 Aug 2026 after it was
-    initially missed), but the moment itself is still real and still
+    its own pill label anywhere (the project pill reads Pre-Production at
+    this point; a channel's own per-customer row reads the same), but the
+    moment itself is still real and still
     timestamped, non-destructively, via ProjectStatusLog.
     """
-    from app.models import Deliverable, ProjectPosmChannel, ProjectSubmissionEvent, ProjectSubmissionEventDeliverable
-    from app.status_tracking import record_deliverable_status, sync_project_pipeline_status
-    from app.status_vocabulary import derive_preproduction_needs
-    from app.notifications import notify_of_project_approved
-    from app.achievements import check_achievements
-    from app.utils import log_activity
-    from app import db
+    from app.modules.core.shared.models import Deliverable, ProjectPosmChannel, ProjectSubmissionEvent, ProjectSubmissionEventDeliverable
+    from app.modules.core.shared.services.status_tracking import record_deliverable_status, sync_project_pipeline_status
+    from app.modules.core.shared.lib.status_vocabulary import derive_preproduction_needs
+    from app.modules.core.shared.services.notifications import notify_of_project_approved
+    from app.modules.core.shared.services.achievements import check_achievements
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.extensions import db
     from datetime import datetime as dt
     from flask import jsonify
 
@@ -4034,9 +4010,9 @@ def overlay_submissions_approve(project_id):
                         'error': 'A client revision is already pending on this deck — nothing to approve.'}), 400
 
     now = dt.utcnow()
-    all_approved = False  # whether this call cascaded all the way to project-approved
+    all_approved = False # whether this call cascaded all the way to project-approved
     channel = resolved['channel']
-    approved_deliverables_this_call = []  # feeds the client_approval event's deliverable links below
+    approved_deliverables_this_call = [] # feeds the client_approval event's deliverable links below
 
     if channel is not None:
         # ── POSM (UAE/Gulf per-customer) ────────────────────────────────
@@ -4053,7 +4029,7 @@ def overlay_submissions_approve(project_id):
         for d in pending:
             record_deliverable_status(d, 'approved', actor)
             # Auto-flag Pre-Production streams the moment a deliverable is
-            # client-approved — no separate manual step (13 Aug 2026, see
+            # client-approved — no separate manual step (see
             # status_vocabulary.py's derive_preproduction_needs).
             d.needs_2d, d.needs_3d, d.needs_technical = derive_preproduction_needs(d)
         approved_deliverables_this_call = pending
@@ -4134,7 +4110,7 @@ def overlay_submissions_approve(project_id):
         for d in pending:
             record_deliverable_status(d, 'approved', actor)
             # Auto-flag Pre-Production streams the moment a deliverable is
-            # client-approved — no separate manual step (13 Aug 2026, see
+            # client-approved — no separate manual step (see
             # status_vocabulary.py's derive_preproduction_needs).
             d.needs_2d, d.needs_3d, d.needs_technical = derive_preproduction_needs(d)
         approved_deliverables_this_call = pending
@@ -4148,7 +4124,7 @@ def overlay_submissions_approve(project_id):
             if project.kv_status:
                 project.kv_status = 'approved'
 
-    # Project pill (22 Aug 2026 simplification, per Ezekiel) is now a pure
+    # Project pill is now a pure
     # deliverable roll-up, independent of the ckv_gate/all_approved logic
     # above — Concept/KV approval isn't a deliverable, so it no longer
     # blocks the pill the way it still blocks the "officially approved"
@@ -4157,7 +4133,7 @@ def overlay_submissions_approve(project_id):
     # branches above uniformly.
     sync_project_pipeline_status(project, actor)
 
-    # Batch note (M3 Step 4 sub-step 8, added 13 Aug 2026) — always log an
+    # Batch note — always log an
     # event for this approval action, even with an empty note, so the deck's
     # timeline has a complete record of who approved what and when; the
     # Pre-Production tab reads client_approval events + their deliverable
@@ -4169,7 +4145,7 @@ def overlay_submissions_approve(project_id):
         author_id=actor.id, message=note or None,
     )
     db.session.add(approval_event)
-    db.session.flush()  # need approval_event.id for the link rows below
+    db.session.flush() # need approval_event.id for the link rows below
     for d in approved_deliverables_this_call:
         db.session.add(ProjectSubmissionEventDeliverable(event_id=approval_event.id, deliverable_id=d.id))
 
@@ -4190,7 +4166,7 @@ def overlay_submissions_approve(project_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Reference Files — upload / download / preview / delete (relocated for M10)
+# Reference Files — upload / download / preview / delete
 #
 # WHAT: these five routes originally lived on the old /projects/<id> detail
 # page's blueprint (detail_bp, projects_detail.py). The overlay's own
@@ -4199,7 +4175,7 @@ def overlay_submissions_approve(project_id):
 # upload/delete fetch() calls hardcode these exact URL paths, and the
 # template's preview/download/download-all buttons use url_for() against
 # them — so they were never actually dead code, just misplaced on the page
-# that's being deleted at M10 cutover (see Projects Rework Workflow.md, M10).
+# that's being deleted at cutover.
 #
 # HOW: moved verbatim — same URL paths, same function bodies, same
 # permission checks — onto project_overlay_bp instead of detail_bp. Because
@@ -4220,7 +4196,7 @@ def overlay_submissions_approve(project_id):
 @role_required('admin', 'cs', 'management')
 def upload_project_file(project_id):
     """Handle reference file uploads for a project. CS and admin only."""
-    from app.models import ProjectFile, User
+    from app.modules.core.shared.models import ProjectFile, User
     from flask import session, current_app
 
     project = Project.query.get_or_404(project_id)
@@ -4258,7 +4234,7 @@ def upload_project_file(project_id):
     file_bytes = file.read()
 
     # Upload directly to NAS - synchronous, user waits for confirmation
-    from app.nas import upload_app_file, build_file_path
+    from app.modules.core.shared.services.nas import upload_app_file, build_file_path
     nas_file_path = build_file_path(project, 'Reference Files', original_filename)
     nas_folder = nas_file_path.rsplit('/',1)[0]
     try:
@@ -4276,8 +4252,8 @@ def upload_project_file(project_id):
         uploaded_by_id=actor.id
     )
 
-    from app import db
-    from app.utils import log_activity, file_type_label
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity, file_type_label
     db.session.add(project_file)
     db.session.commit()
 
@@ -4299,8 +4275,8 @@ def upload_project_file(project_id):
 @login_required
 def download_project_file(file_id):
     """Serve a reference file for download. All authenticated users can download. Download is served from the NAS"""
-    from app.models import ProjectFile
-    from app.nas import download_app_file, build_file_path
+    from app.modules.core.shared.models import ProjectFile
+    from app.modules.core.shared.services.nas import download_app_file, build_file_path
     import io
     from flask import send_file, current_app
 
@@ -4326,8 +4302,8 @@ def download_project_file(file_id):
 @login_required
 def download_all_reference_files(project_id):
     """Zips every reference file for this project and returns a download link."""
-    from app.zip_utils import build_zip
-    from app.nas import download_app_file, build_file_path
+    from app.modules.core.shared.lib.zip_utils import build_zip
+    from app.modules.core.shared.services.nas import download_app_file, build_file_path
     from flask import url_for as _url_for
 
     project = Project.query.get_or_404(project_id)
@@ -4342,7 +4318,7 @@ def download_all_reference_files(project_id):
         try:
             content = download_app_file(nas_path)
         except RuntimeError:
-            continue  # skip a file that failed to fetch rather than failing the whole zip
+            continue # skip a file that failed to fetch rather than failing the whole zip
 
         # Disambiguate if two files happen to share a filename — zipfile
         # allows duplicate entry names, but most extractors handle that badly.
@@ -4371,19 +4347,19 @@ def preview_project_file(file_id):
     image formats. Anything else (.ai, .psd, .docx, etc.) returns a clear
     'no preview available' response so the frontend can fall back to
     download-only, rather than trying to force something that can't work."""
-    from app.models import ProjectFile
-    from app.nas import download_app_file, build_file_path
+    from app.modules.core.shared.models import ProjectFile
+    from app.modules.core.shared.services.nas import download_app_file, build_file_path
     from flask import send_file, jsonify, current_app
     import io
 
     # Maps a stored file extension to the mimetype the browser needs to
     # render it inline. Anything not in here just isn't previewable.
     PREVIEWABLE_TYPES = {
-        'pdf':  'application/pdf',
-        'jpg':  'image/jpeg',
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
-        'png':  'image/png',
-        'gif':  'image/gif',
+        'png': 'image/png',
+        'gif': 'image/gif',
         'webp': 'image/webp',
     }
 
@@ -4397,7 +4373,7 @@ def preview_project_file(file_id):
         return jsonify({
             'success': False,
             'error': 'No preview available for this file type — download instead.'
-        }), 415  # Unsupported Media Type
+        }), 415 # Unsupported Media Type
 
     project = Project.query.get(project_file.project_id)
     nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
@@ -4422,7 +4398,7 @@ def preview_project_file(file_id):
 @login_required
 def delete_project_file(file_id):
     """Delete a reference file. Admin/Management (any project), this project's CS lead/secondary CS, or this projects project owner"""
-    from app.models import ProjectFile, User
+    from app.modules.core.shared.models import ProjectFile, User
     from flask import session
 
     project_file = ProjectFile.query.get_or_404(file_id)
@@ -4441,12 +4417,12 @@ def delete_project_file(file_id):
         return jsonify({'success': False, 'error': 'You are lacking permissions to perform this action.'}), 403
 
     # Delete from NAS
-    from app.nas import delete_app_file, build_file_path
+    from app.modules.core.shared.services.nas import delete_app_file, build_file_path
     nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
     delete_app_file(nas_path)
 
-    from app import db
-    from app.utils import log_activity
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.lib.utils import log_activity
     log_activity('file_deleted', f'{actor.name} removed a reference file from "{project.name}"',
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
@@ -4457,20 +4433,20 @@ def delete_project_file(file_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Job number generation (relocated for M10)
+# Job number generation
 #
 # Originally lived on projects_brief.py's brief_bp (the old briefing page's
 # blueprint). Per that route's own comment: "only real consumer of this
 # route is project creation (grep confirms: legacy create.html and the new
-# create-mode overlay, project_overlay_create.js task #63)" — legacy
-# create.html is deleted at M10, project_overlay_create.js (line ~212,
+# create-mode overlay, project_overlay_create.js)" — legacy
+# create.html is deleted, project_overlay_create.js (line ~212,
 # fetch('/projects/generate-job-number')) is the one live caller left, so
 # it comes here rather than dying with the rest of brief_bp.
 #
 # NOTE (carried over, not fixed here): this still uses the non-atomic
-# MAX(job_number)+1 pattern — the architecture doc flags the atomic fix
-# (job_number_seq.nextval()) as separate M5 work, not yet wired up. Out of
-# scope for this M10 relocation; moved verbatim.
+# MAX(job_number)+1 pattern — the atomic fix
+# (job_number_seq.nextval()) as separate work, not yet wired up. Out of
+# scope here; moved verbatim.
 # ─────────────────────────────────────────────────────────────────────────
 
 @project_overlay_bp.route('/projects/generate-job-number', methods=['GET'])
@@ -4499,16 +4475,16 @@ def generate_job_number():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Submission file serving — download/preview (relocated for M10)
+# Submission file serving — download/preview
 #
 # WHAT: these four routes + their shared helper originally lived on
 # projects_submission.py (submission_bp), the designer-side upload/submit
 # blueprint that predates the overlay's own Submissions tab. Auditing that
-# file for M10 found the other 9 routes there (upload, submit-for-review,
+# found the other 9 routes there (upload, submit-for-review,
 # flag, submit-to-client, add-file, download-all, send-revision,
 # start-revision, delete-file) have zero live callers anymore — all
-# superseded by project_overlay.py's own overlay/submissions/* routes built
-# in M3. These 4 are the exception: _submissions_draft_card.html still
+# superseded by the overlay's own overlay/submissions/* routes. These 4
+# are the exception: _submissions_draft_card.html still
 # hardcodes url_for('submission.download_submission'/'preview_submission'/
 # 'download_submission_file'/'preview_submission_file', ...) for its
 # preview/download buttons on both the active deck and submission history.
@@ -4523,11 +4499,10 @@ def generate_job_number():
 # File/send_file being available at projects_submission.py's module top
 # level; that module-level import doesn't exist here, so it picked up an
 # explicit local import it didn't need before (caught before shipping, same
-# class of mistake as upload_project_file's missing User import at M10
-# task #4).
+# class of mistake as upload_project_file's missing User import).
 #
 # WHY here, not a new file: Submissions is part of the same overlay these
-# other file-serving routes (Reference Files, task #4) already live next
+# other file-serving routes (Reference Files) already live next
 # to — one blueprint for the overlay's file-serving surface, not a fifth
 # blueprint for four routes.
 # ─────────────────────────────────────────────────────────────────────────
@@ -4535,17 +4510,17 @@ def generate_job_number():
 @project_overlay_bp.route('/projects/submission/<int:submission_id>/download')
 @login_required
 def download_submission(submission_id):
-    from app.models import ProjectSubmission
+    from app.modules.core.shared.models import ProjectSubmission
     from flask import send_file
     import io, os
 
     submission = ProjectSubmission.query.get_or_404(submission_id)
-    project    = Project.query.get(submission.project_id)
+    project = Project.query.get(submission.project_id)
 
     # All files live on NAS — upload route never saves to local disk
-    from app.nas import download_app_file, build_file_path
+    from app.modules.core.shared.services.nas import download_app_file, build_file_path
     from flask import current_app
-    nas_path   = build_file_path(project, 'Submissions', submission.original_filename)
+    nas_path = build_file_path(project, 'Submissions', submission.original_filename)
     try:
         file_bytes = download_app_file(nas_path)
     except RuntimeError as e:
@@ -4583,18 +4558,18 @@ def _load_submission_file_bytes(sub_file, project):
             return fh.read()
 
     # storage_location == 'nas'. Two shapes live here:
-    #  1. Overlay flow (this rework): the submission's whole draft was zipped
-    #     into ONE archive at Submit to Client, so this file is a MEMBER of
-    #     that zip — download the zip, extract the one member. The member name
-    #     equals sub_file.original_filename (the submit-to-client route renames
-    #     the main deck to the canonical name before zipping, so every file's
-    #     member name == its original_filename — no per-file mapping needed).
-    #  2. Old flow: a post-submission "Attach Supporting File" upload, stored
-    #     as its own individual NAS object under its own name.
+    # 1. Overlay flow (this rework): the submission's whole draft was zipped
+    # into ONE archive at Submit to Client, so this file is a MEMBER of
+    # that zip — download the zip, extract the one member. The member name
+    # equals sub_file.original_filename (the submit-to-client route renames
+    # the main deck to the canonical name before zipping, so every file's
+    # member name == its original_filename — no per-file mapping needed).
+    # 2. Old flow: a post-submission "Attach Supporting File" upload, stored
+    # as its own individual NAS object under its own name.
     # The parent submission's stored deck name tells them apart: the overlay
     # flow always stores a ".zip" there; the old flow stores the deck file
     # itself (never a .zip).
-    from app.nas import download_app_file, build_file_path
+    from app.modules.core.shared.services.nas import download_app_file, build_file_path
 
     submission = sub_file.submission
     deck_name = submission.original_filename if submission else None
@@ -4625,7 +4600,7 @@ def preview_submission_file(file_id):
     Same PDF/image-only restriction as reference file previews — these are
     arbitrary supplementary uploads, not always something a browser can
     render natively."""
-    from app.models import ProjectSubmissionFile
+    from app.modules.core.shared.models import ProjectSubmissionFile
     from flask import send_file, jsonify
     import io
 
@@ -4674,11 +4649,11 @@ def download_submission_file(file_id):
     # ProjectSubmissionFile/send_file relied on projects_submission.py's
     # module-level imports before this relocation — added explicitly here
     # since project_overlay.py doesn't import either at module level.
-    from app.models import ProjectSubmissionFile
+    from app.modules.core.shared.models import ProjectSubmissionFile
     from flask import send_file
     import io
 
-    extra   = ProjectSubmissionFile.query.get_or_404(file_id)
+    extra = ProjectSubmissionFile.query.get_or_404(file_id)
     project = Project.query.get(extra.project_id)
 
     from flask import current_app
@@ -4702,16 +4677,16 @@ def preview_submission(submission_id):
     PDFs are streamed as-is. PPTX decks get converted to PDF on the fly first,
     since browsers can't render PowerPoint natively — this way the frontend
     only ever has to deal with one format regardless of what was uploaded."""
-    from app.models import ProjectSubmission
-    from app.nas import download_app_file, build_file_path
-    from app.pptx_convert import convert_pptx_to_pdf
+    from app.modules.core.shared.models import ProjectSubmission
+    from app.modules.core.shared.services.nas import download_app_file, build_file_path
+    from app.modules.projects.lib.pptx_convert import convert_pptx_to_pdf
     from flask import send_file, jsonify, current_app
     import io, subprocess
 
     submission = ProjectSubmission.query.get_or_404(submission_id)
-    project    = Project.query.get(submission.project_id)
+    project = Project.query.get(submission.project_id)
 
-    nas_path   = build_file_path(project, 'Submissions', submission.original_filename)
+    nas_path = build_file_path(project, 'Submissions', submission.original_filename)
     try:
         file_bytes = download_app_file(nas_path)
     except RuntimeError as e:
