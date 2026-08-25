@@ -137,7 +137,7 @@ def create_app(config=Config):
     from flask_login import current_user
     from app.routes.admin import admin_bp
     from app.modules.blog.routes.blog import blog_bp
-    from app.routes.feedback import feedback_bp
+    from app.modules.feedback.routes.feedback import feedback_bp
     from app.modules.wiki.routes.wiki import wiki_bp
     from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
     from app.modules.profile.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)

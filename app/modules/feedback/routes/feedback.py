@@ -1,11 +1,11 @@
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
-from app import db
-from app.models import FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment
-from app.utils import get_actor, log_activity
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment
+from app.modules.core.shared.lib.utils import get_actor, log_activity
 from app.achievements import check_achievements
 
-feedback_bp = Blueprint('feedback', __name__)
+feedback_bp = Blueprint('feedback', __name__, template_folder='../templates')
 
 VALID_STATUSES = {'requested', 'in_progress', 'testing', 'implemented'}
 
@@ -70,8 +70,8 @@ def submit_feature():
     db.session.add(feature)
     db.session.commit()
 
-    from app.notifications import notify_admin_of_new_feedback, create_notification
-    from app.models import User as UserModel
+    from app.modules.core.shared.services.notifications import notify_admin_of_new_feedback, create_notification
+    from app.modules.core.shared.models import User as UserModel
     notify_admin_of_new_feedback(
         item_type='Feature Request',
         title=feature.title,
@@ -192,7 +192,7 @@ def update_fr_status(feature_id):
 
     # Notify the creator on meaningful status changes
     if new_status in ('in_progress', 'implemented') and feature.submitter:
-        from app.notifications import create_notification
+        from app.modules.core.shared.services.notifications import create_notification
         messages = {
             'in_progress': f'Your feature request "{feature.title}" is now in progress.',
             'implemented': f'Your feature request "{feature.title}" has been implemented!',
@@ -284,8 +284,8 @@ def submit_bug():
     db.session.add(bug)
     db.session.commit()
 
-    from app.notifications import notify_admin_of_new_feedback, create_notification
-    from app.models import User as UserModel
+    from app.modules.core.shared.services.notifications import notify_admin_of_new_feedback, create_notification
+    from app.modules.core.shared.models import User as UserModel
     notify_admin_of_new_feedback(
         item_type='Bug Report',
         title=bug.title,
@@ -332,7 +332,7 @@ def update_bug_status(bug_id):
 
     # Notify creator on meaningful status changes
     if new_status in ('fix_in_progress', 'resolved') and bug.submitter:
-        from app.notifications import create_notification
+        from app.modules.core.shared.services.notifications import create_notification
         messages = {
             'fix_in_progress': f'Your bug report "{bug.title}" is now being worked on.',
             'resolved':        f'Your bug report "{bug.title}" has been resolved.',
