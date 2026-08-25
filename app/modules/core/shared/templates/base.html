@@ -269,12 +269,9 @@
                         <span class="sidebar-item-label">Color Directory</span>
                     </span>
 
-                    {# Client Directory — was an unlinked placeholder icon (span, no href)
-                       until the Client Directory page/blueprint existed. Now that
-                       app/routes/client_directory.py's index() route is real, this
-                       follows the same "internal nav link, JS intercepts and loads
-                       without refresh" pattern as Wiki/File Templates above: a real
-                       <a href> with class sidebar-item--nav instead of --unlinked. #}
+                    {# Client Directory sidebar link — an internal nav link that JS intercepts
+                       to load without a full refresh, the same pattern as the Wiki and
+                       File Templates links above. #}
                     <a href="{{ url_for('client_directory.index') }}" class="sidebar-item sidebar-item--nav"
                         data-link="client-directory" title="Client Directory">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"

@@ -1,30 +1,20 @@
-# app/routes/client_directory.py
+# Client Directory blueprint: the directory page, plus the two write routes it
+# (and the brief form) POST to — one for Client ("company") records, one for
+# Contact records. Each route handles create AND update in a single endpoint,
+# keyed off whether the JSON body includes an "id".
 #
-# Client Directory blueprint: the directory page itself, plus the two write
-# routes it (and the brief form) POST to - one for Client ("company")
-# records, one for Contact records. Both routes handle create AND update in
-# a single endpoint, keyed off whether the JSON body includes an "id" - this
-# matches what the spec asked for directly rather than splitting into four
-# routes (create/update x company/contact).
-#
-# History: this started as a standalone Company/Contact system, retired on
-# 9 Jul 2026 in favor of Contact hanging directly off the existing Client
-# model - the brief form's Client dropdown already represented "the
-# company", so a second, parallel concept was redundant. See CLAUDE.md /
-# prior commits if you're looking for the old Company model and can't find
-# it - that's why.
+# A Client is the company; Contacts hang directly off the Client model. There
+# is no separate Company model.
 
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
-from app import db
-from app.models import Client, Contact
-from app.decorators import role_required
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Client, Contact
+from app.modules.core.shared.lib.decorators import role_required
 
-# url_prefix here (rather than passed to register_blueprint in __init__.py)
-# matches the existing convention used by api_bp in api.py - every route
-# below is defined relative to this prefix, e.g. @route('/contacts') really
-# means POST /directory/clients/contacts.
-client_directory_bp = Blueprint('client_directory', __name__, url_prefix='/directory/clients')
+# The url_prefix lives on the blueprint, so every route below is relative to
+# it — e.g. @route('/contacts') serves POST /directory/clients/contacts.
+client_directory_bp = Blueprint('client_directory', __name__, url_prefix='/directory/clients', template_folder='../templates')
 
 
 # ── Directory page ──────────────────────────────────────────────────────
@@ -117,7 +107,7 @@ def save_company():
     boundary. A Designer who somehow fired this request directly would
     still get a 403 here, same as any other write route in this app.
     """
-    from app.utils import log_activity, get_actor
+    from app.modules.core.shared.lib.utils import log_activity, get_actor
 
     data = request.get_json()
     name = (data.get('name') or '').strip()
@@ -205,7 +195,7 @@ def save_contact():
     surface actually needs, rather than leaving it more permissive than
     every other write route in this file.
     """
-    from app.utils import log_activity, get_actor
+    from app.modules.core.shared.lib.utils import log_activity, get_actor
 
     data = request.get_json()
     name = (data.get('name') or '').strip()
