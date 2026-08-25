@@ -147,7 +147,7 @@ def create_app():
     from app.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
     from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
     from app.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
-    from app.routes.projects_transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
+    from app.modules.projects.routes.transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
     from app.routes.project_list import project_list_bp # Projects page list
     from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
     from app.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)

@@ -24,13 +24,13 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, abort
 from flask_login import login_required, current_user
 
-from app import db
-from app.decorators import role_required
-from app.models import (
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.lib.decorators import role_required
+from app.modules.core.shared.models import (
     Project, Customer, ProjectCustomer, ProjectRegion,
     Deliverable, DeliverableAssignment, DeliverableStatusLog,
 )
-from app.utils import log_activity
+from app.modules.core.shared.lib.utils import log_activity
 
 transfer_bp = Blueprint('transfer', __name__)
 
@@ -73,8 +73,8 @@ def _notify_transfer(project, deliverable, target_customer, mode, actor):
     designers about the transfer. The actor is never notified about their own action.
     """
     try:
-        from app.notifications import create_notification
-        from app.models import ProjectSecondaryCS
+        from app.modules.core.shared.services.notifications import create_notification
+        from app.modules.core.shared.models import ProjectSecondaryCS
 
         verb = 'moved' if mode == 'move' else 'duplicated'
         msg = (
@@ -136,7 +136,7 @@ def transfer_deliverable(project_id, deliverable_id):
 
     # CS leads can only transfer on their own projects (or ones they're secondary CS on)
     if current_user.role == 'cs':
-        from app.models import ProjectSecondaryCS
+        from app.modules.core.shared.models import ProjectSecondaryCS
         is_secondary = ProjectSecondaryCS.query.filter_by(
             project_id=project_id, user_id=current_user.id
         ).first() is not None
@@ -175,7 +175,7 @@ def transfer_deliverable(project_id, deliverable_id):
 
     # Emulation-aware actor
     from flask import session
-    from app.models import User as UserModel
+    from app.modules.core.shared.models import User as UserModel
     emulating_id = session.get('emulating_user_id')
     actor = UserModel.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
 
