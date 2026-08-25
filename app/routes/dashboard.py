@@ -83,7 +83,7 @@ VIEW_TO_CARD = {
 #     management only for clickable"): the full company-wide project +
 #     deliverable hours breakdown, same data/markup as the standalone
 #     /time-tracking page (build_time_tracking_rows(), imported from
-#     app.routes.time_tracking — see stat_avg_time.html). Every other role
+#     the time_tracking module's logic — see stat_avg_time.html). Every other role
 #     still sees the tile's own number (their personal scoped average,
 #     unchanged), just can't click into it — same `muted` mechanic Clashing
 #     Projects uses at zero clashes, not the old <a>-vs-<div> link swap.
@@ -1166,7 +1166,7 @@ def _compute_project_stats(user):
     # has the project tracking number from the model we added earlier ...
     # display the average time of the numbers tracked") — averages each
     # scoped project's business-hours "overall" total, computed on demand
-    # from its ProjectStatusLog history via time_tracking_logic.py (see
+    # from its ProjectStatusLog history via the time_tracking module's logic (see
     # that module's docstring for the full business-hours/weekend-discard
     # rules and app/status_tracking.py's record_project_status() for why
     # there's no separate accumulator field feeding this anymore — same
@@ -1183,7 +1183,7 @@ def _compute_project_stats(user):
     # construction, not "zero time worked", so including it would silently
     # drag the average toward zero rather than reflect real turnaround
     # time. Same judgment call as before, now applied to the derived value.
-    from app.time_tracking_logic import compute_project_hours
+    from app.modules.time_tracking.logic import compute_project_hours
     tracked_hours = [
         h for p in _scoped_projects(user, active_only=True).all()
         if (h := compute_project_hours(p)['overall']) > 0
@@ -2681,7 +2681,7 @@ def api_time_tracking_rows():
     actor = get_actor()
     if actor.role not in ('admin', 'management'):
         abort(403)
-    from app.routes.time_tracking import build_time_tracking_rows
+    from app.modules.time_tracking.logic import build_time_tracking_rows
     return render_template('dashboard/cards/_stat_avg_time_rows.html', time_tracking_rows=build_time_tracking_rows())
 
 

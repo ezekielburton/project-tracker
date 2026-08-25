@@ -38,7 +38,7 @@ def record_project_status(project, new_status, actor):
     """
     This function's ProjectStatusLog rows (started_at/ended_at per status)
     are the only thing the project/deliverable hours feature reads — see
-    time_tracking_logic.py. There is no separate hours accumulator; hours
+    the time_tracking module's logic. There is no separate hours accumulator; hours
     are recomputed from this log history on demand, so there is one source
     of truth for "how long was this project in status X" rather than a
     running counter that could drift from it.

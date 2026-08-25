@@ -1,52 +1,34 @@
-# app/time_tracking_logic.py
+# Business-hours computation for the time-tracking feature. Pure functions:
+# no Flask/DB writes, they derive hour totals from the *StatusLog history
+# (one row per status an entity was ever in: status, started_at, ended_at;
+# ended_at is None while it is the entity's current status).
 #
-# Business-hours computation for the project/deliverable time-tracking
-# feature (13 Jul 2026, per Ezekiel). Pure functions — no Flask/DB writes,
-# just derives hour totals from the *StatusLog history that
-# app/status_tracking.py's record_*_status() functions already maintain
-# (one row per status the entity was ever in: status, started_at,
-# ended_at — ended_at is None while it's still the entity's CURRENT
-# status).
-#
-# This REPLACES the hours_accumulated/timer_started_at live accumulator
-# that was spliced into record_project_status() earlier the same day —
-# that approach used plain wall-clock hours and a narrow "active" status
-# set. Per Ezekiel's fuller spec, hours now need to be:
+# The rules the numbers follow:
 #   - Business hours only: Mon-Fri, 10AM-6PM Dubai time.
-#   - Weekend hours (Sat/Sun) are silently tracked but DISCARDED unless a
-#     status change actually happened during that weekend — a transition
-#     on a weekend is treated as evidence someone genuinely worked then.
-#   - Broken down PER STATUS, not just one aggregate number, feeding a new
-#     project+deliverable drill-down page (see app/routes/time_tracking.py).
+#   - Weekend hours (Sat/Sun) are discarded unless a status change actually
+#     happened that weekend (a transition is taken as evidence of real work).
+#   - Broken down per status, not just one aggregate, feeding the
+#     project+deliverable drill-down page.
 #
-# Recomputing everything from the *StatusLog tables on every read (instead
-# of maintaining a running counter on the entity itself) means these
-# numbers are always derivable from history, can't drift from a missed
-# write path, and one calculation feeds both the "overall hours" stat and
-# the per-status breakdown — no second source of truth to keep in sync.
-#
-# Per Ezekiel: "We can refine this logic later with management's input" —
-# this file is the one place to change if the business-hours window, the
-# weekend rule, or the excluded-status set ever need adjusting.
+# Everything is recomputed from the status-log history on every read, so the
+# numbers are always derivable from history and there is no separate counter
+# to keep in sync. This file is the one place to change the business-hours
+# window, the weekend rule, or the excluded-status set.
 
 from datetime import datetime, timedelta, timezone, time
 
-# Same fixed-offset approach as the dubai_time Jinja filter (app/__init__.py)
-# — ZoneInfo needs tzdata that isn't reliably available on this app's
-# Windows dev machine, see CLAUDE.md's DB Facts.
+from app.modules.core.shared.models import Project
+
+# Fixed UTC+4 offset for Dubai. A fixed offset rather than ZoneInfo, whose
+# tzdata is not reliably present on the app's Windows host.
 DUBAI_TZ = timezone(timedelta(hours=4))
 
 BUSINESS_START_HOUR = 10
 BUSINESS_END_HOUR = 18
 
-# Statuses that do NOT count toward the "overall" active-time total (per
-# Ezekiel: "any project that is active (not in queue, submitted to client
-# or internal revision or on hold) should count towards that timer").
-# Framed as an EXCLUSION set, not an inclusion whitelist, matching
-# Ezekiel's phrasing directly — every other status (including 'approved')
-# counts as active by default. That's a deliberate reading of what was
-# said, not an oversight; flagged for a later refine-with-management pass
-# if 'approved' shouldn't actually count.
+# Statuses that do NOT count toward the "overall" active-time total.
+# Framed as an exclusion set: every other status (including 'approved')
+# counts as active time by default.
 EXCLUDED_FROM_OVERALL = {'in_queue', 'submitted_to_client', 'internal_revision', 'on_hold'}
 
 
@@ -163,11 +145,49 @@ def compute_status_hours(rows, now_utc=None):
 
 
 def compute_project_hours(project, now_utc=None):
-    """project.status_logs is the backref from ProjectStatusLog (see
-    app/models/__init__.py)."""
+    """Hours from the project's status-log history (the status_logs backref)."""
     return compute_status_hours(project.status_logs, now_utc=now_utc)
 
 
 def compute_deliverable_hours(deliverable, now_utc=None):
-    """deliverable.status_logs is the backref from DeliverableStatusLog."""
+    """Hours from the deliverable's status-log history (the status_logs backref)."""
     return compute_status_hours(deliverable.status_logs, now_utc=now_utc)
+
+
+def build_time_tracking_rows():
+    """
+    One row per non-draft project, each with its own overall and per-status
+    business-hours breakdown, plus the same breakdown for each of its
+    (standard-brief) deliverables. Company-wide, not scoped to one CS lead.
+
+    C&CM per-customer status history (ProjectCustomerStatusLog) is not
+    included — the breakdown is per project and per standard-brief deliverable.
+
+    No access check here — that is the caller's job. This feeds both the
+    /time-tracking page and the dashboard's Average Time card, each of which
+    gates on admin/management before calling.
+    """
+    projects = Project.query.filter(Project.project_status != 'draft').order_by(Project.name).all()
+
+    rows = []
+    for p in projects:
+        deliverables = []
+        for d in p.project_deliverables:
+            d_hours = compute_deliverable_hours(d)
+            deliverables.append({
+                'id': d.id,
+                'name': d.name,
+                'overall': d_hours['overall'],
+                'by_status': d_hours['by_status'],
+            })
+
+        p_hours = compute_project_hours(p)
+        rows.append({
+            'id': p.id,
+            'name': p.name,
+            'overall': p_hours['overall'],
+            'by_status': p_hours['by_status'],
+            'deliverables': deliverables,
+        })
+
+    return rows
