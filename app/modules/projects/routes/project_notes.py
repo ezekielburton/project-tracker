@@ -1,11 +1,10 @@
-# app/routes/project_notes.py
 from flask import Blueprint, render_template, request, jsonify, abort, current_app
 from flask_login import login_required
-from app import db
-from app.models import Project, ProjectNote, User
-from app.utils import log_activity
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Project, ProjectNote, User
+from app.modules.core.shared.lib.utils import log_activity
 
-project_notes_bp = Blueprint('project_notes', __name__)
+project_notes_bp = Blueprint('project_notes', __name__, template_folder='../templates')
 
 # Narrower video list than Reference Files' — must play inline in <video>.
 _CHAT_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
@@ -19,7 +18,7 @@ def _save_chat_attachment(project, upload):
     """Validates and uploads one chat attachment to the NAS. Returns
     (True, (stored_filename, original_filename, type)) or (False, error_message)."""
     import uuid
-    from app.nas import upload_app_file, build_chat_file_path
+    from app.modules.core.shared.services.nas import upload_app_file, build_chat_file_path
 
     original_filename = upload.filename
     ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
@@ -56,7 +55,7 @@ def _get_actor():
     # Emulation-aware: admin "viewing as" another user attributes actions to them.
     from flask import session
     from flask_login import current_user
-    from app.models import User
+    from app.modules.core.shared.models import User
     emulating_id = session.get('emulating_user_id')
     return User.query.get(emulating_id) if (emulating_id and current_user.role == 'admin') else current_user
 
@@ -96,7 +95,7 @@ def _is_designer(user):
     return user.role in ('designer', 'team_lead')
 
 def _overlapping_site_visit(visit_user, start_at, end_at, exclude_id=None):
-    from app.models import SiteVisit
+    from app.modules.core.shared.models import SiteVisit
     query = SiteVisit.query.filter(
         SiteVisit.user_id == visit_user.id,
         SiteVisit.start_at < end_at,
@@ -112,7 +111,7 @@ def _overlapping_site_visit(visit_user, start_at, end_at, exclude_id=None):
 def overlay_notes(project_id):
     """Site Visits tab — notes now live in the chat drawer (see overlay_chat()
     below); URL kept as /overlay/notes so the existing JS call site still works."""
-    from app.models import User
+    from app.modules.core.shared.models import User
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     site_visits = sorted(project.site_visits, key=lambda v: v.created_at, reverse=True)
@@ -317,7 +316,7 @@ def create_note(project_id):
                  user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     if mentioned_ids:
-        from app.notifications import notify_of_chat_mention
+        from app.modules.core.shared.services.notifications import notify_of_chat_mention
         mentioned_users = User.query.filter(User.id.in_(mentioned_ids)).all()
         notify_of_chat_mention(note, project, mentioned_users, actor)
 
@@ -332,7 +331,7 @@ def chat_attachment(note_id):
     import io
     import mimetypes
     from flask import send_file
-    from app.nas import download_app_file, build_chat_file_path
+    from app.modules.core.shared.services.nas import download_app_file, build_chat_file_path
 
     note = ProjectNote.query.get_or_404(note_id)
     if not note.attachment_filename:
@@ -367,7 +366,7 @@ def _can_log_site_visit(actor):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/site-visits/<int:visit_id>/delete', methods=['POST'])
 @login_required
 def delete_site_visit(project_id, visit_id):
-    from app.models import SiteVisit
+    from app.modules.core.shared.models import SiteVisit
     visit = SiteVisit.query.get_or_404(visit_id)
     if visit.project_id != project_id:
         abort(404)
@@ -383,7 +382,7 @@ def delete_site_visit(project_id, visit_id):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/site-visits/create', methods=['POST'])
 @login_required
 def create_site_visit(project_id):
-    from app.models import SiteVisit, User
+    from app.modules.core.shared.models import SiteVisit, User
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -459,7 +458,7 @@ def delete_note(project_id, note_id):
 
     # delete_app_file logs-and-swallows its own failures, so a NAS hiccup never blocks this.
     if note.attachment_filename:
-        from app.nas import delete_app_file, build_chat_file_path
+        from app.modules.core.shared.services.nas import delete_app_file, build_chat_file_path
         delete_app_file(build_chat_file_path(note.project, note.attachment_filename))
 
     db.session.delete(note)
@@ -497,7 +496,7 @@ def toggle_pin_note(project_id, note_id):
 def toggle_reaction(note_id):
     """Add/replace/remove the caller's own reaction. Same emoji again removes it,
     a different emoji replaces it."""
-    from app.models import ProjectNoteReaction
+    from app.modules.core.shared.models import ProjectNoteReaction
     note = ProjectNote.query.get_or_404(note_id)
     actor = _get_actor()
     if not _can_manage_notes(note.project, actor):

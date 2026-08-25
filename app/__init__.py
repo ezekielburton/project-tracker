@@ -152,7 +152,7 @@ def create_app(config=Config):
     from app.routes.project_list import project_list_bp # Projects page list
     from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
     from app.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
-    from app.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
+    from app.modules.projects.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
 
 
     app.register_blueprint(core_bp)  # shared templates (later static) on the Jinja search path
