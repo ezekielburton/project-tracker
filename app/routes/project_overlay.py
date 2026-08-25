@@ -26,13 +26,26 @@ def _can_manage_deliverables(project, actor):
     project), this project's CS Lead, this project's Secondary CS, or the
     specific assigned Project Owner. Kept as its own function even though
     it's identical to can_manage_reference_files today, same reasoning as
-    can_edit_project — they may diverge later."""
+    can_edit_project — they may diverge later.
+
+    25 Aug 2026 (per Ezekiel — a CS building a project on behalf of a
+    DIFFERENT CS Lead got a hard 403 the instant she opened the
+    Deliverables step of her own still-in-progress draft: cs_lead_id was
+    already set to that other person, and none of the checks above cover
+    "I'm the one actually building this"): also allow the draft's own
+    creator, but ONLY while it's still a draft — once finalized,
+    deliverables management goes back to being purely CS Lead/Secondary
+    CS/Project Owner/admin's call, same as everything else on a live
+    project. Mirrors _can_finalize_create()'s reachability rule above,
+    just scoped to this one action instead of the whole create shell.
+    """
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
     return (
         actor.role in ('admin', 'management')
         or actor.id == project.cs_lead_id
         or actor.id in secondary_cs_ids
         or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+        or (project.project_status == 'draft' and actor.id == project.created_by_id)
     )
 
 
