@@ -503,7 +503,7 @@ def upload_deliverable_type_template():
     not the NAS — these are small per-store template files.
     """
     import os, uuid
-    from app.routes.file_templates import TEMPLATE_UPLOAD_FOLDER
+    from app.modules.core.shared.lib.paths import template_upload_folder
 
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
@@ -517,8 +517,8 @@ def upload_deliverable_type_template():
         return jsonify({'success': False, 'error': 'Only .ai files are supported'}), 400
 
     stored_filename = f'{uuid.uuid4().hex[:8]}.{ext}'
-    os.makedirs(TEMPLATE_UPLOAD_FOLDER, exist_ok=True)
-    file.save(os.path.join(TEMPLATE_UPLOAD_FOLDER, stored_filename))
+    os.makedirs(template_upload_folder(), exist_ok=True)
+    file.save(os.path.join(template_upload_folder(), stored_filename))
 
     return jsonify({'success': True, 'filename': stored_filename})
 

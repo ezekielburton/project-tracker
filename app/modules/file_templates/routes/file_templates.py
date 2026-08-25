@@ -1,5 +1,3 @@
-# app/routes/file_templates.py
-#
 # C&CM File Templates library — a standalone (not project-specific) browse
 # page for downloadable per-store design template files (.ai), organized
 # Region -> Customer -> DeliverableType. Templates are small files kept on
@@ -8,14 +6,12 @@
 import os
 from flask import Blueprint, render_template
 from flask_login import login_required
-from app.models import Customer, DeliverableType
+from app.modules.core.shared.models import Customer, DeliverableType
+from app.modules.core.shared.lib.paths import template_upload_folder
 
-file_templates_bp = Blueprint('file_templates', __name__)
+file_templates_bp = Blueprint('file_templates', __name__, template_folder='../templates')
 
-TEMPLATE_UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'file_templates')
-
-# Same region set used across the app (nas.py's REGION_DISPLAY, the POSM
-# channel system, etc.) — UAE first, then the Gulf countries.
+# Same region set used across the app — UAE first, then the Gulf countries.
 REGIONS = [
     ('uae', 'UAE'),
     ('kuwait', 'Kuwait'),
@@ -69,7 +65,7 @@ def download_template(deliverable_type_id):
 
     ext = os.path.splitext(dt.template_filename)[1]
     return send_from_directory(
-        TEMPLATE_UPLOAD_FOLDER, dt.template_filename,
+        template_upload_folder(), dt.template_filename,
         as_attachment=True, download_name=f'{dt.name}{ext}'
     )
 
@@ -79,7 +75,7 @@ def download_template(deliverable_type_id):
 def download_all_customer_templates(customer_id):
     """Zips every uploaded template for one customer's deliverable types."""
     from flask import jsonify, url_for
-    from app.zip_utils import build_zip
+    from app.modules.core.shared.lib.zip_utils import build_zip
 
     customer = Customer.query.get_or_404(customer_id)
     deliverable_types = DeliverableType.query.filter_by(customer_id=customer_id, is_active=True).all()
@@ -88,7 +84,7 @@ def download_all_customer_templates(customer_id):
     for dt in deliverable_types:
         if not dt.template_filename:
             continue
-        file_path = os.path.join(TEMPLATE_UPLOAD_FOLDER, dt.template_filename)
+        file_path = os.path.join(template_upload_folder(), dt.template_filename)
         if not os.path.exists(file_path):
             continue
         with open(file_path, 'rb') as f:
@@ -109,7 +105,7 @@ def download_all_region_templates(region_key):
     """Zips every uploaded template across all customers in a region,
     nesting each customer as its own subfolder inside the zip."""
     from flask import jsonify, url_for, abort
-    from app.zip_utils import build_zip
+    from app.modules.core.shared.lib.zip_utils import build_zip
 
     region_label = dict(REGIONS).get(region_key)
     if not region_label:
@@ -123,7 +119,7 @@ def download_all_region_templates(region_key):
         for dt in deliverable_types:
             if not dt.template_filename:
                 continue
-            file_path = os.path.join(TEMPLATE_UPLOAD_FOLDER, dt.template_filename)
+            file_path = os.path.join(template_upload_folder(), dt.template_filename)
             if not os.path.exists(file_path):
                 continue
             with open(file_path, 'rb') as f:
@@ -142,13 +138,12 @@ def download_all_region_templates(region_key):
 def get_simulation_files_link():
     """
     Returns a Synology Drive deep link for the fixed Simulation Files folder
-    on the NAS — not project-specific, same folder for everyone. Migrated
-    from File Station to Drive (M10 NAS migration, 21 Aug 2026, Ezekiel's
-    call) — see app/nas.py's build_drive_folder_url() for why this needs a
-    live API resolve rather than a plain URL template.
+    on the NAS — not project-specific, the same folder for everyone. The link
+    is resolved through a live NAS API call rather than a static URL template
+    (see build_drive_folder_url in the shared nas service).
     """
     from flask import jsonify
-    from app.nas import build_drive_folder_url
+    from app.modules.core.shared.services.nas import build_drive_folder_url
 
     folder_path = '/Docs and Templates/Templates/Simulation Files'
     url = build_drive_folder_url(folder_path)
