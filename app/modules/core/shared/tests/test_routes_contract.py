@@ -26,5 +26,5 @@ def test_route_contract_matches_baseline(app):
     missing = baseline - current
     added = current - baseline
     assert not missing, f"Routes in baseline but gone now: {sorted(missing)}"
-    assert not added, f"Routes not but not in baseline: {sorted(added)}"
-    
+    assert not added, f"Routes present now but not in baseline: {sorted(added)}"
+    print(f"route contract OK \u2014 {len(current)} routes match baseline")
