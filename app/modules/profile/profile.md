@@ -48,3 +48,19 @@ renamed template `profile/profile.html` resolves through the module's
 ## Notes
 The template was renamed from `auth/profile.html` to `profile/profile.html` so
 the module owns its own name.
+
+## First-login wizard
+
+`routes/wizard.py` (the `wizard` blueprint) handles the first-login onboarding
+wizard: `POST /wizard/complete` saves the fields a new user sets on their way in
+— display name, an optional password, birthday, favourite food, and initial
+notification preferences — then marks `wizard_completed` / `avatar_step_completed`
+on the user. It lives in the profile module because everything it writes is the
+user's own account data.
+
+Two related pieces stay in the app shell by design (they are global UI plumbing,
+not this blueprint's routes): the `inject_wizard_state` context processor in the
+app factory decides on every page whether to show the wizard, and the wizard
+modal markup lives in the shared `base.html` layout. The pref-key list here
+mirrors the auth module's `save_notification_prefs` whitelist and must be kept in
+sync with it.

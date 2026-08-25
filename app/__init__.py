@@ -142,7 +142,7 @@ def create_app(config=Config):
     from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
     from app.modules.profile.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
     from app.modules.achievements.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel
-    from app.routes.wizard import wizard_bp
+    from app.modules.profile.routes.wizard import wizard_bp
     from app.modules.file_templates.routes.file_templates import file_templates_bp
     from app.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
     from app.modules.client_directory.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts

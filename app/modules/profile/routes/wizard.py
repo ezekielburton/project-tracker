@@ -8,7 +8,7 @@ wizard_bp = Blueprint('wizard', __name__)
 @wizard_bp.route('/wizard/complete', methods=['POST'])
 @login_required
 def complete():
-    from app import db
+    from app.modules.core.shared.extensions import db
     import json
 
     data = request.get_json(silent=True)
@@ -20,9 +20,9 @@ def complete():
     if name:
         current_user.name = name
 
-    # Step 1 — password (optional). Same 8-char minimum as auth.py's
-    # /account route, checked again here even though wizard.js already
-    # checks it client-side — never trust client-side validation alone.
+    # Step 1 — password (optional). Same 8-char minimum as the auth
+    # module's /account route, checked again server-side here (never trust
+    # client-side validation alone).
     password = data.get('password') or ''
     password_confirm = data.get('password_confirm') or ''
     if password:
@@ -45,15 +45,15 @@ def complete():
         current_user.favorite_food = favorite_food
 
     # Step 3 — notification preferences. Same read-modify-write pattern as
-    # auth.py's save_notification_prefs / save_sound_prefs — all three
-    # routes share the one notification_prefs JSON blob on User.
+    # the auth module's save_notification_prefs / save_sound_prefs — all
+    # three routes share the one notification_prefs JSON blob on User.
     try:
         prefs = json.loads(current_user.notification_prefs or '{}')
     except (ValueError, TypeError):
         prefs = {}
 
-    # Mirrors the valid_keys whitelist in auth.py's save_notification_prefs.
-    # Keep these two lists in sync if a new per-event pref key is ever added.
+    # Mirrors the valid_keys whitelist in the auth module's
+    # save_notification_prefs. Keep the two in sync if a new pref key is added.
     EMAIL_PREF_KEYS = {
         'new_project', 'lead_assigned', 'concept_kv_assigned', 'revision_flag',
         'flag_reply', 'flag_resolved', 'brief_flag', 'revision_submitted',
