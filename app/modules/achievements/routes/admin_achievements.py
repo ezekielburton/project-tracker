@@ -14,9 +14,9 @@ from functools import wraps
 from flask import Blueprint, jsonify, url_for, request
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
-from app import db
-from app.models import Achievement, AchievementCategory, AchievementBorder, UserAchievement
-from app.utils import log_activity
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Achievement, AchievementCategory, AchievementBorder, UserAchievement
+from app.modules.core.shared.lib.utils import log_activity
 
 admin_achievements_bp = Blueprint('admin_achievements', __name__)
 

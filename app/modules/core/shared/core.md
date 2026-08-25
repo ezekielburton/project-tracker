@@ -52,6 +52,8 @@ is purely organizational.
   deep links)
 - `live_events` — SQLAlchemy commit hooks that detect changes and fan out
 - `sse_relay` — the Postgres LISTEN/NOTIFY relay backing Server-Sent Events
+- `achievements` — the achievement checker (`check_achievements`): advances
+  and awards achievements in response to events fired from across the app
 
 ### routes/
 - `shell` — the `main` blueprint: root redirect to the dashboard, sidebar

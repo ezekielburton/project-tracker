@@ -5,7 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import User, NotificationSound
 from app.modules.core.shared.lib.decorators import role_required
-from app.achievements import check_achievements
+from app.modules.core.shared.services.achievements import check_achievements
 
 
 auth = Blueprint('auth', __name__, template_folder='../templates')

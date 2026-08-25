@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import BlogPost, BlogComment, User
 from app.modules.core.shared.lib.utils import get_actor
-from app.achievements import check_achievements
+from app.modules.core.shared.services.achievements import check_achievements
 from datetime import datetime
 import json
 
