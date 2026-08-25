@@ -1,13 +1,13 @@
 from flask import Blueprint, render_template, jsonify, request, abort
 from flask_login import login_required, current_user
-from app import db
-from app.models import BlogPost, BlogComment, User
-from app.utils import get_actor
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import BlogPost, BlogComment, User
+from app.modules.core.shared.lib.utils import get_actor
 from app.achievements import check_achievements
 from datetime import datetime
 import json
 
-blog_bp = Blueprint('blog', __name__)
+blog_bp = Blueprint('blog', __name__, template_folder='../templates')
 
 @blog_bp.route('/blog')
 @login_required
@@ -123,7 +123,7 @@ def update_post(post_id):
     send_email = data.get('send_email', False)
     if send_email:
         try:
-            from app.notifications import notify_all_of_new_blog_post
+            from app.modules.core.shared.services.notifications import notify_all_of_new_blog_post
             notify_all_of_new_blog_post(post, current_user, send_inapp=False, send_email=True)
         except Exception:
             import traceback
@@ -149,7 +149,7 @@ def toggle_publish(post_id):
         payload = request.get_json(silent=True) or {}
         send_email = payload.get('send_email', False)
         try:
-            from app.notifications import notify_all_of_new_blog_post
+            from app.modules.core.shared.services.notifications import notify_all_of_new_blog_post
             notify_all_of_new_blog_post(post, current_user, send_inapp=True, send_email=send_email)
         except Exception:
             import traceback
@@ -185,3 +185,11 @@ def delete_post(post_id):
     db.session.delete(post)
     db.session.commit()
     return jsonify({'success': True})
+
+@blog_bp.route('/blog-post1-v1.2update')
+@login_required
+def v12_update():
+    # Static release-notes page for the v1.2 update: a single hardcoded page
+    # kept as a template rather than a stored BlogPost. Owned here so the blog
+    # module holds every blog URL; see blog.md "Known debt".
+    return render_template('blog/v12_update.html')

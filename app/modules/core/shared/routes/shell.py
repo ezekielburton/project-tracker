@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, request, jsonify
+from flask import Blueprint, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from datetime import date, timedelta
 from app import db
@@ -18,12 +18,6 @@ def index():
     # (dashboard_cs.html / _leadership.html / _designer.html), so no role
     # logic is needed here.
     return redirect(url_for('projects.index'))
-
-
-@main.route('/blog-post1-v1.2update')
-@login_required
-def blog_v12_update():
-    return render_template('blog/v12_update.html')
 
 
 @main.route('/sidebar/track', methods=['POST'])

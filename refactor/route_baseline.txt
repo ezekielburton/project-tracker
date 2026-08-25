@@ -69,7 +69,7 @@
 /api/version	GET	api.app_version
 /api/zip-download/<zip_id>	GET	api.zip_download
 /blog	GET	blog.index
-/blog-post1-v1.2update	GET	main.blog_v12_update
+/blog-post1-v1.2update	GET	blog.v12_update
 /blog/comments/<int:comment_id>	DELETE	blog.delete_comment
 /blog/editor	GET	blog.editor
 /blog/editor/<int:post_id>	GET	blog.editor_edit

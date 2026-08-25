@@ -136,7 +136,7 @@ def create_app(config=Config):
     from app.models import Notification
     from flask_login import current_user
     from app.routes.admin import admin_bp
-    from app.routes.blog import blog_bp
+    from app.modules.blog.routes.blog import blog_bp
     from app.routes.feedback import feedback_bp
     from app.modules.wiki.routes.wiki import wiki_bp
     from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
