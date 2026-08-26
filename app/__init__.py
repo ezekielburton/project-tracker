@@ -135,7 +135,7 @@ def create_app(config=Config):
     from app.modules.notifications.routes.notifications import notifications_bp
     from app.models import Notification
     from flask_login import current_user
-    from app.routes.admin import admin_bp
+    from app.modules.admin.routes.admin import admin_bp
     from app.modules.blog.routes.blog import blog_bp
     from app.modules.feedback.routes.feedback import feedback_bp
     from app.modules.wiki.routes.wiki import wiki_bp

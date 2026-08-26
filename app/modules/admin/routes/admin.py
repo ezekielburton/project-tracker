@@ -5,15 +5,15 @@ from datetime import timezone, timedelta
 from flask import Blueprint, jsonify, session, url_for, request
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
-from app import db
-from app.models import (
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import (
     User, Client, Customer, Project, ProjectFile,
     DeliverableType, DeliverableTypeDiscipline,
     DesignType, DesignDirection, ActivityLog, NotificationSound
 )
-from app.utils import log_activity
-from app.decorators import role_required
-from app.notifications import broadcast_update_email
+from app.modules.core.shared.lib.utils import log_activity
+from app.modules.core.shared.lib.decorators import role_required
+from app.modules.core.shared.services.notifications import broadcast_update_email
 from werkzeug.security import generate_password_hash
 
 DUBAI_TZ = timezone(timedelta(hours=4))
@@ -905,18 +905,14 @@ def broadcast_update():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Deliverable-type reference image upload (relocated for M10)
+# Deliverable-type reference image upload
 #
-# Originally lived on projects_brief.py's brief_bp. Per its own docstring,
-# this was "Shared by both the Admin Panel's Deliverable Types form and the
-# inline '+ Add custom deliverable' quick-add during C&CM briefing" — the
-# C&CM quick-add died with legacy create.html at M10, but the Admin Panel
-# usage (base.html's global pt-add-del-form, wired up in admin.js) is very
-# much still live, so it comes here rather than dying with the rest of
-# brief_bp. Kept the original role_required('cs', 'admin', 'management')
-# gate exactly as-is, not the stricter admin_required used elsewhere in
-# this file - narrowing it would be a real permission regression for CS
-# and management, who this route was always meant to allow.
+# Backs the Admin Panel's Deliverable Types form (base.html's global
+# pt-add-del-form, wired up in admin.js). Keeps the
+# role_required('cs', 'admin', 'management') gate deliberately — not the
+# stricter admin-only gate used elsewhere in this file — since narrowing it
+# would be a real permission regression for CS and management, who this
+# route has always allowed.
 # ─────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/projects/deliverable-types/upload-image', methods=['POST'])
