@@ -17,7 +17,7 @@ from flask import Blueprint, Response, session
 from flask_login import login_required, current_user
 from gevent.queue import Empty
 
-from app.sse_relay import (
+from app.modules.core.shared.services.sse_relay import (
     subscribe_project, unsubscribe_project,
     subscribe_dashboard, unsubscribe_dashboard,
     subscribe_user, unsubscribe_user,

@@ -1,5 +1,5 @@
-from app import db
-from app.models import Notification, User, ProjectSecondaryCS, ProjectSecondaryCsRegion
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Notification, User, ProjectSecondaryCS, ProjectSecondaryCsRegion
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ def _send_notification_email(recipient, message, project=None):
         return
     try:
         from flask_mail import Message as MailMessage
-        from app import mail
+        from app.modules.core.shared.extensions import mail
 
         # Build the URL — link directly to the project if one is attached
         app_url = 'https://app.vitamin-e.work'
@@ -555,7 +555,7 @@ def notify_lead_designers_of_project_started(project, triggered_by):
     """Notify other lead designers (ProjectDesigner records) when a project is started.
     The actor who pressed Start Project is excluded — they already know.
     CS lead is notified separately via notify_cs_of_project_started."""
-    from app.models import ProjectDesigner
+    from app.modules.core.shared.models import ProjectDesigner
     message = f'{triggered_by.name} has started work on "{project.name}".'
     leads = ProjectDesigner.query.filter_by(project_id=project.id).all()
     for lead in leads:
@@ -744,7 +744,7 @@ def broadcast_update_email(version, subject_line, intro_line, blog_url):
 
     try:
         from flask_mail import Message as MailMessage
-        from app import mail
+        from app.modules.core.shared.extensions import mail
     except Exception as e:
         current_app.logger.warning(f'broadcast_update_email: mail import failed: {e}')
         return 0
@@ -895,7 +895,7 @@ def notify_admin_of_new_feedback(item_type, title, submitted_by, url_path):
 
     try:
         from flask_mail import Message as MailMessage
-        from app import mail
+        from app.modules.core.shared.extensions import mail
 
         app_url   = 'https://app.vitamin-e.work'
         button_url = f'{app_url}{url_path}'
@@ -1020,7 +1020,7 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
             with app.app_context():
                 try:
                     from flask_mail import Message as MailMessage
-                    from app import mail as mail_obj
+                    from app.modules.core.shared.extensions import mail as mail_obj
                 except Exception:
                     app.logger.warning('notify_all_of_new_blog_post: flask_mail not available')
                     return

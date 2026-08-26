@@ -6,8 +6,8 @@
 
 from flask import Blueprint, jsonify, session, current_app
 from flask_login import login_required, current_user
-from app import db
-from app.models import Project, User, ProjectDesigner, ProjectSecondaryCS, Client, Contact
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Project, User, ProjectDesigner, ProjectSecondaryCS, Client, Contact
 
 # Register this as a blueprint with the /api prefix.
 # All routes in this file will be under /api/...
@@ -23,7 +23,7 @@ def zip_download(zip_id):
     changes per feature.
     """
     from flask import abort
-    from app.zip_utils import serve_zip
+    from app.modules.core.shared.lib.zip_utils import serve_zip
 
     response = serve_zip(zip_id)
     if response is None:
@@ -349,7 +349,7 @@ def projects_poll():
       2. Detect if a status changed → update just that badge in-place
     """
     # Import inside the function to avoid circular imports at module load time
-    from app.models import User as UserModel
+    from app.modules.core.shared.models import User as UserModel
 
     # Resolve the effective user — same emulation-aware pattern used throughout the app.
     # If an admin is emulating someone, we behave as if we ARE that person.

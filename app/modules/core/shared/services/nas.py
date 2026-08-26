@@ -22,7 +22,7 @@ _NAS_SESSION.verify = False
 # NAS call for the rest of the run when running off the office network.
 _NAS_HOST_OVERRIDE = None
 
-from app.models import ProjectRegion, ProjectCustomer, Customer, Deliverable
+from app.modules.core.shared.models import ProjectRegion, ProjectCustomer, Customer, Deliverable
 
 # Canonical display names for region slugs stored in the DB
 REGION_DISPLAY = {

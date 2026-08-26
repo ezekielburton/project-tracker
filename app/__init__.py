@@ -61,9 +61,9 @@ def create_app(config=Config):
     db.init_app(app)
     login_manager.init_app(app)
     mail.init_app(app)
-    from app.live_events import init_live_events
+    from app.modules.core.shared.services.live_events import init_live_events
     init_live_events()
-    from app.sse_relay import init_sse_relay
+    from app.modules.core.shared.services.sse_relay import init_sse_relay
     init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
 
     # Cache-busting query string for every static <link>/<script> tag in
@@ -128,23 +128,23 @@ def create_app(config=Config):
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-    from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
+    from app.modules.core.shared.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
     from app.modules.core.shared.blueprint import core as core_bp
-    from app.routes import main
+    from app.modules.core.shared.routes.shell import main
     from app.modules.auth.routes.auth import auth
     from app.modules.notifications.routes.notifications import notifications_bp
-    from app.models import Notification
+    from app.modules.core.shared.models import Notification
     from flask_login import current_user
     from app.modules.admin.routes.admin import admin_bp
     from app.modules.blog.routes.blog import blog_bp
     from app.modules.feedback.routes.feedback import feedback_bp
     from app.modules.wiki.routes.wiki import wiki_bp
-    from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
+    from app.modules.core.shared.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
     from app.modules.profile.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
     from app.modules.achievements.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel
     from app.modules.profile.routes.wizard import wizard_bp
     from app.modules.file_templates.routes.file_templates import file_templates_bp
-    from app.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
+    from app.modules.core.shared.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
     from app.modules.client_directory.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
     from app.modules.dashboard.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
     from app.modules.time_tracking.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
@@ -184,7 +184,7 @@ def create_app(config=Config):
         import json
         from flask import session, url_for
         from flask_login import current_user
-        from app.models import Notification, NotificationSound
+        from app.modules.core.shared.models import Notification, NotificationSound
 
         if current_user.is_authenticated:
             # Use the emulated user's ID when in emulation mode
@@ -261,7 +261,7 @@ def create_app(config=Config):
         the fix, not just a workaround for one call site.
         """
         from flask import g
-        from app.models import UserDisplaySettings, UserAchievement
+        from app.modules.core.shared.models import UserDisplaySettings, UserAchievement
 
         if not hasattr(g, '_active_badge_cache'):
             g._active_badge_cache = {}
@@ -296,7 +296,7 @@ def create_app(config=Config):
         names survives Synology's internal sub-param parse that way.
         """
         from urllib.parse import quote
-        from app.nas import REGION_DISPLAY
+        from app.modules.core.shared.services.nas import REGION_DISPLAY
 
         base = (app.config.get('NAS_WEB_URL') or
                 f"https://{app.config.get('NAS_HOST', '')}:{app.config.get('NAS_PORT', '5001')}")

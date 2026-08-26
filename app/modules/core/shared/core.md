@@ -106,12 +106,15 @@ The shared pytest harness lives here:
 Run the suite from the repo root with `python -m pytest`.
 
 ## Known follow-ups
-- **Shared static move** — the physical relocation of shared CSS/JS/fonts/images
-  into `core/shared/static/` is deferred, because the current asset graph is
-  entangled (the base layout loads every feature's assets globally, fonts are
-  shared across all CSS, and some paths are hardcoded in JS). It is done as one
-  deliberate pass alongside detangling that global loading and giving each
-  module its own static.
+- **Static assets stay consolidated in `app/static/` (decided).** The physical
+  relocation into per-module `static/` folders was deliberately NOT done: the
+  asset graph is entangled (the base layout loads every feature's CSS globally,
+  fonts are shared across CSS via `url(../fonts/)`, some paths are hardcoded in
+  JS, and a `STATIC_VERSION` cache-buster stamps every URL), and the app is live.
+  Instead, each module's assets move into its own `static/` folder *during that
+  module's overhaul*, one at a time. The full ownership map and the per-module
+  move recipe are in `Documentation/Static_Asset_Ownership.md`.
+  (`main_backup.css` is a dead file that can be deleted.)
 - **Repoint intra-core imports** — files inside `core/shared` still import some
   siblings through the old `app.<name>` shims; repoint them to direct
   `core/shared` paths.

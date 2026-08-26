@@ -18,7 +18,7 @@ def _record_status_change(entity, new_status, actor, log_cls, fk_field):
     """Internal — closes the entity's current open log row (if any) and
     opens a new one. Shared by the three public wrappers below so the
     open/close bookkeeping only exists in one place."""
-    from app import db
+    from app.modules.core.shared.extensions import db
 
     now = datetime.utcnow()
 
@@ -46,19 +46,19 @@ def record_project_status(project, new_status, actor):
     (The Project.hours_accumulated/timer_started_at columns are unused —
     left in place on the model but written to by nothing.)
     """
-    from app.models import ProjectStatusLog
+    from app.modules.core.shared.models import ProjectStatusLog
     _record_status_change(project, new_status, actor, ProjectStatusLog, 'project_id')
     project.project_status = new_status
 
 
 def record_customer_status(customer, new_status, actor):
-    from app.models import ProjectCustomerStatusLog
+    from app.modules.core.shared.models import ProjectCustomerStatusLog
     _record_status_change(customer, new_status, actor, ProjectCustomerStatusLog, 'project_customer_id')
     customer.status = new_status
 
 
 def record_deliverable_status(deliverable, new_status, actor):
-    from app.models import DeliverableStatusLog
+    from app.modules.core.shared.models import DeliverableStatusLog
     _record_status_change(deliverable, new_status, actor, DeliverableStatusLog, 'deliverable_id')
     deliverable.status = new_status
 
@@ -84,7 +84,7 @@ def sync_project_pipeline_status(project, actor):
     computed target against the current project_status and skips the write
     entirely when nothing would change.
     """
-    from app.status_vocabulary import derive_deliverable_status
+    from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
 
     if project.cancelled_at is not None or project.project_status in ('draft', 'briefed', 'on_hold'):
         return
@@ -120,7 +120,7 @@ def sync_project_pipeline_status(project, actor):
 def project_status_started_at(project):
     """started_at of `project`'s currently-open ProjectStatusLog row.
     None if nothing has ever been logged for it (pre-dates this table)."""
-    from app.models import ProjectStatusLog
+    from app.modules.core.shared.models import ProjectStatusLog
     row = ProjectStatusLog.query.filter_by(project_id=project.id, ended_at=None).first()
     return row.started_at if row else None
 
@@ -129,7 +129,7 @@ def deliverable_status_started_at(deliverable):
     """Same as project_status_started_at, for one Deliverable. Prefer
     bulk_deliverable_status_started_at when looking this up for more than
     one deliverable at a time — this issues one query per call."""
-    from app.models import DeliverableStatusLog
+    from app.modules.core.shared.models import DeliverableStatusLog
     row = DeliverableStatusLog.query.filter_by(deliverable_id=deliverable.id, ended_at=None).first()
     return row.started_at if row else None
 
@@ -138,7 +138,7 @@ def bulk_deliverable_status_started_at(deliverable_ids):
     """Same data as deliverable_status_started_at, for many deliverables
     in one query — {deliverable_id: started_at}. A deliverable with no
     log row yet just doesn't appear as a key."""
-    from app.models import DeliverableStatusLog
+    from app.modules.core.shared.models import DeliverableStatusLog
     if not deliverable_ids:
         return {}
     rows = DeliverableStatusLog.query.filter(
@@ -151,7 +151,7 @@ def bulk_deliverable_status_started_at(deliverable_ids):
 def bulk_project_status_started_at(project_ids):
     """Same as bulk_deliverable_status_started_at, for projects — used by
     the Projects list so it doesn't run one query per row."""
-    from app.models import ProjectStatusLog
+    from app.modules.core.shared.models import ProjectStatusLog
     if not project_ids:
         return {}
     rows = ProjectStatusLog.query.filter(
@@ -214,7 +214,7 @@ def project_client_approved_at(project):
     entered 'approved') — survives the project later moving on to
     'handed_to_production', unlike project_status_started_at. None if it
     never has been."""
-    from app.models import ProjectStatusLog
+    from app.modules.core.shared.models import ProjectStatusLog
     return latest_client_approval_at(project, ProjectStatusLog, 'project_id')
 
 
@@ -226,7 +226,7 @@ def deliverable_client_approved_at(deliverable):
     another status change) — they only diverge if the deliverable was
     reverted out of 'approved' and hasn't been re-approved yet, in which
     case this still remembers the earlier approval."""
-    from app.models import DeliverableStatusLog
+    from app.modules.core.shared.models import DeliverableStatusLog
     return latest_client_approval_at(deliverable, DeliverableStatusLog, 'deliverable_id')
 
 
@@ -236,8 +236,8 @@ def bulk_project_client_approved_at(project_ids):
     project's 'approved' rows (equivalent to picking the latest one, just
     without N separate queries). A project never approved doesn't appear
     as a key."""
-    from app import db
-    from app.models import ProjectStatusLog
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectStatusLog
     if not project_ids:
         return {}
     rows = (
@@ -251,8 +251,8 @@ def bulk_project_client_approved_at(project_ids):
 
 def bulk_deliverable_client_approved_at(deliverable_ids):
     """Same as bulk_project_client_approved_at, for deliverables."""
-    from app import db
-    from app.models import DeliverableStatusLog
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import DeliverableStatusLog
     if not deliverable_ids:
         return {}
     rows = (

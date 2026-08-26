@@ -1,9 +1,9 @@
 from flask import Blueprint, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from datetime import date, timedelta
-from app import db
+from app.modules.core.shared.extensions import db
 from sqlalchemy import func, nullslast
-from app.models import Project, ProjectDesigner, User, ProjectSecondaryCS, Deliverable
+from app.modules.core.shared.models import Project, ProjectDesigner, User, ProjectSecondaryCS, Deliverable
 
 main = Blueprint('main', __name__)
 
@@ -28,7 +28,7 @@ def sidebar_track():
     Records which sidebar link was clicked, who clicked it, and when.
     Called by sidebar.js — no UI depends on the response.
     """
-    from app.models import SidebarClick
+    from app.modules.core.shared.models import SidebarClick
     data = request.get_json(silent=True) or {}
     link_name = str(data.get('link_name', ''))[:100]
     if not link_name:

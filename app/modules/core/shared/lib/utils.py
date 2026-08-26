@@ -45,7 +45,7 @@ def get_actor():
     """
     from flask import session
     from flask_login import current_user
-    from app.models import User
+    from app.modules.core.shared.models import User
     emulating_id = session.get('emulating_user_id')
     if emulating_id and current_user.role == 'admin':
         return User.query.get(emulating_id)
@@ -57,8 +57,8 @@ def log_activity(action, description, user=None, entity_type=None, entity_name=N
     what_changed.html). changes is an optional structured old/new diff,
     stored on the side for callers that want it later (e.g. an audit view);
     must already be JSON-safe (dates as ISO strings, etc.) before calling."""
-    from app import db
-    from app.models import ActivityLog
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ActivityLog
     try:
         entry = ActivityLog(
             user_id=user.id if user else None,

@@ -20,7 +20,7 @@ _pipeline_stage_for() / derive_customer_pipeline_status() render the same
 vocabulary for a C&CM customer's expand row, reading the independent
 ProjectPosmChannel.status field.
 """
-from app.models import ProjectPosmChannel
+from app.modules.core.shared.models import ProjectPosmChannel
 
 
 # ── Deliverable status (every deliverable, both brief types) ───────────────

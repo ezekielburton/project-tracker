@@ -29,7 +29,7 @@ import psycopg2.extensions
 from gevent import spawn
 from gevent.queue import Queue
 
-from app.live_events import PROJECT_CHANGES_CHANNEL, USER_NOTIFICATIONS_CHANNEL
+from app.modules.core.shared.services.live_events import PROJECT_CHANGES_CHANNEL, USER_NOTIFICATIONS_CHANNEL
 
 _project_subscribers = {}      # project_id (int) -> set of Queue
 _dashboard_subscribers = set()  # set of Queue
