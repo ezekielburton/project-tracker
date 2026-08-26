@@ -1085,3 +1085,46 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
                         )
 
         threading.Thread(target=_send_emails, daemon=True).start()
+
+
+# ── Request Editing Access (26 Aug 2026, per Ezekiel) — see
+# project_overlay.py's request_edit_access()/approve_edit_access()/
+# deny_edit_access() for the full flow this backs. ─────────────────────────
+
+def notify_cs_of_edit_access_request(project, requester):
+    """Notify the CS Lead and every Secondary CS that a designer has
+    requested editing access on their project. Same recipient set as
+    notify_cs_of_brief_flag above — project_overlay.py's
+    _can_decide_edit_access_request grants approve/deny to that exact
+    tier (CS Lead, Secondary CS, management, admin, or the assigned
+    Project Owner)."""
+    message = f'{requester.name} requested editing access to "{project.name}".'
+
+    cs_lead = User.query.get(project.cs_lead_id)
+    if cs_lead:
+        create_notification(recipient=cs_lead, message=message, notification_type='edit_access_requested',
+                            project=project, triggered_by=requester,
+                            pref_key='edit_access_requested')
+
+    for secondary in _get_secondary_cs(project):
+        create_notification(recipient=secondary, message=message, notification_type='edit_access_requested',
+                            project=project, triggered_by=requester,
+                            pref_key='edit_access_requested')
+
+
+def notify_designer_of_edit_access_decision(edit_access_request, approved, triggered_by):
+    """Notify the requesting designer once their Request Editing Access
+    request has been approved or denied — see project_overlay.py's
+    approve_edit_access()/deny_edit_access()."""
+    recipient = edit_access_request.user
+    project = edit_access_request.project
+    if not recipient or not project:
+        return
+    verb = 'approved' if approved else 'denied'
+    message = f'{triggered_by.name} {verb} your request for editing access on "{project.name}".'
+    create_notification(
+        recipient=recipient, message=message,
+        notification_type='edit_access_approved' if approved else 'edit_access_denied',
+        project=project, triggered_by=triggered_by,
+        pref_key='edit_access_decided'
+    )

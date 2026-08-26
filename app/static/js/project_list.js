@@ -295,6 +295,25 @@
             openFolderBtn.addEventListener('click', () => openNasLink(openFolderBtn));
         }
 
+        // Request Editing Access (26 Aug 2026, per Ezekiel) — single button,
+        // no confirm gate (unlike Cancel/Hold, this isn't destructive — it's
+        // just asking). Flips itself to the disabled "pending" state
+        // in-place on success rather than waiting for the sidebar's next
+        // full render, same optimistic-update approach as Hold/Cancel below.
+        const editAccessBtn = sidebarEl.querySelector('#overlay-request-edit-access-btn');
+        if (editAccessBtn) {
+            editAccessBtn.addEventListener('click', () => {
+                editAccessBtn.disabled = true;
+                postJson(`/projects/${projectId}/request-edit-access`, {}, () => {
+                    editAccessBtn.dataset.state = 'pending';
+                    editAccessBtn.textContent = 'Editing Access Requested';
+                }, (err) => {
+                    editAccessBtn.disabled = false;
+                    alert(err || 'Could not request editing access.');
+                });
+            });
+        }
+
         const cancelBtn = sidebarEl.querySelector('#overlay-cancel-project-btn');
         const uncancelBtn = sidebarEl.querySelector('#overlay-uncancel-project-btn');
         const cancelForm = sidebarEl.querySelector('#overlay-cancel-project-form');

@@ -63,6 +63,26 @@ active section. See project_overlay.js. #}
                         data-url="{{ url_for('project_overlay.overlay_nas_folder_link', project_id=project.id) }}">Open
                         Project Folder</button>
 
+                    {% if show_request_edit_access %}
+                    {# Request Editing Access (26 Aug 2026, per Ezekiel) — a
+                    designer assigned to this project but without the usual
+                    CS Lead/Secondary CS/Project Owner tier can ask for it
+                    here. Only ever shown on an already-open, non-draft
+                    project (see _build_details_context's
+                    show_request_edit_access) — never on drafts or on
+                    anything created after the feature's cutoff. Single
+                    button, state-driven by edit_access_request_status
+                    rather than a dual-button pattern like Hold/Cancel above
+                    — there's no toggle-back action here, just
+                    none/pending/denied. #}
+                    <button type="button" class="project-overlay-sidebar-action-btn"
+                        id="overlay-request-edit-access-btn"
+                        data-state="{{ edit_access_request_status or 'none' }}"
+                        {% if edit_access_request_status == 'pending' %}disabled{% endif %}>{% if
+                        edit_access_request_status == 'pending' %}Editing Access Requested{% else %}Request Editing
+                        Access{% endif %}</button>
+                    {% endif %}
+
                     {% if can_manage_flags %}
                     {# Flag Issue (task #42 follow-up, 18 Aug 2026) — raising a
                     project flag moved here from the Details tab so it's

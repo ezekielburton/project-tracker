@@ -3,6 +3,8 @@ Project Details Overlay Route File.
 New blueprint for file hygiene, easier to work on chunks rather than one long file.
 """
 
+from datetime import datetime
+
 from flask import Blueprint, render_template, abort, request, jsonify
 from flask_login import login_required, current_user
 
@@ -44,6 +46,15 @@ def _can_manage_deliverables(project, actor):
         or actor.id in secondary_cs_ids
         or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
         or (project.project_status == 'draft' and actor.id == project.created_by_id)
+        # Request Editing Access (26 Aug 2026, per Ezekiel) — an assigned
+        # designer who's been through the approval flow below (see
+        # _has_edit_access_grant, request_edit_access()/approve_edit_
+        # access()) gets this exact same tier on the one project they
+        # were granted it on, permanently. This is what actually makes
+        # the grant DO anything — everywhere _can_manage_deliverables is
+        # already checked (deliverable CRUD, the Team column's assign
+        # mode) picks this up for free.
+        or _has_edit_access_grant(project, actor)
     )
 
 
@@ -102,6 +113,92 @@ def ensure_posm_channels(project, brief_sections):
     if new_channels_added:
         db.session.commit()
     return new_channels_added
+
+
+# ── Request Editing Access (26 Aug 2026, per Ezekiel) — an assigned
+# designer's self-service path to full deliverable-management rights on a
+# project whose CS Lead is someone else, once that CS Lead (or Secondary
+# CS/management/admin) approves. See _build_details_context's
+# can_request_edit_access, the request_edit_access/approve_edit_access/
+# deny_edit_access routes below, and ProjectEditAccessRequest in
+# core/shared/models/projects.py for the full design writeup. ──────────
+
+def _is_assigned_designer(project, actor):
+    """True if actor has a real assignment on this project — deliverable-
+    level (DeliverableAssignment, the Deliverables tab's Team column chip-
+    assign), project-level (ProjectDesigner, the Details tab's per-team
+    row), or Concept/KV designer (C&CM only). These are the same three
+    surfaces notifications.py's _get_project_designers() sweeps — reused
+    here as the eligibility check below, since "assigned designer" doesn't
+    mean anything different in this feature than it does there."""
+    if actor.role not in ('designer', 'team_lead'):
+        return False
+    if any(pd.user_id == actor.id for pd in project.assigned_designers):
+        return True
+    if actor.id in (project.concept_designer_id, project.kv_designer_id):
+        return True
+    return any(
+        a.designer_id == actor.id
+        for d in project.project_deliverables
+        for a in d.disciplines
+    )
+
+
+# Hardcoded to (approximately) the moment this feature shipped — Ezekiel's
+# call was "any project that already exists right now" (a one-time cutover
+# line for the pre-existing backlog), not a rolling "created in the last
+# N days" window, so this is a fixed constant rather than something
+# computed off datetime.utcnow() at request time.
+_EDIT_ACCESS_CUTOFF = datetime(2026, 8, 26, 13, 10, 0)
+
+
+def _project_edit_access_eligible(project):
+    """Which projects Request Editing Access can be used on at all —
+    "any open project" per Ezekiel, deliberately excluding drafts
+    (project_status == 'draft' — the request only makes sense once a
+    project is actually live) and cancelled projects (cancelled_at set —
+    nothing left to manage). Also excludes anything created on/after
+    _EDIT_ACCESS_CUTOFF — new projects going forward use the normal
+    assignment flow, not this retrofit path."""
+    return (
+        project.project_status != 'draft'
+        and project.cancelled_at is None
+        and project.created_at is not None
+        and project.created_at < _EDIT_ACCESS_CUTOFF
+    )
+
+
+def _has_edit_access_grant(project, actor):
+    """True once actor has an approved ProjectEditAccessRequest on this
+    project — the thing _can_manage_deliverables above and the deliverable
+    status-override checks below actually gate on. Its own one-line
+    lookup (not inlined at each call site) so every caller shares the
+    exact same query shape."""
+    from app.modules.core.shared.models import ProjectEditAccessRequest
+    return ProjectEditAccessRequest.query.filter_by(
+        project_id=project.id, user_id=actor.id, status='approved'
+    ).first() is not None
+
+
+def _can_decide_edit_access_request(project, actor):
+    """Who can approve/deny a pending Request Editing Access request —
+    deliberately NOT _can_manage_deliverables itself (which now includes
+    _has_edit_access_grant): reusing that directly would let a designer
+    who was just granted access on a project turn around and approve
+    someone else's request on the same project, which goes further than
+    "needs approval by CS Lead" was asking for. Same shape as
+    _can_cancel_project (admin/management, CS Lead, Secondary CS, or the
+    assigned Project Owner) — kept as its own function rather than a call
+    to that one, matching this file's existing convention of duplicating
+    identical-shape permission checks that answer conceptually different
+    questions (see _can_manage_deliverables's docstring)."""
+    secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
+    return (
+        actor.role in ('admin', 'management')
+        or actor.id == project.cs_lead_id
+        or actor.id in secondary_cs_ids
+        or (actor.role == 'project_owner' and actor.id == project.project_owner_id)
+    )
 
 
 def _can_cancel_project(project, actor):
@@ -314,7 +411,7 @@ def _needed_teams(d):
     return []
 
 
-def _build_deliverable_focus_context(deliverables, actor, can_manage_project):
+def _build_deliverable_focus_context(deliverables, actor, can_manage_project, has_edit_access_grant=False):
     """Computes the per-deliverable status pill + Focused/All eligibility data
     that both the Standard and C&CM Deliverables views need, so the two
     branches in overlay_deliverables() can't drift out of sync on this.
@@ -324,6 +421,13 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project):
     clicking that team's tag should do for the viewing actor. This is the
     read side of the Team column's click-to-assign feature; the write
     side is assign_deliverable_team() below.
+
+    has_edit_access_grant (26 Aug 2026, per Ezekiel's "grant the status
+    override too") — True when the viewing actor holds an approved
+    ProjectEditAccessRequest on this specific project (see
+    _has_edit_access_grant). Callers pass this in rather than this
+    function recomputing it itself, since overlay_deliverables() already
+    needs the same project/actor pair for can_manage_project.
     """
     from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
     from app.modules.core.shared.services.status_tracking import bulk_deliverable_status_started_at
@@ -381,13 +485,15 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project):
         # Admin's toggle doesn't filter anything either way, per your call —
         # defaulting it to All just means it starts in the "off" position.
         'default_focus': actor.role in ('designer', 'team_lead'),
-        # Status override — admin-only, click the pill / pick a different
+        # Status override — admin, or a designer with an approved edit-
+        # access grant on this project (26 Aug 2026, per Ezekiel — "grant
+        # the status override too"), click the pill / pick a different
         # status. One shared option list regardless of brief type:
         # derive_deliverable_status is identical for Standard and C&CM
         # deliverables. This is the deliverable-level override (the
         # project-level one is a bulk write; see the comment above
         # _DELIVERABLE_STATUS_OVERRIDE_OPTIONS).
-        'can_override_status': actor.role == 'admin',
+        'can_override_status': actor.role == 'admin' or has_edit_access_grant,
         'deliverable_status_options': _DELIVERABLE_STATUS_OVERRIDE_OPTIONS,
     }
 
@@ -983,6 +1089,29 @@ def _build_details_context(project, actor):
     )
     edit_snapshot_at = latest_activity.created_at.isoformat() if latest_activity else ''
 
+    # Request Editing Access (26 Aug 2026, per Ezekiel) — sidebar button
+    # state. edit_access_request_status is None (never asked),
+    # 'pending' (asked, awaiting a decision), 'approved' (already has the
+    # grant — _can_manage_deliverables above already reflects this, the
+    # button itself just hides), or 'denied' (can ask again).
+    # show_request_edit_access gates whether the button renders at all:
+    # only an eligible open project (_project_edit_access_eligible), only
+    # an actually-assigned designer (_is_assigned_designer), and never
+    # once already approved — a 'pending' or 'denied' state still shows
+    # it, just in a different label/disabled state (see _overlay.html).
+    edit_access_request = None
+    if actor.role in ('designer', 'team_lead'):
+        from app.modules.core.shared.models import ProjectEditAccessRequest
+        edit_access_request = ProjectEditAccessRequest.query.filter_by(
+            project_id=project.id, user_id=actor.id
+        ).first()
+    edit_access_request_status = edit_access_request.status if edit_access_request else None
+    show_request_edit_access = (
+        edit_access_request_status != 'approved'
+        and _project_edit_access_eligible(project)
+        and _is_assigned_designer(project, actor)
+    )
+
     return dict(
         status_label=status_label,
         status_class=status_class,
@@ -1014,6 +1143,8 @@ def _build_details_context(project, actor):
         client_options=client_options,
         design_type_options=design_type_options,
         edit_snapshot_at=edit_snapshot_at,
+        show_request_edit_access=show_request_edit_access,
+        edit_access_request_status=edit_access_request_status,
     )
 
 
@@ -1778,12 +1909,14 @@ def _write_deliverable_status_override(deliverable, label, actor):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/<int:deliverable_id>/status/override', methods=['POST'])
 @login_required
 def override_deliverable_status(project_id, deliverable_id):
-    """Admin-only status override (uses the 3-stage vocabulary — see
-    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS above). See
+    """Admin, or a designer with an approved edit-access grant on this
+    project (26 Aug 2026, per Ezekiel — "grant the status override too",
+    see _has_edit_access_grant), status override (uses the 3-stage
+    vocabulary — see _DELIVERABLE_STATUS_OVERRIDE_OPTIONS above). See
     _write_deliverable_status_override() above for what
     fields this actually writes and why.
 
-    Calls sync_project_pipeline_status() at the end — an admin overriding a
+    Calls sync_project_pipeline_status() at the end — overriding a
     deliverable is exactly the kind of "deliverable-affecting action" that
     can flip the project's own pill, same as a real approval/revision would."""
     from app.modules.core.shared.extensions import db
@@ -1793,8 +1926,8 @@ def override_deliverable_status(project_id, deliverable_id):
 
     deliverable = Deliverable.query.filter_by(id=deliverable_id, project_id=project_id).first_or_404()
     actor = _get_actor()
-    if actor.role != 'admin':
-        return jsonify({'success': False, 'error': 'Admin only.'}), 403
+    if actor.role != 'admin' and not _has_edit_access_grant(deliverable.project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to override this status.'}), 403
 
     data = request.get_json(silent=True) or {}
     label = data.get('status')
@@ -2170,6 +2303,138 @@ def overlay_toggle_hold(project_id):
     return jsonify({'success': True})
 
 
+# ── Request Editing Access (26 Aug 2026, per Ezekiel) — see the block
+# comment above _is_assigned_designer for the full design. request_edit_
+# access is the sidebar button's endpoint; approve/deny are reachable from
+# the inline Approve/Deny buttons base.html renders on the CS Lead/
+# Secondary CS's notification (see inject_notifications() in app/__init__.py
+# and notifications.js). ─────────────────────────────────────────────────
+
+@project_overlay_bp.route('/projects/<int:project_id>/request-edit-access', methods=['POST'])
+@login_required
+def request_edit_access(project_id):
+    """Designer-initiated: the overlay sidebar's "Request Editing Access"
+    button (see _build_details_context's show_request_edit_access /
+    edit_access_request_status). Creates — or, on re-request after a
+    denial, resets — a pending ProjectEditAccessRequest and notifies the
+    project's CS Lead/Secondary CS to decide. Does NOT grant anything by
+    itself; _has_edit_access_grant only turns True once a request here has
+    been approved."""
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectEditAccessRequest
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import notify_cs_of_edit_access_request
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if not _project_edit_access_eligible(project):
+        return jsonify({'success': False, 'error': 'Editing access can only be requested on an existing, open project.'}), 400
+    if not _is_assigned_designer(project, actor):
+        return jsonify({'success': False, 'error': 'Only a designer assigned to this project can request editing access.'}), 403
+
+    existing = ProjectEditAccessRequest.query.filter_by(project_id=project.id, user_id=actor.id).first()
+    if existing and existing.status == 'pending':
+        return jsonify({'success': False, 'error': 'You already have a pending request for this project.'}), 400
+    if existing and existing.status == 'approved':
+        return jsonify({'success': False, 'error': 'You already have editing access on this project.'}), 400
+
+    if existing:
+        # Re-request after a denial — reset the same row rather than
+        # inserting a second one (UNIQUE(project_id, user_id) would reject
+        # that anyway), so there's never stale denied history left for the
+        # CS Lead to click past.
+        existing.status = 'pending'
+        existing.requested_at = datetime.utcnow()
+        existing.decided_at = None
+        existing.decided_by_id = None
+    else:
+        db.session.add(ProjectEditAccessRequest(project_id=project.id, user_id=actor.id))
+
+    db.session.commit()
+
+    log_activity(
+        'edit_access_requested',
+        f'{actor.name} requested editing access to "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    notify_cs_of_edit_access_request(project, actor)
+
+    return jsonify({'success': True, 'status': 'pending'})
+
+
+@project_overlay_bp.route('/projects/edit-access-requests/<int:request_id>/approve', methods=['POST'])
+@login_required
+def approve_edit_access(request_id):
+    """CS Lead/Secondary CS/management/admin decision — approves a pending
+    Request Editing Access request, granting the requester
+    _can_manage_deliverables-tier access (deliverables + status override)
+    on that one project, permanently. See _can_decide_edit_access_request
+    for why this uses its own permission check rather than
+    _can_manage_deliverables directly."""
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectEditAccessRequest
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import notify_designer_of_edit_access_decision
+
+    req = ProjectEditAccessRequest.query.get_or_404(request_id)
+    project = req.project
+    actor = _get_actor()
+
+    if not _can_decide_edit_access_request(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to decide this request.'}), 403
+    if req.status != 'pending':
+        return jsonify({'success': False, 'error': 'This request has already been decided.'}), 400
+
+    req.status = 'approved'
+    req.decided_at = datetime.utcnow()
+    req.decided_by_id = actor.id
+    db.session.commit()
+
+    log_activity(
+        'edit_access_approved',
+        f'{actor.name} approved {req.user.name}\'s request for editing access on "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    notify_designer_of_edit_access_decision(req, approved=True, triggered_by=actor)
+
+    return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/edit-access-requests/<int:request_id>/deny', methods=['POST'])
+@login_required
+def deny_edit_access(request_id):
+    """Same as approve_edit_access above, but denies. A denied request can
+    be re-requested later — see request_edit_access above."""
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectEditAccessRequest
+    from app.modules.core.shared.lib.utils import log_activity
+    from app.modules.core.shared.services.notifications import notify_designer_of_edit_access_decision
+
+    req = ProjectEditAccessRequest.query.get_or_404(request_id)
+    project = req.project
+    actor = _get_actor()
+
+    if not _can_decide_edit_access_request(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to decide this request.'}), 403
+    if req.status != 'pending':
+        return jsonify({'success': False, 'error': 'This request has already been decided.'}), 400
+
+    req.status = 'denied'
+    req.decided_at = datetime.utcnow()
+    req.decided_by_id = actor.id
+    db.session.commit()
+
+    log_activity(
+        'edit_access_denied',
+        f'{actor.name} denied {req.user.name}\'s request for editing access on "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+    notify_designer_of_edit_access_decision(req, approved=False, triggered_by=actor)
+
+    return jsonify({'success': True})
+
+
 # ── Brief Flags — port of projects_detail.py's create_flag /
 # reply_flag / resolve_flag, JSON instead of form-post+redirect, plus a
 # new history endpoint the old full-page detail view didn't need (it just
@@ -2330,6 +2595,10 @@ def overlay_deliverables(project_id):
     can_manage = _can_manage_deliverables(project, actor)
     can_manage_flags = _can_manage_flags(actor)
     can_skip_preproduction = _can_skip_preproduction(project, actor)
+    # Passed into _build_deliverable_focus_context below so its
+    # can_override_status also reflects an edit-access grant, not just
+    # actor.role == 'admin' — see that function's docstring.
+    has_edit_access_grant = _has_edit_access_grant(project, actor)
 
     # Brief Flags — one query for every open deliverable-scoped
     # flag on the project, then grouped by deliverable_id so both branches
@@ -2372,7 +2641,7 @@ def overlay_deliverables(project_id):
             can_skip_preproduction=can_skip_preproduction,
             can_manage_flags=can_manage_flags,
             open_flags_by_deliverable_id=open_flags_by_deliverable_id,
-            **_build_deliverable_focus_context(all_deliverables, actor, can_manage),
+            **_build_deliverable_focus_context(all_deliverables, actor, can_manage, has_edit_access_grant),
         )
 
     deliverables = Deliverable.query.filter_by(
@@ -2387,7 +2656,7 @@ def overlay_deliverables(project_id):
         can_manage_flags=can_manage_flags,
         open_flags=open_flags,
         open_flags_by_deliverable_id=open_flags_by_deliverable_id,
-        **_build_deliverable_focus_context(deliverables, actor, can_manage),
+        **_build_deliverable_focus_context(deliverables, actor, can_manage, has_edit_access_grant),
     )
 
 

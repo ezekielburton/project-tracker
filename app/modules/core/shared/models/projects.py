@@ -373,6 +373,54 @@ class SiteVisit(db.Model):
         return f'<SiteVisit project={self.project_id} user={self.user_id}>'
 
 
+class ProjectEditAccessRequest(db.Model):
+    """A designer's self-service request for full deliverable-management
+    rights (add/edit deliverables + status override — same tier as
+    _can_manage_deliverables/admin) on one specific live project they're
+    assigned to. Added 26 Aug 2026 per Ezekiel — the overlay sidebar's
+    "Request Editing Access" button, for a designer who needs to manage
+    deliverables on a project whose CS Lead is someone else and who has
+    no other route to that permission tier.
+
+    Deliberately its own row rather than a boolean flag on ProjectDesigner:
+    this needs a pending/approved/denied lifecycle plus an audit trail (who
+    decided, when), and a designer can be assigned to a project without
+    ever having requested (or been granted) this. Eligibility — who is even
+    allowed to request, and on which projects — is NOT stored here; it's
+    recomputed live by _project_edit_access_eligible()/_is_assigned_designer()
+    in project_overlay.py, scoped to open projects (not draft, not
+    cancelled) that already existed before _EDIT_ACCESS_CUTOFF there. This
+    table only tracks the request/decision itself.
+
+    A grant is permanent once approved — there is no expiry/revoke flow
+    yet (matches Ezekiel's "Permanent + notification action" answer).
+    UNIQUE(project_id, user_id): one row per designer per project. A denied
+    request can be re-requested — see request_edit_access() in
+    project_overlay.py — which resets this same row rather than inserting
+    a second one, so the unique constraint never has to be worked around.
+    """
+    __tablename__ = 'project_edit_access_requests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False)  # 'pending' | 'approved' | 'denied'
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    decided_at = db.Column(db.DateTime, nullable=True)
+    decided_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    project = db.relationship('Project', backref=db.backref('edit_access_requests', cascade='all, delete-orphan'))
+    user = db.relationship('User', foreign_keys=[user_id])
+    decided_by = db.relationship('User', foreign_keys=[decided_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('project_id', 'user_id', name='uq_project_edit_access_requests_project_user'),
+    )
+
+    def __repr__(self):
+        return f'<ProjectEditAccessRequest project={self.project_id} user={self.user_id} status={self.status}>'
+
+
 class ProjectOverlaySeen(db.Model):
     """
     One row per (user, project) marking that user's first visit to the new

@@ -508,6 +508,23 @@
                 <div class="notification-content">
                     <p class="notification-message">{{ notification.message }}</p>
                     <span class="notification-time">{{ notification.created_at | dubai_time }}</span>
+                    {% if notification.notification_type == 'edit_access_requested' and notification.edit_access_request_id %}
+                    {# Request Editing Access (26 Aug 2026, per Ezekiel) — the
+                    only notification type with an action beyond mark-read/
+                    navigate. edit_access_request_id is attached server-side
+                    in inject_notifications() (app/__init__.py) and is only
+                    ever set while the request is still pending — once
+                    decided (from here or, in the future, elsewhere) it's
+                    None and these buttons stop rendering on refresh. #}
+                    <div class="notification-inline-actions">
+                        <button type="button" class="notification-action-btn notification-action-btn--approve"
+                            data-request-id="{{ notification.edit_access_request_id }}"
+                            data-decision="approve">Approve</button>
+                        <button type="button" class="notification-action-btn notification-action-btn--deny"
+                            data-request-id="{{ notification.edit_access_request_id }}"
+                            data-decision="deny">Deny</button>
+                    </div>
+                    {% endif %}
                 </div>
                 <button type="button" class="notification-mark-read-btn" data-id="{{ notification.id }}"
                     title="Mark as read">✓</button>

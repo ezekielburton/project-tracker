@@ -203,6 +203,31 @@ def create_app(config=Config):
 
             unread_count = sum(1 for n in active_notifications if not n.is_read)
 
+            # Request Editing Access (26 Aug 2026, per Ezekiel) — attach
+            # the still-pending ProjectEditAccessRequest id to each
+            # matching notification, so base.html can render inline
+            # Approve/Deny buttons that POST straight to
+            # project_overlay.py's approve_edit_access()/deny_edit_access()
+            # without a template-side query. One extra query total (not
+            # per-notification): notification.project_id + .triggered_by_id
+            # (the requesting designer) uniquely key a pending request
+            # thanks to ProjectEditAccessRequest's own UNIQUE(project_id,
+            # user_id). None here just means it's already been decided
+            # (e.g. from the overlay, if that ever grows its own UI) —
+            # base.html skips the buttons in that case.
+            edit_access_notif_ids = [
+                n.id for n in active_notifications if n.notification_type == 'edit_access_requested'
+            ]
+            if edit_access_notif_ids:
+                from app.modules.core.shared.models import ProjectEditAccessRequest
+                pending_by_key = {
+                    (r.project_id, r.user_id): r.id
+                    for r in ProjectEditAccessRequest.query.filter_by(status='pending').all()
+                }
+                for n in active_notifications:
+                    if n.notification_type == 'edit_access_requested':
+                        n.edit_access_request_id = pending_by_key.get((n.project_id, n.triggered_by_id))
+
             # Resolve this user's saved sound prefs (enabled/volume/chosen file)
             # from the same notification_prefs JSON blob used on the account page.
             # Every page needs this — not just /account — because the 30-second
