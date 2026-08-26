@@ -31,9 +31,9 @@ app/modules/projects/
   filtering, sorting, row expansion, and saved table views.
 - **project_overlay**: the project detail overlay — Details, Deliverables,
   Submissions, Flags, Chat, Notes, and Pre-Production surfaces, project creation
-  (create overlay + resumable drafts), status overrides, cancel project/customer,
-  reference-file and submission-file serving, and job-number generation. By far
-  the biggest file (~4,700 lines, 54 routes).
+  (create overlay + resumable drafts), status overrides, add/cancel project
+  customer, reference-file and submission-file serving, and job-number
+  generation. By far the biggest file (~4,700+ lines, 55 routes).
 - **project_preproduction**: the 2D/3D/Technical stream cycle after client
   approval — assign, mark-done, approve, flag, Skip to Pre-Production, and the
   Handed to Production cascade.

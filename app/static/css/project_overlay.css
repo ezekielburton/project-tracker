@@ -1562,6 +1562,13 @@ button.overlay-chat-reaction-chip:hover {
 .overlay-customer-add-form select {
     display: block;
     width: 100%;
+    /* Missed this the first pass — .overlay-flag-revision-input (the
+       cancel-reason textarea this form's actions row is styled after)
+       carries its own margin-bottom to separate itself from the Confirm/
+       Cancel buttons underneath; a plain <select> has no such built-in
+       class here, so without this the picker and the Add Customer/Cancel
+       buttons sat flush against each other (25 Aug 2026, per Ezekiel). */
+    margin-bottom: var(--space-2);
 }
 
 .overlay-notes {

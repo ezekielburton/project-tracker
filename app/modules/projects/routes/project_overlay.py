@@ -1256,16 +1256,11 @@ def overlay_create_draft():
     # of sync with a checkbox grid. Existing rows for customers no longer
     # checked are removed rather than soft-cancelled — nothing downstream
     # can reference them yet, this is still an unfinished draft.
-    if 'customer_ids' in data:
-        wanted_ids = {int(cid) for cid in (data.get('customer_ids') or [])}
-        existing = {pc.customer_id: pc for pc in draft.project_customers}
-        for customer_id, pc in existing.items():
-            if customer_id not in wanted_ids:
-                db.session.delete(pc)
-        for customer_id in wanted_ids:
-            if customer_id not in existing and Customer.query.get(customer_id):
-                db.session.add(ProjectCustomer(project_id=draft.id, customer_id=customer_id))
-
+    #
+    # (25 Aug 2026: this block used to run twice in a row, back to back —
+    # harmless since the second pass was a no-op against what the first
+    # already did, but dead weight. Collapsed to one; the ProjectRegion
+    # sync below was already only in the second copy.)
     if 'customer_ids' in data:
         wanted_ids = {int(cid) for cid in (data.get('customer_ids') or [])}
         existing = {pc.customer_id: pc for pc in draft.project_customers}
