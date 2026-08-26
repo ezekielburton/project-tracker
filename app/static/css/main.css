@@ -5600,7 +5600,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 /* Quick-add modal */
 .modal-box {
-    /* --surface is undefined in :root (per CLAUDE.md) — resolves to
+    /* --surface is undefined in :root — resolves to
        transparent, letting .modal-overlay's translucent sandstone tint
        show through instead of a solid white popup. --white is the
        actual solid background token. */

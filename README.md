@@ -64,7 +64,6 @@ project-tracker/
 ├── migrate_*.py         # Larger migration scripts
 ├── create_tables.py     # Creates any new tables via db.create_all()
 ├── run.py               # App entry point
-├── CLAUDE.md            # Dev reference (patterns, gotchas, branding tokens)
 └── Vitamin_Helix_Infrastructure.pdf  # Deployment & infrastructure reference
 ```
 
@@ -182,7 +181,7 @@ cd project-tracker && git pull && sudo systemctl restart helix
 
 ## Key Dev Notes
 
-See `CLAUDE.md` for patterns, gotchas, branding tokens, and architectural decisions. Key things to know:
+See each module's own `.md` doc (under `app/modules/<feature>/`) and the architecture documentation for patterns, conventions, and key decisions. Key things to know:
 
 - Always resolve the **effective user** via `get_actor()` (not `current_user`) in routes that record actions — the app supports admin emulation mode
 - `project.project_status == 'approved'` is the global lock sentinel — check it at the top of any mutating route

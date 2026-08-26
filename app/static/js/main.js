@@ -295,7 +295,7 @@ function dismissAchievementToast(toast) {
         }
 
         /* "Confirm" — save callback, close first, THEN call.
-           (matches the existing approval modal pattern in CLAUDE.md) */
+           (matches the existing approval modal pattern) */
         btnOk.addEventListener('click', function () {
             var fn = _confirmCallback;
             _confirmCallback = null;       /* clear before calling */

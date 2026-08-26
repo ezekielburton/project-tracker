@@ -77,7 +77,7 @@ def project_stream(project_id):
 @sse_bp.route('/notifications')
 @login_required
 def notifications_stream():
-    # Emulation-aware actor pattern (see CLAUDE.md) — an admin emulating
+    # Emulation-aware actor pattern — an admin emulating
     # another user should get a live stream of THAT user's notifications,
     # matching what /notifications/poll already shows them.
     emulating_id = session.get('emulating_user_id')

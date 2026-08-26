@@ -39,7 +39,7 @@
         if (!modal) return;
         _addCompanyOnSaved = onSaved || null;
         modal.classList.remove('hidden');
-        // Pause polling while the modal is open, per CLAUDE.md's "Polling —
+        // Pause polling while the modal is open, per the "Polling —
         // pause during modals" pattern - without this, the interval reload
         // could yank the page out from under the user mid-edit. Guarded
         // (window.helixPolling &&) because not every page that loads this
@@ -230,7 +230,7 @@
 
         // This is the sibling that gets its "hidden" class toggled by the
         // row's click handler below - same this.nextElementSibling
-        // mechanic CLAUDE.md documents for the project table's expansion
+        // mechanic used for the project table's expansion
         // rows, so a company's contacts are always looked up structurally
         // (via the sibling relationship) rather than by ID, avoiding any
         // duplicate-ID collision between company blocks.

@@ -2,7 +2,7 @@
    ───────────────────────────────────
    Project + deliverable business-hours breakdown page (added 13 Jul
    2026). Own dedicated CSS file per this project's "every new feature
-   gets its own route/JS/CSS" convention — see CLAUDE.md.
+   gets its own route/JS/CSS" convention.
 
    Deliberately doesn't reuse dashboard.css's .dash-row/.dash-tile
    components: this page's rows carry a variable-length list of per-status

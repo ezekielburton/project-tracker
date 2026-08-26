@@ -37,7 +37,7 @@ def index():
 
     # Built as a plain list of dicts, not passed as raw ORM objects, because
     # this gets embedded directly into the page as JSON via |tojson in the
-    # template - see CLAUDE.md's "JS in templates" rule: JSON data always
+    # template, following the "JS in templates" rule: JSON data always
     # goes into a <script> block as a JS constant, never stuffed into an
     # HTML attribute, since Flask's tojson filter doesn't escape " for that
     # context and it silently breaks JSON.parse the moment any field
@@ -149,7 +149,7 @@ def save_company():
             return jsonify({'success': False, 'error': 'A company with this name already exists'}), 400
 
         # created_by=get_actor() (the object), not created_by_id=...id (the
-        # int) - matches the "DB Facts" convention in CLAUDE.md used
+        # int) - matches the "DB Facts" convention used
         # everywhere else a creator relationship is set on a new row.
         client = Client(
             name=name, aliases=aliases,

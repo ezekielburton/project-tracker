@@ -44,7 +44,7 @@ def _format_earned_date(earned_at):
     Formats a UTC earned_at datetime as 'Earned 3 Jun 2026', in Dubai local
     time. Uses the same fixed-offset timezone(timedelta(hours=4)) pattern
     as the dubai_time filter in app/__init__.py (ZoneInfo needs tzdata on
-    Windows, per CLAUDE.md), and builds the "day month year" string by hand
+    Windows), and builds the "day month year" string by hand
     rather than with %-d, which isn't portable to Windows' strftime — same
     reason the birthday tag in profile.html does this manually.
     """
@@ -539,7 +539,7 @@ def save_pinned_achievements():
     on an ordered list of user_achievement_ids sent from the drag-and-drop
     UI. Delete-all-then-recreate rather than diffing — pinned rows carry no
     state worth preserving beyond their order (unlike the Standard Brief
-    Deliverable upsert pattern in CLAUDE.md, which exists specifically to
+    Deliverable upsert pattern, which exists specifically to
     preserve per-row status through an edit), so there's nothing to lose
     by replacing the set wholesale, and it sidesteps any need to reconcile
     adds/removes/reorders as three separate operations.

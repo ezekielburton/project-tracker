@@ -39,8 +39,8 @@ ACHIEVEMENT_UPLOAD_FOLDER = os.path.join('app', 'static', 'achievements')
 ALLOWED_BADGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif'}  # gif included — animated badges may want an animated source image
 
 # The ONLY trigger_event values that actually do anything — every call site
-# in the app that fires check_achievements() is listed in CLAUDE.md's Phase
-# 2 spec. Hardcoded as a dropdown (rather than a free-text field) specifically
+# in the app that fires check_achievements() is one of these. Hardcoded as a
+# dropdown (rather than a free-text field) specifically
 # because the Achievement model's own docstring calls out the risk: "a typo
 # here silently meaning this achievement never fires." A dropdown of exactly
 # these seven makes that typo impossible.
@@ -160,8 +160,8 @@ def update_achievement_category(category_id):
 def delete_achievement_category(category_id):
     """
     Blocks the delete if the category still has achievements in it, rather
-    than cascading — same "hard block, clear error" pattern CLAUDE.md
-    documents for user deletion (e.g. "user is CS Lead ... returns a clear
+    than cascading — the same "hard block, clear error" pattern used for
+    user deletion (e.g. "user is CS Lead ... returns a clear
     error"). Achievement.category_id is NOT NULL, so silently cascading
     would destroy earned-achievement history for every user who'd earned
     something in this category; forcing the admin to move or delete those
@@ -332,7 +332,7 @@ def delete_achievement(achievement_id):
     Deletes the achievement catalogue entry AND every user's progress
     toward it (UserAchievement rows) — there's no meaningful "achievement
     you can't see the definition of but still have progress on" state to
-    preserve. Matches the cascade-then-delete pattern CLAUDE.md documents
+    preserve. Matches the cascade-then-delete pattern used
     for user deletion: clear out dependents first, then the row itself.
     """
     achievement = Achievement.query.get_or_404(achievement_id)

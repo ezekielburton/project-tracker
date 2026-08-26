@@ -7,8 +7,8 @@
 # a change; if it touched one of the watched models, this catches it.
 #
 # Two-hook design, not one, because this codebase calls db.session.flush()
-# constantly mid-request (to get auto-generated IDs before commit — see the
-# DB Facts in CLAUDE.md). By the time a single end-of-transaction hook could
+# constantly mid-request (to get auto-generated IDs before commit). By the
+# time a single end-of-transaction hook could
 # look at session.new/dirty/deleted, anything already flushed earlier in the
 # same request would already be gone from those collections — flushed
 # objects become "clean" and drop out of session.dirty. So:

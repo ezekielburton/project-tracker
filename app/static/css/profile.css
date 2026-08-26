@@ -130,7 +130,7 @@
     flex-shrink: 0;
 }
 
-/* Global h1-h6 are uppercase by default (see CLAUDE.md CSS Facts) —
+/* Global h1-h6 are uppercase by default —
    a person's name shouldn't render in the all-caps display font. */
 .profile-name {
     text-transform: none;

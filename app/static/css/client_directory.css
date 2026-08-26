@@ -94,7 +94,7 @@
 
 /* ── Left panel rows: company (expandable) + contact (nested) ───────────
    Same expand/collapse mechanic as the project table's expansion-row
-   (this.nextElementSibling toggle, per CLAUDE.md's "Expandable rows"
+   (this.nextElementSibling toggle, the "Expandable rows"
    pattern) - .directory-contact-list is the sibling that gets toggled,
    never looked up by ID, so there's no risk of duplicate-ID collisions
    between company blocks the way there would be with getElementById. */
@@ -168,8 +168,8 @@
 }
 
 .directory-detail-header h2 {
-    /* Global h1-h6 { text-transform: uppercase } is overridden here per
-       CLAUDE.md's CSS Facts - a company/contact name should render exactly
+    /* Global h1-h6 { text-transform: uppercase } is overridden here -
+       a company/contact name should render exactly
        as typed, not shouted in caps. */
     text-transform: none;
     letter-spacing: normal;

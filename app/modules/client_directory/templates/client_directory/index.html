@@ -60,7 +60,7 @@
 {% include 'partials/client_directory_modals.html' %}
 
 <script>
-    // Per CLAUDE.md's "JS in templates" rule: embedded data always goes into
+    // Following the "JS in templates" rule: embedded data always goes into
     // a <script> constant, never a tojson'd value inside an HTML attribute -
     // Flask's tojson filter doesn't escape " for that context, so any
     // company/contact field containing a quote character would silently

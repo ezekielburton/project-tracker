@@ -88,9 +88,9 @@ def create_app(config=Config):
     # across dozens of edits — the browser's HTTP cache correctly, and
     # indefinitely, kept serving old CSS/JS, surviving hard refreshes and
     # even brand-new tabs, since the URL genuinely never changed. This is
-    # what caused the 16 Jul 2026 "This Week Load has no styling" saga (see
-    # CLAUDE.md) — the served bytes and the file on disk were both correct
-    # the whole time, only the browser's cached copy of the frozen-URL
+    # what can produce a "stylesheet has no effect after deploy" symptom —
+    # the served bytes and the file on disk are both correct the whole
+    # time, only the browser's cached copy of the frozen-URL
     # response was stale. Confirmed via `git status`/`git rev-parse HEAD`
     # directly: dashboard.css showed as modified/uncommitted while
     # STATIC_VERSION matched HEAD exactly — then confirmed AGAIN after a

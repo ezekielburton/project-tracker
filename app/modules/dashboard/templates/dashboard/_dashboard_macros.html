@@ -269,7 +269,7 @@
    macro call per row instead of copy-pasting at_risk.html's markup into
    a second template. at_risk.html itself is no longer included anywhere
    (My Day/My Week and Overdue/At Risk both moved out of the tab-strip/
-   pinned-card systems into toggle boxes the same day — see CLAUDE.md),
+   pinned-card systems into toggle boxes),
    so this macro is now the ONLY place At Risk rows render from.
 
    `item` is built by _compute_at_risk_projects() in dashboard.py — same
@@ -502,7 +502,7 @@
    showing beyond the name is the project's current status, as a plain
    neutral .dash-action-tag pill — reused as-is (still a live, styled
    class in dashboard.css; it just stopped being dash_due_row()'s own tag
-   when Next Actions was redesigned to reuse that macro, see CLAUDE.md).
+   when Next Actions was redesigned to reuse that macro).
 
    No JS mirror needed — same as At Risk/Clashing Projects, this card's
    row list is fully server-rendered with no fetch-on-toggle, only its
@@ -721,6 +721,6 @@
 
 
 {# dash_deep_dive_project_row() / dash_deep_dive_deliverable_row() —
-   removed 13 Jul 2026 along with the whole deep-dive zone at the bottom of
-   the dashboard (see CLAUDE.md). Check git history around that date if
+   removed along with the whole deep-dive zone at the bottom of
+   the dashboard. Check git history if
    either ever needs resurrecting. #}

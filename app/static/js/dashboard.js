@@ -14,7 +14,7 @@
 // syncs inline max-height to whatever the server rendered as .expanded on
 // this particular load. Event listeners are NOT safe to rerun: attaching
 // document.addEventListener() again on a second run would stack a duplicate
-// handler on top of the first (same class of bug CLAUDE.md's achievements
+// handler on top of the first (same class of bug the achievements
 // system hit with _helixBound). window._dashboardListenersBound guards
 // against that — listeners attach exactly once per page session, ever.
 
@@ -206,7 +206,7 @@
     // _dashLastUpdatedAt resets to Date.now() at page load AND every time
     // refreshDashboardFromSSE() actually runs (see that function, below)
     // — SSE only fires when something genuinely changed server-side
-    // (sse.py's "deliberately dumb doorbell" design, see CLAUDE.md's Live
+    // (sse.py's "deliberately dumb doorbell" design — see the Live
     // Updates section), so every reset really does mean "the data just
     // got fresher", not a cosmetic/fake tick.
     var _dashLastUpdatedAt = Date.now();
@@ -463,7 +463,7 @@
     // /dashboard/api/decisions endpoint returns raised_at as a plain ISO
     // string — the dubai_time filter only runs at Jinja render time, so
     // the client-side re-render has to do its own UTC -> Dubai (UTC+4,
-    // fixed offset, matches CLAUDE.md's DB Facts on why this app uses a
+    // fixed offset — the same reason this app uses a
     // fixed offset instead of ZoneInfo) conversion by hand.
     function formatDubaiTime(isoString) {
         if (!isoString) return '_';
@@ -688,7 +688,7 @@
 
         overlay.classList.remove('hidden');
 
-        // See CLAUDE.md's "Polling — pause during modals" pattern. This is
+        // Follows the "Polling — pause during modals" pattern. This is
         // a harmless no-op on THIS page right now — polling.js doesn't
         // recognise the new dashboard yet (Task #17, the SSE integration
         // chunk, extends it to), so there's no active stream here for
@@ -738,7 +738,7 @@
                 // This modal is a direct submit-then-close flow, not a
                 // "confirm this pending action" one — there's no separate
                 // stored callback to save before closing here, so
-                // CLAUDE.md's "save the callback before calling close"
+                // the "save the callback before calling close"
                 // pitfall doesn't apply. Still closing BEFORE toasting so
                 // the modal is visibly gone the moment the toast appears,
                 // rather than the two happening in a jarring simultaneous
@@ -828,7 +828,7 @@
 
     // Rebuilds the Designer <select> to only the people on the given team
     // — reads from LEADERSHIP_DESIGNERS (dashboard_leadership.html's
-    // page-level {id, name, team} array, see CLAUDE.md's "JS in
+    // page-level {id, name, team} array, per the "JS in
     // templates — JSON data" rule). Called on modal open (for whichever
     // team is selected first) and again on the Team <select>'s own
     // change event.
@@ -1268,8 +1268,8 @@
     // below) landing mid-flight against a manual tab click. This is the
     // one card left where it can actually happen — fetchAndRenderDue()
     // has the identical gap in its own code, but Due's filter is pinned
-    // to a single fixed value now (see its fourth follow-up in
-    // CLAUDE.md), so there's no second filter value left for a race to
+    // to a single fixed value now, so there's no second filter value
+    // left for a race to
     // manifest against there. nextActionsRequestSeq is bumped on every
     // call; a response is only rendered if it's still the most recent
     // request issued when it comes back.
@@ -1883,7 +1883,7 @@
     // this page and calls window.helixDashboardRefresh() every time it
     // fires — it deliberately knows nothing about this dashboard's cards
     // beyond that one global function name, matching sse.py's own
-    // "deliberately dumb doorbell" design (see CLAUDE.md's Live Updates
+    // "deliberately dumb doorbell" design (see the Live Updates
     // section): something changed somewhere, go fetch and figure out what.
     //
     // SCOPE OF WHAT ACTUALLY REFRESHES LIVE HERE — deliberately partial:
@@ -2691,8 +2691,8 @@
             // NOTE: the dashboard's deep-dive zone (Projects/Deliverables
             // tabs at the bottom of the page, including its own "All"/
             // "At Risk" filter chips, deadline-sort pills, and side-by-side
-            // toggle) was removed entirely 13 Jul 2026 — see CLAUDE.md and
-            // git history around that date if any of this needs
+            // toggle) was removed entirely — see git history if any of
+            // this needs
             // resurrecting.
         });
 
