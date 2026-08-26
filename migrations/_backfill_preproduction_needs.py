@@ -12,9 +12,10 @@ overwrites a real decision made after this point.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app import create_app, db
-from app.models import Deliverable
-from app.status_vocabulary import derive_preproduction_needs
+from app import create_app
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Deliverable
+from app.modules.core.shared.lib.status_vocabulary import derive_preproduction_needs
 
 app = create_app()
 

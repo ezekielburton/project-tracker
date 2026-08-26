@@ -1,5 +1,6 @@
-from app import create_app, db
-from app.models import ProjectPosmChannel, ProjectSubmission, ProjectRevision, ProjectCustomer, Project
+from app import create_app
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import ProjectPosmChannel, ProjectSubmission, ProjectRevision, ProjectCustomer, Project
 
 app = create_app()
 

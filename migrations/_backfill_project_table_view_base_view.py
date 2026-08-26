@@ -18,8 +18,9 @@ Safe to run more than once — only touches rows still on the old value.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app import create_app, db
-from app.models import ProjectTableView
+from app import create_app
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import ProjectTableView
 
 app = create_app()
 
