@@ -146,7 +146,7 @@ def create_app(config=Config):
     from app.modules.file_templates.routes.file_templates import file_templates_bp
     from app.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
     from app.modules.client_directory.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
-    from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
+    from app.modules.dashboard.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
     from app.modules.time_tracking.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
     from app.modules.projects.routes.transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
     from app.modules.projects.routes.project_list import project_list_bp # Projects page list

@@ -36,10 +36,9 @@ _DELIVERABLE_PRIORITY = [
 
 def _deliverable_level_action(project):
     """
-    Added M10 (20 Aug 2026), per Ezekiel: the dashboard should keep
-    showing exactly ONE next action per project (never enumerate
-    deliverables in the UI — "that would make the dashboard pointless"),
-    but that one action was silently computed from project.project_status
+    The dashboard shows exactly ONE next action per project — it never
+    enumerates deliverables in the UI. That one action was previously
+    computed from project.project_status
     alone, which doesn't move once a project is actively being worked —
     two deliverables could be in revision and one already back with the
     client and the project would still show whatever generic guidance
@@ -78,10 +77,10 @@ def _deliverable_level_action(project):
 
 def needs_client_approval(project):
     """
-    Added M10 (20 Aug 2026) for the Pending Approval dashboard card,
-    replacing a flat `project.project_status == 'submitted_to_client'`
-    filter that only ever matched Standard briefs. Traced through
-    overlay_submissions_draft_submit_to_client (project_overlay.py): its
+    Backs the Pending Approval dashboard card. A flat
+    `project.project_status == 'submitted_to_client'` filter only ever
+    matched Standard briefs; this instead follows
+    overlay_submissions_draft_submit_to_client (in the overlay): its
     POSM-channel branch sets channel.status = 'submitted_to_client' and
     its C&CM Concept & KV branch sets project.concept_status/kv_status —
     record_project_status(project, 'submitted_to_client', ...) is only
@@ -149,54 +148,46 @@ def get_next_action_owner(project):
 
     # No open flags — fall back to status.
     #
-    # REBUILT 15 Jul 2026, per Ezekiel: "If a project is in internal review -
-    # the next action across all sections should show 'Check Internal
-    # Submission'. If a project is in submitted to client status, the next
-    # action should show 'Follow up with client'." While making that change,
-    # audited this whole map against the ACTUAL current project_status
-    # values (VALID list in projects_detail.py's set_project_status route:
+    # The rule: a project in internal review shows 'Check Internal
+    # Submission'; a project submitted to client shows 'Follow up with
+    # client'. This map was audited against the ACTUAL current project_status
+    # values (the valid set:
     # briefed, in_queue, in_progress, submitted, internal_review,
     # internal_revision, submitted_to_client, revision_in_queue,
     # revision_in_progress, approved, on_hold, awaiting_posm_details) and
     # found this map was built for an OLDER status scheme (awaiting_review /
     # revision_requested / re_submitted — none of which are in the current
     # VALID list at all) that had drifted out of sync with the real
-    # submission flow (see the "Project Submission Routes" flow comment
-    # above upload_submission() in projects_detail.py, and the
-    # record_project_status() call sites across projects_submission.py /
-    # projects_detail.py / projects_approval.py). Any project sitting in
+    # submission flow. Any project sitting in
     # 'briefed', 'internal_revision', 'revision_in_queue', or
     # 'revision_in_progress' was silently falling through to the generic
     # ('cs', 'Check project status') default below — confirmed via grep that
     # none of those four ever matched a status_map key before this rebuild.
     # 'in_queue', 'submitted', 'internal_review', 'internal_revision',
     # 'revision_in_progress', and 'awaiting_posm_details' are no longer SET
-    # anywhere in live code (confirmed again at M10 cutover, 20 Aug 2026 —
-    # grepped every record_project_status() call site across the current
-    # codebase and found none of these six as a literal argument). The
+    # anywhere in live code (no record_project_status() call site passes
+    # these six as a literal argument). The
     # "still reachable via a manual admin status-dropdown override" escape
-    # hatch this comment used to cite is itself gone now — that was
-    # projects_detail.py's set_project_status route, deleted whole with the
-    # old detail page (M10 task #4); there is no surviving way to write an
+    # hatch that used to exist — an admin status-dropdown override — is
+    # gone (the old set_project_status route was deleted with the old
+    # detail page); there is no surviving way to write an
     # arbitrary project_status value anymore, only the fixed literals each
     # overlay route passes to record_project_status(). So these six are
     # fully unreachable through any live code path today — kept anyway,
-    # defensively, purely for pre-M10 historical rows that may still sit at
+    # defensively, purely for historical rows that may still sit at
     # one of these raw values in the database, so a lookup against old data
     # doesn't fall back to the generic default either.
     #
-    # 'handed_to_production' added 18 Aug 2026 — a real status now (see
-    # project_preproduction.py's _cascade_handed_to_production), and was
-    # falling through to the generic default same as the four above before
-    # this rebuild did. Dashboard bug fix same day: this status is now
-    # also excluded from every "active work" list (_scoped_projects et al
-    # in dashboard.py) same as 'approved', so in practice this entry only
+    # 'handed_to_production' is a real status (set by pre-production's
+    # _cascade_handed_to_production). It is also excluded from every
+    # "active work" list (_scoped_projects et al) like 'approved', so in
+    # practice this entry only
     # matters for the active_only=False call sites (e.g. what-changed)
     # that still look a handed-off project's guidance up.
     #
-    # 'pre_production' added at M10 cutover (20 Aug 2026) to match
-    # app/status_vocabulary.py's own 'kept here for completeness in case
-    # that changes' branch for the same raw value — not written anywhere as
+    # 'pre_production' mirrors the shared status vocabulary's own
+    # 'kept for completeness' branch for the same raw value — not written
+    # anywhere as
     # a real project_status today (Standard projects surface Pre-Production
     # per-deliverable instead, via _post_approval_deliverable_status), so
     # this entry is forward-looking only, same reasoning as the six above.
@@ -249,10 +240,8 @@ def guidance_for_viewer(owner_info, viewer):
     returned, which is role-neutral (it just answers "whose turn is it and
     what should they do", regardless of who's looking at it).
 
-    Added 15 Jul 2026, per Ezekiel: "for designers and team leads, they
-    dont need to see the next action that is only for client servicing
-    (e.g follow up with client) it should show no action required." A
-    CS-role action — 'Follow up with client', 'Check Internal Submission',
+    For designers and team leads, a CS-only next action (e.g. 'Follow up
+    with client') shows as no action required. A CS-role action — 'Follow up with client', 'Check Internal Submission',
     'Release files and start production if applicable', 'Unblock project',
     'Add POSM details when available', 'Review work internally', or the
     flag-reply guidance 'Review flag and provide information' — isn't
@@ -319,8 +308,8 @@ def rag_for_deadline(deadline):
     colour based on ONE specific deadline (rather than a whole project's
     nearest deadline) can reuse the exact same thresholds instead of
     re-deriving them separately and risking the two drifting apart. (Originally
-    factored out for the dashboard's deep-dive zone, since removed 13 Jul
-    2026 — see CLAUDE.md; kept as its own function since other callers may
+    factored out for the dashboard's deep-dive zone (since removed); kept
+    as its own function since other callers may
     still want it.)
     """
     from datetime import date
@@ -348,8 +337,7 @@ def get_project_rag(project):
 
 def _clash_severity(deliverables):
     """
-    Classifies a same-designer, same-day group of 2+ deliverables (added
-    10 Jul 2026, per Ezekiel's exact rule):
+    Classifies a same-designer, same-day group of 2+ deliverables:
 
     'clash'     — a real, certain conflict: the group spans MORE THAN ONE
                   PROJECT (a designer can't split themselves across two
