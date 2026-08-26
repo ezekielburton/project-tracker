@@ -922,6 +922,26 @@ def _build_details_context(project, actor):
                 'status_class': css_class,
             })
 
+    # Add Customer (25 Aug 2026, per Ezekiel — a C&CM campaign that expands
+    # to a new customer after submission had no path forward at all; the
+    # customer picker only ever existed in the create-mode draft flow).
+    # Reuses _can_manage_deliverables's permission tier rather than
+    # can_cancel_project — adding a customer immediately creates its own
+    # deliverables surface, so this is closer kin to managing deliverables
+    # than to cancelling the project. Excludes every customer already
+    # linked here, cancelled or not — re-adding a cancelled one goes
+    # through Reactivate above, not a second row for the same customer.
+    can_manage_customers = project.brief_type == 'ccm' and _can_manage_deliverables(project, actor)
+    addable_customers_by_region = {}
+    if can_manage_customers:
+        from app.modules.core.shared.models import Customer
+        linked_customer_ids = {pc.customer_id for pc in project.project_customers}
+        addable_customers_by_region = {
+            region: [c for c in Customer.query.filter_by(region=region).order_by(Customer.name).all()
+                      if c.id not in linked_customer_ids]
+            for region in _CREATE_REGION_ORDER
+        }
+
     # Brief Flags — Details' Flags card covers 'project' plus the
     # 'concept'/'kv' flag types (folded in here rather than a third toggle
     # location —
@@ -986,6 +1006,9 @@ def _build_details_context(project, actor):
         can_cancel_project=can_cancel_project,
         can_toggle_hold=can_toggle_hold,
         customer_rows=customer_rows,
+        can_manage_customers=can_manage_customers,
+        addable_customers_by_region=addable_customers_by_region,
+        region_names=_CREATE_REGION_NAMES,
         project_open_flags=project_open_flags,
         can_manage_flags=can_manage_flags,
         client_options=client_options,
@@ -2014,6 +2037,82 @@ def overlay_uncancel_customer(project_customer_id):
         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
     )
     return jsonify({'success': True})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/customers/add', methods=['POST'])
+@login_required
+def add_project_customer(project_id):
+    """Adds a new customer to an already-submitted C&CM project (25 Aug
+    2026, per Ezekiel — a campaign that expands to a new customer after
+    go-live had no path forward except cancelling and recreating the whole
+    project; the customer picker only ever existed in the create-mode
+    draft flow, see overlay_create_draft()'s 'customer_ids' handling
+    above). Reuses _can_manage_deliverables's permission tier rather than
+    can_cancel_project — see _build_details_context's can_manage_customers
+    for why.
+    """
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import Customer, ProjectCustomer, ProjectRegion
+    from app.modules.core.shared.lib.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+
+    if project.brief_type != 'ccm':
+        return jsonify({'success': False, 'error': 'Only C&CM projects have customers.'}), 400
+    if not _can_manage_deliverables(project, actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to add a customer to this project.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    customer_id = data.get('customer_id')
+    customer = Customer.query.get(int(customer_id)) if customer_id else None
+    if not customer:
+        return jsonify({'success': False, 'error': 'Select a customer.'}), 400
+
+    existing = ProjectCustomer.query.filter_by(project_id=project.id, customer_id=customer.id).first()
+    if existing:
+        if existing.cancelled:
+            return jsonify({'success': False, 'error': f'{customer.name} was already on this project and was cancelled — use Reactivate instead of adding it again.'}), 400
+        return jsonify({'success': False, 'error': f'{customer.name} is already on this project.'}), 400
+
+    pc = ProjectCustomer(project_id=project.id, customer_id=customer.id)
+    db.session.add(pc)
+
+    # Keep ProjectRegion synced the same way the create-mode picker does —
+    # _build_ccm_design_folders() (nas.py) drives its Region/Customer
+    # folder tree off ProjectRegion, not off project_customers directly.
+    if customer.region and not ProjectRegion.query.filter_by(project_id=project.id, region=customer.region).first():
+        db.session.add(ProjectRegion(project_id=project.id, region=customer.region))
+
+    db.session.flush()
+
+    # Self-heals this customer's own POSM submission channel the same way
+    # opening the Submissions tab already does for every customer — see
+    # ensure_posm_channels()'s docstring. Scoped to just the new row here
+    # (rather than rebuilding every region's full set) since that's the
+    # only thing that's actually new.
+    if customer.region:
+        ensure_posm_channels(project, {customer.region: [pc]})
+
+    db.session.commit()
+
+    log_activity(
+        'customer_added',
+        f'{actor.name} added "{customer.name}" to "{project.name}"',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+
+    # Same background NAS folder build every other customer-affecting
+    # mutation on a live project uses (see overlay_create_finalize above)
+    # — idempotent, so this just adds the new customer's folder without
+    # touching anything else in the tree.
+    from flask import current_app as _app
+    from app.modules.core.shared.services.nas import _run_in_background, create_project_folders
+    _pid = project.id
+    _app_obj = _app._get_current_object()
+    _run_in_background(_app_obj, lambda: create_project_folders(Project.query.get(_pid)))
+
+    return jsonify({'success': True, 'project_customer_id': pc.id, 'customer_name': customer.name})
 
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/nas-folder-link')

@@ -1547,6 +1547,23 @@ button.overlay-chat-reaction-chip:hover {
     margin-bottom: var(--space-2);
 }
 
+/* Add Customer (25 Aug 2026) — sits above the Customers table inside the
+   same card, so it needs its own bottom margin to separate from the table
+   header below, same spacing .overlay-customer-cancel-form uses to
+   separate a row's reveal-form from whatever comes after it. The toggle
+   button's own .overlay-file-action-btn styling is untouched; only the
+   wrapper needs the gap since the select/actions inside reuse
+   .overlay-flag-revision-form, which already spaces itself from the
+   toggle button above it via margin-top. */
+.overlay-customer-add-row {
+    margin-bottom: var(--space-3);
+}
+
+.overlay-customer-add-form select {
+    display: block;
+    width: 100%;
+}
+
 .overlay-notes {
     margin-top: 1rem;
     display: flex;

@@ -1,6 +1,6 @@
 {% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
-{# Flags + Cancel Customer toggle share one row (23 Aug 2026, per Ezekiel —
+{# Flags + Customers toggle share one row (23 Aug 2026, per Ezekiel —
 "a cancel customer button next to flag history - blue. becomes cancel
 when pressed to go back"). _flag_project_panel.html itself is untouched —
 it's a shared partial also used per-customer on the Deliverables tab, so
@@ -10,8 +10,16 @@ copies. Clicking it swaps the Properties/Design Leads/Reference Files
 body (#overlay-details-main-view) out for the Customers card
 (#overlay-details-cancel-view) in place, same "Edit -> Save/Cancel" swap
 vocabulary the overlay header's own Edit button already uses — the button
-reads "Cancel Customer" while showing the normal view, and "Back" while
-the Customers card is showing. See project_details_card.js. #}
+reads "Manage Customers" while showing the normal view, and "Back" while
+the Customers card is showing.
+
+Relabelled from "Cancel Customer" 25 Aug 2026 (per Ezekiel) when Add
+Customer landed in the same card below — the toggle now opens a panel
+that can do more than cancel, so the button needed to say so. Gate
+widened to match: it used to require customer_rows (nothing to cancel
+without at least one row), but can_manage_customers alone is enough now,
+since a project can reach here with zero customers and still need to add
+the first one. See project_details_card.js. #}
 <div class="overlay-details-grid">
     <div class="overlay-card-full overlay-ccm-top-row">
         <div class="overlay-ccm-top-row-flags">
@@ -19,11 +27,11 @@ the Customers card is showing. See project_details_card.js. #}
             {% set flags = project_open_flags %}
             {% include "project_overlay/_flag_project_panel.html" %}
         </div>
-        {% if can_cancel_project and customer_rows %}
+        {% if (can_cancel_project and customer_rows) or can_manage_customers %}
         <button type="button"
             class="overlay-file-action-btn overlay-file-action-btn--action overlay-cancel-customer-toggle-btn"
-            id="overlay-cancel-customer-toggle-btn" data-label-default="Cancel Customer"
-            data-label-active="Back">Cancel Customer</button>
+            id="overlay-cancel-customer-toggle-btn" data-label-default="Manage Customers"
+            data-label-active="Back">Manage Customers</button>
         {% endif %}
     </div>
 </div>
@@ -142,17 +150,57 @@ the Customers card is showing. See project_details_card.js. #}
 
 {# Customers (23 Aug 2026, per Ezekiel — "we need a way to cancel a
 customer. Cancelling a customer freezes its state for invoicing -> it can
-be undone"). Swapped in over #overlay-details-main-view by the Cancel
-Customer toggle button above, not shown alongside it — every customer on
+be undone"). Swapped in over #overlay-details-main-view by the Manage
+Customers toggle button above, not shown alongside it — every customer on
 the project, cancelled or not, unlike the Deliverables/Submissions/Pre-
 Production scope-selects which all drop a cancelled customer from their
 list (that's what makes cancelling a "freeze" everywhere else). This is
-the one place a cancelled customer can still be seen and reactivated. #}
-{% if customer_rows %}
+the one place a cancelled customer can still be seen and reactivated.
+
+Add Customer (25 Aug 2026, per Ezekiel — see can_manage_customers/
+addable_customers_by_region in _build_details_context() for the
+permission/data behind this): a customer picked from every Customer NOT
+already linked to this project, cancelled or not — re-adding a cancelled
+one goes through Reactivate below, not this form. Gate widened from
+customer_rows alone to (customer_rows or can_manage_customers), since a
+project can land here with zero customers and still need to add its
+first one. #}
+{% if customer_rows or can_manage_customers %}
 <div id="overlay-details-cancel-view" class="is-hidden">
     <div class="overlay-details-grid">
         <div class="overlay-card-full">
             {% call card('Customers') %}
+            {% if can_manage_customers %}
+            <div class="overlay-customer-add-row">
+                <button type="button"
+                    class="overlay-file-action-btn overlay-file-action-btn--action overlay-customer-add-toggle-btn"
+                    id="overlay-customer-add-toggle-btn">+ Add Customer</button>
+                <div class="overlay-flag-revision-form is-hidden overlay-customer-add-form"
+                    id="overlay-customer-add-form">
+                    <select class="overlay-mark-approved-note" id="overlay-customer-add-select">
+                        <option value="">Select a customer…</option>
+                        {% for region_key in ['uae', 'kuwait', 'qatar', 'bahrain', 'oman'] %}
+                        {% set customers = addable_customers_by_region.get(region_key, []) %}
+                        {% if customers %}
+                        <optgroup label="{{ region_names[region_key] }}">
+                            {% for c in customers %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                    <span class="overlay-flag-revision-error hidden" id="overlay-customer-add-error"></span>
+                    <div class="overlay-flag-revision-form-actions">
+                        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                            id="overlay-customer-add-confirm">Add Customer</button>
+                        <button type="button" class="overlay-file-action-btn"
+                            id="overlay-customer-add-cancel">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% if customer_rows %}
             <div class="overlay-designer-table overlay-customer-table">
                 <div class="overlay-designer-table-header overlay-customer-table-header">
                     <span>Customer</span>
@@ -205,6 +253,7 @@ the one place a cancelled customer can still be seen and reactivated. #}
                 </div>
                 {% endfor %}
             </div>
+            {% endif %}
             {% endcall %}
         </div>
     </div>
