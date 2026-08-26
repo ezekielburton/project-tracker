@@ -24,7 +24,7 @@
     margin: 0.75rem 0 1rem;
 }
 
-/* Reuses the same visual language as .team-tag-btn (CLAUDE.md's documented
+/* Reuses the same visual language as .team-tag-btn (the documented
    JS-toggled pill pattern) rather than inventing a new tab style — quiet
    background when inactive, filled when active. */
 .achievement-tab-btn {
@@ -150,7 +150,7 @@
     font-size: 0.9rem;
     margin: 0 0 0.6rem;
     /* Category headings are a sub-heading inside an already-quiet card —
-       CLAUDE.md's global h1-h6 uppercase rule is too heavy here. */
+       the global h1-h6 uppercase rule is too heavy here. */
     text-transform: none;
     letter-spacing: normal;
     font-family: var(--font-body);

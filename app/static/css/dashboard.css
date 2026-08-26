@@ -4,8 +4,8 @@
    (--tangerine/--sandstone/--pine/--rose/--canary, .team-tag-btn for pills,
    .modal-overlay/.modal for the Flag to Management modal) — no new design
    language. Used to also style a "deep-dive zone" (Projects/Deliverables
-   tabs at the bottom of the page) — removed entirely 13 Jul 2026, see
-   CLAUDE.md and git history around that date. */
+   tabs at the bottom of the page) — removed entirely, see
+   git history. */
 
 /* ══════════════════════════════════════════════════════════════════════
    CS-only redesigned dashboard (added 16 Jul 2026 — dashboard_cs.html).
@@ -335,7 +335,7 @@
 }
 
 /* text-transform/letter-spacing reset — h1-h6 are globally uppercased
-   (see CLAUDE.md's CSS Facts) and this should read as a normal title. */
+   and this should read as a normal title. */
 .dash-priority-card-title {
     font-family: var(--font-body);
     font-size: 1.15rem;
@@ -1022,8 +1022,8 @@
 
 /* .dash-card-body-inner is always nested inside .dash-card-body-content
    now (the mode=None static-card markup that used to also render this
-   class directly was removed in the 15 Jul 2026 tab-strip redesign — see
-   CLAUDE.md), so there's just one rule instead of a base + override pair. */
+   class directly was removed in the tab-strip redesign), so there's just
+   one rule instead of a base + override pair. */
 .dash-card-body-inner {
     padding: 1.4rem;
 }
@@ -1279,7 +1279,7 @@
    the rest of the panel's content, no new JS needed (same "let the
    existing mechanic do it" pattern used for "open by default"/"hidden
    until a tab is selected" elsewhere on this page). h1-h6 are globally
-   uppercased (see CLAUDE.md's CSS Facts) so this is a plain div, not a
+   uppercased so this is a plain div, not a
    heading element — text-transform/letter-spacing are reset explicitly
    anyway in case that global rule ever changes shape. */
 .dash-toggle-box-view-title {
@@ -2073,8 +2073,7 @@ a.dash-row:hover {
    Shape matches .dash-owner-tag/.dash-action-tag/.dash-risk-tag's shared
    small-pill recipe (mono font, tight padding, rounded) rather than
    .rag-badge (too wide/uppercase for a sentence-length tag like "Waiting
-   since: 13 Jul") — see CLAUDE.md's note on why .rag-badge was rejected
-   here. Colour-coded via item.waiting_color ('red'/'amber' — see
+   since: 13 Jul"). Colour-coded via item.waiting_color ('red'/'amber' — see
    _compute_decisions()/_compute_next_actions()'s docstrings in
    dashboard.py for the exact classification rules): red reuses the same
    deepened #E60000 every other "something's actually wrong" tag on this

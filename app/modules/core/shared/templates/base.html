@@ -1,0 +1,1211 @@
+{% from '_macros.html' import user_avatar_visual %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}One Vitamin Platform{% endblock %}</title>
+    <link rel="icon" type="image/png" href="static/images/favicon.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/blog.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/feedback.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wiki.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/quill/1.3.7/quill.snow.min.css?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css?v={{ config.STATIC_VERSION }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/preview.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/achievements.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/drag-drop.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/file-templates.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/client_directory.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/time_tracking.css') }}?v={{ config.STATIC_VERSION }}">
+    {# shared.css/project_list.css/project_overlay.css load globally, same as
+    blog.css/feedback.css above and for the same reason — SPA navigation
+    (sidebar.js's navigateTo) strips everything outside <main id="main-content">
+    out of the response (see spa_strip_response in app/__init__.py), which
+    includes the whole <head>. A page-specific {% block extra_css %} only
+    ever renders on a real full page load, so a stylesheet declared there
+    silently never loads on a browser tab that reaches this page via SPA nav
+    instead — exactly what was happening on the Projects page until this. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shared.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_list.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
+    {% block extra_css %}{% endblock %}
+
+    {# Local-dev safety net: the Werkzeug reloader restarting mid-session (a
+       code edit while someone's browsing) leaves a split-second window where
+       the old process has died and the new one isn't listening yet. A
+       stylesheet <link> request that races that window fails outright, and
+       browsers don't retry a failed stylesheet load on their own — the page
+       renders with correct HTML but zero CSS, which reads as "the whole page
+       broke" even though it's just a transient timing miss. The script below
+       reloads once on such a failure. Scoped to same-origin /static/
+       stylesheets only (a flaky CDN hiccup on the Quill/Cropper <link>s above
+       shouldn't trigger a reload), and time-windowed so it protects across
+       multiple restarts in a session but won't reload-loop if a stylesheet is
+       genuinely broken rather than just racing a restart. #}
+    <script>
+        (function () {
+            var FLAG = 'helix_css_reload_at';
+            var last = parseInt(sessionStorage.getItem(FLAG) || '0', 10);
+            document.querySelectorAll('link[rel="stylesheet"][href^="/static/"]').forEach(function (link) {
+                link.addEventListener('error', function () {
+                    var now = Date.now();
+                    if (now - last < 5000) return; // already tried a reload for this in the last 5s - avoid a loop
+                    sessionStorage.setItem(FLAG, String(now));
+                    location.reload();
+                });
+            });
+        })();
+    </script>
+
+</head>
+
+<script>
+    var HELIX_VERSION = {{ config.STATIC_VERSION | tojson }};
+</script>
+
+{# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}                      
+
+<body class="{% if current_user.is_authenticated %}has-sidebar{% endif %}">
+
+    {% if current_user.is_authenticated %}
+
+    {# ─────────────────────────────────────────────
+    SIDEBAR
+    Default state: minimized (icon-only, ~90px).
+    Expands on hover OR when sidebar--pinned class is present.
+    Pin state is toggled by JS and saved to localStorage.
+    ───────────────────────────────────────────── #}
+    <aside class="sidebar" id="sidebar">
+
+        {# Header: logo + pin button #}
+    <div class="sidebar-header">
+        <div class="sidebar-logo">
+            <span class="sidebar-logo-min">V</span>
+            <span class="sidebar-logo-max">One Vitamin Platform</span>
+        </div>
+        <div class="sidebar-header-actions">
+            {# Expand/collapse toggle — always visible #}
+            <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Expand sidebar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                </svg>
+            </button>
+            {# Pin button — only visible when expanded #}
+            <button type="button" class="sidebar-pin-btn" id="sidebar-pin-btn" title="Pin sidebar">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="17" x2="12" y2="22" />
+                    <path
+                        d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+        <nav class="sidebar-nav">
+
+            {# ── SECTION 1: Internal Tools ── #}
+            <div class="sidebar-section">
+                <span class="sidebar-section-label">Internal Tools</span>
+                <div class="sidebar-grid">
+
+                            {# Dashboard link — no role gate, every role gets it,
+                               same as Projects/Wiki below. #}
+                            <a href="{{ url_for('projects.index') }}" class="sidebar-item sidebar-item--nav"
+                                data-link="dashboard" title="Dashboard">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                    <polyline points="9 22 9 12 15 12 15 22" />
+                                </svg>
+                                <span class="sidebar-item-label">Dashboard</span>
+                            </a>
+
+                            {# Projects — internal nav link, JS intercepts and loads without refresh #}
+                            <a href="{{ url_for('project_list.index') }}" class="sidebar-item sidebar-item--nav" data-link="projects"
+                                title="Projects">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path
+                                        d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                </svg>
+                                <span class="sidebar-item-label">Projects</span>
+                            </a>
+
+                            {# File Storage — external link, opens NAS in new tab #}
+                            <a href="http://quickconnect.to/vitaminNAS26/drive" target="_blank"
+                                class="sidebar-item sidebar-item--external" data-link="file-storage"
+                                title="File Storage">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                                    <line x1="6" y1="6" x2="6.01" y2="6" />
+                                    <line x1="6" y1="18" x2="6.01" y2="18" />
+                                </svg>
+                                <span class="sidebar-item-label">File Storage</span>
+                            </a>
+
+                            {# Wiki — internal knowledge base #}
+                            <a href="{{ url_for('wiki.index') }}" class="sidebar-item sidebar-item--nav" data-link="wiki" title="Wiki">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                                </svg>
+                                <span class="sidebar-item-label">Wiki</span>
+                            </a>
+
+                            {# Admin Panel — admin only, opens the slide-out panel #}
+                            {% if current_user.role == 'admin' %}
+                            <button type="button" class="sidebar-item" data-link="admin" title="Admin Panel"
+                                onclick="event.stopPropagation(); document.getElementById('admin-panel-trigger').click()">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <circle cx="12" cy="8" r="4" />
+                                    <path d="M20 21a8 8 0 1 0-16 0" />
+                                </svg>
+                                <span class="sidebar-item-label">Admin Panel</span>
+                            </button>
+                            {% endif %}
+
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            {# ── SECTION 2: External Tools ── #}
+            <div class="sidebar-section">
+                <span class="sidebar-section-label">External Tools</span>
+                <div class="sidebar-grid">
+
+                    <a href="https://slides.google.com" target="_blank" class="sidebar-item sidebar-item--external"
+                        data-link="google-slides" title="Google Slides">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                            <path d="M8 21h8" />
+                            <path d="M12 17v4" />
+                        </svg>
+                        <span class="sidebar-item-label">Google Slides</span>
+                    </a>
+
+                    <a href="https://www.office.com" target="_blank" class="sidebar-item sidebar-item--external"
+                        data-link="microsoft-365" title="Microsoft 365">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                        </svg>
+                        <span class="sidebar-item-label">Microsoft 365</span>
+                    </a>
+
+                    <a href="https://onedrive.live.com" target="_blank" class="sidebar-item sidebar-item--external"
+                        data-link="onedrive" title="OneDrive">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+                        </svg>
+                        <span class="sidebar-item-label">OneDrive</span>
+                    </a>
+
+                    <a href="https://magnific.ai" target="_blank" class="sidebar-item sidebar-item--external"
+                        data-link="magnific" title="Magnific">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            <line x1="11" y1="8" x2="11" y2="14" />
+                            <line x1="8" y1="11" x2="14" y2="11" />
+                        </svg>
+                        <span class="sidebar-item-label">Magnific</span>
+                    </a>
+
+                    <a href="https://www.shutterstock.com" target="_blank" class="sidebar-item sidebar-item--external"
+                        data-link="shutterstock" title="Shutterstock">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                            <circle cx="12" cy="13" r="4" />
+                        </svg>
+                        <span class="sidebar-item-label">Shutterstock</span>
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            {# ── SECTION 3: Directories (all unlinked — features not yet built) ── #}
+            <div class="sidebar-section">
+                <span class="sidebar-section-label">Directories</span>
+                <div class="sidebar-grid">
+
+                    <span class="sidebar-item sidebar-item--unlinked" data-link="color-directory"
+                        title="Color Directory">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+                            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+                            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+                            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+                            <path
+                                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.` 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+                        </svg>
+                        <span class="sidebar-item-label">Color Directory</span>
+                    </span>
+
+                    {# Client Directory sidebar link — an internal nav link that JS intercepts
+                       to load without a full refresh, the same pattern as the Wiki and
+                       File Templates links above. #}
+                    <a href="{{ url_for('client_directory.index') }}" class="sidebar-item sidebar-item--nav"
+                        data-link="client-directory" title="Client Directory">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        <span class="sidebar-item-label">Client Directory</span>
+                    </a>
+
+                    <span class="sidebar-item sidebar-item--unlinked" data-link="production-directory"
+                        title="Production Directory">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="4" y1="21" x2="4" y2="14" />
+                            <line x1="4" y1="10" x2="4" y2="3" />
+                            <line x1="12" y1="21" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12" y2="3" />
+                            <line x1="20" y1="21" x2="20" y2="16" />
+                            <line x1="20" y1="12" x2="20" y2="3" />
+                            <line x1="1" y1="14" x2="7" y2="14" />
+                            <line x1="9" y1="8" x2="15" y2="8" />
+                            <line x1="17" y1="16" x2="23" y2="16" />
+                        </svg>
+                        <span class="sidebar-item-label">Production Directory</span>
+                    </span>
+
+                    <a href="{{ url_for('file_templates.index') }}" class="sidebar-item sidebar-item--nav" data-link="file-templates"
+                        title="File Templates">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <path d="M14 2v6h6" />
+                        </svg>
+                        <span class="sidebar-item-label">File Templates</span>
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            {# ── SECTION 4: Studio (all unlinked — features built across v1.2-v1.3) ── #}
+            <div class="sidebar-section">
+                <span class="sidebar-section-label">Studio</span>
+                <div class="sidebar-grid">
+
+                    <a href="{{ url_for('feedback.bug_reports') }}" class="sidebar-item sidebar-item--nav"
+                        data-link="bug-reporting" title="Bug Reporting">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="8" y="6" width="8" height="12" rx="4" />
+                            <path d="m19 7-3 2" />
+                            <path d="m5 7 3 2" />
+                            <path d="m19 17-3-2" />
+                            <path d="m5 17 3-2" />
+                            <path d="M20 12h-4" />
+                            <path d="M4 12h4" />
+                        </svg>
+                        <span class="sidebar-item-label">Bug Reporting</span>
+                    </a>
+
+                    <a href="{{ url_for('feedback.feature_requests') }}" class="sidebar-item sidebar-item--nav"
+                        data-link="feature-request" title="Feature Requests">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21h6" />
+                            <path
+                                d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
+                        </svg>
+                        <span class="sidebar-item-label">Feature Requests</span>
+                    </a>
+
+                    <a href="{{ url_for('blog.index') }}" class="sidebar-item sidebar-item--nav" data-link="update-blog"
+                        title="App Update Blog">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
+                        </svg>
+                        <span class="sidebar-item-label">App Update Blog</span>
+                    </a>
+
+                    {# Design Outing Board — visible to designers, team leads, and admin.
+                       Rendered sidebar-item--unlinked (greyed out / non-clickable) for
+                       everyone it's shown to. #}
+                    {% if effective_user.role in ['designer', 'team_lead', 'admin'] %}
+                    <span class="sidebar-item sidebar-item--unlinked" data-link="outing-board"
+                        title="Design Outing Board">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                            <circle cx="12" cy="10" r="3" />
+                        </svg>
+                        <span class="sidebar-item-label">Design Outing Board</span>
+                    </span>
+                    {% endif %}
+
+                    <span class="sidebar-item sidebar-item--unlinked" data-link="birthday-calendar"
+                        title="Birthday Calendar">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 12 20 22 4 22 4 12" />
+                            <rect x="2" y="7" width="20" height="5" />
+                            <path d="M12 22V7" />
+                            <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+                            <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+                        </svg>
+                        <span class="sidebar-item-label">Birthday Calendar</span>
+                    </span>
+
+                    <span class="sidebar-item sidebar-item--unlinked" data-link="raise-issue" title="Raise an Issue">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                        <span class="sidebar-item-label">Raise an Issue</span>
+                    </span>
+
+                </div>
+            </div>
+
+        </nav>
+    </aside>
+
+    {# Expand tab — fixed to the right edge of the minimised sidebar.
+    Hidden once expanded. Clicking it triggers sidebar expansion via JS. #}
+    <button type="button" id="sidebar-expand-tab" class="sidebar-expand-tab" title="Expand sidebar">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+        </svg>
+    </button>
+
+    {# ─────────────────────────────────────────────
+    TOP-RIGHT FLOATING BAR
+    Fixed to viewport top-right. Contains admin trigger,
+    notification bell, and account menu — formerly in the navbar.
+    ───────────────────────────────────────────── #}
+    <div class="topbar-right" id="topbar-right">
+
+        {% if current_user.role == 'admin' %}
+        <button type="button" id="admin-panel-trigger" class="topbar-btn" title="Admin Panel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+            </svg>
+        </button>
+        {% endif %}
+
+        <button type="button" id="notification-bell" class="topbar-btn nav-bell">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {% if unread_count > 0 %}
+            <span class="bell-badge" id="notif-unread-badge">{{ unread_count }}</span>
+            {% endif %}
+        </button>
+
+        <div class="account-menu">
+            <button type="button" id="account-trigger" class="account-trigger topbar-btn">
+                {{ user_avatar_visual(current_user, 'profile') }}
+                <span class="account-name">{{ current_user.name.split()[0] }}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+            <div id="account-dropdown" class="account-dropdown hidden">
+                <a href="{{ url_for('profile.view') }}" class="account-dropdown-item sidebar-item--nav">Profile</a>
+                <a href="{{ url_for('auth.logout') }}" class="account-dropdown-item logout">Logout</a>
+            </div>
+        </div>
+
+    </div>
+
+    {% endif %}{# end current_user.is_authenticated — sidebar + topbar #}
+
+
+    {% if is_emulating %}
+    <div class="emulation-badge">
+        <span class="emulation-badge-label">Viewing as</span>
+        <button type="button" id="emulation-badge-trigger" class="emulation-badge-trigger">
+            <strong class="emulation-badge-name">{{ effective_user.name }}</strong>
+            <span class="emulation-badge-role">{{ effective_user.role }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </button>
+        <div id="emulation-badge-dropdown" class="emulation-badge-dropdown hidden">
+            <input type="text" id="badge-user-search" placeholder="Search users..." class="badge-user-search-input">
+            <div id="badge-user-list" class="badge-user-list"></div>
+        </div>
+        <button type="button" id="exit-emulation-btn" class="emulation-badge-exit">Exit</button>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_authenticated %}
+    <aside id="notification-panel" class="notification-panel hidden">
+        <div class="notification-panel-header">
+            <button type="button" id="close-notifications" aria-label="Close notifications">&gt;</button>
+            <span class="notification-panel-title">Notifications</span>
+            <div class="notification-panel-toggle dashboard-toggle">
+                <button type="button" id="btn-notif-inbox" class="toggle-btn active">Inbox</button>
+                <button type="button" id="btn-notif-archived" class="toggle-btn">Archived</button>
+            </div>
+        </div>
+
+        <div id="notif-inbox-view" class="notification-panel-body">
+            {% if user_notifications %}
+            <div class="archived-toolbar">
+                {% if unread_count > 0 %}
+                <button type="button" id="inbox-mark-all-read-btn" class="archived-select-btn">Mark all as read</button>
+                {% endif %}
+                <button type="button" id="inbox-archive-all-btn" class="archived-select-btn">Archive All</button>
+            </div>
+            {% for notification in user_notifications %}
+            <div class="notification-item {% if not notification.is_read %}unread{% endif %}"
+                data-id="{{ notification.id }}">
+                <div class="notification-content">
+                    <p class="notification-message">{{ notification.message }}</p>
+                    <span class="notification-time">{{ notification.created_at | dubai_time }}</span>
+                    {% if notification.notification_type == 'edit_access_requested' and notification.edit_access_request_id %}
+                    {# Request Editing Access (26 Aug 2026, per Ezekiel) — the
+                    only notification type with an action beyond mark-read/
+                    navigate. edit_access_request_id is attached server-side
+                    in inject_notifications() (app/__init__.py) and is only
+                    ever set while the request is still pending — once
+                    decided (from here or, in the future, elsewhere) it's
+                    None and these buttons stop rendering on refresh. #}
+                    <div class="notification-inline-actions">
+                        <button type="button" class="notification-action-btn notification-action-btn--approve"
+                            data-request-id="{{ notification.edit_access_request_id }}"
+                            data-decision="approve">Approve</button>
+                        <button type="button" class="notification-action-btn notification-action-btn--deny"
+                            data-request-id="{{ notification.edit_access_request_id }}"
+                            data-decision="deny">Deny</button>
+                    </div>
+                    {% endif %}
+                </div>
+                <button type="button" class="notification-mark-read-btn" data-id="{{ notification.id }}"
+                    title="Mark as read">✓</button>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="no-notifications">No notifications</p>
+            {% endif %}
+        </div>
+
+        <div id="notif-archived-view" class="notification-panel-body hidden">
+            {% if archived_notifications %}
+            <div class="archived-toolbar">
+                <button type="button" id="archived-remove-btn" class="archived-remove-btn hidden">Remove</button>
+                <button type="button" id="archived-delete-all-btn" class="archived-remove-btn">Delete All</button>
+                <button type="button" id="archived-select-btn" class="archived-select-btn">Select</button>
+            </div>
+            {% for notification in archived_notifications %}
+            <div class="notification-item notification-item--archived" data-id="{{ notification.id }}">
+                <input type="checkbox" class="notif-checkbox hidden" value="{{ notification.id }}">
+                <div class="notification-content">
+                    <p class="notification-message">{{ notification.message }}</p>
+                    <span class="notification-time">{{ notification.created_at | dubai_time }}</span>
+                </div>
+                <button type="button" class="notification-restore-btn" data-id="{{ notification.id }}"
+                    title="Restore to inbox">↩</button>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="no-notifications">No archived notifications</p>
+            {% endif %}
+        </div>
+    </aside>
+
+    {% if current_user.role == 'admin' %}
+    <aside id="admin-panel" class="admin-panel hidden">
+        <div class="admin-panel-header">
+            <span class="admin-panel-title">Admin Panel</span>
+            <button type="button" id="close-admin-panel" aria-label="Close">&lt;</button>
+        </div>
+        <div class="admin-nav-grid">
+            <button type="button" class="admin-nav-btn active" data-section="emulate">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M20 21a8 8 0 1 0-16 0" />
+                    <path d="M17 16l2 2 2-2" />
+                    <path d="M19 18V13" />
+                </svg>
+                <span>Emulate User</span>
+            </button>
+            <button type="button" class="admin-nav-btn" data-section="projects">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    <line x1="12" y1="11" x2="12" y2="17" />
+                    <line x1="9" y1="14" x2="15" y2="14" />
+                </svg>
+                <span>Project Tools</span>
+            </button>
+            <button type="button" class="admin-nav-btn" data-section="accounts">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <span>Account Tools</span>
+            </button>
+            <button type="button" class="admin-nav-btn" data-section="activity">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                </svg>
+                <span>Activity Log</span>
+            </button>
+            <button type="button" class="admin-nav-btn" data-section="sounds">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 18V5l12-2v13" />
+                    <circle cx="6" cy="18" r="3" />
+                    <circle cx="18" cy="16" r="3" />
+                </svg>
+                <span>Notification Sounds</span>
+            </button>
+            {# Phase 7 of the achievement system — new nav entry, same shape as every other admin-nav-btn above. #}
+            <button type="button" class="admin-nav-btn" data-section="achievements">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="6" />
+                    <path d="M8.5 13.5 7 22l5-3 5 3-1.5-8.5" />
+                </svg>
+                <span>Achievements</span>
+            </button>
+        </div>
+
+        <div class="admin-panel-body">
+            <div class="admin-section" id="admin-section-emulate">
+                <input type="text" id="emulate-search" class="form-input" placeholder="Search users...">
+                <div id="emulate-user-list" class="emulate-user-list"></div>
+            </div>
+            <div class="admin-section hidden" id="admin-section-projects">
+                <div class="pt-tabs">
+                    <button class="pt-tab-btn active" data-pt="clients">Clients</button>
+                    <button class="pt-tab-btn" data-pt="customers">Customers</button>
+                    <button class="pt-tab-btn" data-pt="projects">Projects</button>
+                    <button class="pt-tab-btn" data-pt="drafts">Drafts</button>
+                    <button class="pt-tab-btn" data-pt="deliverables">Del. Types</button>
+                    <button class="pt-tab-btn" data-pt="design-types">Design Types</button>
+                    <button class="pt-tab-btn" data-pt="design-directions">Directions</button>
+                    <button class="pt-tab-btn" data-pt="job-numbers">Job #s</button>
+                </div>
+                <div class="pt-panel" id="pt-panel-clients">
+                    <button type="button" class="accounts-add-btn" id="pt-add-client-toggle">+ Add Client</button>
+                    <form id="pt-add-client-form" class="add-user-form hidden">
+                        <input type="text" id="pt-new-client-name" class="form-input" placeholder="Client name">
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="pt-add-client-cancel">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="pt-clients-list" class="accounts-user-list"></div>
+                </div>
+                <div class="pt-panel hidden" id="pt-panel-customers">
+                    <button type="button" class="accounts-add-btn" id="pt-add-customer-toggle">+ Add Customer</button>
+                    <form id="pt-add-customer-form" class="add-user-form hidden">
+                        <input type="text" id="pt-new-customer-name" class="form-input" placeholder="Customer name">
+                        <select id="pt-new-customer-region" class="form-input">
+                            <option value="">Select region...</option>
+                            <option value="uae">UAE</option>
+                            <option value="kuwait">Kuwait</option>
+                            <option value="qatar">Qatar</option>
+                            <option value="bahrain">Bahrain</option>
+                            <option value="oman">Oman</option>
+                        </select>
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="pt-add-customer-cancel">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="pt-customers-list" class="accounts-user-list"></div>
+                </div>
+                <div class="pt-panel hidden" id="pt-panel-projects">
+                    {# Repointed 18 Aug 2026 — was url_for('brief.drafts'), the old
+                       create-flow's drafts/entry page, now retired (task #67). The
+                       new create flow lives entirely on the Projects list page
+                       itself (its own "+ New Project" button), so this just sends
+                       admins there instead of trying to deep-link into it. #}
+                    <a href="{{ url_for('project_list.index') }}" class="accounts-add-btn pt-add-link">+ Add Project</a>
+                    <div id="pt-projects-list" class="accounts-user-list"></div>
+                </div>
+                <div class="pt-panel hidden" id="pt-panel-drafts">
+                    <div id="pt-drafts-list" class="accounts-user-list"></div>
+                </div>
+                <div class="pt-panel hidden" id="pt-panel-deliverables">
+                    <button type="button" class="accounts-add-btn" id="pt-add-del-toggle">+ Add Deliverable
+                        Type</button>
+                    <form id="pt-add-del-form" class="add-user-form hidden">
+                        <input type="text" id="pt-new-del-name" class="form-input" placeholder="Deliverable type name">
+                        <select id="pt-new-del-client" class="form-input">
+                            <option value="">Select client...</option>
+                        </select>
+                        <select id="pt-new-del-region" class="form-input">
+                            <option value="">Select region...</option>
+                            <option value="uae">UAE</option>
+                            <option value="kuwait">Kuwait</option>
+                            <option value="qatar">Qatar</option>
+                            <option value="bahrain">Bahrain</option>
+                            <option value="oman">Oman</option>
+                        </select>
+                        <select id="pt-new-del-customer" class="form-input">
+                            <option value="">Select customer...</option>
+                        </select>
+                        <div class="pt-discipline-checks">
+                            <label><input type="checkbox" value="2D"> 2D</label>
+                            <label><input type="checkbox" value="3D"> 3D</label>
+                            <label><input type="checkbox" value="Technical"> Technical</label>
+                        </div>
+                        <label class="pt-custom-label">
+                            <input type="checkbox" id="pt-new-del-custom"> Mark as custom
+                        </label>
+                        <label style="font-size:0.85rem;display:block;margin-top:4px;">
+                            Reference image: <input type="file" id="pt-new-del-image" accept="image/*">
+                        </label>
+                        <label style="font-size:0.85rem;display:block;margin-top:4px;">
+                            Template file (.ai): <input type="file" id="pt-new-del-template" accept=".ai">
+                        </label>
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="pt-add-del-cancel">Cancel</button>
+                        </div>
+                    </form>
+                    <div class="pt-filter-bar">
+                        <select id="pt-filter-client" class="pt-filter-select">
+                            <option value="">All Clients</option>
+                        </select>
+                        <select id="pt-filter-region" class="pt-filter-select">
+                            <option value="">All Regions</option>
+                            <option value="uae">UAE</option>
+                            <option value="kuwait">Kuwait</option>
+                            <option value="qatar">Qatar</option>
+                            <option value="bahrain">Bahrain</option>
+                            <option value="oman">Oman</option>
+                        </select>
+                        <select id="pt-filter-customer" class="pt-filter-select">
+                            <option value="">All Customers</option>
+                        </select>
+                    </div>
+                    <div id="pt-deliverables-list" class="accounts-user-list"></div>
+                </div>
+                <div class="pt-panel hidden" id="pt-panel-design-types">
+                    <button type="button" class="accounts-add-btn" id="pt-add-dt-toggle">+ Add Design Type</button>
+                    <form id="pt-add-dt-form" class="add-user-form hidden">
+                        <input type="text" id="pt-new-dt-name" class="form-input"
+                            placeholder="e.g. 3D Rendering, 2D Illustration">
+                        <p class="form-label-sub" style="margin: 0.4rem 0 0.2rem;">Teams (select all that apply)</p>
+                        <div class="pt-discipline-checks" id="pt-new-dt-teams">
+                            <label><input type="checkbox" value="2D"> 2D</label>
+                            <label><input type="checkbox" value="3D"> 3D</label>
+                            <label><input type="checkbox" value="Technical"> Technical</label>
+                        </div>
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="pt-add-dt-cancel">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="pt-design-types-list" class="accounts-user-list"></div>
+                </div>
+                {# Job Numbers panel — lists every project with a job number so admin
+                   can clear individual numbers without deleting the project.
+                   Populated by loadPTJobNumbers() in admin.js. #}
+                <div class="pt-panel hidden" id="pt-panel-job-numbers">
+                    <div id="pt-job-numbers-list" class="accounts-user-list"></div>
+                </div>
+                <div class="pt-panel hidden" id="pt-panel-design-directions">
+                    <button type="button" class="accounts-add-btn" id="pt-add-dd-toggle">+ Add Direction</button>
+                    <form id="pt-add-dd-form" class="add-user-form hidden">
+                        <input type="text" id="pt-new-dd-name" class="form-input"
+                            placeholder="e.g. Front-Facing, Side Profile">
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="pt-add-dd-cancel">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="pt-design-directions-list" class="accounts-user-list"></div>
+                </div>
+            </div>
+            <div class="admin-section hidden" id="admin-section-accounts">
+                <button type="button" id="add-user-toggle" class="accounts-add-btn">+ Add User</button>
+                {% if dev_tools_enabled %}
+                <button type="button" class="accounts-add-btn"
+                    style="background: var(--rose); color: #fff; border-color: var(--rose);" onclick="openWipeModal()">⚠
+                    Wipe Projects</button>
+                {% endif %}
+                <form id="add-user-form" class="add-user-form hidden">
+                    <input type="text" id="new-user-name" class="form-input" placeholder="Full name">
+                    <input type="email" id="new-user-email" class="form-input" placeholder="Email">
+                    <input type="password" id="new-user-password" class="form-input" placeholder="Password">
+                    <select id="new-user-role" class="form-input">
+                        <option value="">Select role...</option>
+                        <option value="cs">CS</option>
+                        <option value="designer">Designer</option>
+                        <option value="team_lead">Team Lead</option>
+                        <option value="management">Management</option>
+                        <option value="project_owner">Project Owner</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <select id="new-user-team" class="form-input hidden">
+                        <option value="">Select team...</option>
+                        <option value="2D">2D</option>
+                        <option value="3D">3D</option>
+                        <option value="Technical">Technical</option>
+                    </select>
+                    <div class="add-user-actions">
+                        <button type="submit" class="btn-primary">Create User</button>
+                        <button type="button" id="add-user-cancel">Cancel</button>
+                    </div>
+                </form>
+                <div id="accounts-user-list" class="accounts-user-list"></div>
+            </div>
+            <div class="admin-section hidden" id="admin-section-activity">
+                <div class="activity-toolbar">
+                    <div class="activity-search-row">
+                        <input type="text" id="activity-search" class="form-input" placeholder="Search log...">
+                        <input type="date" id="activity-from" class="form-input">
+                        <input type="date" id="activity-to" class="form-input">
+                        <select id="activity-category" class="activity-category-select">
+                            <option value="all">All Categories</option>
+                            <option value="creation">Creation</option>
+                            <option value="flags">Flags</option>
+                            <option value="deletions">Deletions</option>
+                            <option value="assignments">Assignments</option>
+                            <option value="edits">Edits</option>
+                            <option value="other">Other</option>
+                        </select>
+                        <button type="button" class="btn-primary" id="activity-search-btn">Search</button>
+                        <button type="button" class="activity-clear-btn" id="activity-reset-btn">Reset</button>
+                    </div>
+                    <div class="activity-action-row">
+                        <button type="button" class="accounts-add-btn activity-export-btn"
+                            id="activity-export-btn">Export to file</button>
+                        <button type="button" class="accounts-add-btn activity-wipe-btn" id="activity-wipe-btn">Wipe
+                            log</button>
+                    </div>
+                </div>
+                <div id="activity-log-list" class="activity-log-list"></div>
+            </div>
+            <div class="admin-section hidden" id="admin-section-sounds">
+                <button type="button" class="accounts-add-btn" id="add-sound-toggle">+ Add Sound</button>
+                <form id="add-sound-form" class="add-user-form hidden">
+                    <input type="text" id="new-sound-name" class="form-input" placeholder="Sound name (e.g. Soft Chime)">
+                    <input type="file" id="new-sound-file" class="form-input" accept=".mp3,.wav,.ogg,.m4a,.aac">
+                    <div class="add-user-actions">
+                        <button type="submit" class="btn-primary">Upload</button>
+                        <button type="button" id="add-sound-cancel">Cancel</button>
+                    </div>
+                </form>
+                <div id="sounds-list" class="accounts-user-list"></div>
+            </div>
+
+            {# ── Phase 7: Achievement system admin panel ──────────────────────────
+               Two sub-tabs (Achievements / Borders), same pattern as the existing
+               "Project Tools" section's .pt-tabs/.pt-panel above — own prefixed
+               classes (ach- instead of pt-) so the two sections' JS click handlers
+               never collide, even though they look identical. #}
+            <div class="admin-section hidden" id="admin-section-achievements">
+                <div class="ach-tabs">
+                    <button type="button" class="ach-tab-btn active" data-ach="categories">Achievements</button>
+                    <button type="button" class="ach-tab-btn" data-ach="borders">Borders</button>
+                </div>
+
+                {# ── Achievements sub-tab: category accordion ─────────────────── #}
+                <div class="ach-panel" id="ach-panel-categories">
+                    <button type="button" class="accounts-add-btn" id="add-ach-category-toggle">+ Add Category</button>
+                    <form id="add-ach-category-form" class="add-user-form hidden">
+                        <input type="text" id="new-ach-category-name" class="form-input"
+                            placeholder="Category name (e.g. Submissions)">
+                        <input type="text" id="new-ach-category-icon" class="form-input"
+                            placeholder="Icon (emoji, optional)">
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="add-ach-category-cancel">Cancel</button>
+                        </div>
+                    </form>
+
+                    {# Hidden until a drag actually happens — appears so the admin has an #}
+                    {# explicit, unambiguous moment to commit reordering, rather than #}
+                    {# every drag auto-saving (same reasoning as the Pinned Achievements #}
+                    {# UI on the Account page, Phase 5). #}
+                    <button type="button" class="btn-primary hidden" id="save-ach-order-btn"
+                        style="margin: 0.75rem 0;">Save Order</button>
+
+                    {# Rendered entirely by admin.js from GET /admin/api/achievement-categories — #}
+                    {# see loadAchievementCategories() there for the accordion markup. #}
+                    <div id="ach-categories-list"></div>
+                </div>
+
+                {# ── Borders sub-tab ───────────────────────────────────────────── #}
+                <div class="ach-panel hidden" id="ach-panel-borders">
+                    <button type="button" class="accounts-add-btn" id="add-ach-border-toggle">+ Add Border</button>
+                    <form id="add-ach-border-form" class="add-user-form hidden">
+                        <input type="text" id="new-ach-border-name" class="form-input"
+                            placeholder="Border name (e.g. Golden Shimmer)">
+                        <input type="text" id="new-ach-border-class" class="form-input"
+                            placeholder="CSS class (must exist in achievements.css, e.g. border-golden-shimmer)">
+                        <div class="add-user-actions">
+                            <button type="submit" class="btn-primary">Create</button>
+                            <button type="button" id="add-ach-border-cancel">Cancel</button>
+                        </div>
+                    </form>
+                    <div id="ach-borders-list" class="accounts-user-list"></div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    {# ── Add/Edit Achievement modal ────────────────────────────────────────────
+       One modal serves both create and edit — achievement-modal-mode / -editing-id
+       (set by admin.js right before opening it) tell the submit handler which
+       API call to make. Kept as a single modal rather than two nearly-identical
+       ones, same reasoning as the profile page's combined Edit Details popup. #}
+    <div id="achievement-modal" class="modal-overlay hidden" data-mode="create" data-editing-id="">
+        <div class="modal-box">
+            <h3 class="modal-title" id="achievement-modal-title">Add Achievement</h3>
+
+            <div class="form-group">
+                <label for="ach-form-name">Name</label>
+                <input type="text" id="ach-form-name" class="form-input" placeholder="e.g. First Submission">
+            </div>
+            <div class="form-group">
+                <label for="ach-form-description">Description</label>
+                <textarea id="ach-form-description" class="form-input" rows="2"
+                    placeholder="Shown to users on the profile checklist"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-category">Category</label>
+                {# Populated by admin.js from the already-loaded category list — #}
+                {# no separate fetch needed, the Achievements tab already has it. #}
+                <select id="ach-form-category" class="form-input"></select>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-trigger">Trigger Event</label>
+                {# Hardcoded to the 7 events actually wired into check_achievements() #}
+                {# call sites (see VALID_TRIGGER_EVENTS in admin_achievements.py) — #}
+                {# anything else could never fire, so a dropdown is the only option #}
+                {# that makes an achievement's trigger ever actually work. #}
+                <select id="ach-form-trigger" class="form-input">
+                    <option value="project_submitted">Project Submitted</option>
+                    <option value="project_approved">Project Approved</option>
+                    <option value="bug_submitted">Bug Report Submitted</option>
+                    <option value="feature_submitted">Feature Request Submitted</option>
+                    <option value="blog_comment">Blog Comment Posted</option>
+                    <option value="upvote_given">Feature Upvote Given</option>
+                    <option value="user_login">User Logged In</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-threshold">Threshold (progress needed to earn)</label>
+                <input type="number" id="ach-form-threshold" class="form-input" min="1" value="1">
+            </div>
+            <div class="form-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="ach-form-hidden">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="margin-left: 0.5rem; font-size: 0.85rem;">Hidden until earned (shows "???")</span>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-badge-file">Badge Image</label>
+                <input type="file" id="ach-form-badge-file" class="form-input" accept=".png,.jpg,.jpeg,.webp,.gif">
+                {# Shown only when editing an achievement that already has an image — #}
+                {# lets the admin see what's currently saved without re-uploading it. #}
+                <img id="ach-form-badge-preview" src="" alt="" class="hidden"
+                    style="width: 48px; height: 48px; object-fit: contain; margin-top: 0.5rem;">
+            </div>
+            <div class="form-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="ach-form-animated">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="margin-left: 0.5rem; font-size: 0.85rem;">Animated badge (subtle pulse effect)</span>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-reward-title">Reward Title (optional)</label>
+                <input type="text" id="ach-form-reward-title" class="form-input" placeholder="e.g. Rookie Submitter">
+            </div>
+            <div class="form-group">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="ach-form-title-animated">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="margin-left: 0.5rem; font-size: 0.85rem;">Animated title text</span>
+            </div>
+            <div class="form-group">
+                <label for="ach-form-border">Reward Border (optional)</label>
+                {# Populated by admin.js from GET /admin/api/achievement-borders. #}
+                <select id="ach-form-border" class="form-input">
+                    <option value="">— None —</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="achievement-modal-cancel-btn">Cancel</button>
+                <button type="button" class="btn-primary" id="achievement-modal-save-btn">Save</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if dev_tools_enabled %}
+    <div id="wipe-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeWipeModal()">
+        <div class="modal-box">
+            <h3 class="modal-title" style="color: var(--rose);">⚠ Wipe All Projects?</h3>
+            <p>This permanently deletes <strong>every project</strong> and all related data.
+                The FOC counter resets to FOC-001. <strong>This cannot be undone.</strong></p>
+            <p style="margin-top: 1rem;">Type <strong>WIPE</strong> to confirm:</p>
+            <input type="text" id="wipe-confirm-input" class="form-input" placeholder="Type WIPE here"
+                oninput="checkWipeConfirm()" style="margin-top: 0.5rem;">
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button type="button" class="btn-secondary" onclick="closeWipeModal()">Cancel</button>
+                <button type="button" class="btn-danger" id="wipe-confirm-btn" onclick="confirmWipe()" disabled>Wipe
+                    Everything</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div id="file-preview-modal" class="modal-overlay hidden">
+        <div class="file-preview-modal-box">
+            <div class="file-preview-header">
+                <h3 class="modal-title" id="file-preview-title"></h3>
+                <button type="button" class="modal-close" id="file-preview-close">&times;</button>
+            </div>
+            <div class="file-preview-body" id="file-preview-body"></div>
+        </div>
+    </div>
+
+    {# Main content area — shifts right to make room for sidebar when authenticated #}
+    <main class="main-content" id="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        {% include 'partials/avatar_crop_modal.html' %}
+        <script src="{{ url_for('static', filename='js/avatar-cropper.js') }}"></script>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>OVP &copy; 2026 - v2.4</p>
+    </footer>
+
+    {% if show_wizard %}
+    <div id="wizard-overlay" class="wizard-overlay" data-show-name-step="{{ 'true' if show_name_step else 'false' }}"
+        data-avatar-step-only="{{ 'true' if avatar_step_only else 'false' }}">
+        <div class="wizard-card">
+    
+            <div class="wizard-steps-indicator">
+                <span class="wizard-dot" data-step="1"></span>
+                <span class="wizard-dot" data-step="2"></span>
+                <span class="wizard-dot" data-step="3"></span>
+                <span class="wizard-dot" data-step="4"></span>
+            </div>
+    
+            <div class="wizard-step hidden" data-wizard-step="1">
+                <h2>Welcome — let's get you set up</h2>
+                <div class="form-group">
+                    <label for="wizard-name">Display Name</label>
+                    <input type="text" id="wizard-name" class="form-input" value="{{ current_user.name }}">
+                </div>
+                <div class="form-group">
+                    <label for="wizard-password">New Password (optional)</label>
+                    <input type="password" id="wizard-password" class="form-input" autocomplete="new-password"
+                        placeholder="Leave blank to keep your current password">
+                </div>
+                <div class="form-group">
+                    <label for="wizard-password-confirm">Confirm New Password</label>
+                    <input type="password" id="wizard-password-confirm" class="form-input" autocomplete="new-password"
+                        placeholder="Leave blank to keep your current password">
+                </div>
+                <p id="wizard-password-error" class="wizard-error hidden">Passwords do not match.</p>
+            </div>
+    
+            <div class="wizard-step hidden" data-wizard-step="2">
+                <h2>Tell us a bit about yourself</h2>
+                <div class="form-group">
+                    <label for="wizard-birthday">Date of Birth (optional)</label>
+                    <input type="date" id="wizard-birthday" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="wizard-food">Favourite Food (optional)</label>
+                    <input type="text" id="wizard-food" class="form-input" placeholder="e.g. Shawarma">
+                </div>
+            </div>
+    
+            <div class="wizard-step hidden" data-wizard-step="3">
+                <h2>Notification Preferences</h2>
+                <div class="detail-fields">
+                    <div class="detail-field" style="align-items: center;">
+                        <span class="detail-label">Email Notifications</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="wizard-email-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="detail-field" style="align-items: center;">
+                        <span class="detail-label">In-App Notification Sound</span>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="wizard-sound-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <input type="range" id="wizard-sound-volume" min="0" max="100" style="width: 100px;">
+                                <span id="wizard-sound-volume-label"
+                                    style="font-size: 0.8rem; color: var(--grey-dark); width: 2.5em;">100%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="wizard-step hidden" data-wizard-step="4">
+                <h2>Add a Profile Photo</h2>
+                <div class="wizard-avatar-preview-wrap" style="display:flex; justify-content:center; margin-bottom:1rem;">
+                    <img id="wizard-avatar-preview"
+                        src="{% if current_user.avatar_filename %}{{ url_for('static', filename='avatars/' + current_user.avatar_filename) }}{% endif %}"
+                        class="profile-avatar{% if not current_user.avatar_filename %} hidden{% endif %}" alt="">
+                    <div id="wizard-avatar-initials"
+                        class="profile-avatar profile-avatar--initials{% if current_user.avatar_filename %} hidden{% endif %}">
+                        {{ current_user.name[0].upper() }}
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:center;">
+                    <button type="button" class="btn-secondary" id="wizard-avatar-btn">Change Photo</button>
+                </div>
+                <input type="file" id="wizard-avatar-input" accept="image/jpeg,image/png,image/webp" style="display:none;">
+            </div>
+    
+            <div class="wizard-actions">
+                <button type="button" class="btn-secondary hidden" id="wizard-back-btn">Back</button>
+                <button type="button" class="btn-primary" id="wizard-next-btn">Next</button>
+                <button type="button" class="btn-primary hidden" id="wizard-finish-btn">Finish</button>
+            </div>
+    
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ===== Confirm Modal ===== -->
+    <!-- Single reusable overlay for all confirmation dialogs.                     -->
+    <!-- JS shows it via showConfirm(message, onConfirm) defined in main.js.      -->
+    <!-- The 'hidden' class (display:none) is toggled by JS.                      -->
+    <div id="confirm-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="confirm-modal-card">
+            <!-- Title — generic default; JS can override via data attribute if needed -->
+            <p class="confirm-modal-title" id="confirm-modal-title">Are you sure?</p>
+            <!-- Message body — populated by showConfirm() before the modal opens -->
+            <p class="confirm-modal-body" id="confirm-modal-body"></p>
+            <div class="confirm-modal-actions">
+                <button type="button" id="confirm-modal-cancel" class="btn-secondary">Cancel</button>
+                <button type="button" id="confirm-modal-ok" class="btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Achievement Toast Container ===== -->
+    <!-- Sits above the regular toast container; showAchievementToast() injects here. -->
+    <div id="achievement-toast-container" aria-live="polite"></div>
+
+    <!-- ===== Toast Container ===== -->
+    <!-- Fixed bottom-right container; individual toasts are injected by showToast() in main.js. -->
+    <!-- aria-live="polite" announces toasts to screen readers without interrupting.             -->
+    <div id="toast-container" aria-live="polite"></div>
+
+    <script>
+        // Per-user notification sound settings (on/off, volume, chosen file) —
+        // resolved server-side once per page load in inject_notifications().
+        // Read by helixPlayNotificationSound() in notifications.js.
+        const HELIX_SOUND_PREFS = {{ sound_prefs | tojson }};
+    </script>
+
+    <script src="{{ url_for('static', filename='js/preview.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/notifications.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    {# detail.js tag removed 24 Aug 2026 — the file itself was deleted along
+    with the old pre-redesign detail page (app/static/js/detail.js, gone
+    since the "Old detail page removed" commit), but this <script> tag was
+    left behind loading it globally on every page. Same class of gap as the
+    assign-lead routes found the same day: a leftover reference to
+    something the cutover deleted, quietly 404ing (console-only, harmless —
+    the file's been gone since the cutover, so nothing has executed from it
+    in a long time) until someone actually looked at network requests. #}
+    <script src="{{ url_for('static', filename='js/drag-drop.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/rich-editor.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+    <script src="{{ url_for('static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>     
+    {% endif %}
+    <!-- SPA:EXTRA_JS:START -->
+    {% block extra_js %}{% endblock %}
+    <!-- SPA:EXTRA_JS:END -->
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
+    {% if current_user.is_authenticated %}
+    <script src="{{ url_for('static', filename='js/polling.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/wizard.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    {% endif %}
+
+</body>
+
+</html>

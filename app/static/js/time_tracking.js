@@ -2,7 +2,7 @@
 //
 // Project + deliverable business-hours breakdown page (added 13 Jul
 // 2026). Own dedicated JS file per this project's "every new feature
-// gets its own route/JS/CSS" convention — see CLAUDE.md.
+// gets its own route/JS/CSS" convention.
 //
 // The deliverable expand/collapse itself is plain <details>/<summary> in
 // time_tracking.html — works with zero JS. This file only adds the

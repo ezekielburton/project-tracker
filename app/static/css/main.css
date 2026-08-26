@@ -1758,6 +1758,55 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     background-color: rgba(99, 119, 91, 0.1);
 }
 
+/* Inline Approve/Deny (26 Aug 2026, per Ezekiel) — Request Editing Access
+is the first notification type with an action beyond mark-read/navigate,
+so unlike .notification-mark-read-btn these are always visible (not
+hover-revealed) — a pending request sitting unnoticed until someone
+happens to hover it would defeat the point of a request that needs a
+decision. */
+.notification-inline-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+}
+
+.notification-action-btn {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    border: 1px solid var(--border-subtle);
+    background: var(--white);
+    color: var(--grey-dark);
+}
+
+.notification-action-btn:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.notification-action-btn--approve {
+    color: var(--pine);
+    border-color: var(--pine);
+}
+
+.notification-action-btn--approve:hover:not(:disabled) {
+    color: var(--white);
+    background: var(--pine);
+}
+
+.notification-action-btn--deny {
+    color: var(--salmon);
+    border-color: var(--salmon);
+}
+
+.notification-action-btn--deny:hover:not(:disabled) {
+    color: var(--white);
+    background: var(--salmon);
+}
+
 
 .notification-item:last-child {
     border-bottom: none;
@@ -5551,7 +5600,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 /* Quick-add modal */
 .modal-box {
-    /* --surface is undefined in :root (per CLAUDE.md) — resolves to
+    /* --surface is undefined in :root — resolves to
        transparent, letting .modal-overlay's translucent sandstone tint
        show through instead of a solid white popup. --white is the
        actual solid background token. */

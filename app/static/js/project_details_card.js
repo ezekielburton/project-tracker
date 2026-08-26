@@ -182,6 +182,64 @@ window.ProjectDetailsCard = (function () {
         // elements are in the fresh HTML.
         if (window.ProjectFlags) window.ProjectFlags.init(rootEl, projectId, onChanged);
 
+        // ── Add Customer (25 Aug 2026, per Ezekiel — the Customers card
+        // could Cancel/Reactivate but never add one; a C&CM campaign that
+        // expands to a new customer after submission had no path forward
+        // except cancelling and recreating the whole project). Same
+        // reveal-form shape as Cancel Customer below — a toggle button
+        // shows/hides a form with its own error box, rather than a
+        // confirm() gate, since picking the wrong customer from a select
+        // is low-stakes and easily corrected before hitting Add.
+        var addCustomerToggleBtn = rootEl.querySelector('#overlay-customer-add-toggle-btn');
+        var addCustomerForm = rootEl.querySelector('#overlay-customer-add-form');
+        if (addCustomerToggleBtn && addCustomerForm) {
+            addCustomerToggleBtn.addEventListener('click', function () {
+                addCustomerToggleBtn.classList.add('is-hidden');
+                addCustomerForm.classList.remove('is-hidden');
+            });
+        }
+        var addCustomerCancelBtn = rootEl.querySelector('#overlay-customer-add-cancel');
+        if (addCustomerCancelBtn && addCustomerToggleBtn && addCustomerForm) {
+            addCustomerCancelBtn.addEventListener('click', function () {
+                addCustomerForm.classList.add('is-hidden');
+                addCustomerToggleBtn.classList.remove('is-hidden');
+                var errorEl = rootEl.querySelector('#overlay-customer-add-error');
+                if (errorEl) errorEl.classList.add('hidden');
+            });
+        }
+        var addCustomerConfirmBtn = rootEl.querySelector('#overlay-customer-add-confirm');
+        if (addCustomerConfirmBtn) {
+            addCustomerConfirmBtn.addEventListener('click', function () {
+                var select = rootEl.querySelector('#overlay-customer-add-select');
+                var errorEl = rootEl.querySelector('#overlay-customer-add-error');
+                var customerId = select ? select.value : '';
+                if (!customerId) {
+                    if (errorEl) { errorEl.textContent = 'Select a customer first.'; errorEl.classList.remove('hidden'); }
+                    return;
+                }
+                addCustomerConfirmBtn.disabled = true;
+                if (errorEl) errorEl.classList.add('hidden');
+                fetch(`/projects/${projectId}/customers/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ customer_id: customerId }),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        addCustomerConfirmBtn.disabled = false;
+                        if (!data.success) {
+                            if (errorEl) { errorEl.textContent = data.error || 'Could not add this customer.'; errorEl.classList.remove('hidden'); }
+                            return;
+                        }
+                        onChanged();
+                    })
+                    .catch(function () {
+                        addCustomerConfirmBtn.disabled = false;
+                        if (errorEl) { errorEl.textContent = 'Something went wrong. Please try again.'; errorEl.classList.remove('hidden'); }
+                    });
+            });
+        }
+
         // ── Cancel Customer panel toggle (23 Aug 2026, per Ezekiel — "a
         // cancel customer button next to flag history - blue. becomes
         // cancel when pressed to go back") — swaps the whole Properties/

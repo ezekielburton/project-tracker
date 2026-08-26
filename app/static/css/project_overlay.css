@@ -323,6 +323,15 @@ they stay put regardless of how many nav items sit above them. */
     display: none;
 }
 
+/* Request Editing Access, while a request is pending (26 Aug 2026) — the
+button itself is disabled rather than swapped for text, so its label
+("Editing Access Requested") stays in the same spot other lifecycle
+buttons occupy instead of shifting the layout. */
+.project-overlay-sidebar-action-btn:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
 /* Blue action tier (Resume, Reactivate, and — per Ezekiel, 18 Aug 2026 —
 Put on Hold too, so all "confirm-gated but not destructive" lifecycle
 moves read as the same color). */
@@ -1544,6 +1553,30 @@ button.overlay-chat-reaction-chip:hover {
 }
 
 .overlay-customer-cancel-form {
+    margin-bottom: var(--space-2);
+}
+
+/* Add Customer (25 Aug 2026) — sits above the Customers table inside the
+   same card, so it needs its own bottom margin to separate from the table
+   header below, same spacing .overlay-customer-cancel-form uses to
+   separate a row's reveal-form from whatever comes after it. The toggle
+   button's own .overlay-file-action-btn styling is untouched; only the
+   wrapper needs the gap since the select/actions inside reuse
+   .overlay-flag-revision-form, which already spaces itself from the
+   toggle button above it via margin-top. */
+.overlay-customer-add-row {
+    margin-bottom: var(--space-3);
+}
+
+.overlay-customer-add-form select {
+    display: block;
+    width: 100%;
+    /* Missed this the first pass — .overlay-flag-revision-input (the
+       cancel-reason textarea this form's actions row is styled after)
+       carries its own margin-bottom to separate itself from the Confirm/
+       Cancel buttons underneath; a plain <select> has no such built-in
+       class here, so without this the picker and the Add Customer/Cancel
+       buttons sat flush against each other (25 Aug 2026, per Ezekiel). */
     margin-bottom: var(--space-2);
 }
 

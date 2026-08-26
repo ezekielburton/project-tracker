@@ -2097,7 +2097,7 @@ function openAchievementModal(mode, achievement, categoryId) {
         }
 
         achievementModal.classList.remove('hidden');
-        if (window.helixPolling) window.helixPolling.pause(); // modal requires input before any server action — see CLAUDE.md polling pattern
+        if (window.helixPolling) window.helixPolling.pause(); // modal requires input before any server action — the polling-pause pattern
     });
 }
 

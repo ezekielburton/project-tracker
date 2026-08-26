@@ -244,6 +244,9 @@ document.addEventListener('click', function (event) {
 document.querySelectorAll('.notification-item:not(.notification-item--archived)').forEach(function (item) {
     item.addEventListener('click', function (e) {
         if (e.target.closest('.notification-mark-read-btn')) return;
+        // Request Editing Access's inline Approve/Deny buttons (26 Aug
+        // 2026) — same "don't also navigate" exclusion as mark-read above.
+        if (e.target.closest('.notification-inline-actions')) return;
         var notificationId = this.dataset.id;
         fetch('/notifications/' + notificationId + '/read', {
             method: 'POST',
@@ -334,6 +337,47 @@ function handleMarkRead(e) {
 document.querySelectorAll('.notification-mark-read-btn').forEach(function (btn) {
     btn.addEventListener('click', handleMarkRead);
 })
+
+// Request Editing Access (26 Aug 2026, per Ezekiel) — the inline Approve/
+// Deny buttons on an 'edit_access_requested' notification. Posts straight
+// to project_overlay.py's approve_edit_access()/deny_edit_access(); on
+// success just removes the action row (the notification message itself
+// stays — it's still useful history once decided), on failure re-enables
+// the buttons and surfaces the error.
+function handleEditAccessDecision(e) {
+    e.stopPropagation();
+
+    var btn = this;
+    var requestId = btn.dataset.requestId;
+    var decision = btn.dataset.decision; // 'approve' | 'deny'
+    var actionsEl = btn.closest('.notification-inline-actions');
+    var buttons = actionsEl ? actionsEl.querySelectorAll('.notification-action-btn') : [];
+    buttons.forEach(function (b) { b.disabled = true; });
+
+    fetch('/projects/edit-access-requests/' + requestId + '/' + decision, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.success) {
+                buttons.forEach(function (b) { b.disabled = false; });
+                var msg = data.error || 'Could not process this request.';
+                if (window.showToast) { window.showToast(msg); } else { alert(msg); }
+                return;
+            }
+            if (actionsEl) actionsEl.remove();
+        })
+        .catch(function () {
+            buttons.forEach(function (b) { b.disabled = false; });
+            var msg = 'Something went wrong. Please try again.';
+            if (window.showToast) { window.showToast(msg); } else { alert(msg); }
+        });
+}
+
+document.querySelectorAll('.notification-action-btn').forEach(function (btn) {
+    btn.addEventListener('click', handleEditAccessDecision);
+});
 
 // Named function so dynamically created restore buttons can reuse the same logic
 function handleRestore(e) {

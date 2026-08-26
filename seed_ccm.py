@@ -1,5 +1,6 @@
-from app import create_app, db
-from app.models import (User, Client, Customer, DeliverableType, DeliverableTypeDiscipline)
+from app import create_app
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import (User, Client, Customer, DeliverableType, DeliverableTypeDiscipline)
 
 app = create_app()
 

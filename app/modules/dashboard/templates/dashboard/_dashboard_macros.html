@@ -1,0 +1,726 @@
+{# Shared card shell used by every card partial in app/templates/dashboard/cards/.
+   {% call %} lets each card partial supply its expanded body as a block of
+   arbitrary HTML while this macro owns the tab/body wrapper markup, so the
+   mechanic (dashboard.css / dashboard.js) only has to be written once.
+
+   key         — matches a CARD_ORDER entry in dashboard.py; also the
+                 data-card value dashboard.js and the tab-switch logic key
+                 off of.
+   title       — tab label / card header title.
+   summary_html — small badge content shown on the tab (numbers/pills).
+                 Passed as a string and rendered with |safe since it's
+                 usually a small chunk of markup (e.g. mini-stat pills),
+                 not plain text.
+   expanded    — True if this card's tab should be ACTIVE on first paint
+                 (matches initial_expanded_card, which defaults to
+                 'summary' — see index() in dashboard.py). Exactly one
+                 card across the whole page should have this True.
+   muted       — True renders the tab visually de-emphasized and
+                 unclickable (used by the Clashing Projects card at zero
+                 clashes).
+   mode        — One of:
+                   'tab'  — renders ONLY the small clickable tab button
+                     (title + summary_html badge), no body. Used by every
+                     card in card_order, laid out in a horizontal strip in
+                     dashboard.html's .dash-content-tabs (moved to the top
+                     of the page 15 Jul 2026, later still — see
+                     dashboard.html's own docstring on that block).
+                   'body' — renders ONLY the body content, wrapped for
+                     dashboard.html's single .dash-content-area. Max-height-
+                     collapsed unless `expanded`; exactly one body is ever
+                     .expanded at a time, whichever tab is currently
+                     active.
+                 A card partial gets `{% include %}`'d for whichever
+                 mode(s) it's reachable in, via dashboard.html setting the
+                 `dash_render_mode` context variable before each include —
+                 so whatever Jinja the partial does above its `{% call %}`
+                 (building summary_html, querying data for the body, etc.)
+                 simply reruns each time. Harmless — no writes, just some
+                 redundant string-building.
+
+   Redesigned 15 Jul 2026, per Ezekiel: "Have the my day/my week div be
+   the interactive area where the information populates. Where my day/my
+   week is lets have the tabs for each card that are clickable." Before
+   this, Summary ("My Day / My Week") was a special case with its own
+   mode=None branch — a permanently-open, non-toggling card rendered
+   separately from every other card's tile+shared-expand-area system (see
+   git history around 12-15 Jul 2026 for that design, and summary.html's
+   docstring for how it was ported over, now itself orphaned — see below).
+   mode=None no longer exists — every caller passes mode='tab' or
+   mode='body' explicitly (dash_render_mode, set once per include-loop in
+   dashboard.html).
+
+   A THIRD mode, 'static', briefly existed (added 15 Jul 2026, earlier the
+   same day, for Overdue/At Risk's always-visible pinned cards) and was
+   REMOVED again a few hours later, same day, when Overdue/At Risk AND My
+   Day/My Week were both rebuilt as bespoke toggle boxes instead
+   (app/templates/dashboard/toggle_overdue_at_risk.html and
+   toggle_my_day_week.html — see dashboard.html's docstring on
+   .dash-toggle-row) — neither of those needs dash_card() at all anymore,
+   they render their own header/button/body markup directly. Only 'tab'
+   and 'body' remain. #}
+{% macro dash_card(key, title, summary_html, expanded=False, muted=False, mode=None) %}
+{% if mode == 'tab' %}
+<button type="button" class="dash-content-tab{% if expanded %} active{% endif %}{% if muted %} dash-content-tab--muted{% endif %}"
+    data-card="{{ key }}" {% if not muted %}data-action="toggle-card"{% endif %}>
+    <span class="dash-content-tab-title">{{ title }}</span>
+    {% if summary_html %}<span class="dash-content-tab-badge">{{ summary_html | safe }}</span>{% endif %}
+</button>
+{% elif mode == 'body' %}
+{# .dash-card-body-visual (added 12 Jul 2026, second pass) is the "looks
+   like a card" wrapper — white bg/radius/shadow, only when .expanded — and
+   .dash-card-body-content (outer) is purely the "clips to 0 height when
+   collapsed" wrapper. They have to be two different elements: overflow:
+   hidden clips a box's OWN box-shadow when they're on the same element, so
+   a single combined element would render an expanded body with a visibly
+   cut-off shadow. See the big comment on .dash-card-body-content in
+   dashboard.css for the fuller version of this. #}
+<div class="dash-card-body-content{% if expanded %} expanded{% endif %}" data-card="{{ key }}">
+    <div class="dash-card-body-visual">
+        <div class="dash-card-body-inner">
+            {{ caller() }}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{#
+   dash_person_chip(person, missing_label)
+   ─────────────────────────────────────────
+   Small avatar+name chip used underneath a Due row's title (added 13 Jul
+   2026 — see dash_due_row()'s redesign below). `person` is a
+   _serialize_person() dict ({id, name, avatar_filename}) or None/empty.
+
+   Deliberately a <span>, not a link to the person's profile — dash_due_row
+   wraps the WHOLE row in an <a>, and nesting an <a> inside an <a> is
+   invalid HTML (this is why the old .dash-owner-tag pill was a span too).
+
+   When `person` is falsy, renders `missing_label` (if given) as a
+   .dash-risk-tag — the exact same red "something's wrong" tag component
+   the At Risk card uses, and (for designers) the exact same wording
+   _TEAM_MISSING_LABELS defines, computed server-side in
+   _due_row_people() — so "nobody assigned" reads identically here and on
+   the At Risk card rather than inventing a second phrasing.
+#}
+{% macro dash_person_chip(person, missing_label=None, missing_class='dash-risk-tag') %}
+{% if person %}
+<span class="dash-person-chip">
+    <span class="dash-person-avatar">
+        {% if person.avatar_filename %}
+        <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="">
+        {% else %}
+        <span class="dash-person-avatar-initials">{{ person.name[0].upper() }}</span>
+        {% endif %}
+    </span>
+    <span class="dash-person-name">{{ person.name }}</span>
+</span>
+{% elif missing_label %}
+{# missing_class defaults to the At Risk card's rose .dash-risk-tag (used
+   for CS Missing here). Designer-missing tags pass the --red modifier
+   instead (13 Jul 2026, per Ezekiel: "make the designer missing tags
+   red") — pure red (#FF0000), not the softer rose, since that's what was
+   specifically called out. See .dash-risk-tag--red in dashboard.css. #}
+<span class="{{ missing_class }}">{{ missing_label }}</span>
+{% endif %}
+{% endmacro %}
+
+
+{#
+   dash_row_people(cs_lead, designers)
+   ─────────────────────────────────────
+   Row of avatar+name chips (CS lead first, then one chip per assigned
+   designer / missing-team tag) — extracted 13 Jul 2026 from dash_due_row()
+   below into its own macro so other cards can reuse the exact same chip
+   row instead of copying its inline loop. Added per Ezekiel: "add the
+   tags you have already made (with their profile pic included) for the
+   relevant designers and CS leads. Add it to at risk, clashing projects."
+   Now used by dash_due_row (Overdue/Summary), at_risk.html, and
+   clashes.html. `designers` is the _due_row_people() shape: [{'team':,
+   'users': [...], 'missing_label':}, ...] — pass [] for rows with no
+   design-team data (there are none today, but the macro tolerates it).
+#}
+{% macro dash_row_people(cs_lead, designers) %}
+<span class="dash-row-people">
+    {{ dash_person_chip(cs_lead, 'CS Missing') }}
+    {%- for team_entry in designers %}
+        {%- if team_entry.users %}
+            {%- for u in team_entry.users %}{{ dash_person_chip(u) }}{% endfor -%}
+        {%- else %}
+            {{ dash_person_chip(None, team_entry.missing_label, 'dash-risk-tag dash-risk-tag--red') }}
+        {%- endif -%}
+    {%- endfor %}
+</span>
+{% endmacro %}
+
+
+{#
+   dash_due_row(item) — REDESIGNED 13 Jul 2026, per Ezekiel:
+   "Put the action needed to do on the right and make it bigger. Above it
+   put the text 'Next Action'. Underneath the project name and deliverable
+   name, replace the name with the profile image + name of the CS lead.
+   Then add designer assigned to that deliverable in the same style."
+
+   Row now has three zones instead of two:
+     1. .dash-row-date — plain deadline text, no more coloured rag-badge
+        pill (removed same-day follow-up, per Ezekiel: "remove the green
+        wrapper" — the RAG colour info is still available via item.rag if
+        a future pass wants it back, just not rendered as a filled box
+        here anymore). A vertical divider (border-right) separates it from
+        the rest of the row, spanning the row's full height the same
+        border-right/align-self: stretch technique .dash-summary-col--left
+        uses for the Today/This Week split.
+     2. .dash-row-main — title, THEN a row of person chips underneath
+        (CS lead first, then one chip per assigned designer / missing-team
+        tag — see item.designers, built by _due_row_people() in
+        dashboard.py). Replaces the old guidance+owner .dash-row-tags pills.
+     3. .dash-row-next-action — "Next Action" label (small, mono, same
+        visual language as .dash-col-heading) over item.guidance itself,
+        wrapped in a pine-green .dash-row-next-action-tag pill (same-day
+        follow-up, per Ezekiel: "wrap it in a tag, make it pine green") —
+        was plain bold text. Right-aligned, flex-shrink: 0 so a long
+        project title never pushes it off the row.
+
+   item.owner/item.owner_role are still present on the dict (dashboard.py
+   still computes them — Next Actions' own row markup uses the equivalent
+   fields independently) but are NO LONGER rendered here; CS lead +
+   designer chips replace what the owner tag used to communicate.
+
+   IMPORTANT: dashboard.js's renderDueRow() is a hand-written JS mirror of
+   this exact macro (same "SSR and JS mirror must stay in sync" rule noted
+   throughout this file) — if you change this macro's output, update
+   renderDueRow() and its buildPersonChip()/DASH_TEAM_MISSING_LABELS
+   companions to match.
+
+   Title INVERTED 13 Jul 2026, per Ezekiel: "the layout you have made for
+   [Overdue] is very very clean. Invert the text so that deliverable is
+   first and bold, project is second and grey." Was project (bold, main)
+   — deliverable/customer (grey, detail); now deliverable/customer (bold,
+   main) — project (grey, detail). A plain project-level row (no
+   deliverable/customer — item.type == 'project') has nothing to invert,
+   so it's unchanged: just the project name, bold, on its own.
+
+   Person-chip row extracted into dash_row_people() (above) the same day,
+   so At Risk and Clashing Projects can render the identical avatar+name
+   chips without copying this loop — see that macro's docstring.
+
+   show_waiting param (added 16 Jul 2026, per Ezekiel: "For every item in
+   Decision Needed / Others' Actions, show: Waiting since... Waiting
+   for..."; widened the same day to also cover My Actions, per Ezekiel's
+   follow-up: "Apply those changes to the my actions tab too, it's only
+   on other's actions") — defaults False, since this macro is ALSO shared
+   by Overdue and My Day/My Week's Today/This Week lists, which were never
+   asked to show this. Both Next Actions tabs now pass show_waiting=True:
+   next_actions.html's SSR 'mine' list passes it directly; JS-fetched
+   'others' gets it via fetchAndRenderNextActions() passing
+   showWaiting=true to renderDueRow() (which mirrors this param). Overdue/
+   Today/This Week (dash_due_row's other three callers) still render
+   exactly as before — none of them pass show_waiting, so it stays at its
+   False default there. item.waiting_since_display / waiting_reason /
+   waiting_color are computed unconditionally in
+   _compute_next_actions()/_compute_decisions() regardless of this flag
+   (cheap, keeps the payload shape uniform) — this param only controls
+   whether they're RENDERED. Reuses the .dash-row-people row's
+   left/right split for reason vs. date via a new .dash-row-waiting line
+   directly underneath it, only added when item.waiting_since_display is
+   truthy (defensively — see _compute_next_actions()'s own docstring on
+   why the open ProjectStatusLog row could in theory be missing).
+#}
+{% macro dash_due_row(item, show_waiting=False) %}
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+    {# "No deadline" fallback added 13 Jul 2026 when Next Actions started
+       reusing this macro (see the big comment above) — Due's own rows
+       never have a null deadline (only overdue items reach that card),
+       but Next Actions rows can (e.g. a project still 'in_queue' with no
+       deliverable deadlines set yet). Harmless no-op for Due. #}
+    <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">
+            {%- if item.type == 'deliverable' %}{{ item.deliverable_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- elif item.type == 'customer' and item.customer_name %}{{ item.customer_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- else %}{{ item.project_name }}
+            {%- endif %}
+        </span>
+        {{ dash_row_people(item.cs_lead, item.designers) }}
+        {% if show_waiting and item.waiting_since_display %}
+        <span class="dash-row-waiting">
+            <span class="dash-waiting-tag dash-waiting-tag--{{ item.waiting_color }}">Waiting since: {{ item.waiting_since_display }}</span>
+            {% if item.waiting_reason %}
+            <span class="dash-waiting-tag dash-waiting-tag--{{ item.waiting_color }}">Waiting for: {{ item.waiting_reason }}</span>
+            {% endif %}
+        </span>
+        {% endif %}
+    </span>
+    <span class="dash-row-next-action">
+        <span class="dash-row-next-action-label">Next Action</span>
+        <span class="dash-row-next-action-tag">{{ item.guidance }}</span>
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
+   dash_at_risk_row(item) — extracted 15 Jul 2026, later still, from
+   at_risk.html's own inline row markup (unchanged pixel-for-pixel) so the
+   new Overdue/At Risk toggle box (see toggle_overdue_at_risk.html and the
+   big comment on .dash-toggle-row in dashboard.html) can render At Risk
+   rows the same way dash_due_row() lets it render Overdue rows — one
+   macro call per row instead of copy-pasting at_risk.html's markup into
+   a second template. at_risk.html itself is no longer included anywhere
+   (My Day/My Week and Overdue/At Risk both moved out of the tab-strip/
+   pinned-card systems into toggle boxes),
+   so this macro is now the ONLY place At Risk rows render from.
+
+   `item` is built by _compute_at_risk_projects() in dashboard.py — same
+   shape as before this extraction, nothing about the DATA changed, only
+   where the markup that renders it lives.
+#}
+{% macro dash_at_risk_row(item) %}
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+    <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">{{ item.name }}</span>
+        {% if item.tags %}
+        <span class="dash-row-tags">
+            {% for tag in item.tags %}
+            <span class="dash-risk-tag{{ ' dash-risk-tag--' + tag.variant if tag.variant != 'plain' else '' }}">{{ tag.label }}</span>
+            {% endfor %}
+        </span>
+        {% endif %}
+        {{ dash_row_people(item.cs_lead, item.designers) }}
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
+   dash_leadership_risk_row(item) / dash_leadership_waiting_row(item) —
+   added 16 Jul 2026, for the leadership (management/admin) dashboard's
+   Risk/Overdue and Waiting on Others cards (see the big comment on
+   _compute_risk_overdue() in dashboard.py for the full design history).
+
+   Both wrap the row's own .dash-row <a> in a sibling <div>/<button> shell
+   — same "don't nest interactive content inside interactive content" rule
+   dash_person_chip() and the Decisions Needed Resolve button
+   (.dash-decision-row) already follow, reusing THAT exact wrapper class
+   rather than inventing a new one, since the shape (a row + one or two
+   action buttons alongside it) is identical.
+#}
+{% macro dash_leadership_risk_row(item) %}
+<div class="dash-decision-row dash-leadership-risk-row">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+        <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+        <span class="dash-row-main">
+            <span class="dash-row-title">
+                {%- if item.customer_name %}{{ item.customer_name }} <span class="dash-row-title-detail">&mdash; {{ item.name }}</span>
+                {%- else %}{{ item.name }}
+                {%- endif %}
+            </span>
+            {% if item.tags %}
+            <span class="dash-row-tags">
+                {% for tag in item.tags %}
+                <span class="dash-risk-tag{{ ' dash-risk-tag--' + tag.variant if tag.variant != 'plain' else '' }}">{{ tag.label }}</span>
+                {% endfor %}
+            </span>
+            {% endif %}
+            {{ dash_row_people(item.cs_lead, item.designers) }}
+        </span>
+    </a>
+    <span class="dash-leadership-risk-actions">
+        {% if item.has_no_cs_lead %}
+        <button type="button" class="btn-secondary dash-leadership-action-btn"
+            data-action="open-reassign-cs-lead-modal" data-project-id="{{ item.project_id }}" data-project-name="{{ item.name }}">Reassign CS Lead</button>
+        {% endif %}
+        {% if item.missing_teams %}
+        <button type="button" class="btn-secondary dash-leadership-action-btn"
+            data-action="open-assign-designer-modal" data-project-id="{{ item.project_id }}" data-project-name="{{ item.name }}"
+            data-missing-teams="{{ item.missing_teams | join(',') }}">Assign Designer</button>
+        {% endif %}
+    </span>
+</div>
+{% endmacro %}
+
+
+{% macro dash_leadership_waiting_row(item) %}
+<div class="dash-decision-row dash-leadership-waiting-row">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+        <span class="dash-row-main">
+            <span class="dash-row-title">{{ item.project_name }}</span>
+            <span class="dash-row-tags">
+                <span class="dash-action-tag">Waiting for: {{ item.waiting_for }}</span>
+            </span>
+        </span>
+        <span class="dash-row-waiting-since">Age: {{ item.age_display }}</span>
+    </a>
+    <span class="dash-leadership-risk-actions">
+        {% if item.row_type == 'follow_up' %}
+        {# Placeholder — per Ezekiel: "Follow up will send a message in app
+           to the person once we implement the chat system later so keep
+           it placeholder for now (no interaction)". Disabled, not just
+           visually inert, so there's no confusing no-op click. #}
+        <button type="button" class="btn-secondary dash-leadership-action-btn" disabled title="Coming soon — in-app chat not built yet">Follow up</button>
+        {% else %}
+        <button type="button" class="btn-secondary dash-leadership-action-btn"
+            data-action="open-assign-designer-modal" data-project-id="{{ item.project_id }}" data-project-name="{{ item.project_name }}"
+            data-missing-teams="{{ item.missing_teams | join(',') }}">Assign</button>
+        {% endif %}
+    </span>
+</div>
+{% endmacro %}
+
+
+{#
+   dash_escalation_history_row(item, show_raised_by=False) — one row in the
+   "My Escalation History" (CS dashboard) / "Escalation History" (Leadership
+   dashboard) collapsible sections, added 17 Jul 2026 per Ezekiel: "we need
+   to keep that escalation history and give it a spot on the dashboard to
+   open a hidden div with those escalations and their message history."
+
+   Shared by both dashboards rather than two near-duplicate macros — the
+   only real difference is show_raised_by (Leadership's list spans every
+   CS/designer/team lead company-wide, so each row needs to say WHO
+   escalated it; a CS's own history is implicitly "raised by me", so that
+   chip would be redundant there and is omitted).
+
+   Same .dash-decision-row wrapper (row <a> + sibling trigger <button>) as
+   dash_leadership_risk_row()/dash_leadership_waiting_row() above and My
+   Escalated Projects' row in dashboard_cs.html — the button opens the SAME
+   shared Decision Flag modal every other escalation-related row on this
+   page uses, just passing this row's own flag_id (not the project's
+   CURRENT active flag, which for a resolved row is None, or could be a
+   different, newer escalation if the project's been flagged again since)
+   — see get_decision_flag()'s flag_id query param in projects_detail.py.
+   The modal renders read-only for a resolved flag (no reply box, no
+   resolve controls — see renderDecisionFlagModal() in dashboard.js), so
+   "View" rather than "View / Reply" is deliberately the button's label
+   here, distinct from My Escalated Projects' still-open rows.
+
+   Date shown is resolved_display (when this closed out), not raised_at —
+   the list itself is sorted newest-resolved-first, so the date column
+   should agree with that ordering. .rag-green is reused as-is for the
+   "Resolved" tag's colour (the existing solid pine-green class, already
+   used elsewhere on this page for the same "this is done, no action
+   needed" signal) — paired with a new .dash-escalation-resolved-tag
+   modifier (added 17 Jul 2026, same-day follow-up, per Ezekiel: "make the
+   resolved tag rounded") that overrides .rag-badge's boxy min-width/
+   small-radius shape with a full pill, scoped to just this one usage
+   rather than reshaping .rag-badge itself (that base class is shared by
+   Next Actions/Decisions/Clashes/the deep-dive row macros, none of which
+   asked for this).
+
+   The person chip (show_raised_by) is wrapped in .dash-row-people (added
+   same follow-up) rather than sitting bare — it was previously a direct
+   child of .dash-row-main with no margin of its own, so it sat flush
+   against .dash-row-tags above it with zero gap; .dash-row-people is the
+   same "one row of chips, spaced from whatever's above" class Due/At
+   Risk/Next Actions/Clashing Projects already use for their own person-
+   chip rows, reused here for the identical reason.
+#}
+{% macro dash_escalation_history_row(item, show_raised_by=False) %}
+<div class="dash-decision-row">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+        <span class="dash-row-date">{{ item.resolved_display or '—' }}</span>
+        <span class="dash-row-main">
+            <span class="dash-row-title">{{ item.project_name }}</span>
+            <span class="dash-row-tags">
+                <span class="rag-green dash-escalation-resolved-tag">Resolved</span>
+                {% if item.reply_count %}
+                <span class="dash-action-tag">{{ item.reply_count }} repl{{ 'y' if item.reply_count == 1 else 'ies' }}</span>
+                {% endif %}
+            </span>
+            {% if show_raised_by %}
+            <span class="dash-row-people">{{ dash_person_chip(item.raised_by) }}</span>
+            {% endif %}
+        </span>
+    </a>
+    <button type="button" class="btn-secondary dash-escalated-view-btn" data-action="open-decision-flag-modal"
+        data-project-id="{{ item.project_id }}" data-project-name="{{ item.project_name }}" data-flag-id="{{ item.flag_id }}">View</button>
+</div>
+{% endmacro %}
+
+
+{#
+   dash_role_tile(tile) — Role Snapshot's per-person tile (Leadership
+   dashboard). Extracted 16 Jul 2026, same-day follow-up (per Ezekiel:
+   "Role snapshot needs to be segregrated. Client servicing row. Designer
+   Row (split into the 3 teams, 2d, 3d and technical)") so the same tile
+   markup can be rendered under the CS section and each of the three team
+   sub-sections without copy-pasting it four times — see
+   _compute_role_snapshot() in dashboard.py for how `tile` is built and
+   for the segregation itself (dashboard.py groups tiles into
+   role_snapshot.cs / role_snapshot.designers_by_team / .designers_unassigned;
+   this macro only renders ONE tile, unchanged from before the split).
+
+   Made clickable 16 Jul 2026, later still — per Ezekiel: "the client
+   servicing and designers toggle that shows their cards, these need to be
+   clickable, that shows a hidden div below that shows the details of the
+   info card row by row." `data-action="toggle-role-tile"` +
+   `data-user-id`/`data-name` are read by dashboard.js's click handler,
+   which looks up this person's `rows` (now attached to `tile` by
+   _compute_role_snapshot(), see dashboard.py) in the page-level
+   ROLE_SNAPSHOT_TILES JSON blob (dashboard_leadership.html) and renders
+   them into the ONE shared `#dash-role-snapshot-expand` div that sits
+   below both the CS and Designers panels — so clicking a tile in either
+   panel reveals the same detail area, same "one shared expand area"
+   convention this page already uses elsewhere (e.g. #dash-content-area).
+   `.dash-role-tile--active` (dashboard.css) highlights whichever tile's
+   detail is currently showing; toggling the SAME tile again closes it.
+#}
+{% macro dash_role_tile(tile) %}
+<div class="dash-role-tile" data-action="toggle-role-tile" data-user-id="{{ tile.user_id }}" data-name="{{ tile.name }}" role="button" tabindex="0">
+    <div class="dash-role-tile-header">
+        <span class="dash-role-tile-dot dash-role-tile-dot--{{ tile.dot_color }}"></span>
+        <span class="dash-role-tile-name">{{ tile.name }}</span>
+    </div>
+    <div class="dash-role-tile-stat">
+        {{ tile.active_count }} active
+        {% if tile.stat_key != 'clear' %}
+            · {{ tile.stat_count }} {{ tile.stat_label }}
+        {% else %}
+            · clear
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+
+{#
+   dash_stat_project_row(item) — added 15 Jul 2026, per Ezekiel: "have the
+   rest of the cards ... move down also. And when they click them it shows
+   the relevant information in the information area" (Your Active
+   Projects / Pending Approval / Total Active Projects — moved from static
+   stat tiles into real tab+body cards, see the big comment above
+   CARD_ORDER in dashboard.py and _stat_project_rows() there for how
+   `item` is built).
+
+   Deliberately plain — same .dash-row/.dash-row-date/.dash-row-title
+   shell every other row on this page uses, but no person chips or
+   Next Action block: these three cards are a membership list ("which
+   projects make up this number"), not an actionable row like Due/Next
+   Actions, so there's nothing to chip or act on here. The one thing worth
+   showing beyond the name is the project's current status, as a plain
+   neutral .dash-action-tag pill — reused as-is (still a live, styled
+   class in dashboard.css; it just stopped being dash_due_row()'s own tag
+   when Next Actions was redesigned to reuse that macro).
+
+   No JS mirror needed — same as At Risk/Clashing Projects, this card's
+   row list is fully server-rendered with no fetch-on-toggle, only its
+   mini-stat badge is live-refreshed via SSE (see dashboard.js).
+#}
+{% macro dash_stat_project_row(item) %}
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+    <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">{{ item.name }}</span>
+        <span class="dash-row-tags">
+            <span class="dash-action-tag">{{ item.status_label }}</span>
+        </span>
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
+   dash_priority_action_row(item) — added 16 Jul 2026 for the CS-only
+   redesigned dashboard's "My Priority Actions" card (dashboard_cs.html,
+   _compute_priority_actions() in dashboard.py). Effectively dash_due_row()
+   (person chips + right-hand pine "Next Action" block) merged with
+   dash_at_risk_row()'s tag row — At Risk is retired as its own card on
+   this new layout, per Ezekiel: "The at risk will be folded into this via
+   a tag (so at risk tag on the row entry)". item.tags is the same
+   {'label':,'variant':} shape _compute_at_risk_projects() already uses
+   ('overdue' pulsing red, 'plain' rose CS Missing) — see
+   _compute_priority_actions()'s own docstring for why designer-missing is
+   deliberately NOT a third tag here (the red fallback chip inside
+   item.designers, via dash_row_people(), already covers that fact — a
+   flat tag AND a red chip for the same gap would repeat the exact
+   duplicate-indicator bug the At Risk card was fixed for on 13 Jul 2026).
+
+   Always project-level (item.type is always 'project' here — no
+   deliverable/customer to invert a title against, same as Next Actions'
+   old rows), so the title is just the plain project name, no inversion
+   logic needed.
+
+   No JS mirror — this card is fully server-rendered with no fetch-on-open
+   (there's nothing to toggle to fetch), same "acceptable staleness until
+   next page load" convention At Risk/Clashing Projects already use
+   elsewhere on this page.
+#}
+{% macro dash_priority_action_row(item) %}
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+    <span class="dash-row-date">{{ item.deadline if item.deadline else 'No deadline' }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">{{ item.project_name }}</span>
+        {% if item.tags %}
+        <span class="dash-row-tags">
+            {% for tag in item.tags %}
+            <span class="dash-risk-tag{{ ' dash-risk-tag--' + tag.variant if tag.variant != 'plain' else '' }}">{{ tag.label }}</span>
+            {% endfor %}
+        </span>
+        {% endif %}
+        {{ dash_row_people(item.cs_lead, item.designers) }}
+    </span>
+    <span class="dash-row-next-action">
+        <span class="dash-row-next-action-label">Next Action</span>
+        <span class="dash-row-next-action-tag">{{ item.guidance }}</span>
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
+   dash_waiting_row(item) — added 16 Jul 2026 for the CS-only redesigned
+   dashboard's "Waiting on Others" card (dashboard_cs.html,
+   _compute_waiting_on_others() in dashboard.py). Deliberately a SMALLER
+   row than dash_due_row()/dash_priority_action_row() — per Ezekiel: "It
+   will show the owner (example if it's designer show designer name and
+   image, if it's on CS, show their name and image) and it will show
+   waiting since for each entry" — just the project name, the raw next-step
+   text (item.guidance — NOT run through guidance_for_viewer(), see
+   _compute_waiting_on_others()'s docstring for why), one avatar+name chip
+   per current owner (item.owners, 0-2 people — see
+   _serialize_owners_list()), and a plain "Waiting since X" line on the
+   right (reuses dash_person_chip() for the avatar chips, but NOT
+   dash_row_people() — there's no CS-lead-then-designers split to render
+   here, just "whoever's turn it is").
+#}
+{% macro dash_waiting_row(item) %}
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+    <span class="dash-row-main">
+        <span class="dash-row-title">{{ item.project_name }}</span>
+        <span class="dash-row-tags">
+            <span class="dash-action-tag">{{ item.guidance }}</span>
+        </span>
+        <span class="dash-row-people">
+            {% for person in item.owners %}{{ dash_person_chip(person) }}{% endfor %}
+        </span>
+    </span>
+    {% if item.waiting_since_display %}
+    <span class="dash-row-waiting-since">Waiting since {{ item.waiting_since_display }}</span>
+    {% endif %}
+</a>
+{% endmacro %}
+
+
+{#
+   dash_due_today_row(item) — added 16 Jul 2026 for the CS dashboard's
+   newly-clickable "X due today" Focus pill (dashboard_cs.html), which
+   opens a section listing everything due today. `item` comes from
+   _compute_due(scope_user, 'today') — same data source Overdue/Summary's
+   Today column already use, so this row list can never disagree with the
+   pill's own count (both trace back to len(_compute_due(user, 'today'))
+   — see _compute_summary()'s docstring).
+
+   Deliberately NOT dash_due_row() reused as-is — that macro renders
+   dash_row_people(item.cs_lead, item.designers), which shows BOTH the CS
+   lead and every assigned designer regardless of whose turn it currently
+   is ("who's involved"). This section is specifically about "who is the
+   owner of what is due (designer or CS)" — a single current-owner
+   concept, same as Waiting on Others' own dash_waiting_row() above, just
+   with a deadline/title shell matching dash_due_row()'s title-inversion
+   (deliverable/customer name bold, project name grey) instead of
+   dash_waiting_row()'s plain project-only title. item.owner_chips is
+   built by _compute_due() via _serialize_owners_list(owner['user']) —
+   the same normalizer Waiting on Others already uses, so a 0/1/several-
+   person owner list renders identically in both places.
+#}
+{% macro dash_due_today_row(item) %}
+<a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+    <span class="dash-row-date">{{ item.deadline }}</span>
+    <span class="dash-row-main">
+        <span class="dash-row-title">
+            {%- if item.type == 'deliverable' %}{{ item.deliverable_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- elif item.type == 'customer' and item.customer_name %}{{ item.customer_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+            {%- else %}{{ item.project_name }}
+            {%- endif %}
+        </span>
+        <span class="dash-row-tags">
+            <span class="dash-action-tag">{{ item.guidance }}</span>
+        </span>
+        <span class="dash-row-people">
+            {% for person in item.owner_chips %}{{ dash_person_chip(person) }}{% endfor %}
+        </span>
+    </span>
+</a>
+{% endmacro %}
+
+
+{#
+   dash_designer_queue_row(item) — added 16 Jul 2026 for the designer/
+   team_lead dashboard's "My Work Queue" card (dashboard_designer.html,
+   _compute_designer_work_queue() in dashboard.py). Effectively
+   dash_priority_action_row() (date/divider, tags row, right-hand pine
+   "Next Action" block) with two differences: item.client_name renders as
+   a .dash-row-sub line under the title (per Ezekiel: "It should have the
+   project name and the client name below it"), and a single CS-lead-only
+   person chip (dash_person_chip(item.cs_lead) — NOT dash_row_people(),
+   there's no designer roster to show here, this IS the designer's own
+   view of their own project) instead of a full CS-lead+designers row.
+
+   Wrapped in the same .dash-decision-row shell dash_leadership_risk_row()
+   uses (row link + a sibling actions area) rather than a bare <a>, since
+   Blocked rows missing brief info need a real clickable button (opens the
+   inline flag-to-CS-lead modal) that can't legally nest inside the row's
+   own <a> — same rule dash_person_chip()/the Decisions resolve button
+   already follow elsewhere on this page. item.show_flag_button is False
+   for every row except Blocked rows with missing_info=True (see
+   _designer_row_classification() in dashboard.py), so the actions span is
+   empty (harmless) for the vast majority of rows.
+
+   item.deadline is None only for Blocked rows (missing_info always routes
+   there — see _compute_designer_work_queue()'s docstring on why a
+   no-deadline row can't currently reach Due Today/This Week) — rendered
+   as yellow "No Deadline" text (.dash-row-date--warning) either way, per
+   Ezekiel: "If there is no deadline highlight that by making that row's
+   deadline text yellow 'No Deadline' instead of a date."
+
+   17 Jul 2026: title inverts to item.entry_name (bold, the specific
+   deliverable/customer this designer is assigned to) + item.project_name
+   (grey, .dash-row-title-detail) — same title-inversion pattern
+   dash_due_row() already uses — per the deliverable/customer-based
+   rework of _compute_designer_work_queue() (see its docstring). Every
+   row now carries entry_name; the plain item.project_name fallback
+   branch is defensive only.
+#}
+{% macro dash_designer_queue_row(item) %}
+<div class="dash-decision-row dash-designer-queue-row">
+    <a class="dash-row" href="{{ url_for('project_list.index', project=item.project_id) }}">
+        <span class="dash-row-date{{ ' dash-row-date--warning' if not item.deadline else '' }}">{{ item.deadline if item.deadline else 'No Deadline' }}</span>
+        <span class="dash-row-main">
+            <span class="dash-row-title">
+                {%- if item.entry_name %}{{ item.entry_name }} <span class="dash-row-title-detail">&mdash; {{ item.project_name }}</span>
+                {%- else %}{{ item.project_name }}
+                {%- endif %}
+            </span>
+            {% if item.client_name %}
+            <span class="dash-row-sub">{{ item.client_name }}</span>
+            {% endif %}
+            {% if item.tags %}
+            <span class="dash-row-tags">
+                {% for tag in item.tags %}
+                <span class="dash-risk-tag{{ ' dash-risk-tag--' + tag.variant if tag.variant != 'plain' else '' }}">{{ tag.label }}</span>
+                {% endfor %}
+            </span>
+            {% endif %}
+            {{ dash_person_chip(item.cs_lead) }}
+        </span>
+        <span class="dash-row-next-action">
+            <span class="dash-row-next-action-label">Next Action</span>
+            <span class="dash-row-next-action-tag">{{ item.next_action }}</span>
+        </span>
+    </a>
+    {% if item.show_flag_button %}
+    <span class="dash-leadership-risk-actions">
+        <button type="button" class="btn-secondary dash-leadership-action-btn"
+            data-action="open-designer-flag-modal" data-project-id="{{ item.project_id }}" data-project-name="{{ item.project_name }}">Flag to CS Lead</button>
+    </span>
+    {% endif %}
+</div>
+{% endmacro %}
+
+
+{# dash_deep_dive_project_row() / dash_deep_dive_deliverable_row() —
+   removed along with the whole deep-dive zone at the bottom of
+   the dashboard. Check git history if
+   either ever needs resurrecting. #}

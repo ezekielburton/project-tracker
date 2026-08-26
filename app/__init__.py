@@ -1,14 +1,9 @@
 from flask import Flask, g, request
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-from flask_mail import Mail
 from config import Config
 from datetime import timezone, timedelta, datetime
 import os
 
-db = SQLAlchemy()
-login_manager = LoginManager()
-mail = Mail()
+from app.modules.core.shared.extensions import db, login_manager, mail
 
 
 def _compute_static_version():
@@ -34,6 +29,11 @@ def _compute_static_version():
     next deploy, since `git pull` rewrites the mtime of anything that
     changed. No new env var or GEVENT_WORKER branch needed, so it doesn't
     reintroduce either problem the two earlier attempts ran into.
+
+    Ported onto refactor/vsa 24 Aug 2026 alongside main — this branch's
+    own module restructuring (app.modules.core.shared.extensions etc.)
+    is untouched by this fix; only the STATIC_VERSION computation itself
+    changed.
     """
     import time
     app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -54,16 +54,16 @@ def _compute_static_version():
     return str(int(newest)) if newest else str(int(time.time()))
 
 
-def create_app():
+def create_app(config=Config):
     app = Flask(__name__)
     app.config.from_object(Config)
 
     db.init_app(app)
     login_manager.init_app(app)
     mail.init_app(app)
-    from app.live_events import init_live_events
+    from app.modules.core.shared.services.live_events import init_live_events
     init_live_events()
-    from app.sse_relay import init_sse_relay
+    from app.modules.core.shared.services.sse_relay import init_sse_relay
     init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
 
     # Cache-busting query string for every static <link>/<script> tag in
@@ -88,9 +88,9 @@ def create_app():
     # across dozens of edits — the browser's HTTP cache correctly, and
     # indefinitely, kept serving old CSS/JS, surviving hard refreshes and
     # even brand-new tabs, since the URL genuinely never changed. This is
-    # what caused the 16 Jul 2026 "This Week Load has no styling" saga (see
-    # CLAUDE.md) — the served bytes and the file on disk were both correct
-    # the whole time, only the browser's cached copy of the frozen-URL
+    # what can produce a "stylesheet has no effect after deploy" symptom —
+    # the served bytes and the file on disk are both correct the whole
+    # time, only the browser's cached copy of the frozen-URL
     # response was stale. Confirmed via `git status`/`git rev-parse HEAD`
     # directly: dashboard.css showed as modified/uncommitted while
     # STATIC_VERSION matched HEAD exactly — then confirmed AGAIN after a
@@ -128,32 +128,34 @@ def create_app():
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-    from app.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
-    from app.routes import main
-    from app.routes.auth import auth
-    from app.routes.notifications import notifications_bp
-    from app.models import Notification
+    from app.modules.core.shared.models import (User, Project, ProjectDesigner, Scope, Client, Customer, DeliverableType, DeliverableTypeDiscipline, ProjectRegion, ProjectCustomer, Deliverable, DeliverableAssignment, ActivityLog, DesignType, DesignDirection, ProjectFile, ProjectSubmission, ProjectSubmissionDeliverable, ProjectSubmissionFile, ProjectRevision, ProjectRevisionDeliverable, BlogPost, BlogComment, FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment)
+    from app.modules.core.shared.blueprint import core as core_bp
+    from app.modules.core.shared.routes.shell import main
+    from app.modules.auth.routes.auth import auth
+    from app.modules.notifications.routes.notifications import notifications_bp
+    from app.modules.core.shared.models import Notification
     from flask_login import current_user
-    from app.routes.admin import admin_bp
-    from app.routes.blog import blog_bp
-    from app.routes.feedback import feedback_bp
-    from app.routes.wiki import wiki_bp
-    from app.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
-    from app.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
-    from app.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel (Phase 7)
-    from app.routes.wizard import wizard_bp
-    from app.routes.file_templates import file_templates_bp
-    from app.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
-    from app.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
-    from app.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
-    from app.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
+    from app.modules.admin.routes.admin import admin_bp
+    from app.modules.blog.routes.blog import blog_bp
+    from app.modules.feedback.routes.feedback import feedback_bp
+    from app.modules.wiki.routes.wiki import wiki_bp
+    from app.modules.core.shared.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
+    from app.modules.profile.routes.profile import profile_bp  # profile view/edit routes (split out of auth.py 3 Jul 2026)
+    from app.modules.achievements.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel
+    from app.modules.profile.routes.wizard import wizard_bp
+    from app.modules.file_templates.routes.file_templates import file_templates_bp
+    from app.modules.core.shared.routes.sse import sse_bp  # Stage 4 of the SSE redesign — live push routes
+    from app.modules.client_directory.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
+    from app.modules.dashboard.routes.dashboard import dashboard_bp  # role-based dashboard (backend only for now)
+    from app.modules.time_tracking.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
     from app.modules.projects.routes.transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
-    from app.routes.project_list import project_list_bp # Projects page list
-    from app.routes.project_overlay import project_overlay_bp # Projects detail overlay
-    from app.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
-    from app.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
+    from app.modules.projects.routes.project_list import project_list_bp # Projects page list
+    from app.modules.projects.routes.project_overlay import project_overlay_bp # Projects detail overlay
+    from app.modules.projects.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
+    from app.modules.projects.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
 
 
+    app.register_blueprint(core_bp)  # shared templates (later static) on the Jinja search path
     app.register_blueprint(notifications_bp)
     app.register_blueprint(main)
     app.register_blueprint(auth)
@@ -182,7 +184,7 @@ def create_app():
         import json
         from flask import session, url_for
         from flask_login import current_user
-        from app.models import Notification, NotificationSound
+        from app.modules.core.shared.models import Notification, NotificationSound
 
         if current_user.is_authenticated:
             # Use the emulated user's ID when in emulation mode
@@ -200,6 +202,31 @@ def create_app():
             ).order_by(Notification.created_at.desc()).limit(50).all()
 
             unread_count = sum(1 for n in active_notifications if not n.is_read)
+
+            # Request Editing Access (26 Aug 2026, per Ezekiel) — attach
+            # the still-pending ProjectEditAccessRequest id to each
+            # matching notification, so base.html can render inline
+            # Approve/Deny buttons that POST straight to
+            # project_overlay.py's approve_edit_access()/deny_edit_access()
+            # without a template-side query. One extra query total (not
+            # per-notification): notification.project_id + .triggered_by_id
+            # (the requesting designer) uniquely key a pending request
+            # thanks to ProjectEditAccessRequest's own UNIQUE(project_id,
+            # user_id). None here just means it's already been decided
+            # (e.g. from the overlay, if that ever grows its own UI) —
+            # base.html skips the buttons in that case.
+            edit_access_notif_ids = [
+                n.id for n in active_notifications if n.notification_type == 'edit_access_requested'
+            ]
+            if edit_access_notif_ids:
+                from app.modules.core.shared.models import ProjectEditAccessRequest
+                pending_by_key = {
+                    (r.project_id, r.user_id): r.id
+                    for r in ProjectEditAccessRequest.query.filter_by(status='pending').all()
+                }
+                for n in active_notifications:
+                    if n.notification_type == 'edit_access_requested':
+                        n.edit_access_request_id = pending_by_key.get((n.project_id, n.triggered_by_id))
 
             # Resolve this user's saved sound prefs (enabled/volume/chosen file)
             # from the same notification_prefs JSON blob used on the account page.
@@ -259,7 +286,7 @@ def create_app():
         the fix, not just a workaround for one call site.
         """
         from flask import g
-        from app.models import UserDisplaySettings, UserAchievement
+        from app.modules.core.shared.models import UserDisplaySettings, UserAchievement
 
         if not hasattr(g, '_active_badge_cache'):
             g._active_badge_cache = {}
@@ -294,7 +321,7 @@ def create_app():
         names survives Synology's internal sub-param parse that way.
         """
         from urllib.parse import quote
-        from app.nas import REGION_DISPLAY
+        from app.modules.core.shared.services.nas import REGION_DISPLAY
 
         base = (app.config.get('NAS_WEB_URL') or
                 f"https://{app.config.get('NAS_HOST', '')}:{app.config.get('NAS_PORT', '5001')}")

@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import subprocess
 from urllib.parse import urlparse, urlunparse
 from app import create_app
-from app.nas import download_app_file
+from app.modules.core.shared.services.nas import download_app_file
 
 # The backup created by backup_db.py's last successful run.
 # Update this if you want to test-restore a different backup file.

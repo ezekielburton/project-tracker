@@ -31,8 +31,9 @@ real post-redesign count it correctly leaves alone.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app import create_app, db
-from app.models import Project, Deliverable, ProjectRevision, ProjectRevisionDeliverable
+from app import create_app
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import Project, Deliverable, ProjectRevision, ProjectRevisionDeliverable
 
 app = create_app()
 

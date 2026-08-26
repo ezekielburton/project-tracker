@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from datetime import datetime, timezone, timedelta
 from app import create_app
-from app.nas import upload_app_file
+from app.modules.core.shared.services.nas import upload_app_file
 import subprocess
 
 DUBAI_TZ = timezone(timedelta(hours=4))

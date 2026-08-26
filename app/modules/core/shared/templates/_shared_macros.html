@@ -1,0 +1,323 @@
+{# app/templates/_shared_macros.html
+Shared markup for the Projects/Detail/Briefing rewrite, paired with
+app/static/css/shared.css. Mirrors the pattern _dashboard_macros.html
+already established (one macro = one component, reused everywhere)
+but generalized off dash-* naming. Dashboard's own macros are
+UNCHANGED — this is a parallel set for the three new pages. #}
+
+{#
+card(title, header_extra_html)
+─────────────────────────────────
+Generic white card shell (.card/.card-header). Pass title for a
+plain text heading, or leave it blank and put your own markup in
+header_extra_html (e.g. a button) if you need more than a title —
+header_extra_html is rendered |safe, same convention dash_card()
+uses for summary_html. Body content goes in the {% call %} block.
+#}
+{% macro card(title=None, header_extra_html=None) %}
+<div class="card">
+    {% if title or header_extra_html %}
+    <div class="card-header">
+        {% if title %}<span class="card-header-title">{{ title }}</span>{% endif %}
+        {% if header_extra_html %}{{ header_extra_html | safe }}{% endif %}
+    </div>
+    {% endif %}
+    {{ caller() }}
+</div>
+{% endmacro %}
+
+
+
+{#
+person_chip(person, missing_label, missing_class)
+──────────────────────────────────────────────────────
+Direct rename of dash_person_chip() (_dashboard_macros.html) onto the
+generalized .person-chip/.person-avatar classes above. `person` is
+the same {id, name, avatar_filename} shape used everywhere else in
+the app. Deliberately a <span>, not a link — same reasoning as the
+    original: this is expected to sit inside rows that are themselves
+    links, and a link can't legally nest inside a link.
+    #}
+    {% macro person_chip(person, missing_label=None, missing_class='tag tag--risk') %}
+    {% if person %}
+    <span class="person-chip">
+        <span class="person-avatar">
+            {% if person.avatar_filename %}
+            <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="" loading="lazy"> 
+            {% else %}
+            <span class="person-avatar-initials">{{ person.name[0].upper() }}</span>
+            {% endif %}
+        </span>
+        <span class="person-name">{{ person.name }}</span>
+    </span>
+    {% elif missing_label %}
+    <span class="{{ missing_class }}">{{ missing_label }}</span>
+    {% endif %}
+    {% endmacro %}
+
+
+    {#
+    mini_stat(variant, value, label)
+    ───────────────────────────────────────
+    Coloured dot + big value + small label, e.g. a Projects-page rollup
+    ("4 of 7 Approved").
+    {% macro mini_stat(variant, value, label) %}
+    <span class="mini-stat">
+        <span class="mini-stat-dot mini-stat-dot--{{ variant }}"></span>
+        <span class="mini-stat-value">{{ value }}</span>
+        <span class="mini-stat-label">{{ label }}</span>
+    </span>
+    {% endmacro %}
+
+
+    {#
+    tag(text, variant)
+    ──────────────────────
+    Small coloured pill. variant matches a .tag--{{variant}} modifier
+    class in shared.css ('action'/'owner'/'risk' exist today; add more
+    there as Detail/Briefing need new colours — e.g. team tags,
+    revision-count tags — rather than writing a new one-off class each
+    time).
+    #}
+    {% macro tag(text, variant='action') %}
+    <span class="tag tag--{{ variant }}">{{ text }}</span>
+    {% endmacro %}
+    {% macro status_pill(text, modifier) %}
+    <span class="status-pill status-pill--{{ modifier }}">{{ text }}</span>
+    {% endmacro %}
+
+    {#
+    status_override_picker(picker_id, current_label, current_class, options, target_url)
+    ───────────────────────────────────────────────────────────────────────────────────
+    Admin-only "click the pill, pick a different status, it overrides"
+    control — same toggle-button + popover
+    recipe as avatar_picker() below, just swapping person rows for status
+    pills. `options` is a list of (label, css_modifier) pairs — the exact
+    shape status_vocabulary.py's own derive_*_status() functions return,
+    and what app/routes/project_overlay.py's
+    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS passes in, so the popover can
+    never offer a status that doesn't render as a real pill. `target_url`
+    is the POST endpoint status_picker.js sends { status: <label> } to on
+    selection. Used for a deliverable's own status (project_deliverables_card.js)
+    and, for the project pill itself (project_details_card.js), as a bulk
+    write — target_url there is project_overlay.override_project_status(),
+    which applies the picked status to every deliverable (and, for C&CM,
+    every ProjectPosmChannel) on the project; the pill is still a pure live
+    roll-up either way, never stored directly. #}
+    {% macro status_override_picker(picker_id, current_label, current_class, options, target_url) %}
+    <div class="status-picker" id="{{ picker_id }}" data-target-url="{{ target_url }}">
+        <button type="button" class="status-picker-trigger">
+            {{ status_pill(current_label, current_class) }}
+        </button>
+        <div class="status-picker-popover" hidden>
+            {% for label, modifier in options %}
+            <button type="button" class="status-picker-option{% if label == current_label %} is-current{% endif %}"
+                data-status-value="{{ label }}">
+                {{ status_pill(label, modifier) }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endmacro %}
+
+    {#
+    included_summary(includes_concept, includes_kv, names)
+    ──────────────────────────────────────────────────────
+    The quiet "N deliverables ▾" line shown under a sent / historical
+    submission. Collapsed by default so a deck with many deliverables
+    doesn't render a wall of tags; the toggle reveals the full list.
+    The list is the button's immediately-following sibling, so the JS
+    (project_submissions_draft_card.js) toggles it via
+    button.nextElementSibling — no ids, so this macro can appear any
+    number of times on one page (indicator + every history entry) with
+    zero id collisions. `names` is a plain list of strings; Concept/KV
+    are counted and rendered as their own tags alongside them.
+    #}
+    {% macro included_summary(includes_concept, includes_kv, names) %}
+    {% set _count = (names | length) + (1 if includes_concept else 0) + (1 if includes_kv else 0) %}
+    {% if _count %}
+    <div class="overlay-inc">
+        <button type="button" class="overlay-inc-toggle" aria-expanded="false">
+            <span class="overlay-inc-chevron">▾</span>
+            <span class="overlay-inc-count">{{ _count }} deliverable{{ '' if _count == 1 else 's' }}</span>
+        </button>
+        <div class="overlay-inc-list is-hidden">
+            {% if includes_concept %}{{ tag('Concept', 'muted') }}{% endif %}
+            {% if includes_kv %}{{ tag('KV', 'muted') }}{% endif %}
+            {% for name in names %}{{ tag(name, 'muted') }}{% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endmacro %}
+    
+    {#
+    avatar_picker(picker_id, current_person, options, missing_label)
+    ──────────────────────────────────────────────────────────────
+    A button showing the current pick (person_chip, or missing_label if
+    unset) that opens a small popover list of avatar+name rows to choose
+    from — same toggle-button + absolute-positioned-popover recipe as
+    .project-filter-panel/.project-sort-panel (project_list.css), just
+    sized for a short list instead of a wide multi-column one. Generic:
+    the caller supplies `options` (a list of {id, name, avatar_filename}
+    — the same person shape person_chip() already expects). This macro
+    only renders markup — it doesn't know what picking someone should DO
+    (save a CS lead vs a Project Owner are different routes/rules), that
+    lives in avatar_picker.js's onSelect callback, wired up per instance
+    by whichever card uses it. picker_id must be unique per instance on
+    the page (becomes an element id).
+    #}
+    {% macro avatar_picker(picker_id, current_person, options, missing_label='Select…', trigger_label=None, data_team=None)
+    %}
+    <div class="avatar-picker" id="{{ picker_id }}" {% if data_team %} data-team="{{ data_team }}" {% endif %}>
+        <button type="button" class="avatar-picker-trigger">
+            {% if trigger_label %}
+            <span class="avatar-picker-action-label">{{ trigger_label }}</span>
+            {% elif current_person %}
+            {{ person_chip(current_person) }}
+            {% else %}
+            <span class="avatar-picker-placeholder">{{ missing_label }}</span>
+            {% endif %}
+        </button>
+        <div class="avatar-picker-popover" hidden>
+            {% for person in options %}
+            <button type="button" class="avatar-picker-option" data-user-id="{{ person.id }}">
+                {{ person_chip(person) }}
+            </button>
+            {% else %}
+            <p class="avatar-picker-empty">Nobody available.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endmacro %}
+
+    {#
+    deliverable_assign_tag(deliverable_id, team, person, options, mode)
+    ──────────────────────────────────────────────────────────────────
+    One team-tag cell in the Deliverables roster's Team column: it shows who
+    is assigned to a deliverable's team (a DeliverableAssignment), with a
+    write path in the UI. `mode` is computed server-side per
+    deliverable/team in _build_deliverable_focus_context
+    (app/routes/project_overlay.py) and picks one of three renderings:
+
+      'manage' — CS/Admin/Management/Project Owner, or this team's own
+                 team lead. Opens the standard avatar-picker popover (same
+                 AvatarPicker.js hook classes avatar_picker() above uses)
+                 to assign, reassign, or unassign anyone on the team.
+      'self'   — a plain designer on this exact team. One click claims it
+                 if empty or releases their own claim if it's already
+                 them — no popover, wired directly in
+                 project_deliverables_card.js (self_toggle), which can
+                 never touch a teammate's assignment (enforced
+                 server-side too, in assign_deliverable_team()).
+      'static' — no standing on this team and not a manager. Same
+                 non-interactive tag look it always had, plus a small
+                 avatar alongside it once someone's assigned, so a
+                 read-only viewer still sees who's on it.
+
+    Deliberately reuses .avatar-picker-placeholder (shared.css) for the
+    "nobody yet, click to fill" dashed-pill look in both interactive
+    modes — same visual language as every other empty picker in this app,
+    not a new one invented just for this.
+    #}
+    {% macro deliverable_assign_tag(deliverable_id, team, person, options, mode) %}
+    {% if mode == 'manage' %}
+    <div class="avatar-picker deliverable-assign-tag" data-deliverable-id="{{ deliverable_id }}" data-team="{{ team }}">
+        <button type="button" class="avatar-picker-trigger">
+            {% if person %}
+            <span class="deliverable-assign-avatar deliverable-assign-avatar--{{ team|lower }}" title="{{ person.name }}">
+                {% if person.avatar_filename %}
+                <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="" loading="lazy">
+                {% else %}
+                <span class="person-avatar-initials">{{ person.name[0].upper() }}</span>
+                {% endif %}
+            </span>
+            {% else %}
+            <span class="avatar-picker-placeholder">{{ team }}</span>
+            {% endif %}
+        </button>
+        <div class="avatar-picker-popover" hidden>
+            {% if person %}
+            <button type="button" class="avatar-picker-option deliverable-assign-unassign" data-user-id="">Unassign</button>
+            {% endif %}
+            {% for opt in options %}
+            <button type="button" class="avatar-picker-option{{ ' is-current' if person and opt.id == person.id else '' }}"
+                data-user-id="{{ opt.id }}">{{ person_chip(opt) }}</button>
+            {% else %}
+            <p class="avatar-picker-empty">No {{ team }} designers yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif mode == 'self' %}
+    <button type="button"
+        class="deliverable-assign-tag deliverable-assign-tag--self{% if not person %} avatar-picker-placeholder{% endif %}"
+        data-deliverable-id="{{ deliverable_id }}" data-team="{{ team }}" data-mode="self"
+        title="{% if person %}{{ person.name }} — click to remove yourself{% else %}Click to assign yourself to {{ team }}{% endif %}">
+        {% if person %}
+        <span class="deliverable-assign-avatar deliverable-assign-avatar--{{ team|lower }}">
+            {% if person.avatar_filename %}
+            <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="" loading="lazy">
+            {% else %}
+            <span class="person-avatar-initials">{{ person.name[0].upper() }}</span>
+            {% endif %}
+        </span>
+        {% else %}{{ team }}{% endif %}
+    </button>
+    {% else %}
+    {{ tag(team, team|lower) }}
+    {% if person %}
+    <span class="deliverable-assign-avatar deliverable-assign-avatar--{{ team|lower }} deliverable-assign-avatar--static"
+        title="{{ person.name }}">
+        {% if person.avatar_filename %}
+        <img src="{{ url_for('static', filename='avatars/' + person.avatar_filename) }}" alt="" loading="lazy">
+        {% else %}
+        <span class="person-avatar-initials">{{ person.name[0].upper() }}</span>
+        {% endif %}
+    </span>
+    {% endif %}
+    {% endif %}
+    {% endmacro %}
+
+    {#
+    deliverable_picker(picker_id, options, selected_ids)
+    ──────────────────────────────────────────────────────────────
+    A popover multi-select — same trigger-button + fixed-position-popover
+    recipe as avatar_picker() above, sized for toggling a list of
+    deliverables on/off instead of picking exactly one person. The trigger
+    label ("2 deliverables selected") and each option's .is-selected class
+    are the only state that matters — deliverable_picker.js keeps both in
+    sync after the initial render. This macro only renders markup; the
+    caller decides what a selection change should DO. picker_id must be
+    unique per instance on the page (becomes an element id).
+    #}
+    {% macro deliverable_picker(picker_id, options, selected_ids=[]) %}
+    <div class="deliverable-picker" id="{{ picker_id }}">
+        <button type="button" class="deliverable-picker-trigger">
+            <span class="deliverable-picker-trigger-label">
+                {% set count = selected_ids|length %}
+                {%- if count == 0 %}Select deliverables to include
+                {%- elif count == 1 %}1 deliverable selected
+                {%- else %}{{ count }} deliverables selected
+                {%- endif %}
+            </span>
+        </button>
+        <div class="deliverable-picker-popover" hidden>
+            <div class="deliverable-picker-list">
+                {% for d in options %}
+                <button type="button" class="deliverable-picker-option{{ ' is-selected' if d.id in selected_ids else '' }}"
+                    data-deliverable-id="{{ d.id }}">{{ d.name }}</button>
+                {% else %}
+                <p class="deliverable-picker-empty">No deliverables available.</p>
+                {% endfor %}
+            </div>
+            {% if options %}
+            <div class="deliverable-picker-footer">
+                <button type="button" class="deliverable-picker-select-all">Select All</button>
+                <button type="button" class="deliverable-picker-clear">Clear</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endmacro %}
+
+
+

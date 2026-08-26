@@ -388,8 +388,8 @@
         // New role-based dashboard (app/templates/dashboard.html): identified
         // by .dash-content-tabs, unique to that page (same idea as the old
         // dashboard's container-ID check above — pick a marker that can't
-        // also appear on other pages). Was .dash-cards-grid before the 15
-        // Jul 2026 tab-strip redesign (see CLAUDE.md) — that class was
+        // also appear on other pages). Was .dash-cards-grid before the
+        // tab-strip redesign — that class was
         // deleted along with the old Summary-only card wrapper it marked,
         // so this had to move to a class that still renders unconditionally
         // for every role. .dash-content-tabs (the tab strip itself) fits:
@@ -397,7 +397,7 @@
         // always renders on this page, and only this page. Reuses the SAME
         // /sse/dashboard route the old dashboard subscribes to above —
         // sse.py's dashboard_stream() is a generic "something about some
-        // project changed" doorbell (see CLAUDE.md's Live Updates section),
+        // project changed" doorbell (see the Live Updates section),
         // not tied to either dashboard's specific markup, so both pages can
         // safely listen to it at once (never simultaneously in practice,
         // since they're different pages, but nothing here assumes otherwise).

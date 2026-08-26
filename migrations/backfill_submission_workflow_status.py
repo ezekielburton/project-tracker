@@ -23,8 +23,9 @@ Run via migrate.py
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app import create_app, db
-from app.models import ProjectSubmission, Project, ProjectPosmChannel
+from app import create_app
+from app.modules.core.shared.extensions import db
+from app.modules.core.shared.models import ProjectSubmission, Project, ProjectPosmChannel
 
 app = create_app()
 
