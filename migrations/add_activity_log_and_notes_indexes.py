@@ -24,8 +24,20 @@ choke point, which calls _bulk_activity_and_chat_at() unconditionally.
 
 CONCURRENTLY so this doesn't take a write lock on either table while it
 runs — this is a live system, not a maintenance window. CONCURRENTLY
-cannot run inside a transaction block, hence conn.autocommit = True below
-(a plain "BEGIN; CREATE INDEX CONCURRENTLY; COMMIT;" is a Postgres error).
+cannot run inside a transaction block, hence the AUTOCOMMIT isolation
+level set below (a plain "BEGIN; CREATE INDEX CONCURRENTLY; COMMIT;" is
+a Postgres error).
+
+NOTE on how AUTOCOMMIT is set: db.engine.raw_connection() returns
+SQLAlchemy's PoolProxiedConnection wrapper (the "ConnectionFairy"), not
+the bare psycopg2 connection. Setting `.autocommit = True` directly on
+that wrapper only sets a plain attribute on the wrapper object itself —
+it never reaches the real psycopg2 connection, so the CREATE INDEX
+CONCURRENTLY below still silently runs inside an implicit transaction
+and fails with "CREATE INDEX CONCURRENTLY cannot run inside a
+transaction block". Using engine.connect().execution_options(
+isolation_level="AUTOCOMMIT") instead goes through SQLAlchemy's own
+isolation-level handling, which does reach the real DBAPI connection.
 
 Run via: python migrate.py (NOT directly - see migrate.py at project root)
 IF NOT EXISTS makes re-running this harmless.
@@ -34,22 +46,18 @@ IF NOT EXISTS makes re-running this harmless.
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app, db
+from sqlalchemy import text
 
 app = create_app()
 with app.app_context():
-    conn = db.engine.raw_connection()
-    conn.autocommit = True
-    cur = conn.cursor()
+    with db.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_activity_logs_entity_type_entity_id
+            ON activity_logs (entity_type, entity_id);
+        """))
+        conn.execute(text("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_project_notes_project_id
+            ON project_notes (project_id);
+        """))
 
-    cur.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_activity_logs_entity_type_entity_id
-        ON activity_logs (entity_type, entity_id);
-    """)
-    cur.execute("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_project_notes_project_id
-        ON project_notes (project_id);
-    """)
-
-    cur.close()
-    conn.close()
     print("Done - added activity_logs(entity_type, entity_id) and project_notes(project_id) indexes.")
