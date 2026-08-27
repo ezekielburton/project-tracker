@@ -3179,7 +3179,7 @@ def confirm_apply_deliverables_multiple(project_id):
     if not new_deliverables:
         return jsonify({
             'success': False,
-            'error': 'Nothing to apply — every matching deliverable already exists on the selected customers.',
+            'error': 'Nothing to apply. Every matching deliverable is already on the selected customers.',
         }), 400
 
     # add_all + one commit — new_disciplines/new_deliverables reference

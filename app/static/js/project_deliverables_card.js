@@ -578,6 +578,23 @@ window.ProjectDeliverablesCard = (function () {
                 }).map(function (tagEl) { return tagEl.dataset.customerId; });
             }
 
+            // Small helper — a customer card is built from up to three
+            // clearly divided sections (name + counts, deadline, add to
+            // catalog), matching how every other overlay card separates
+            // its own sections rather than running everything into one
+            // paragraph. Plain language throughout, no em dashes.
+            function buildSection(labelText) {
+                var section = document.createElement('div');
+                section.className = 'overlay-apply-multiple-target-section';
+                if (labelText) {
+                    var label = document.createElement('span');
+                    label.className = 'overlay-field-label';
+                    label.textContent = labelText;
+                    section.appendChild(label);
+                }
+                return section;
+            }
+
             function renderReview(data) {
                 targetsContainer.innerHTML = '';
                 data.targets.forEach(function (t) {
@@ -585,38 +602,53 @@ window.ProjectDeliverablesCard = (function () {
                     el.className = 'overlay-apply-multiple-target';
                     el.dataset.customerId = t.customer_id;
 
+                    // Section 1: customer name plus a couple of small,
+                    // plain-language count tags instead of one long
+                    // sentence.
                     var header = document.createElement('div');
                     header.className = 'overlay-apply-multiple-target-header';
-                    header.textContent = t.customer_name + ' — ' + t.will_add_count +
-                        (t.will_add_count === 1 ? ' deliverable' : ' deliverables') + ' will be duplicated' +
-                        (t.already_existing.length ? ' (' + t.already_existing.length + ' already there, skipped)' : '');
+                    var name = document.createElement('span');
+                    name.className = 'overlay-apply-multiple-target-name';
+                    name.textContent = t.customer_name;
+                    header.appendChild(name);
+                    var counts = document.createElement('span');
+                    counts.className = 'overlay-apply-multiple-target-counts';
+                    if (t.will_add_count) {
+                        var addTag = document.createElement('span');
+                        addTag.className = 'tag tag--action';
+                        addTag.textContent = t.will_add_count + ' to add';
+                        counts.appendChild(addTag);
+                    }
+                    if (t.already_existing.length) {
+                        var haveTag = document.createElement('span');
+                        haveTag.className = 'tag tag--muted';
+                        haveTag.textContent = t.already_existing.length + ' already added';
+                        counts.appendChild(haveTag);
+                    }
+                    header.appendChild(counts);
                     el.appendChild(header);
 
+                    // Section 2: deadline for everything duplicated onto
+                    // this customer.
+                    var deadlineSection = buildSection('Deadline');
                     var deadlineRow = document.createElement('div');
                     deadlineRow.className = 'overlay-apply-multiple-target-deadline';
-                    var dateLabel = document.createElement('label');
-                    dateLabel.textContent = 'Deadline ';
                     var dateInput = document.createElement('input');
                     dateInput.type = 'date';
                     dateInput.className = 'overlay-apply-multiple-date';
-                    dateLabel.appendChild(dateInput);
-                    var timeLabel = document.createElement('label');
-                    timeLabel.textContent = 'Time ';
                     var timeSelect = document.createElement('select');
                     timeSelect.className = 'overlay-apply-multiple-time';
                     if (timeTemplate) timeSelect.innerHTML = timeTemplate.innerHTML;
-                    timeLabel.appendChild(timeSelect);
-                    deadlineRow.appendChild(dateLabel);
-                    deadlineRow.appendChild(timeLabel);
-                    el.appendChild(deadlineRow);
+                    deadlineRow.appendChild(dateInput);
+                    deadlineRow.appendChild(timeSelect);
+                    deadlineSection.appendChild(deadlineRow);
+                    el.appendChild(deadlineSection);
 
+                    // Section 3: only shown when this customer's catalog is
+                    // missing one or more of the source deliverables.
                     if (t.missing.length) {
-                        var missingWrap = document.createElement('div');
-                        missingWrap.className = 'overlay-apply-multiple-missing';
-                        var label = document.createElement('span');
-                        label.className = 'overlay-field-label';
-                        label.textContent = 'Not yet in this customer’s catalog — create and apply?';
-                        missingWrap.appendChild(label);
+                        var missingSection = buildSection('Add to catalog');
+                        missingSection.classList.add('overlay-apply-multiple-missing');
                         t.missing.forEach(function (m) {
                             var row = document.createElement('label');
                             row.className = 'overlay-apply-multiple-missing-item';
@@ -626,16 +658,16 @@ window.ProjectDeliverablesCard = (function () {
                             cb.dataset.deliverableId = m.id;
                             row.appendChild(cb);
                             row.appendChild(document.createTextNode(' ' + m.name));
-                            missingWrap.appendChild(row);
+                            missingSection.appendChild(row);
                         });
-                        el.appendChild(missingWrap);
+                        el.appendChild(missingSection);
                     }
                     targetsContainer.appendChild(el);
                 });
                 var matchedCount = data.total_will_add;
                 summaryLine.textContent = matchedCount
-                    ? ('Ready to duplicate ' + matchedCount + (matchedCount === 1 ? ' matched deliverable' : ' matched deliverables') + ' — review each customer below, then Apply.')
-                    : 'No direct catalog matches — review the missing deliverables below to create and apply them, then Apply.';
+                    ? (matchedCount + (matchedCount === 1 ? ' deliverable is ready to add.' : ' deliverables are ready to add.') + ' Check the details below, then press Apply.')
+                    : 'None of these deliverables are in the other catalogs yet. Check the details below, then press Apply.';
             }
 
             if (openBtn) openBtn.addEventListener('click', openModal);

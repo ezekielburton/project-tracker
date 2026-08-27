@@ -2672,35 +2672,56 @@ button.overlay-chat-reaction-chip:hover {
     margin-bottom: var(--space-2);
 }
 
+/* One customer card, three clearly divided sections (27 Aug 2026, per
+   Ezekiel — was one run-on sentence per customer, replaced with the same
+   name/label/border-divider pattern the rest of the overlay already uses,
+   e.g. _submissions_submit_summary.html's .overlay-submit-summary-section):
+   name + status tags, Deadline, and (only when needed) Add to catalog. */
 .overlay-apply-multiple-target {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
     padding: var(--space-3);
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
 }
 
 .overlay-apply-multiple-target-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+}
+
+.overlay-apply-multiple-target-name {
     font-family: var(--font-body);
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--black);
 }
 
-.overlay-apply-multiple-target-deadline {
+.overlay-apply-multiple-target-counts {
     display: flex;
-    gap: var(--space-3);
-    flex-wrap: wrap;
+    gap: var(--space-1);
 }
 
-.overlay-apply-multiple-target-deadline label {
+.overlay-apply-multiple-target-section {
     display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    color: var(--grey-mid);
+    flex-direction: column;
+    gap: var(--space-2);
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--space-2) 0;
+}
+
+.overlay-apply-multiple-target-section:last-child {
+    padding-bottom: 0;
+}
+
+.overlay-apply-multiple-target-deadline {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
 }
 
 .overlay-apply-multiple-target-deadline input,
@@ -2710,14 +2731,6 @@ button.overlay-chat-reaction-chip:hover {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
     padding: var(--space-1) var(--space-2);
-}
-
-.overlay-apply-multiple-missing {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    border-top: 1px solid var(--border-subtle);
-    padding-top: var(--space-2);
 }
 
 .overlay-apply-multiple-missing-item {
