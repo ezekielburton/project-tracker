@@ -548,10 +548,9 @@ window.ProjectDeliverablesCard = (function () {
                 var sourceName = scopeSelectEl ? scopeSelectEl.options[scopeSelectEl.selectedIndex].textContent : '';
                 sourceLabel.textContent = 'Apply ' + sourceName + '’s deliverables to:';
 
-                modal.querySelectorAll('.overlay-apply-multiple-customer-option').forEach(function (opt) {
-                    var cb = opt.querySelector('input');
-                    cb.checked = false;
-                    opt.classList.toggle('is-hidden', opt.dataset.customerId === sourceCustomerId);
+                modal.querySelectorAll('.overlay-apply-multiple-customer-tag').forEach(function (tagEl) {
+                    tagEl.classList.remove('is-selected');
+                    tagEl.classList.toggle('is-hidden', tagEl.dataset.customerId === sourceCustomerId);
                 });
                 selectError.classList.add('hidden');
                 stepReview.classList.add('hidden');
@@ -563,10 +562,20 @@ window.ProjectDeliverablesCard = (function () {
                 modal.classList.add('hidden');
             }
 
+            // Click-to-toggle tags (27 Aug 2026, per Ezekiel) — same
+            // is-selected convention as the 2D/3D/Technical toggles and
+            // the deliverable picker popover, so "selected" looks the
+            // same everywhere on this page.
+            modal.querySelectorAll('.overlay-apply-multiple-customer-tag').forEach(function (tagEl) {
+                tagEl.addEventListener('click', function () {
+                    tagEl.classList.toggle('is-selected');
+                });
+            });
+
             function selectedTargetIds() {
-                return Array.prototype.filter.call(modal.querySelectorAll('.overlay-apply-multiple-customer-option input'), function (cb) {
-                    return cb.checked;
-                }).map(function (cb) { return cb.value; });
+                return Array.prototype.filter.call(modal.querySelectorAll('.overlay-apply-multiple-customer-tag'), function (tagEl) {
+                    return tagEl.classList.contains('is-selected');
+                }).map(function (tagEl) { return tagEl.dataset.customerId; });
             }
 
             function renderReview(data) {

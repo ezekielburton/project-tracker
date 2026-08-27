@@ -181,13 +181,15 @@
 
                 <div id="overlay-apply-multiple-step-select">
                     <p class="overlay-field-label" id="overlay-apply-multiple-source-label"></p>
-                    <div class="overlay-apply-multiple-customer-list" id="overlay-apply-multiple-target-list">
+                    {# Clean toggle tags (27 Aug 2026, per Ezekiel) — same
+                    shape/font as the app's base .tag class, same
+                    click-to-select/sky-fill convention as the 2D/3D/
+                    Technical toggles above and the deliverable picker
+                    popover, instead of a checkbox list. #}
+                    <div class="overlay-apply-multiple-customer-tags" id="overlay-apply-multiple-target-list">
                         {% for c in all_customers %}
-                        <label class="overlay-apply-multiple-customer-option"
-                            data-customer-id="{{ c.project_customer.id }}">
-                            <input type="checkbox" value="{{ c.project_customer.id }}">
-                            {{ c.project_customer.customer.name }}
-                        </label>
+                        <button type="button" class="overlay-apply-multiple-customer-tag"
+                            data-customer-id="{{ c.project_customer.id }}">{{ c.project_customer.customer.name }}</button>
                         {% endfor %}
                     </div>
                     <span class="overlay-apply-multiple-error hidden" id="overlay-apply-multiple-select-error"></span>
