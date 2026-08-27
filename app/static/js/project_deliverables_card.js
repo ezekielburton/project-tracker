@@ -440,10 +440,28 @@ window.ProjectDeliverablesCard = (function () {
                     if (!listEl) return;
                     var rows = listEl.querySelectorAll('.overlay-deliverables-edit-row');
                     if (!rows.length) return;
-                    var sourceDate = rows[0].querySelector('.overlay-deliverables-edit-date').value;
-                    var sourceTime = rows[0].querySelector('.overlay-deliverables-edit-time').value;
-                    Array.prototype.forEach.call(rows, function (row, i) {
-                        if (i === 0) return;
+                    // Bug fix (27 Aug 2026, per Ezekiel) — this used to
+                    // always copy row 0's date/time verbatim, even when
+                    // row 0 had none set (a freshly added row, or one
+                    // nobody had dated yet), which silently blanked every
+                    // other row's real deadline with no warning. Now it
+                    // uses the first row that actually HAS a date as the
+                    // source, and refuses (with a toast) if no row does.
+                    var sourceRow = null;
+                    for (var i = 0; i < rows.length; i++) {
+                        if (rows[i].querySelector('.overlay-deliverables-edit-date').value) {
+                            sourceRow = rows[i];
+                            break;
+                        }
+                    }
+                    if (!sourceRow) {
+                        showToast('Set a deadline on at least one row before using Apply Deadline to All.', 'error');
+                        return;
+                    }
+                    var sourceDate = sourceRow.querySelector('.overlay-deliverables-edit-date').value;
+                    var sourceTime = sourceRow.querySelector('.overlay-deliverables-edit-time').value;
+                    Array.prototype.forEach.call(rows, function (row) {
+                        if (row === sourceRow) return;
                         row.querySelector('.overlay-deliverables-edit-date').value = sourceDate;
                         row.querySelector('.overlay-deliverables-edit-time').value = sourceTime;
                     });
