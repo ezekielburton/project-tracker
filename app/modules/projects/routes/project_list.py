@@ -2,17 +2,26 @@
 # each viewing role, plus the JSON endpoints that power its filtering, sorting,
 # row expansion, and saved table views.
 
-from datetime import date
+from datetime import date, datetime
 from flask import Blueprint, render_template, session, request, jsonify, url_for, redirect
 from flask_login import login_required, current_user
 from sqlalchemy import nullslast, func, case
 from sqlalchemy.orm import joinedload, selectinload
 from app.modules.core.shared.extensions import db
-from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel
+from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel, ActivityLog, ProjectNote, ProjectActivitySeen
 from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 from app.modules.core.shared.services.status_tracking import bulk_project_status_started_at, bulk_project_client_approved_at
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new', template_folder='../templates')
+
+# Unread dots (26/27 Aug 2026, per Ezekiel) — hardcoded to (approximately)
+# the moment this feature shipped, same shape and same reasoning as
+# project_overlay.py's _EDIT_ACCESS_CUTOFF: a user with no ProjectActivitySeen
+# row for a given project is treated as having "seen" it at this fixed
+# instant, not as having never seen it — otherwise every project's entire
+# activity/chat history would light up unread the moment this ships. Only
+# genuinely new activity/chat from here forward ever shows a dot.
+_ACTIVITY_SEEN_ROLLOUT_CUTOFF = datetime(2026, 8, 27, 6, 15, 0)
 
 def _serialize_person(u):
     """Same architecture as dashboard.py's _serialize_person"""
@@ -99,6 +108,77 @@ def _bulk_deliverable_aggregates(project_ids):
         next_deadlines[d.project_id] = {'date': d.design_deadline, 'deliverable_name': d.name}
 
     return rollups, next_deadlines
+
+
+def _bulk_activity_and_chat_at(project_ids):
+    """
+    Unread dots (26/27 Aug 2026, per Ezekiel) — one MAX(created_at) query
+    per source, each grouped by project, same N+1-avoidance shape as
+    _bulk_deliverable_aggregates above.
+
+    "Updates" is read from ActivityLog, filtered to entity_type='project' —
+    every one of this module's ~46 log_activity() call sites already tags
+    itself that way (customer added, status override, hold/cancel, edit-
+    access decisions, etc.), so this is already a complete, uniform "last
+    time something happened on this project" signal with no new logging
+    code and no allowlist of specific action types to maintain here.
+    "Chats" is ProjectNote.created_at.
+
+    Returns (last_update_at, last_chat_at), each a dict keyed by
+    project_id — a project with no key in a given dict has never had that
+    kind of activity at all.
+    """
+    if not project_ids:
+        return {}, {}
+
+    last_update_at = dict(
+        db.session.query(ActivityLog.entity_id, func.max(ActivityLog.created_at))
+        .filter(ActivityLog.entity_type == 'project', ActivityLog.entity_id.in_(project_ids))
+        .group_by(ActivityLog.entity_id)
+        .all()
+    )
+    last_chat_at = dict(
+        db.session.query(ProjectNote.project_id, func.max(ProjectNote.created_at))
+        .filter(ProjectNote.project_id.in_(project_ids))
+        .group_by(ProjectNote.project_id)
+        .all()
+    )
+    return last_update_at, last_chat_at
+
+
+def _bulk_activity_seen(project_ids, user):
+    """
+    Unread dots — this user's (last_seen_update_at, last_seen_chat_at)
+    watermark per project, from ProjectActivitySeen. One query for the
+    whole batch, same shape as every other _bulk_* helper here. Returns a
+    dict keyed by project_id -> the ProjectActivitySeen row; a project
+    with no key just means this user has no watermark for it yet — see
+    _has_unread_activity()'s rollout-cutoff fallback for what that means.
+    """
+    if not project_ids:
+        return {}
+    rows = (
+        ProjectActivitySeen.query
+        .filter(ProjectActivitySeen.user_id == user.id, ProjectActivitySeen.project_id.in_(project_ids))
+        .all()
+    )
+    return {r.project_id: r for r in rows}
+
+
+def _has_unread_activity(last_activity_at, seen_at):
+    """
+    Shared truth-table behind both has_unread_update and has_unread_chat
+    on each row (see _serialize_row below): no activity of this kind has
+    ever happened -> never unread. Activity exists but this user has no
+    watermark row yet -> unread only if that activity happened after
+    _ACTIVITY_SEEN_ROLLOUT_CUTOFF (pre-existing history never lights up on
+    rollout). Watermark set -> unread if the activity is newer than it.
+    """
+    if last_activity_at is None:
+        return False
+    baseline = seen_at if seen_at is not None else _ACTIVITY_SEEN_ROLLOUT_CUTOFF
+    return last_activity_at > baseline
+
 
 def _urgency_for(next_deadline, today):
     """
@@ -462,7 +542,20 @@ def _fetch_all_view_rows(view, user):
     rollups, next_deadlines = _bulk_deliverable_aggregates(project_ids)
     status_started_at = bulk_project_status_started_at(project_ids)
     client_approved_at = bulk_project_client_approved_at(project_ids)
-    return [_serialize_row(p, rollups, next_deadlines, status_started_at, client_approved_at) for p in projects]
+    # Unread dots (26/27 Aug 2026, per Ezekiel) — two more batch-computed
+    # dicts, same pattern as the three above: one pair of bulk queries for
+    # the whole view regardless of row count, folded into each row's dict
+    # by _serialize_row below. Because it happens here — before
+    # _compute_rows_and_groups' filter/sort/group pass ever runs — the
+    # dots are just another field on each row dict, and survive every
+    # filter/sort/group the same way rollup/urgency/etc. already do.
+    last_update_at, last_chat_at = _bulk_activity_and_chat_at(project_ids)
+    seen_by_project = _bulk_activity_seen(project_ids, user)
+    return [
+        _serialize_row(p, rollups, next_deadlines, status_started_at, client_approved_at,
+                       last_update_at, last_chat_at, seen_by_project)
+        for p in projects
+    ]
 
 
 def _rows_excluding(all_rows, exclude):
@@ -590,11 +683,20 @@ def _build_filter_counts(all_rows):
         'design_type': design_type_counts,
     }
 
-def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_approved_at=None):
+def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_approved_at=None,
+                   last_update_at=None, last_chat_at=None, seen_by_project=None):
     """Turns one Project into the flat dict the template needs. Pulled out of index(), now that there are three different queries feeding
-    in the same row shape. rollups/next_deadlines/status_started_at/client_approved_at are the batch-computed dicts from _bulk_deliverable_aggregates()/bulk_project_status_started_at()/bulk_project_client_approved_at() — a plain dict lookup here instead of each row running its own query."""
+    in the same row shape. rollups/next_deadlines/status_started_at/client_approved_at are the batch-computed dicts from _bulk_deliverable_aggregates()/bulk_project_status_started_at()/bulk_project_client_approved_at() — a plain dict lookup here instead of each row running its own query.
+
+    last_update_at/last_chat_at/seen_by_project (26/27 Aug 2026, per
+    Ezekiel) are _bulk_activity_and_chat_at()/_bulk_activity_seen()'s
+    batch-computed dicts, same calling convention as the others — used
+    here to derive has_unread_update/has_unread_chat, the Projects table's
+    two per-row dots. All five extra params default to None so this stays
+    a valid call from anywhere that doesn't care about unread state."""
     next_deadline = next_deadlines.get(p.id)
     status_label, status_class = derive_project_status(p)
+    seen = (seen_by_project or {}).get(p.id)
     return {
         'id': p.id,
         'name': p.name,
@@ -622,6 +724,12 @@ def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_ap
         'customer_count': sum(1 for pc in p.project_customers if not pc.cancelled) if p.brief_type == 'ccm' else None,
         'next_deadline': next_deadline,
         'urgency': _urgency_for(next_deadline, date.today()),
+        # Unread dots — independent flags per _has_unread_activity's rules
+        # above, so a project can show either, both, or neither.
+        'has_unread_update': _has_unread_activity(
+            (last_update_at or {}).get(p.id), seen.last_seen_update_at if seen else None),
+        'has_unread_chat': _has_unread_activity(
+            (last_chat_at or {}).get(p.id), seen.last_seen_chat_at if seen else None),
     }
 
 def _compute_rows_and_groups(all_rows):

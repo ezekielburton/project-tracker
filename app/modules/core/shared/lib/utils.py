@@ -51,6 +51,41 @@ def get_actor():
         return User.query.get(emulating_id)
     return current_user
 
+def mark_project_activity_seen(project, user, kind):
+    """Advances one of a user's two Projects-table unread watermarks for
+    this project (26/27 Aug 2026, per Ezekiel — the table's per-row
+    "new updates"/"new chat" dots; see ProjectActivitySeen's docstring in
+    core/shared/models/projects.py for the full design).
+
+    kind is 'update' or 'chat'. Callers: project_overlay.py's overlay()
+    route (kind='update', fires on opening the overlay at all) and
+    project_notes.py's overlay_chat() route (kind='chat', fires only on
+    opening the Chat drawer specifically) — kept as two independent calls
+    rather than one shared watermark, per Ezekiel's call that staff need
+    to clear those two dots separately.
+
+    Upserts rather than requiring a pre-existing row, and is deliberately
+    best-effort like log_activity above — a failure here should never
+    break the page it's called from, it just means the dot might not
+    clear until the next successful visit."""
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectActivitySeen
+    from datetime import datetime
+
+    column = {'update': 'last_seen_update_at', 'chat': 'last_seen_chat_at'}[kind]
+    try:
+        seen = ProjectActivitySeen.query.filter_by(project_id=project.id, user_id=user.id).first()
+        if not seen:
+            seen = ProjectActivitySeen(project_id=project.id, user_id=user.id)
+            db.session.add(seen)
+        setattr(seen, column, datetime.utcnow())
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+
+
 def log_activity(action, description, user=None, entity_type=None, entity_name=None, entity_id=None, changes=None):
     """description stays the free-text sentence shown everywhere (dashboard's
     What Changed card renders it as-is, deliberately no diff UI there — see

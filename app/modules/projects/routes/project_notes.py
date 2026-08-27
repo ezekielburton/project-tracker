@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, abort, current_a
 from flask_login import login_required
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Project, ProjectNote, User
-from app.modules.core.shared.lib.utils import log_activity
+from app.modules.core.shared.lib.utils import log_activity, mark_project_activity_seen
 
 project_notes_bp = Blueprint('project_notes', __name__, template_folder='../templates')
 
@@ -223,6 +223,12 @@ def overlay_chat(project_id):
     is_admin = actor.role in ('admin', 'management')
     # At most one pinned note per project (enforced in toggle_pin_note).
     pinned_note = next((n for n in notes if n.is_pinned), None)
+
+    # Clears the Projects table's "new chat" dot for this project (26/27
+    # Aug 2026, per Ezekiel) — deliberately its own watermark, separate
+    # from overlay()'s "new updates" one in project_overlay.py, so opening
+    # some other tab never silently marks unread chat messages as read.
+    mark_project_activity_seen(project, actor, 'chat')
 
     return render_template(
         'project_overlay/_overlay_chat.html',

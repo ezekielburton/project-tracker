@@ -1654,6 +1654,14 @@ def overlay(project_id):
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     context = _build_details_context(project, actor)
+    # Clears the Projects table's "new updates" dot for this project (26/27
+    # Aug 2026, per Ezekiel) — deliberately fires on opening the overlay at
+    # all, not per sub-tab; see ProjectActivitySeen's docstring for why the
+    # Chat drawer gets its own separate watermark instead (project_notes.py's
+    # overlay_chat()). Best-effort — see mark_project_activity_seen()'s
+    # docstring — never blocks the render below.
+    from app.modules.core.shared.lib.utils import mark_project_activity_seen
+    mark_project_activity_seen(project, actor, 'update')
     return render_template('project_overlay/_overlay.html', project=project, **context)
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/details')

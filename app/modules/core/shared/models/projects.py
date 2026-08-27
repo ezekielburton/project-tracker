@@ -421,6 +421,52 @@ class ProjectEditAccessRequest(db.Model):
         return f'<ProjectEditAccessRequest project={self.project_id} user={self.user_id} status={self.status}>'
 
 
+class ProjectActivitySeen(db.Model):
+    """Per-(user, project) watermark backing the Projects table's two
+    unread dots (26/27 Aug 2026, per Ezekiel — "notification bubble... for
+    new updates or chats"). Two independent timestamps, not one: Ezekiel
+    was explicit that staff need to clear an "update" dot separately from
+    a "chat" dot, since chat is newly adopted and opening some other tab
+    shouldn't silently mark unread messages as read.
+
+    last_seen_update_at is advanced by opening the project overlay at all
+    (project_overlay.py's overlay() route calls
+    mark_project_activity_seen(project, actor, 'update')).
+    last_seen_chat_at is advanced only by opening the Chat drawer
+    specifically (project_notes.py's overlay_chat() route calls
+    mark_project_activity_seen(project, actor, 'chat')). Both go through
+    that one shared helper in core/shared/lib/utils.py.
+
+    No row for a (user, project) pair means "never seen" — project_list.py
+    treats that as seen at _ACTIVITY_SEEN_ROLLOUT_CUTOFF (there), not as
+    forever-unread, so the existing backlog of activity/chat history
+    doesn't light up every row the moment this ships. Same rollout-cutoff
+    shape as ProjectEditAccessRequest's _EDIT_ACCESS_CUTOFF above.
+
+    "Updates" is read from ActivityLog (entity_type='project') and "chats"
+    from ProjectNote — both already exist and are already logged uniformly
+    for every project-affecting action in this codebase, so no new event-
+    logging code was needed to define either side of "unread".
+    """
+    __tablename__ = 'project_activity_seen'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    last_seen_update_at = db.Column(db.DateTime, nullable=True)
+    last_seen_chat_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    project = db.relationship('Project', foreign_keys=[project_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'project_id', name='uq_project_activity_seen_user_project'),
+    )
+
+    def __repr__(self):
+        return f'<ProjectActivitySeen user={self.user_id} project={self.project_id}>'
+
+
 class ProjectOverlaySeen(db.Model):
     """
     One row per (user, project) marking that user's first visit to the new

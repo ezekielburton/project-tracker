@@ -3,7 +3,7 @@ from core/shared/extensions, so cross-file relationships resolve normally.
 This package re-exports every model as the single import surface."""
 from .users import load_user, User, RoleTitle, UserTableLayout, DEFAULT_ROLE_TITLES, ProjectTableView
 from .clients import Client, Customer, Contact
-from .projects import DesignType, DesignDirection, Scope, Project, ProjectDesigner, ProjectReviewer, ProjectApproval, ProjectRegion, ProjectCustomer, ProjectFile, SiteVisit, ProjectOverlaySeen, ProjectSecondaryCS, ProjectSecondaryCsRegion, ProjectPosmChannel, ProjectEditAccessRequest
+from .projects import DesignType, DesignDirection, Scope, Project, ProjectDesigner, ProjectReviewer, ProjectApproval, ProjectRegion, ProjectCustomer, ProjectFile, SiteVisit, ProjectOverlaySeen, ProjectSecondaryCS, ProjectSecondaryCsRegion, ProjectPosmChannel, ProjectEditAccessRequest, ProjectActivitySeen
 from .deliverables import DeliverableType, DeliverableTypeDiscipline, Deliverable, DeliverableAssignment, DeliverablePreproductionEvent
 from .status_logs import ProjectStatusLog, ProjectCustomerStatusLog, DeliverableStatusLog
 from .submissions import ProjectSubmission, ProjectRevision, ProjectRevisionDeliverable, ProjectSubmissionDeliverable, ProjectSubmissionEvent, ProjectSubmissionEventDeliverable, ProjectSubmissionFile, TechnicalSubmission
@@ -42,6 +42,7 @@ __all__ = [
     'ProjectSecondaryCsRegion',
     'ProjectPosmChannel',
     'ProjectEditAccessRequest',
+    'ProjectActivitySeen',
     'DeliverableType',
     'DeliverableTypeDiscipline',
     'Deliverable',

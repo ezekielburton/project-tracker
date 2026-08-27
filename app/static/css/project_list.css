@@ -312,6 +312,31 @@
 
 .project-col-name {
     grid-column: var(--pos-name, 2);
+    gap: var(--space-2);
+}
+
+/* Unread dots (26/27 Aug 2026, per Ezekiel) — small, distinct colors so
+"new update" and "new chat message" read as two different things at a
+glance, not one generic "something happened" indicator. --tangerine
+matches the notification bell's own existing accent color (main.css's
+.bell-badge/.notification-item), so "update" reads consistently with the
+rest of the app; --lavender is unused elsewhere in this palette, so
+"chat" can't be mistaken for a status/urgency color already in play
+(coral/oak/clover are status stages, salmon is danger, sky is action). */
+.project-unread-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.project-unread-dot--update {
+    background: var(--tangerine);
+}
+
+.project-unread-dot--chat {
+    background: var(--lavender);
 }
 
 .project-col-client {

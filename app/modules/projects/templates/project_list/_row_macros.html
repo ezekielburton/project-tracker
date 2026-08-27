@@ -26,7 +26,23 @@ running count, which is exactly why this needs a namespace instead. #}
         <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
             data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>
     </span>
-    <span class="project-col-name">{{ row.name }}</span>
+    <span class="project-col-name">
+        {{ row.name }}
+        {# Unread dots (26/27 Aug 2026, per Ezekiel) — two independent
+        indicators, deliberately not one combined dot: staff need to tell
+        "new update" and "new chat message" apart, and clear them
+        separately (opening the overlay clears the update dot; only
+        opening Chat specifically clears the chat one — see
+        mark_project_activity_seen() in core/shared/lib/utils.py). Lives
+        right on project_row(), the one macro every render path shares
+        (real page load, live SSE refresh, every filter/sort/group
+        combination), so there's no separate code path for this to fall
+        out of sync with. #}
+        {% if row.has_unread_update %}<span class="project-unread-dot project-unread-dot--update"
+            title="New updates since you last viewed this project"></span>{% endif %}
+        {% if row.has_unread_chat %}<span class="project-unread-dot project-unread-dot--chat"
+            title="New chat messages since you last opened Chat"></span>{% endif %}
+    </span>
     <span class="project-col-client">{{ row.client or '—' }}</span>
     <span class="project-col-cs">
         {{ person_chip(row.cs_lead, 'CS Missing') }}
