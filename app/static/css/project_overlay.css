@@ -2518,6 +2518,35 @@ button.overlay-chat-reaction-chip:hover {
     border-color: var(--black);
 }
 
+/* C&CM's deliverable catalog picker (26/27 Aug 2026, per Ezekiel) — the
+   row's first grid cell now wraps a <select> (.overlay-deliverables-edit-name
+   still, so it inherits the field styling above) plus a conditional
+   free-text input that only shows once "+ Add new deliverable…" is picked.
+   Standard's plain .overlay-deliverables-edit-name <input> never gets this
+   wrapper, so it's unaffected. */
+.overlay-deliverables-edit-name-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.overlay-deliverables-edit-new-name {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--black);
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-2);
+    min-width: 0;
+}
+
+.overlay-deliverables-edit-new-name:focus {
+    outline: none;
+    border-color: var(--black);
+}
+
 .overlay-deliverables-edit-toggle {
     font-family: var(--font-body);
     font-size: var(--text-xs);
@@ -2561,6 +2590,115 @@ button.overlay-chat-reaction-chip:hover {
 
 .overlay-deliverables-edit-header-deadline {
     grid-column: span 2;
+}
+
+/* ------- Deliverables: Apply to Multiple modal ------- */
+/* (26/27 Aug 2026, per Ezekiel) — sits on the standard .modal-overlay/
+   .modal-box shell (main.css); only what's specific to this modal's two
+   steps lives here. */
+
+.overlay-apply-multiple-box {
+    max-width: 32rem;
+    width: 100%;
+}
+
+.overlay-apply-multiple-customer-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 14rem;
+    overflow-y: auto;
+    margin: var(--space-2) 0 var(--space-3);
+}
+
+.overlay-apply-multiple-customer-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--black);
+}
+
+.overlay-apply-multiple-error {
+    display: block;
+    margin-bottom: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--rose);
+}
+
+.overlay-apply-multiple-summary {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--grey-dark);
+    margin: 0 0 var(--space-3);
+}
+
+#overlay-apply-multiple-targets {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-height: 22rem;
+    overflow-y: auto;
+    margin-bottom: var(--space-2);
+}
+
+.overlay-apply-multiple-target {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.overlay-apply-multiple-target-header {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--black);
+}
+
+.overlay-apply-multiple-target-deadline {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.overlay-apply-multiple-target-deadline label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    color: var(--grey-mid);
+}
+
+.overlay-apply-multiple-target-deadline input,
+.overlay-apply-multiple-target-deadline select {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: var(--space-1) var(--space-2);
+}
+
+.overlay-apply-multiple-missing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    border-top: 1px solid var(--border-subtle);
+    padding-top: var(--space-2);
+}
+
+.overlay-apply-multiple-missing-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--black);
 }
 
 .overlay-deliverables-ccm {

@@ -5,6 +5,14 @@ window.ProjectDeliverablesCard = (function () {
         var skipPickerHandle = null;
         var assignPickerHandles = [];
         var statusPickerHandles = [];
+        // Apply to Multiple (26/27 Aug 2026, per Ezekiel) requires a clean
+        // Save first — it reads real, committed deliverables server-side,
+        // never in-form drafts — so every row mutation in edit mode flips
+        // this true via markUnsaved(), bindEdit() resets it false on a
+        // fresh render of saved state, and a successful Save resets it
+        // false again right before backToReadOnly().
+        var hasUnsavedChanges = false;
+        function markUnsaved() { hasUnsavedChanges = true; }
 
         function bindReadOnly() {
             wireDeliverablesRail(rootEl);
@@ -260,14 +268,38 @@ window.ProjectDeliverablesCard = (function () {
                     row.querySelectorAll('.overlay-deliverables-edit-toggle'),
                     function (btn) { return btn.classList.contains('is-active'); }
                 ).map(function (btn) { return btn.dataset.team; });
-                return {
+                var out = {
                     id: row.dataset.deliverableId || null,
-                    name: row.querySelector('.overlay-deliverables-edit-name').value.trim(),
                     design_deadline: row.querySelector('.overlay-deliverables-edit-date').value || null,
                     design_deadline_time: row.querySelector('.overlay-deliverables-edit-time').value || null,
                     teams: teams,
                     deleted: row.dataset.deleted === 'true',
                 };
+
+                // C&CM rows carry the catalog picker (see
+                // _deliverables_ccm_edit.html); Standard rows still just
+                // have a plain .overlay-deliverables-edit-name <input> —
+                // this branch is what keeps both shapes working through
+                // the one shared save route.
+                var typeSelect = row.querySelector('.overlay-deliverables-edit-type-select');
+                if (typeSelect) {
+                    if (typeSelect.value === '__new__') {
+                        var newNameInput = row.querySelector('.overlay-deliverables-edit-new-name');
+                        var newName = newNameInput ? newNameInput.value.trim() : '';
+                        out.new_type_name = newName;
+                        out.name = newName;
+                    } else if (typeSelect.value === '__legacy__' || !typeSelect.value) {
+                        var legacyOpt = typeSelect.options[typeSelect.selectedIndex];
+                        out.name = (legacyOpt && legacyOpt.dataset.name) || '';
+                    } else {
+                        out.deliverable_type_id = typeSelect.value;
+                        var pickedOpt = typeSelect.options[typeSelect.selectedIndex];
+                        out.name = (pickedOpt && pickedOpt.dataset.name) || '';
+                    }
+                } else {
+                    out.name = row.querySelector('.overlay-deliverables-edit-name').value.trim();
+                }
+                return out;
             });
         }
 
@@ -315,7 +347,7 @@ window.ProjectDeliverablesCard = (function () {
 
         function wireRow(row) {
             row.querySelectorAll('.overlay-deliverables-edit-toggle').forEach(function (btn) {
-                btn.addEventListener('click', function () { btn.classList.toggle('is-active'); });
+                btn.addEventListener('click', function () { btn.classList.toggle('is-active'); markUnsaved(); });
             });
             var deleteBtn = row.querySelector('.overlay-deliverables-edit-delete');
             if (deleteBtn) {
@@ -326,16 +358,51 @@ window.ProjectDeliverablesCard = (function () {
                     } else {
                         row.remove();
                     }
+                    markUnsaved();
                 });
             }
+            // C&CM's catalog picker only (Standard still uses a plain
+            // .overlay-deliverables-edit-name <input>, no select — see
+            // _deliverables_standard_edit.html) — picking "+ Add new
+            // deliverable…" reveals the free-text name field beside it.
+            var typeSelect = row.querySelector('.overlay-deliverables-edit-type-select');
+            var newNameInput = row.querySelector('.overlay-deliverables-edit-new-name');
+            if (typeSelect && newNameInput) {
+                typeSelect.addEventListener('change', function () {
+                    var isNew = typeSelect.value === '__new__';
+                    newNameInput.classList.toggle('is-hidden', !isNew);
+                    if (isNew) newNameInput.focus();
+                });
+            }
+            row.querySelectorAll('input, select').forEach(function (el) {
+                el.addEventListener('input', markUnsaved);
+                el.addEventListener('change', markUnsaved);
+            });
         }
 
         function bindEdit() {
+            // A fresh render of edit mode always reflects committed state
+            // (either the first Edit Deliverables click, or the reload
+            // Apply to Multiple's confirm step does on success) — reset
+            // here rather than only after Save, so opening Apply to
+            // Multiple right after either of those never false-positives.
+            hasUnsavedChanges = false;
+            // Standard has one shared #overlay-deliverable-row-template;
+            // C&CM has one per customer panel, keyed by customer id (see
+            // _deliverables_ccm_edit.html) so a cloned row's picker always
+            // offers THAT customer's catalog — addTemplateFor() below
+            // resolves which one Add Deliverable should clone from.
             var template = rootEl.querySelector('#overlay-deliverable-row-template');
             var addBtn = rootEl.querySelector('#overlay-add-deliverable-btn');
             var applyAllBtn = rootEl.querySelector('#overlay-apply-deadline-all-btn');
             var saveBtn = rootEl.querySelector('#overlay-save-deliverables-btn');
             var scopeSelect = rootEl.querySelector('#overlay-deliverables-edit-scope-select');
+
+            function addTemplateFor(listEl) {
+                if (template) return template;
+                var panel = listEl.closest('[data-customer-panel]');
+                return panel ? rootEl.querySelector('#overlay-deliverable-row-template-' + panel.dataset.customerPanel) : null;
+            }
 
             rootEl.querySelectorAll('.overlay-deliverables-edit-row').forEach(wireRow);
 
@@ -348,15 +415,19 @@ window.ProjectDeliverablesCard = (function () {
                 });
             }
 
-            if (addBtn && template) {
+            if (addBtn) {
                 addBtn.addEventListener('click', function () {
                     var listEl = activeEditList(rootEl);
                     if (!listEl) return;
-                    var clone = template.content.cloneNode(true);
+                    var rowTemplate = addTemplateFor(listEl);
+                    if (!rowTemplate) return;
+                    var clone = rowTemplate.content.cloneNode(true);
                     var row = clone.querySelector('.overlay-deliverables-edit-row');
                     listEl.appendChild(clone);
                     wireRow(row);
-                    row.querySelector('.overlay-deliverables-edit-name').focus();
+                    markUnsaved();
+                    var focusTarget = row.querySelector('.overlay-deliverables-edit-type-select') || row.querySelector('.overlay-deliverables-edit-name');
+                    if (focusTarget) focusTarget.focus();
                 });
             }
 
@@ -376,6 +447,7 @@ window.ProjectDeliverablesCard = (function () {
                         row.querySelector('.overlay-deliverables-edit-date').value = sourceDate;
                         row.querySelector('.overlay-deliverables-edit-time').value = sourceTime;
                     });
+                    markUnsaved();
                 });
             }
 
@@ -403,12 +475,253 @@ window.ProjectDeliverablesCard = (function () {
                                 alert(data.error || 'Could not save deliverables.');
                                 return;
                             }
+                            hasUnsavedChanges = false;
                             backToReadOnly();
                         })
                         .catch(function () {
                             saveBtn.disabled = false;
                             saveBtn.textContent = originalText;
                             alert('Something went wrong.');
+                        });
+                });
+            }
+
+            wireApplyToMultiple();
+        }
+
+        // ── Apply to Multiple (26/27 Aug 2026, per Ezekiel) — C&CM only;
+        // the modal itself only renders when the project has more than one
+        // customer (see _deliverables_ccm_edit.html), so this is a no-op
+        // everywhere else, Standard included. Two-step modal: pick target
+        // customers -> server computes matches/misses against each
+        // target's own catalog (POST .../apply-multiple/preview, no
+        // writes) -> review, one deadline per target customer applied to
+        // everything duplicated onto it, plus a per-customer checklist for
+        // any deliverable missing from that customer's catalog -> Apply
+        // (POST .../apply-multiple/confirm, writes once). Requires a clean
+        // Save first since both endpoints read committed deliverables, not
+        // in-form drafts. ──
+        function wireApplyToMultiple() {
+            var modal = rootEl.querySelector('#overlay-apply-multiple-modal');
+            if (!modal) return;
+
+            var openBtn = rootEl.querySelector('#overlay-apply-multiple-btn');
+            var stepSelect = modal.querySelector('#overlay-apply-multiple-step-select');
+            var stepReview = modal.querySelector('#overlay-apply-multiple-step-review');
+            var sourceLabel = modal.querySelector('#overlay-apply-multiple-source-label');
+            var selectError = modal.querySelector('#overlay-apply-multiple-select-error');
+            var reviewError = modal.querySelector('#overlay-apply-multiple-review-error');
+            var summaryLine = modal.querySelector('#overlay-apply-multiple-summary-line');
+            var targetsContainer = modal.querySelector('#overlay-apply-multiple-targets');
+            var continueBtn = modal.querySelector('#overlay-apply-multiple-continue');
+            var confirmBtn = modal.querySelector('#overlay-apply-multiple-confirm');
+            var cancelBtn = modal.querySelector('#overlay-apply-multiple-cancel');
+            var backBtn = modal.querySelector('#overlay-apply-multiple-back');
+            var timeTemplate = rootEl.querySelector('#overlay-apply-multiple-time-options-template');
+            var sourceCustomerId = null;
+
+            function activeSourceCustomerId() {
+                var visiblePanel = rootEl.querySelector('.overlay-deliverables-edit-panel:not(.is-hidden)');
+                return visiblePanel ? visiblePanel.dataset.customerPanel : null;
+            }
+
+            function openModal() {
+                if (hasUnsavedChanges) {
+                    showToast('Save your changes before using Apply to Multiple.', 'error');
+                    return;
+                }
+                sourceCustomerId = activeSourceCustomerId();
+                if (!sourceCustomerId) return;
+                var sourcePanel = rootEl.querySelector('.overlay-deliverables-edit-panel[data-customer-panel="' + sourceCustomerId + '"]');
+                // dataset.deleted, not the row's inline display style — same
+                // signal collectRows()/the save route already use to tell a
+                // soft-deleted-but-unsaved row apart from a real one.
+                var visibleRows = sourcePanel ? Array.prototype.filter.call(
+                    sourcePanel.querySelectorAll('.overlay-deliverables-edit-row[data-deliverable-id]'),
+                    function (row) { return row.dataset.deleted !== 'true'; }
+                ) : [];
+                if (!visibleRows.length) {
+                    showToast('This customer has no saved deliverables to duplicate.', 'error');
+                    return;
+                }
+                var scopeSelectEl = rootEl.querySelector('#overlay-deliverables-edit-scope-select');
+                var sourceName = scopeSelectEl ? scopeSelectEl.options[scopeSelectEl.selectedIndex].textContent : '';
+                sourceLabel.textContent = 'Apply ' + sourceName + '’s deliverables to:';
+
+                modal.querySelectorAll('.overlay-apply-multiple-customer-option').forEach(function (opt) {
+                    var cb = opt.querySelector('input');
+                    cb.checked = false;
+                    opt.classList.toggle('is-hidden', opt.dataset.customerId === sourceCustomerId);
+                });
+                selectError.classList.add('hidden');
+                stepReview.classList.add('hidden');
+                stepSelect.classList.remove('hidden');
+                modal.classList.remove('hidden');
+            }
+
+            function closeModal() {
+                modal.classList.add('hidden');
+            }
+
+            function selectedTargetIds() {
+                return Array.prototype.filter.call(modal.querySelectorAll('.overlay-apply-multiple-customer-option input'), function (cb) {
+                    return cb.checked;
+                }).map(function (cb) { return cb.value; });
+            }
+
+            function renderReview(data) {
+                targetsContainer.innerHTML = '';
+                data.targets.forEach(function (t) {
+                    var el = document.createElement('div');
+                    el.className = 'overlay-apply-multiple-target';
+                    el.dataset.customerId = t.customer_id;
+
+                    var header = document.createElement('div');
+                    header.className = 'overlay-apply-multiple-target-header';
+                    header.textContent = t.customer_name + ' — ' + t.will_add_count +
+                        (t.will_add_count === 1 ? ' deliverable' : ' deliverables') + ' will be duplicated' +
+                        (t.already_existing.length ? ' (' + t.already_existing.length + ' already there, skipped)' : '');
+                    el.appendChild(header);
+
+                    var deadlineRow = document.createElement('div');
+                    deadlineRow.className = 'overlay-apply-multiple-target-deadline';
+                    var dateLabel = document.createElement('label');
+                    dateLabel.textContent = 'Deadline ';
+                    var dateInput = document.createElement('input');
+                    dateInput.type = 'date';
+                    dateInput.className = 'overlay-apply-multiple-date';
+                    dateLabel.appendChild(dateInput);
+                    var timeLabel = document.createElement('label');
+                    timeLabel.textContent = 'Time ';
+                    var timeSelect = document.createElement('select');
+                    timeSelect.className = 'overlay-apply-multiple-time';
+                    if (timeTemplate) timeSelect.innerHTML = timeTemplate.innerHTML;
+                    timeLabel.appendChild(timeSelect);
+                    deadlineRow.appendChild(dateLabel);
+                    deadlineRow.appendChild(timeLabel);
+                    el.appendChild(deadlineRow);
+
+                    if (t.missing.length) {
+                        var missingWrap = document.createElement('div');
+                        missingWrap.className = 'overlay-apply-multiple-missing';
+                        var label = document.createElement('span');
+                        label.className = 'overlay-field-label';
+                        label.textContent = 'Not yet in this customer’s catalog — create and apply?';
+                        missingWrap.appendChild(label);
+                        t.missing.forEach(function (m) {
+                            var row = document.createElement('label');
+                            row.className = 'overlay-apply-multiple-missing-item';
+                            var cb = document.createElement('input');
+                            cb.type = 'checkbox';
+                            cb.checked = true;
+                            cb.dataset.deliverableId = m.id;
+                            row.appendChild(cb);
+                            row.appendChild(document.createTextNode(' ' + m.name));
+                            missingWrap.appendChild(row);
+                        });
+                        el.appendChild(missingWrap);
+                    }
+                    targetsContainer.appendChild(el);
+                });
+                var matchedCount = data.total_will_add;
+                summaryLine.textContent = matchedCount
+                    ? ('Ready to duplicate ' + matchedCount + (matchedCount === 1 ? ' matched deliverable' : ' matched deliverables') + ' — review each customer below, then Apply.')
+                    : 'No direct catalog matches — review the missing deliverables below to create and apply them, then Apply.';
+            }
+
+            if (openBtn) openBtn.addEventListener('click', openModal);
+            if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+            if (backBtn) {
+                backBtn.addEventListener('click', function () {
+                    stepReview.classList.add('hidden');
+                    stepSelect.classList.remove('hidden');
+                });
+            }
+
+            if (continueBtn) {
+                continueBtn.addEventListener('click', function () {
+                    var targetIds = selectedTargetIds();
+                    if (!targetIds.length) {
+                        selectError.textContent = 'Select at least one customer.';
+                        selectError.classList.remove('hidden');
+                        return;
+                    }
+                    selectError.classList.add('hidden');
+                    continueBtn.disabled = true;
+                    fetch(`/projects/${projectId}/overlay/deliverables/apply-multiple/preview`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ source_customer_id: sourceCustomerId, target_customer_ids: targetIds }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            continueBtn.disabled = false;
+                            if (!data.success) {
+                                selectError.textContent = data.error || 'Could not preview this duplication.';
+                                selectError.classList.remove('hidden');
+                                return;
+                            }
+                            renderReview(data);
+                            stepSelect.classList.add('hidden');
+                            stepReview.classList.remove('hidden');
+                        })
+                        .catch(function () {
+                            continueBtn.disabled = false;
+                            selectError.textContent = 'Something went wrong. Please try again.';
+                            selectError.classList.remove('hidden');
+                        });
+                });
+            }
+
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', function () {
+                    var targets = {};
+                    targetsContainer.querySelectorAll('.overlay-apply-multiple-target').forEach(function (el) {
+                        var customerId = el.dataset.customerId;
+                        var missingIds = Array.prototype.filter.call(
+                            el.querySelectorAll('.overlay-apply-multiple-missing-item input'),
+                            function (cb) { return cb.checked; }
+                        ).map(function (cb) { return cb.dataset.deliverableId; });
+                        targets[customerId] = {
+                            date: el.querySelector('.overlay-apply-multiple-date').value || null,
+                            time: el.querySelector('.overlay-apply-multiple-time').value || null,
+                            create_missing_ids: missingIds,
+                        };
+                    });
+                    confirmBtn.disabled = true;
+                    reviewError.classList.add('hidden');
+                    fetch(`/projects/${projectId}/overlay/deliverables/apply-multiple/confirm`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            source_customer_id: sourceCustomerId,
+                            target_customer_ids: Object.keys(targets),
+                            targets: targets,
+                        }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            confirmBtn.disabled = false;
+                            if (!data.success) {
+                                reviewError.textContent = data.error || 'Could not apply this duplication.';
+                                reviewError.classList.remove('hidden');
+                                return;
+                            }
+                            closeModal();
+                            showToast(data.message, 'success');
+                            fetch(`/projects/${projectId}/overlay/deliverables/edit`)
+                                .then(function (r) { return r.text(); })
+                                .then(function (html) {
+                                    if (destroyed) return;
+                                    rootEl.innerHTML = html;
+                                    bindEdit();
+                                    if (onChanged) onChanged();
+                                });
+                        })
+                        .catch(function () {
+                            confirmBtn.disabled = false;
+                            reviewError.textContent = 'Something went wrong. Please try again.';
+                            reviewError.classList.remove('hidden');
                         });
                 });
             }

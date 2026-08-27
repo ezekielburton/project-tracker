@@ -497,20 +497,53 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project, ha
         'deliverable_status_options': _DELIVERABLE_STATUS_OVERRIDE_OPTIONS,
     }
 
-def _build_ccm_deliverable_sections(project):
+def _build_ccm_deliverable_sections(project, with_catalog=False):
     """Groups a C&CM project's deliverables as Region -> Customer -> Deliverables,
     mirroring the brief_sections pattern used elsewhere (projects_detail.py's overlay
     route, the old detail page's C&CM section) so this view can't drift from how the
     rest of the app already understands region/customer structure. Customers whose
     region isn't one of the five known keys land in a single 'other' bucket rather
     than being silently dropped.
+
+    Deliverables are fetched in ONE query for every customer on the project
+    (grouped by project_customer_id in Python below) rather than one query
+    per customer in the loop — the old shape was an N+1 that scaled with
+    customer count on every C&CM project. with_catalog=True does the same
+    for each customer's DeliverableType catalog (one query total, grouped
+    by customer_id) — only the Edit Deliverables view needs it, so the
+    read-only view (overlay_deliverables()) skips that query entirely by
+    leaving this False.
     """
-    from app.modules.core.shared.models import Deliverable
+    from app.modules.core.shared.models import Deliverable, DeliverableType
+
+    active_pcs = [pc for pc in project.project_customers if not pc.cancelled]
+
+    deliverables_by_pc = {}
+    if active_pcs:
+        pc_ids = [pc.id for pc in active_pcs]
+        all_deliverables = (
+            Deliverable.query
+            .filter(Deliverable.project_id == project.id, Deliverable.project_customer_id.in_(pc_ids))
+            .order_by(Deliverable.id)
+            .all()
+        )
+        for d in all_deliverables:
+            deliverables_by_pc.setdefault(d.project_customer_id, []).append(d)
+
+    catalog_by_customer = {}
+    if with_catalog and active_pcs:
+        customer_ids = {pc.customer_id for pc in active_pcs}
+        all_types = (
+            DeliverableType.query
+            .filter(DeliverableType.customer_id.in_(customer_ids), DeliverableType.is_active.is_(True))
+            .order_by(DeliverableType.name)
+            .all()
+        )
+        for t in all_types:
+            catalog_by_customer.setdefault(t.customer_id, []).append(t)
 
     by_region = {}
-    for pc in project.project_customers:
-        if pc.cancelled:
-            continue
+    for pc in active_pcs:
         region_key = pc.customer.region or 'other'
         by_region.setdefault(region_key, []).append(pc)
 
@@ -526,10 +559,10 @@ def _build_ccm_deliverable_sections(project):
             continue
         customers = []
         for pc in by_region[region_key]:
-            deliverables = Deliverable.query.filter_by(
-                project_id=project.id, project_customer_id=pc.id
-            ).order_by(Deliverable.id).all()
-            customers.append({'project_customer': pc, 'deliverables': deliverables})
+            entry = {'project_customer': pc, 'deliverables': deliverables_by_pc.get(pc.id, [])}
+            if with_catalog:
+                entry['catalog'] = catalog_by_customer.get(pc.customer_id, [])
+            customers.append(entry)
         sections.append({
             'key': region_key,
             'name': region_names.get(region_key, region_key.title()),
@@ -2682,7 +2715,7 @@ def overlay_deliverables_edit(project_id):
         # above) — reusing _build_ccm_deliverable_sections keeps the customer
         # picker's options identical between view and edit, so switching
         # between them never reshuffles which customer is "first".
-        regions = _build_ccm_deliverable_sections(project)
+        regions = _build_ccm_deliverable_sections(project, with_catalog=True)
         has_gulf_regions = any(r['key'] in ('kuwait', 'qatar', 'bahrain', 'oman') for r in regions)
         all_customers = [c for r in regions for c in r['customers']]
         first_customer_id = all_customers[0]['project_customer'].id if all_customers else None
@@ -2722,9 +2755,21 @@ def save_standard_deliverables(project_id):
     Shape borrowed from assign_standard_deliverables_bulk in
     projects_detail.py (loop, single commit, log after) — but this route
     creates/updates/deletes rows rather than assigning designers, so it's
-    new rather than reused outright."""
+    new rather than reused outright.
+
+    Deliverable catalog picker (26/27 Aug 2026, per Ezekiel) — C&CM rows
+    now carry either an existing catalog pick (deliverable_type_id) or a
+    brand-new name to add to that customer's catalog permanently
+    (new_type_name), instead of always being a free-typed name. Standard
+    rows, and any legacy C&CM row nobody has re-picked from the catalog
+    yet, carry neither and fall through to the original free-text `name`
+    path untouched. Every catalog lookup below runs against
+    types_by_customer — ONE query for every customer referenced anywhere
+    in this payload, done up front — rather than a query per row, so a
+    save with many "Add new deliverable" rows across several customers
+    still costs one query total, not N."""
     from datetime import datetime as dt
-    from app.modules.core.shared.models import Deliverable
+    from app.modules.core.shared.models import Deliverable, DeliverableType
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.lib.utils import log_activity
     from flask import request, jsonify, session
@@ -2765,6 +2810,32 @@ def save_standard_deliverables(project_id):
             return None
         return val if val in valid_customer_ids else None
 
+    # One batched fetch covering every customer referenced anywhere in this
+    # payload — types_by_customer[customer_id] is a plain list, looked up
+    # by id or by name (case-insensitive) in memory below, never re-queried
+    # per row. Also doubles as ownership validation: a deliverable_type_id
+    # the client sends only counts as a match if it's actually in this
+    # customer's own catalog.
+    row_customer_ids = {parse_customer_id(r.get('project_customer_id')) for r in rows}
+    row_customer_ids.discard(None)
+    types_by_customer = {}
+    if row_customer_ids:
+        for t in DeliverableType.query.filter(DeliverableType.customer_id.in_(row_customer_ids)).all():
+            types_by_customer.setdefault(t.customer_id, []).append(t)
+
+    def lookup_type_by_id(customer_id, type_id):
+        for t in types_by_customer.get(customer_id, []):
+            if t.id == type_id:
+                return t
+        return None
+
+    def lookup_type_by_name(customer_id, name):
+        key = name.strip().lower()
+        for t in types_by_customer.get(customer_id, []):
+            if t.name.strip().lower() == key:
+                return t
+        return None
+
     created, updated, deleted = [], [], []
 
     for row in rows:
@@ -2777,13 +2848,45 @@ def save_standard_deliverables(project_id):
                 db.session.delete(deliverable)
             continue
 
-        name = (row.get('name') or '').strip()
-        if not name:
-            continue # a blank row that was never filled in — skip it rather than fail the whole save
-
+        customer_id_for_row = parse_customer_id(row.get('project_customer_id'))
         design_deadline = parse_date(row.get('design_deadline'))
         design_deadline_time = parse_time(row.get('design_deadline_time'))
         teams = ','.join(row.get('teams') or [])
+
+        resolved_type = None
+        new_type_name = (row.get('new_type_name') or '').strip()
+        raw_type_id = row.get('deliverable_type_id')
+
+        if new_type_name and customer_id_for_row:
+            # Reuse a same-named entry if one already exists (two rows in
+            # this same save typing the identical new name) instead of
+            # creating a duplicate catalog entry.
+            resolved_type = lookup_type_by_name(customer_id_for_row, new_type_name)
+            if not resolved_type:
+                resolved_type = DeliverableType(
+                    name=new_type_name,
+                    client_id=project.client_id,
+                    customer_id=customer_id_for_row,
+                    is_custom=True,
+                )
+                db.session.add(resolved_type)
+                # So a second row in the same payload that types the exact
+                # same new name reuses this one instead of double-creating.
+                types_by_customer.setdefault(customer_id_for_row, []).append(resolved_type)
+            name = resolved_type.name
+        elif raw_type_id and customer_id_for_row:
+            try:
+                resolved_type = lookup_type_by_id(customer_id_for_row, int(raw_type_id))
+            except (TypeError, ValueError):
+                resolved_type = None
+            name = resolved_type.name if resolved_type else (row.get('name') or '').strip()
+        else:
+            # Legacy freeform (no catalog link yet) or Standard — name is
+            # whatever the client sent, exactly as before this feature.
+            name = (row.get('name') or '').strip()
+
+        if not name:
+            continue # a blank row that was never filled in — skip it rather than fail the whole save
 
         if row_id:
             deliverable = Deliverable.query.filter_by(id=row_id, project_id=project_id).first()
@@ -2793,12 +2896,14 @@ def save_standard_deliverables(project_id):
             deliverable.design_deadline = design_deadline
             deliverable.design_deadline_time = design_deadline_time
             deliverable.teams = teams
+            if resolved_type is not None:
+                deliverable.deliverable_type = resolved_type
             updated.append(deliverable.name)
         else:
             deliverable = Deliverable(
                 project_id=project_id,
-                project_customer_id=parse_customer_id(row.get('project_customer_id')),
-                deliverable_type_id=None,
+                project_customer_id=customer_id_for_row,
+                deliverable_type=resolved_type,
                 name=name,
                 design_deadline=design_deadline,
                 design_deadline_time=design_deadline_time,
@@ -2831,6 +2936,274 @@ def save_standard_deliverables(project_id):
                      user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
 
     return jsonify({'success': True})
+
+
+def _apply_multiple_compute(project, source_customer_id, target_customer_ids):
+    """Shared read-only computation behind Apply to Multiple's preview AND
+    confirm steps (26/27 Aug 2026, per Ezekiel) — confirm re-derives this
+    itself rather than trusting whatever the client's earlier preview
+    response said, so a save or another Apply landing in between can't
+    leave it writing against stale matches.
+
+    Three queries total, none of them per-deliverable or per-customer:
+    the source customer's own deliverables, every target customer's
+    EXISTING deliverables on this project (so a name already present there
+    is skipped rather than duplicated), and every target customer's
+    DeliverableType catalog (so a name that matches an existing type there
+    just gets instantiated instead of creating a new type). Everything
+    below that loops per target customer is in-memory dict/set work.
+
+    Returns (source_deliverables, per_target) — per_target is keyed by
+    target ProjectCustomer.id, each value holding 'project_customer' plus
+    three lists: 'will_add' (list of (source_deliverable, matched_type)
+    pairs — a same-named catalog entry already exists there),
+    'already_existing' (source deliverables that customer already has on
+    this project, skipped), and 'missing' (source deliverables with no
+    catalog match there yet). Returns (None, None) if the source or any
+    target id doesn't actually belong to this project.
+    """
+    from app.modules.core.shared.models import Deliverable, DeliverableType, ProjectCustomer
+
+    try:
+        source_id_int = int(source_customer_id)
+        target_ids_int = [int(x) for x in target_customer_ids]
+    except (TypeError, ValueError):
+        return None, None
+
+    source_pc = ProjectCustomer.query.filter_by(id=source_id_int, project_id=project.id).first()
+    target_pcs = ProjectCustomer.query.filter(
+        ProjectCustomer.id.in_(target_ids_int), ProjectCustomer.project_id == project.id
+    ).all()
+    if not source_pc or not target_pcs or len(target_pcs) != len(set(target_ids_int)):
+        return None, None
+
+    source_deliverables = Deliverable.query.filter_by(
+        project_id=project.id, project_customer_id=source_pc.id
+    ).order_by(Deliverable.id).all()
+
+    target_pc_ids = [pc.id for pc in target_pcs]
+    target_customer_ids_real = {pc.id: pc.customer_id for pc in target_pcs}
+
+    existing_by_target = {}
+    for d in Deliverable.query.filter(
+        Deliverable.project_id == project.id,
+        Deliverable.project_customer_id.in_(target_pc_ids),
+    ).all():
+        existing_by_target.setdefault(d.project_customer_id, set()).add(d.name.strip().lower())
+
+    catalog_by_customer = {}
+    for t in DeliverableType.query.filter(
+        DeliverableType.customer_id.in_(set(target_customer_ids_real.values())),
+        DeliverableType.is_active.is_(True),
+    ).all():
+        catalog_by_customer.setdefault(t.customer_id, {})[t.name.strip().lower()] = t
+
+    per_target = {}
+    for pc in target_pcs:
+        already = existing_by_target.get(pc.id, set())
+        catalog = catalog_by_customer.get(pc.customer_id, {})
+        will_add, already_existing, missing = [], [], []
+        for d in source_deliverables:
+            key = d.name.strip().lower()
+            if key in already:
+                already_existing.append(d)
+            elif key in catalog:
+                will_add.append((d, catalog[key]))
+            else:
+                missing.append(d)
+        per_target[pc.id] = {
+            'project_customer': pc,
+            'will_add': will_add,
+            'already_existing': already_existing,
+            'missing': missing,
+        }
+    return source_deliverables, per_target
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/apply-multiple/preview', methods=['POST'])
+@login_required
+def preview_apply_deliverables_multiple(project_id):
+    """Read-only step of Apply to Multiple — computes what pressing Apply
+    would do without writing anything, so the modal can show the matched
+    count and each target customer's missing list before anything is
+    committed. Requires deliverables to already be saved (enforced
+    client-side in project_deliverables_card.js, which blocks opening this
+    modal while there are unsaved row edits) so this always reads real,
+    committed deliverables rather than in-form drafts."""
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if not _can_manage_deliverables(project, actor):
+        abort(403)
+
+    data = request.get_json(silent=True) or {}
+    source_customer_id = data.get('source_customer_id')
+    target_customer_ids = data.get('target_customer_ids') or []
+
+    source_deliverables, per_target = _apply_multiple_compute(project, source_customer_id, target_customer_ids)
+    if source_deliverables is None:
+        return jsonify({'success': False, 'error': 'Invalid customer selection.'}), 400
+    if not source_deliverables:
+        return jsonify({'success': False, 'error': 'This customer has no deliverables to duplicate.'}), 400
+
+    targets_out = []
+    total_will_add = 0
+    for pc_id, info in per_target.items():
+        total_will_add += len(info['will_add'])
+        targets_out.append({
+            'customer_id': pc_id,
+            'customer_name': info['project_customer'].customer.name,
+            'will_add_count': len(info['will_add']),
+            'already_existing': [d.name for d in info['already_existing']],
+            'missing': [{'id': d.id, 'name': d.name} for d in info['missing']],
+        })
+
+    return jsonify({'success': True, 'targets': targets_out, 'total_will_add': total_will_add})
+
+
+@project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/apply-multiple/confirm', methods=['POST'])
+@login_required
+def confirm_apply_deliverables_multiple(project_id):
+    """Write step of Apply to Multiple. Re-derives matches/missing from the
+    database itself via _apply_multiple_compute rather than trusting the
+    client's earlier preview response, so a save or another Apply landing
+    in between preview and confirm can't leave this writing against stale
+    matches. Every new DeliverableType/DeliverableTypeDiscipline/
+    Deliverable is batched into add_all() calls and committed once — a
+    project with many target customers costs the same handful of queries
+    as one, not one round trip per customer or per deliverable."""
+    from datetime import datetime as dt
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import DeliverableType, DeliverableTypeDiscipline, Deliverable
+    from app.modules.core.shared.lib.utils import log_activity
+
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if not _can_manage_deliverables(project, actor):
+        abort(403)
+
+    data = request.get_json(silent=True) or {}
+    source_customer_id = data.get('source_customer_id')
+    target_customer_ids = data.get('target_customer_ids') or []
+    # {str(target_customer_id): {'date': 'YYYY-MM-DD', 'time': 'HH:MM', 'create_missing_ids': [...]}}
+    per_target_input = data.get('targets') or {}
+
+    source_deliverables, per_target = _apply_multiple_compute(project, source_customer_id, target_customer_ids)
+    if source_deliverables is None or not source_deliverables:
+        return jsonify({'success': False, 'error': 'Invalid customer selection.'}), 400
+
+    def parse_date(val):
+        if not val:
+            return None
+        try:
+            return dt.strptime(val, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+
+    def parse_time(val):
+        if not val:
+            return None
+        try:
+            return dt.strptime(val, '%H:%M').time()
+        except ValueError:
+            return None
+
+    new_types, new_disciplines, new_deliverables = [], [], []
+    duplicated_count = 0
+    customers_touched = set()
+
+    for pc_id, info in per_target.items():
+        target_input = per_target_input.get(str(pc_id)) or {}
+        deadline = parse_date(target_input.get('date'))
+        deadline_time = parse_time(target_input.get('time'))
+        try:
+            create_missing_ids = {int(x) for x in (target_input.get('create_missing_ids') or [])}
+        except (TypeError, ValueError):
+            create_missing_ids = set()
+
+        # Matched — the target customer's catalog already has this name;
+        # just instantiate a Deliverable against the existing type.
+        for source_d, matched_type in info['will_add']:
+            new_deliverables.append(Deliverable(
+                project_id=project.id,
+                project_customer_id=pc_id,
+                deliverable_type=matched_type,
+                name=matched_type.name,
+                design_deadline=deadline,
+                design_deadline_time=deadline_time,
+                teams=source_d.teams,
+                status='in_queue',
+                created_by=actor,
+            ))
+            duplicated_count += 1
+            customers_touched.add(pc_id)
+
+        # Missing, but selected to be created for this customer — clones
+        # team/image/template from the source's own catalog entry when it
+        # has one; a legacy freeform source deliverable (no linked type)
+        # has nothing to clone beyond name/teams.
+        for source_d in info['missing']:
+            if source_d.id not in create_missing_ids:
+                continue
+            source_type = source_d.deliverable_type
+            new_type = DeliverableType(
+                name=source_d.name,
+                client_id=project.client_id,
+                customer_id=info['project_customer'].customer_id,
+                reference_image=source_type.reference_image if source_type else None,
+                template_filename=source_type.template_filename if source_type else None,
+                is_custom=True,
+            )
+            new_types.append(new_type)
+            if source_type and source_type.disciplines:
+                for disc in source_type.disciplines:
+                    new_disciplines.append(DeliverableTypeDiscipline(deliverable_type=new_type, team=disc.team))
+            elif source_d.teams:
+                for team in source_d.teams.split(','):
+                    if team:
+                        new_disciplines.append(DeliverableTypeDiscipline(deliverable_type=new_type, team=team))
+
+            new_deliverables.append(Deliverable(
+                project_id=project.id,
+                project_customer_id=pc_id,
+                deliverable_type=new_type,
+                name=source_d.name,
+                design_deadline=deadline,
+                design_deadline_time=deadline_time,
+                teams=source_d.teams,
+                status='in_queue',
+                created_by=actor,
+            ))
+            duplicated_count += 1
+            customers_touched.add(pc_id)
+
+    if not new_deliverables:
+        return jsonify({
+            'success': False,
+            'error': 'Nothing to apply — every matching deliverable already exists on the selected customers.',
+        }), 400
+
+    # add_all + one commit — new_disciplines/new_deliverables reference
+    # new_types by relationship object, not id, so this is safe even
+    # though none of the new types have a real primary key yet;
+    # SQLAlchemy resolves every FK at flush.
+    db.session.add_all(new_types)
+    db.session.add_all(new_disciplines)
+    db.session.add_all(new_deliverables)
+    db.session.commit()
+
+    message = 'Duplicated {} deliverable{} across {} customer{}.'.format(
+        duplicated_count, '' if duplicated_count == 1 else 's',
+        len(customers_touched), '' if len(customers_touched) == 1 else 's',
+    )
+    log_activity('deliverables_duplicated', f'{message} ("{project.name}")',
+                 user=actor, entity_type='project', entity_name=project.name, entity_id=project.id)
+
+    return jsonify({
+        'success': True,
+        'duplicated_count': duplicated_count,
+        'customer_count': len(customers_touched),
+        'message': message,
+    })
 
 
 def _can_write_deliverable_assignment(project, actor, team, target_designer_id, existing_assignment):

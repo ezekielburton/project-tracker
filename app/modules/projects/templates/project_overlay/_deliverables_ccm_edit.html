@@ -8,10 +8,20 @@
         grouped on the right. One customer panel is visible at a time, but
         Save always posts every panel's rows in one request (see
         collectAllRows in project_deliverables_card.js) — switching the
-        picker never risks losing unsaved edits in another panel. #}
+        picker never risks losing unsaved edits in another panel.
+
+        Deliverable catalog picker + Apply to Multiple (26/27 Aug 2026, per
+        Ezekiel) — Apply to Multiple only makes sense with a second
+        customer to apply to, so it's only rendered when this project has
+        more than one; the button/modal simply don't exist otherwise
+        rather than rendering disabled and unexplained. #}
         <div class="overlay-card-controls-row">
             <button type="button" class="overlay-file-action-btn" id="overlay-add-deliverable-btn"
                 {% if not all_customers %}disabled{% endif %}>Add Deliverable</button>
+            {% if all_customers|length > 1 %}
+            <button type="button" class="overlay-file-action-btn" id="overlay-apply-multiple-btn">Apply to
+                Multiple</button>
+            {% endif %}
             <div class="overlay-deliverables-controls-right">
                 <button type="button" class="overlay-file-action-btn" id="overlay-apply-deadline-all-btn">Apply
                     Deadline to All</button>
@@ -72,8 +82,28 @@
                 {% set current_teams = (d.teams or '').split(',') %}
                 {% endif %}
                 <div class="overlay-deliverables-edit-row" data-deliverable-id="{{ d.id }}">
-                    <input type="text" class="overlay-deliverables-edit-name" value="{{ d.name }}"
-                        placeholder="Deliverable Name">
+                    <div class="overlay-deliverables-edit-name-wrap">
+                        <select class="overlay-deliverables-edit-name overlay-deliverables-edit-type-select">
+                            {# Never selected here — a saved row always has either a real catalog
+                            pick or the __legacy__ fallback below carrying `selected` instead. #}
+                            <option value="" disabled>Choose a deliverable…</option>
+                            {# A row that hasn't been re-picked from the catalog yet (created before
+                            this feature, or still pointing at a name the customer's catalog doesn't
+                            have) keeps working exactly as it always has — this option carries its
+                            current name so Save leaves it untouched unless the picker is actually
+                            changed. #}
+                            {% if not d.deliverable_type_id %}
+                            <option value="__legacy__" data-name="{{ d.name }}" selected>{{ d.name }}</option>
+                            {% endif %}
+                            {% for t in c.catalog %}
+                            <option value="{{ t.id }}" data-name="{{ t.name }}" {% if d.deliverable_type_id==t.id
+                                %}selected{% endif %}>{{ t.name }}</option>
+                            {% endfor %}
+                            <option value="__new__">+ Add new deliverable…</option>
+                        </select>
+                        <input type="text" class="overlay-deliverables-edit-new-name is-hidden"
+                            placeholder="New deliverable name">
+                    </div>
                     <input type="date" class="overlay-deliverables-edit-date"
                         value="{{ d.design_deadline.isoformat() if d.design_deadline else '' }}">
                     <select class="overlay-deliverables-edit-time">
@@ -100,11 +130,24 @@
                 {% endfor %}
             </div>
         </div>
-        {% endfor %}
 
-        <template id="overlay-deliverable-row-template">
+        {# One row template per customer, keyed by that customer's own id
+        — Add Deliverable clones whichever one matches the active panel, so
+        the cloned row's picker always offers THAT customer's catalog, not
+        whichever customer happened to be first on the page. #}
+        <template id="overlay-deliverable-row-template-{{ c.project_customer.id }}">
             <div class="overlay-deliverables-edit-row">
-                <input type="text" class="overlay-deliverables-edit-name" placeholder="Deliverable Name">
+                <div class="overlay-deliverables-edit-name-wrap">
+                    <select class="overlay-deliverables-edit-name overlay-deliverables-edit-type-select">
+                        <option value="" selected>Choose a deliverable…</option>
+                        {% for t in c.catalog %}
+                        <option value="{{ t.id }}" data-name="{{ t.name }}">{{ t.name }}</option>
+                        {% endfor %}
+                        <option value="__new__">+ Add new deliverable…</option>
+                    </select>
+                    <input type="text" class="overlay-deliverables-edit-new-name is-hidden"
+                        placeholder="New deliverable name">
+                </div>
                 <input type="date" class="overlay-deliverables-edit-date">
                 <select class="overlay-deliverables-edit-time">
                     <option value="">Time…</option>
@@ -118,6 +161,68 @@
                 <button type="button" class="overlay-deliverables-edit-delete" aria-label="Delete">Delete</button>
             </div>
         </template>
+        {% endfor %}
+
+        {% if all_customers|length > 1 %}
+        {# Apply to Multiple (26/27 Aug 2026, per Ezekiel) — takes whichever
+        customer panel is active as the source, offers every OTHER customer
+        on this project as a target. Two-step modal, both steps in one
+        overlay so there's no extra page navigation: pick target customers
+        -> server computes matches/misses against each target's own catalog
+        -> review (one deadline per target customer, applied to everything
+        duplicated onto it — same "one date field, applied to the set"
+        pattern as Apply Deadline to All above, just per target customer
+        instead of per row) -> Apply. Requires Save Deliverables first (see
+        project_deliverables_card.js) so it always reads real, committed
+        deliverables. #}
+        <div class="modal-overlay hidden" id="overlay-apply-multiple-modal">
+            <div class="modal-box overlay-apply-multiple-box">
+                <h3 class="modal-title">Apply to Multiple</h3>
+
+                <div id="overlay-apply-multiple-step-select">
+                    <p class="overlay-field-label" id="overlay-apply-multiple-source-label"></p>
+                    <div class="overlay-apply-multiple-customer-list" id="overlay-apply-multiple-target-list">
+                        {% for c in all_customers %}
+                        <label class="overlay-apply-multiple-customer-option"
+                            data-customer-id="{{ c.project_customer.id }}">
+                            <input type="checkbox" value="{{ c.project_customer.id }}">
+                            {{ c.project_customer.customer.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <span class="overlay-apply-multiple-error hidden" id="overlay-apply-multiple-select-error"></span>
+                    <div class="modal-actions">
+                        <button type="button" class="overlay-file-action-btn" id="overlay-apply-multiple-cancel">Cancel</button>
+                        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                            id="overlay-apply-multiple-continue">Continue</button>
+                    </div>
+                </div>
+
+                <div id="overlay-apply-multiple-step-review" class="hidden">
+                    <p class="overlay-apply-multiple-summary" id="overlay-apply-multiple-summary-line"></p>
+                    <div id="overlay-apply-multiple-targets"></div>
+                    <span class="overlay-apply-multiple-error hidden" id="overlay-apply-multiple-review-error"></span>
+                    <div class="modal-actions">
+                        <button type="button" class="overlay-file-action-btn" id="overlay-apply-multiple-back">Back</button>
+                        <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
+                            id="overlay-apply-multiple-confirm">Apply</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {# Not rendered visibly — just a source of the standard Time…
+        <option> list for the per-target-customer deadline row the JS above
+        builds dynamically once a preview response comes back (each target
+        customer's deadline row doesn't exist in the DOM until then, so it
+        can't carry its own server-rendered options the way the main table
+        rows do). #}
+        <select id="overlay-apply-multiple-time-options-template" class="hidden">
+            <option value="">Time…</option>
+            {% for value, label in time_options %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
         {% endcall %}
     </div>
 </div>
