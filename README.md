@@ -1,131 +1,89 @@
-# Vitamin-E
+# Vitamin-E (Helix)
 
-Internal operations platform for Vitamin Dubai — replaces Monday.com for managing creative project briefs, deliverables, designer assignments, revision workflows, and project approvals across the 2D, 3D, and Technical design teams.
+Internal operations platform for **Vitamin Dubai**. It replaces Monday.com for running creative work end to end — project briefs, deliverables, designer assignments, revision cycles, and approvals across the 2D, 3D, and Technical design teams.
 
-Built and maintained by Ezekiel Burton — Digital Systems Pilot Lead.
-
-**Current version: v1.3** (shipped 28 June 2026)
+Built and maintained by **Ezekiel Burton** — Digital Systems Pilot Lead.
 
 ---
 
-## What It Does
+## What it does
 
-- **CS** creates project briefs (C&CM or Standard), assigns regions and customers, manages deliverables and deadlines, reviews designer submissions, and approves work
-- **Designers** pick up deliverables, submit work individually or in bulk, and raise flags when something needs clarification
-- **Team Leads** assign designers, track team progress, and manage revision cycles
-- **Admins** manage users, design types, deliverable types, and have full visibility across everything — including the ability to give final approval and lock projects
-- **Management** has read-only visibility into project and team status
+Everyone works from a role that fits their job:
 
-**Project types:**
-- **C&CM** (Concept & Campaign Material) — concept/KV phase followed by POSM channel deliverables across UAE and Gulf regions
-- **Standard** — flat list of deliverables without regional breakdown
+- **CS** create briefs (C&CM or Standard), set regions, customers, deliverables and deadlines, review submissions, and approve work.
+- **Designers** pick up deliverables, submit work (single or in bulk), and raise flags when something needs clarifying.
+- **Team Leads** assign designers and track team progress through revision cycles.
+- **Admins** manage users and settings, see everything, give final approval, and lock projects.
+- **Management** get a read-only view of project and team status.
 
-**Platform features (v1.3):**
-- App Updates blog — admin-authored posts with section-based editor, comments, URL hash navigation
-- Feature Requests — staff can submit, upvote, and track feature ideas; admin manages status
-- Bug Reports — staff can report bugs; admin tracks through to resolution
-- In-app notifications for status changes + admin email alerts on new submissions
-- Admin emulation mode — act as any user to reproduce issues or review their view
+**Project types:** *C&CM* (Concept & Campaign Material) runs a concept/KV phase followed by POSM deliverables across the UAE and Gulf regions; *Standard* is a flat list of deliverables with no regional split.
+
+Beyond the core workflow, the platform also includes a role-based **dashboard**, a **client directory**, **time tracking**, a **wiki**, an **achievements** system, reusable **file templates**, an in-app **App Updates blog**, **feature requests + bug reports**, **live updates** (changes appear without a page refresh), **in-app + email notifications**, file storage on the office **Synology NAS**, and an **admin emulation** mode for reproducing any user's exact view.
+
+---
+
+## Architecture
+
+Helix is built in **Vertical Slice Architecture** — every feature is its own self-contained module.
+
+```
+app/
+  modules/
+    <feature>/          # one folder per feature: routes, templates, logic, tests, its own <feature>.md
+    core/shared/        # the single home for code shared across features
+      models/  lib/  services/  routes/  templates/  extensions.py
+  static/               # shared css / js / fonts, cache-busted on each deploy
+migrations/             # one-off schema scripts, applied by migrate.py
+run.py                  # entry point
+```
+
+Feature modules: `achievements`, `admin`, `auth`, `blog`, `client_directory`, `dashboard`, `feedback`, `file_templates`, `notifications`, `profile`, `projects`, `time_tracking`, `wiki`.
+
+The rule is simple: anything one feature needs lives in that feature's folder; anything two or more features share moves to `core/shared`. Features don't reach into each other's internals — they meet in `core/shared`. Want to change one feature? Open its module, change it, done — nothing else has to move.
 
 ---
 
 ## Stack
 
-- **Backend:** Python 3.14 · Flask 3.1.3 · Flask-SQLAlchemy · Flask-Login
-- **Database:** PostgreSQL 18.4 (database: `project_tracker`)
-- **Frontend:** Jinja2 server-rendered templates · Vanilla JS · Custom CSS
-- **No ORM migrations** — schema changes are handled via one-off ALTER TABLE scripts at the project root
+- **Backend:** Python 3.14 · Flask 3.1 · SQLAlchemy 2.0 · Flask-Login
+- **Database:** PostgreSQL 18 (`project_tracker`)
+- **Frontend:** Jinja2 server-rendered templates · vanilla JS · custom CSS
+- **Live updates:** Server-Sent Events (gevent workers in production)
+- **Schema changes:** one-off scripts run through a small `migrate.py` runner — no Flask-Migrate
 
 ---
 
-## Project Structure
+## Local setup
 
-```
-project-tracker/
-├── app/
-│   ├── models/          # SQLAlchemy models (all in __init__.py)
-│   ├── routes/          # Flask blueprints
-│   │   ├── projects.py  # Core project CRUD, brief creation, submission flow
-│   │   ├── admin.py     # User management, emulation, broadcast emails
-│   │   ├── blog.py      # App Updates blog (posts, comments, editor)
-│   │   ├── feedback.py  # Feature Requests + Bug Reports
-│   │   └── notifications.py  # Notification read/archive/poll routes
-│   ├── templates/
-│   │   ├── projects/    # create, detail, edit views
-│   │   ├── blog/        # index, _post_content, editor, version update pages
-│   │   └── feedback/    # feature_requests, _feature_content, bug_reports, _bug_content
-│   ├── static/
-│   │   ├── css/         # main.css, blog.css, feedback.css
-│   │   └── js/          # main.js, detail.js, admin.js, sidebar.js,
-│   │                    # notifications.js, blog.js, feedback.js, bug_reports.js
-│   ├── notifications.py # create_notification(), notify_admin_of_new_feedback()
-│   └── utils.py         # get_actor() emulation resolver, log_activity()
-├── add_*.py             # One-off DB migration scripts (run manually, once)
-├── migrate_*.py         # Larger migration scripts
-├── create_tables.py     # Creates any new tables via db.create_all()
-├── run.py               # App entry point
-└── Vitamin_Helix_Infrastructure.pdf  # Deployment & infrastructure reference
-```
-
----
-
-## Local Setup
-
-**Prerequisites:** Python 3.14+, PostgreSQL 18, pip
+Prerequisites: Python 3.14+ and PostgreSQL 18.
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/ZeeKzz/project-tracker.git
 cd project-tracker
 
-# 2. Install dependencies
+python -m venv venv
+source venv/bin/activate            # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# 3. Create the database
 createdb -U postgres project_tracker
 
-# 4. Set up environment variables
-cp .env.example .env
-# Edit .env with your DB credentials and mail config
+# Create a .env with at least SECRET_KEY and DATABASE_URL
+# (add mail / NAS settings if you use those features)
 
-# 5. Create tables
-python create_tables.py
-
-# 6. Run migration scripts in order (see below)
-
-# 7. Run the app
-python run.py
+python create_tables.py             # build tables from the models
+python migrate.py                   # apply any pending schema scripts
+python run.py                       # http://localhost:5000
 ```
-
-App runs at `http://localhost:5000`
 
 ---
 
-## Database Migrations
+## Database migrations
 
-There is no migration framework. When a new column or table is needed, a script is written at the project root and run once manually:
-
-```bash
-python add_example_column.py
-```
-
-### Full migration order (run once on a fresh DB after create_tables.py)
+There is no migration framework. Each schema change is a one-off script in `migrations/`, applied through a small runner that records what has already been run:
 
 ```bash
-python add_ccm_tables.py
-python add_notification_archive.py
-python add_brief_flag_tables.py
-python add_design_type_team.py
-python add_deliverable_teams.py
-python add_hold_status.py
-python add_concept_kv_status.py
-python add_posm.py
-python add_gulf_posm.py
-python add_posm_country_counts.py
-python add_posm_channels.py
-python migrate_approval.py
-python add_blog_tables.py
-python add_bug_report_tables.py
+python migrate.py --status          # see what's applied vs pending
+python migrate.py                   # run all pending scripts
 ```
 
 ---
@@ -134,8 +92,8 @@ python add_bug_report_tables.py
 
 | Role | Access |
 |------|--------|
-| Admin | Full access, user management, emulation mode, final project approval |
-| CS | Create and manage briefs, review submissions, flag revisions, CS-approve work |
+| Admin | Everything — users, settings, emulation, final approval, project lock |
+| CS | Create/manage briefs, review submissions, flag revisions, CS-approve |
 | Designer | View assigned deliverables, submit work, raise flags |
 | Team Lead | Assign designers, manage team deliverables, update status |
 | Management | Read-only dashboard |
@@ -144,50 +102,12 @@ python add_bug_report_tables.py
 
 ## Deployment
 
-Production runs on a Mini-PC (Ubuntu Server 24.04) in the Vitamin Dubai server room. Accessible locally at `http://10.101.20.159:5000` and externally at `https://app.vitamin-e.work` via Cloudflare Tunnel.
+Production runs on-prem (Ubuntu Server) under gunicorn, exposed at **https://app.vitamin-e.work** through a Cloudflare Tunnel. A typical deploy is: merge to `main`, `git pull` on the server, restart the service, and purge the Cloudflare cache if static files changed.
 
-See `Vitamin_Helix_Infrastructure.pdf` for the full setup, backup strategy, and deploy workflow.
-
-**Quick deploy from dev machine:**
-```bash
-git push
-ssh ssh.vitamin-e.work
-cd project-tracker && git pull && sudo systemctl restart helix
-```
+The full deploy, backup, and infrastructure runbook is kept in an internal document outside this repo, so no infrastructure details or secrets live in version control.
 
 ---
 
 ## Versioning
 
-| Format | Meaning |
-|--------|---------|
-| `X.YY` (e.g. `1.01`, `1.02`) | Bug fix or QoL patch — no new features |
-| `X.Y` (e.g. `1.1`, `1.2`) | Feature update within the current major scope |
-| `X.0` (e.g. `2.0`, `3.0`) | New major era / large scope shift |
-
-**1.x era** = project management (briefs, deliverables, submissions, POSM, approval, feedback).
-
-| Version | Date | Scope |
-|---------|------|-------|
-| 1.0 | 22 Jun 2026 | Initial launch |
-| 1.01 | 25 Jun 2026 | Real-time assignment DOM updates · C&CM reference images · GMT+4 timestamps · Approved projects filters |
-| 1.02 | 26 Jun 2026 | Bug fixes from pilot feedback |
-| 1.2.1 | 27 Jun 2026 | Visual loading indicators · Admin panel moved to sidebar · Form input styling · 2s autosave debounce |
-| 1.3 | 28 Jun 2026 | App Updates blog · Feature Requests · Bug Reports · In-app + email notifications · Admin emulation awareness |
-
-**2.x era** = infrastructure + NAS + dashboard + client portal (starting 29 June 2026).
-
----
-
-## Key Dev Notes
-
-See each module's own `.md` doc (under `app/modules/<feature>/`) and the architecture documentation for patterns, conventions, and key decisions. Key things to know:
-
-- Always resolve the **effective user** via `get_actor()` (not `current_user`) in routes that record actions — the app supports admin emulation mode
-- `project.project_status == 'approved'` is the global lock sentinel — check it at the top of any mutating route
-- JSON data in templates must go in `<script>` block constants, never in HTML `value=""` attributes
-- `log_activity()` imports db inside the function to avoid circular imports
-- Notifications must be created **after** `db.session.commit()`
-- Dubai timezone uses a fixed `+4` offset — `ZoneInfo` is not reliable on Windows without `tzdata`
-- `--surface` CSS variable is not defined — use `--white` for solid white backgrounds
-- `blog.css` and `feedback.css` are loaded in `base.html <head>` (not per-page) to prevent flash on SPA navigation
+`X.YY` is a patch (bug fix / quality-of-life), `X.Y` is a feature update, and `X.0` marks a new major era. The **1.x** era delivered core project management — briefs, deliverables, POSM, approvals, and feedback. The **2.x** era, currently in progress, adds the infrastructure, NAS integration, dashboard, and the wider platform features listed above.
