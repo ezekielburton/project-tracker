@@ -8,7 +8,13 @@ class ProjectNote(db.Model):
     __tablename__ = 'project_notes'
 
     id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    # index=True since 26/27 Aug 2026 — the unread-dots feature added a
+    # MAX(created_at) GROUP BY project_id query over this whole table on
+    # every Projects page load/filter (_bulk_activity_and_chat_at() in
+    # project_list.py); a bare FK column gets no index automatically in
+    # Postgres. See migrations/add_activity_log_and_notes_indexes.py for
+    # the retroactive index on the existing table.
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False, index=True)
     author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     body = db.Column(db.Text, nullable=False)
     file_link = db.Column(db.String(500), nullable=True)
