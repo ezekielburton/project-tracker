@@ -28,15 +28,24 @@ app/modules/projects/
 ## The five blueprints
 - **project_list** (`/projects-new`): the role-adaptive projects table — one page
   that renders differently per viewing role — plus the JSON endpoints for its
-  filtering, sorting, row expansion, and saved table views.
+  filtering, sorting, row expansion, and saved table views. Also computes the
+  per-user unread indicators shown on each row (separate dots for new project
+  updates vs. new chat messages, cleared independently — see
+  ProjectActivitySeen and `mark_project_activity_seen()` in
+  `core/shared/lib/utils.py`), sourced from the same `ActivityLog` every
+  other project-change entry point already writes to.
 - **project_overlay**: the project detail overlay — Details, Deliverables,
   Submissions, Flags, Chat, Notes, and Pre-Production surfaces, project creation
   (create overlay + resumable drafts), status overrides, add/cancel project
   customer, self-service editing-access requests (an assigned designer asking
   for, and a CS Lead/Secondary CS granting, full deliverable-management rights
-  on one open project — see ProjectEditAccessRequest), reference-file and
+  on one open project — see ProjectEditAccessRequest), a per-customer
+  deliverable catalog picker for C&CM (replacing free-text entry with a pick
+  from that customer's DeliverableType catalog, or add a new one to it
+  permanently) plus an Apply to Multiple flow to duplicate one customer's
+  deliverable set onto others on the same project, reference-file and
   submission-file serving, and job-number generation. By far the biggest file
-  (~5,000+ lines, 58 routes).
+  (~5,400 lines, 60 routes).
 - **project_preproduction**: the 2D/3D/Technical stream cycle after client
   approval — assign, mark-done, approve, flag, Skip to Pre-Production, and the
   Handed to Production cascade.
@@ -68,7 +77,7 @@ cards, transfer, etc.) is still served from the global `/static` loader; it move
 in the shared-static pass.
 
 ## Known follow-up (deferred to the per-module overhaul)
-`project_overlay.py` is ~4,700 lines. It was moved as-is; splitting it into
+`project_overlay.py` is ~5,400 lines. It was moved as-is; splitting it into
 smaller files (details / deliverables / submissions / flags / create) is a
 worthwhile future refactor, deliberately left for the planned overhaul of this
 feature rather than done during the relocation, to avoid changing behaviour on
