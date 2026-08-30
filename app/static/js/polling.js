@@ -62,8 +62,11 @@
     // has dropped — matches the cadence the old setInterval-only design used.
     var _FALLBACK_INTERVAL_MS = 1000;
 
-    // Opens an EventSource at `url` and calls `onEvent` every time it pushes
-    // a message. If EventSource isn't supported at all, or the connection
+    // Opens an EventSource at `url` and calls `onEvent(data)` every time it
+    // pushes a message, `data` being whatever string the server sent (a
+    // project_id for /sse/dashboard and /sse/projects/<id> — see
+    // sse_relay.py). The fallback interval below calls `onEvent()` with no
+    // argument instead, same as always. If EventSource isn't supported at all, or the connection
     // errors out (proxy issue, network blip, server restart), falls back to
     // calling `onEvent` on a plain setInterval every `intervalMs` — the
     // exact behavior this file used before SSE existed — until/unless the
@@ -96,9 +99,9 @@
         var source = new EventSource(url);
 
         source.onopen = stopFallback;
-        source.onmessage = function () {
+        source.onmessage = function (e) {
             stopFallback();
-            onEvent();
+            onEvent(e.data);
         };
         source.onerror = function () {
             // SSE dropped or failed to (re)connect — keep the UI live via
@@ -420,14 +423,16 @@
         // same /sse/dashboard doorbell as both dashboards above — it's
         // already a generic "some project changed" broadcast, not tied to
         // any one page's markup, so a third page can listen to it too.
-        // The actual refresh (re-fetch just this view/filter/sort/group's
-        // rows and swap them into #project-table) is owned by
-        // project_list.js via window.helixRefreshProjectTable(), same
-        // separation-of-concerns as window.helixDashboardRefresh() above —
-        // this file only ever decides WHEN to refresh, never HOW.
+        // The actual refresh is owned by project_list.js via
+        // window.helixRefreshProjectTable(projectId) — passed the changed
+        // project's id straight through from the SSE payload so it can
+        // update just that row when possible, falling back to the full
+        // table otherwise. Same separation-of-concerns as
+        // window.helixDashboardRefresh() above — this file only ever
+        // decides WHEN to refresh, never HOW.
         if (document.querySelector('.project-list-page')) {
-            _projectTableStream = _connectLiveStream('/sse/dashboard', function () {
-                if (window.helixRefreshProjectTable) window.helixRefreshProjectTable();
+            _projectTableStream = _connectLiveStream('/sse/dashboard', function (projectId) {
+                if (window.helixRefreshProjectTable) window.helixRefreshProjectTable(projectId);
             }, _FALLBACK_INTERVAL_MS);
         }
     }

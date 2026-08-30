@@ -693,13 +693,27 @@
     // polling.js opens a stream to /sse/dashboard (the same generic "some
     // project changed somewhere" doorbell the old and new dashboards
     // already use) whenever .project-list-page is on screen, and calls
-    // this on every ping via window.helixRefreshProjectTable. Re-fetches
-    // just the rows for the CURRENT view/filter/sort/group (same query
-    // string the page itself is already showing) and swaps them straight
-    // into #project-table, so the table quietly stays live in the
-    // background — same principle as the overlay's own SSE refresh
-    // (startOverlayStream above), just scoped to the table instead of one
-    // project's detail.
+    // this on every ping via window.helixRefreshProjectTable(projectId),
+    // projectId being whatever the SSE payload named (see polling.js's
+    // _connectLiveStream). Two paths:
+    //
+    //   - projectId is already showing (a matching [data-project-id] row
+    //     exists) — fetch just that project's row (table_row() in
+    //     project_list.py) and update the existing row node's content in
+    //     place, leaving its DOM position and its sibling
+    //     .project-expand-container (any open breakdown panel) untouched.
+    //   - anything else — no projectId (plain fallback-interval tick), or
+    //     the project isn't in the DOM yet — re-fetch the whole view
+    //     (table_rows()) and swap it into #project-table, same as before
+    //     this existed. Needed for a project entering the current view for
+    //     the first time, since a single-row fetch has nowhere to insert it.
+    //
+    // Known trade-off: a targeted update never moves a row (Group/Sort
+    // position) or corrects a group header's count — those only catch up
+    // on the next full refresh. Most pings are content-only changes to an
+    // already-visible row, so this is the common case; something that
+    // would actually reorder a row settles itself next time the page/
+    // filter/sort refreshes for any other reason.
     //
     // #project-overlay-mount is a SIBLING of .project-list-page's table
     // region, not nested inside it, so replacing #project-table's content
@@ -714,28 +728,42 @@
     // reorder listeners, which are bound directly to the header cells
     // (not delegated) — bindColumnControls() has to re-run against the
     // fresh cells afterwards, hence window.helixRebindProjectTableColumns.
-    function refreshProjectTable() {
-        // A resize or reorder drag holds direct references to the exact
-        // header-cell nodes being dragged and reads live measurements off
-        // them every animation frame — replacing them mid-drag would either
-        // freeze it or have it silently fail against now-detached nodes.
-        // Simplest safe fix: skip this one refresh. Nothing is lost — the
-        // next SSE ping picks up whatever changed once the user lets go.
-        if (document.body.classList.contains('is-resizing-column') ||
-            document.body.classList.contains('is-reordering-column')) {
-            return;
-        }
+    function isColumnDragInProgress() {
+        return document.body.classList.contains('is-resizing-column') ||
+            document.body.classList.contains('is-reordering-column');
+    }
 
+    function refreshOneRow(projectId, existingRow) {
+        fetch('/projects-new/table-rows/' + projectId + window.location.search)
+            .then((response) => {
+                if (response.status === 204) {
+                    const expandContainer = existingRow.nextElementSibling;
+                    if (expandContainer && expandContainer.classList.contains('project-expand-container')) {
+                        expandContainer.remove();
+                    }
+                    existingRow.remove();
+                    return null;
+                }
+                return response.ok ? response.text() : null;
+            })
+            .then((html) => {
+                if (html === null || isColumnDragInProgress()) return;
+                const temp = document.createElement('div');
+                temp.innerHTML = html;
+                const newRow = temp.querySelector('.project-row--link');
+                if (newRow) existingRow.innerHTML = newRow.innerHTML;
+            })
+            .catch(() => {
+                // Network blip — silently skip, same as every other poll/
+                // stream callback in this app. The next ping tries again.
+            });
+    }
+
+    function refreshWholeTable() {
         fetch('/projects-new/table-rows' + window.location.search)
             .then((response) => (response.ok ? response.text() : null))
             .then((html) => {
-                if (html === null) return;
-                // Re-check — a drag could have started while the fetch was
-                // in flight.
-                if (document.body.classList.contains('is-resizing-column') ||
-                    document.body.classList.contains('is-reordering-column')) {
-                    return;
-                }
+                if (html === null || isColumnDragInProgress()) return;
                 table.innerHTML = html;
                 if (window.helixRebindProjectTableColumns) {
                     window.helixRebindProjectTableColumns();
@@ -745,6 +773,23 @@
                 // Network blip — silently skip, same as every other poll/
                 // stream callback in this app. The next ping tries again.
             });
+    }
+
+    function refreshProjectTable(projectId) {
+        // A resize or reorder drag holds direct references to the exact
+        // header-cell nodes being dragged and reads live measurements off
+        // them every animation frame — replacing them mid-drag would either
+        // freeze it or have it silently fail against now-detached nodes.
+        // Simplest safe fix: skip this one refresh. Nothing is lost — the
+        // next SSE ping picks up whatever changed once the user lets go.
+        if (isColumnDragInProgress()) return;
+
+        const existingRow = projectId ? table.querySelector('[data-project-id="' + projectId + '"]') : null;
+        if (existingRow) {
+            refreshOneRow(projectId, existingRow);
+        } else {
+            refreshWholeTable();
+        }
     }
 
     window.helixRefreshProjectTable = refreshProjectTable;

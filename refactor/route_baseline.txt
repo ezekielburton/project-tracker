@@ -145,6 +145,7 @@
 /projects-new/customer/<int:project_customer_id>/expand	GET	project_list.expand_customer
 /projects-new/layout	POST	project_list.save_layout
 /projects-new/table-rows	GET	project_list.table_rows
+/projects-new/table-rows/<int:project_id>	GET	project_list.table_row
 /projects-new/views	POST	project_list.create_view
 /projects-new/views/<int:view_id>/delete	POST	project_list.delete_view
 /projects-new/views/<int:view_id>/rename	POST	project_list.rename_view

@@ -69,6 +69,9 @@ base.html's <head> instead of here — see the comment there for why. #}
                             <button type="button" class="filter-clear-all" id="filter-clear-all">Clear all</button>
                         </div>
                     </div>
+                    {% if view_capped %}
+                    <div class="filter-panel-cap-warning">This view has more than {{ view_row_cap }} projects — only the first {{ view_row_cap }} are shown. Narrow your filters to see the rest.</div>
+                    {% endif %}
 
                     <div class="filter-columns">
 

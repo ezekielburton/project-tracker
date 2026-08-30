@@ -1,0 +1,11 @@
+{# app/templates/project_list/_single_row.html
+   Response body for project_list.table_row() — one project's row, same
+   markup a real page load or the full table-rows refresh would produce.
+   project_list.js's refreshProjectTable() lifts just the
+   .project-row--link element out of this and swaps its content into the
+   existing DOM node — it never uses this template's --row-num/grid-row
+   (unknowable here, rendered in isolation from the full grouped/sorted
+   table) or touches the row's sibling .project-expand-container. #}
+{% from 'project_list/_row_macros.html' import project_row with context %}
+{% set ns = namespace(row_num=1) %}
+{{ project_row(row, ns) }}

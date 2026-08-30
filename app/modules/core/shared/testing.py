@@ -6,7 +6,10 @@ Every module's tests reach these through the root conftest.py:
 - `db_session` wraps a single test in a transaction rolled back at teardown,
                so tests never persist data and stay isolated from one another.
 """
+from contextlib import contextmanager
+
 import pytest
+from sqlalchemy import event
 
 from config import Config, TestingConfig
 from app import create_app, db as _db
@@ -56,21 +59,40 @@ def db_session(app):
     # the whole test here is safe: this pushes a brand-new AppContext (and
     # g) per test function, unlike the `app` fixture's context above, which
     # would have been the SAME context for the entire session.
+    #
+    # session.configure(bind=connection, join_transaction_mode=...) alone
+    # does NOT work here: Flask-SQLAlchemy's Session subclass overrides
+    # get_bind() to resolve connections through its own engine registry,
+    # which silently ignores that setting for actual query/commit traffic —
+    # confirmed by writes becoming visible to a separate connection right
+    # after a plain session.commit(), even though session_factory.kw showed
+    # the right bind. Forcing get_bind() itself on the instance is what
+    # actually pins every query to our connection; from there the standard
+    # begin_nested()-plus-restart-listener recipe correctly contains each
+    # commit() to a SAVEPOINT until the outer `transaction.rollback()` below
+    # undoes everything at once.
     with app.app_context():
         connection = _db.engine.connect()
         transaction = connection.begin()
         _db.session.remove()
-        _db.session.configure(bind=connection, join_transaction_mode="create_savepoint")
+        _db.session.configure(bind=connection)
+        session = _db.session()
+        session.get_bind = lambda *a, **kw: connection
+        session.begin_nested()
+
+        def _restart_savepoint(sess, trans):
+            if trans.nested and not trans._parent.nested:
+                sess.begin_nested()
+
+        event.listen(session, 'after_transaction_end', _restart_savepoint)
         try:
             yield _db.session
         finally:
+            event.remove(session, 'after_transaction_end', _restart_savepoint)
             _db.session.remove()
             transaction.rollback()
             connection.close()
             _db.session.configure(bind=_db.engine)
-
-from contextlib import contextmanager
-from sqlalchemy import event
 
 
 def login_as(client, app, user, password):

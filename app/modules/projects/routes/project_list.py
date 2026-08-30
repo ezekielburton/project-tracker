@@ -286,118 +286,105 @@ def _parse_date(param_name):
     except ValueError:
         return None
 
-def _filter_rows(rows, exclude=None):
+def _row_passes_filters(row, exclude=None):
     """
-    Applies every active filter dimension to an already-fetched,
-    already-serialized row list, skipping whichever one dimension
-    `exclude` names — used when computing that dimension's own option
-    counts, so a dimension's current selection doesn't shrink its own
-    option counts to just itself.
-
-    Used to be two functions: _apply_sql_filters (cs_lead/client/
-    brief_type/initial_deadline/search — cheap to push into the WHERE
-    clause, so that's where they lived) and _apply_row_filters (designers/
-    status/urgency/team/design_type/next_deadline — computed values with
-    no single column to filter on, so always Python-side). Merged into one
-    Python-only function: _build_filter_counts calls this once per filter
-    dimension (8 dimensions) plus once more for the visible row list, and
-    every one of those 9 calls used to mean _rows_excluding re-running the
-    SQL-filtered half as a fresh, fully eager-loaded DB query — 9 full
-    fetch-and-serialize passes over the view's projects on every single
-    page load, each exactly as expensive as the others with NO filters
-    active, which is exactly the case that was slow (every dimension
-    scoped to the whole view instead of some filtered-down subset).
-
-    Now _fetch_all_view_rows() runs the DB fetch exactly once per request
-    (shared by _compute_rows_and_groups and _build_filter_counts — see
-    table_rows()/index()), and every dimension, former-SQL ones included,
-    is a cheap Python list comprehension over rows already sitting in
-    memory. The cs_lead/client/brief_type/initial_deadline/search blocks
-    below are a straight port of the old SQL conditions onto the row
-    dict's equivalent fields (_serialize_row already carries all of
-    them for display) — a project with no cs_lead/client/deadline set
-    just never matches an id/date filter, same as SQL comparing against
-    NULL never matches either.
+    True if one serialized row matches every active filter dimension
+    except `exclude`. Same conditions _filter_rows applies to a list, one
+    row at a time — used directly by table_row() so a single-project
+    check can never drift from what filtering the full list would decide.
     """
     if exclude != 'cs_lead':
         cs_lead_ids = _parse_ids('cs_lead')
-        if cs_lead_ids:
-            rows = [r for r in rows if r['cs_lead'] and r['cs_lead']['id'] in cs_lead_ids]
+        if cs_lead_ids and not (row['cs_lead'] and row['cs_lead']['id'] in cs_lead_ids):
+            return False
 
     if exclude != 'client':
         client_ids = _parse_ids('client')
         want_client_undefined = _has_undefined('client')
-        if client_ids or want_client_undefined:
-            rows = [r for r in rows if
-                    (client_ids and r['client_id'] in client_ids)
-                    or (want_client_undefined and r['client_id'] is None)]
+        if (client_ids or want_client_undefined) and not (
+            (client_ids and row['client_id'] in client_ids)
+            or (want_client_undefined and row['client_id'] is None)
+        ):
+            return False
 
     if exclude != 'brief_type':
         brief_types = _parse_values('brief_type')
-        if brief_types:
-            rows = [r for r in rows if r['brief_type'] in brief_types]
+        if brief_types and row['brief_type'] not in brief_types:
+            return False
 
     if exclude != 'initial_deadline':
         initial_from = _parse_date('initial_deadline_from')
-        if initial_from:
-            rows = [r for r in rows if r['initial_deadline'] and r['initial_deadline'] >= initial_from]
+        if initial_from and not (row['initial_deadline'] and row['initial_deadline'] >= initial_from):
+            return False
 
         initial_to = _parse_date('initial_deadline_to')
-        if initial_to:
-            rows = [r for r in rows if r['initial_deadline'] and r['initial_deadline'] <= initial_to]
+        if initial_to and not (row['initial_deadline'] and row['initial_deadline'] <= initial_to):
+            return False
 
     if exclude != 'search':
         search = request.args.get('search', '').strip()
         if search:
             needle = search.lower()
-            rows = [r for r in rows if
-                    needle in (r['name'] or '').lower()
-                    or needle in (r['job_number'] or '').lower()]
+            if not (needle in (row['name'] or '').lower() or needle in (row['job_number'] or '').lower()):
+                return False
 
     if exclude != 'designers':
         designer_ids = _parse_ids('designers')
         want_undefined = _has_undefined('designers')
-        if designer_ids or want_undefined:
-            rows = [r for r in rows if
-                    (designer_ids and any(d and d['id'] in designer_ids for d in r['designers']))
-                    or (want_undefined and not r['designers'])]
+        if (designer_ids or want_undefined) and not (
+            (designer_ids and any(d and d['id'] in designer_ids for d in row['designers']))
+            or (want_undefined and not row['designers'])
+        ):
+            return False
 
     if exclude != 'status':
         statuses = _parse_values('status')
-        if statuses:
-            rows = [r for r in rows if r['blanket_status'] in statuses]
+        if statuses and row['blanket_status'] not in statuses:
+            return False
 
     if exclude != 'urgency':
         urgencies = _parse_values('urgency')
-        if urgencies:
-            rows = [r for r in rows if r['urgency'] in urgencies]
+        if urgencies and row['urgency'] not in urgencies:
+            return False
 
     if exclude != 'team':
         teams = _parse_values('team')
         want_undefined = _has_undefined('team')
-        if teams or want_undefined:
-            rows = [r for r in rows if
-                    any(t in teams for t in r['design_teams'])
-                    or (want_undefined and not r['design_teams'])]
+        if (teams or want_undefined) and not (
+            any(t in teams for t in row['design_teams'])
+            or (want_undefined and not row['design_teams'])
+        ):
+            return False
 
     if exclude != 'design_type':
         design_types = _parse_values('design_type')
         want_undefined = _has_undefined('design_type')
-        if design_types or want_undefined:
-            rows = [r for r in rows if
-                    r['design_type'] in design_types
-                    or (want_undefined and r['design_type'] is None)]
+        if (design_types or want_undefined) and not (
+            row['design_type'] in design_types
+            or (want_undefined and row['design_type'] is None)
+        ):
+            return False
 
     if exclude != 'next_deadline':
         next_from = _parse_date('next_deadline_from')
-        if next_from:
-            rows = [r for r in rows if r['next_deadline'] and r['next_deadline']['date'] >= next_from]
+        if next_from and not (row['next_deadline'] and row['next_deadline']['date'] >= next_from):
+            return False
 
         next_to = _parse_date('next_deadline_to')
-        if next_to:
-            rows = [r for r in rows if r['next_deadline'] and r['next_deadline']['date'] <= next_to]
+        if next_to and not (row['next_deadline'] and row['next_deadline']['date'] <= next_to):
+            return False
 
-    return rows
+    return True
+
+
+def _filter_rows(rows, exclude=None):
+    """
+    Keeps rows matching every active filter dimension except `exclude` —
+    used when computing that dimension's own option counts, so a
+    dimension's current selection doesn't shrink its own option counts to
+    just itself. See _row_passes_filters for the per-row conditions.
+    """
+    return [r for r in rows if _row_passes_filters(r, exclude)]
 
 def _resolve_view(view, user):
     """
@@ -521,6 +508,11 @@ def _base_query_for_view(view, user):
 
     return query, order_by
 
+# Safety cap (task #55, Group C) — an unbounded view could serialize
+# thousands of projects on every request/SSE ping. Fetched as cap+1 so
+# truncation can be detected without a separate COUNT query.
+_VIEW_ROW_CAP = 500
+
 def _fetch_all_view_rows(view, user):
     """
     The one and only DB fetch-and-serialize pass per request: every
@@ -532,12 +524,18 @@ def _fetch_all_view_rows(view, user):
     (the visible list) and _build_filter_counts (every filter chip's own
     count) — see _filter_rows()'s docstring for why this replaced 9
     separate fetches.
+
+    Capped at _VIEW_ROW_CAP. Returns (rows, truncated) so callers can warn
+    the user instead of silently showing a partial view.
     """
     query, order_by = _base_query_for_view(view, user)
     if query is None:
-        return []
+        return [], False
 
-    projects = _eager_load(query).order_by(order_by).all()
+    projects = _eager_load(query).order_by(order_by).limit(_VIEW_ROW_CAP + 1).all()
+    truncated = len(projects) > _VIEW_ROW_CAP
+    if truncated:
+        projects = projects[:_VIEW_ROW_CAP]
     project_ids = [p.id for p in projects]
     rollups, next_deadlines = _bulk_deliverable_aggregates(project_ids)
     status_started_at = bulk_project_status_started_at(project_ids)
@@ -551,11 +549,12 @@ def _fetch_all_view_rows(view, user):
     # filter/sort/group the same way rollup/urgency/etc. already do.
     last_update_at, last_chat_at = _bulk_activity_and_chat_at(project_ids)
     seen_by_project = _bulk_activity_seen(project_ids, user)
-    return [
+    rows = [
         _serialize_row(p, rollups, next_deadlines, status_started_at, client_approved_at,
                        last_update_at, last_chat_at, seen_by_project)
         for p in projects
     ]
+    return rows, truncated
 
 
 def _rows_excluding(all_rows, exclude):
@@ -735,23 +734,9 @@ def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_ap
 def _compute_rows_and_groups(all_rows):
     """
     The rows -> filter -> sort -> group pipeline, shared by index() and
-    table_rows() (added for task #55's SSE-triggered live table refresh —
-    see project_list.js's refreshProjectTable() and polling.js's
-    .project-list-page branch). Pulled out so the live-refresh endpoint can
-    never quietly drift out of sync with what a real page load computes —
-    same principle as _base_query_for_view/_rows_excluding already being
-    shared rather than re-derived per caller.
-
-    Takes the shared _fetch_all_view_rows() result (all_rows) rather than
-    fetching itself (see _filter_rows()'s docstring): filtering is the only
-    thing this function does to the already-fetched rows.
-
-    No post-serialize "Design Completed" filtering needed — that separate label is gone, and the
-    SQL-level exclusion _fetch_all_view_rows inherits from
-    _base_query_for_view (Project.project_status != 'handed_to_production'
-    for My/All, == 'handed_to_production' for design_complete) is already
-    exact now that the project pill is a plain live roll-up with no
-    in-between C&CM-only state to reconcile against a computed field.
+    table_rows() so the live-refresh endpoint can't drift from a real page
+    load. Takes _fetch_all_view_rows()'s result; filtering is the only thing
+    that drops rows (sort and group only reorder/bucket).
     """
     rows = _filter_rows(all_rows)
 
@@ -786,28 +771,50 @@ def _compute_rows_and_groups(all_rows):
 @login_required
 def table_rows():
     """
-    Stage 3 of task #55 (SSE live updates) — the Projects table's own
-    refresh endpoint. sse.py's /sse/dashboard is a generic "some project
-    changed somewhere" doorbell (same one the old and new dashboards
-    already listen to); on a ping, the client re-fetches this with its
-    current view/filter/sort/group query params still attached and swaps
-    the result straight into #project-table, leaving the rest of the page
-    (toolbar, filter panel, any open overlay) completely untouched. See
-    project_list.js's refreshProjectTable() and project_list_layout.js's
-    bindColumnControls() (re-run after the swap, since resize/reorder
-    listeners are bound directly to header cells, not delegated) for the
-    two pieces that make that swap safe without a full page reload.
-
-    Deliberately does NOT touch session['last_project_view'] the way
-    index() does — a background live-update ping should never change what
-    the user would land on next time they click the sidebar's Projects
-    link, only index() (a real navigation) should do that.
+    The Projects table's full refresh endpoint. On an SSE ping the client
+    re-fetches this with its current view/filter/sort/group params and swaps
+    the result into #project-table, leaving the rest of the page untouched.
+    Does NOT touch session['last_project_view'] — only index() (a real
+    navigation) should change where the sidebar's Projects link lands.
     """
     user = _effective_user()
     view = request.args.get('view') or session.get('last_project_view', 'my')
-    all_rows = _fetch_all_view_rows(view, user)
+    all_rows, _truncated = _fetch_all_view_rows(view, user)
     rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(all_rows)
     return render_template('project_list/_table_rows.html', rows=rows, groups=groups, today=date.today())
+
+
+@project_list_bp.route('/table-rows/<int:project_id>')
+@login_required
+def table_row(project_id):
+    """
+    Targeted single-row refresh, answered without building the whole view.
+    Membership reuses _base_query_for_view and the filter check reuses
+    _row_passes_filters — the same query and predicate the full list uses —
+    so it can't drift from a full refresh. 204 means the project isn't in the
+    current view/filter (project_list.js then removes the row).
+    """
+    user = _effective_user()
+    view = request.args.get('view') or session.get('last_project_view', 'my')
+    query, _order_by = _base_query_for_view(view, user)
+    if query is None:
+        return '', 204
+
+    project = _eager_load(query).filter(Project.id == project_id).first()
+    if project is None:
+        return '', 204
+
+    rollups, next_deadlines = _bulk_deliverable_aggregates([project_id])
+    status_started_at = bulk_project_status_started_at([project_id])
+    client_approved_at = bulk_project_client_approved_at([project_id])
+    last_update_at, last_chat_at = _bulk_activity_and_chat_at([project_id])
+    seen_by_project = _bulk_activity_seen([project_id], user)
+    row = _serialize_row(project, rollups, next_deadlines, status_started_at, client_approved_at,
+                          last_update_at, last_chat_at, seen_by_project)
+
+    if not _row_passes_filters(row):
+        return '', 204
+    return render_template('project_list/_single_row.html', row=row, today=date.today())
 
 
 @project_list_bp.route('/')
@@ -858,7 +865,7 @@ def index():
     # docstring) — the visible row list and every filter chip's
     # own count are both just Python-side filtering of this same list now,
     # instead of each re-querying and re-serializing the view from scratch.
-    all_rows = _fetch_all_view_rows(view, user)
+    all_rows, view_capped = _fetch_all_view_rows(view, user)
     rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(all_rows)
 
     filter_counts = _build_filter_counts(all_rows)
@@ -951,7 +958,8 @@ def index():
                        saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout, is_admin=(user.role == 'admin'),
                        sort_options=SORT_OPTIONS, sort_field=sort_field, sort_dir=sort_dir,
                        saved_views=saved_views, current_base_view=current_base_view, is_dirty=is_dirty,
-                       group_options=GROUP_FIELDS, group_field=group_field, groups=groups, show_cancelled=_show_cancelled(), )
+                       group_options=GROUP_FIELDS, group_field=group_field, groups=groups, show_cancelled=_show_cancelled(),
+                       view_capped=view_capped, view_row_cap=_VIEW_ROW_CAP, )
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required

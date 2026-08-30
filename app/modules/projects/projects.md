@@ -52,10 +52,11 @@ The project-card JS/CSS still load from the global `/static`; they move in the s
 
 ## Optimization status
 - Done: two N+1 fixes (draft-card history rendering; the list page's row expansion), each with a query-count test. The overlay split above.
-- Open: list-page live-refresh scaling — targeted single-row SSE updates instead of a full `/table-rows` refetch, plus a cap on full-view rebuilds.
+- Done: list-page live updates (Group C). A change refreshes just the one changed row (`/projects-new/table-rows/<id>`, or `204` if that project isn't in the current view); the full-table refetch is the fallback for a project entering the view. Very large views are capped at 500 rows with a banner. A targeted update doesn't reorder rows or fix group counts — those settle on the next full refresh.
+- Done (C3): the single-row endpoint answers without rebuilding the whole view — it looks up just that project and checks it against the same base query and filter rules the full list uses. Same result as the full list, far less work per update; a test pins the two together.
 
 ## Not here
 The first-login account wizard moved to the profile module.
 
 ## Tests
-`tests/` — smoke tests (per-blueprint auth, template resolution, lib imports, achievements) plus the two query-count perf tests above.
+`tests/` — smoke tests (per-blueprint auth, template resolution, lib imports, achievements) and the two query-count perf tests above. Each `project_overlay/` route file has its own test (auth + happy path). For the list page: `test_project_list_live_refresh.py` covers the single-row endpoint and the row cap, and `test_table_row_matches_full_view.py` pins the single-row show/hide decision to what the full table shows across the main filters.
