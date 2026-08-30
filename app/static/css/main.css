@@ -986,6 +986,12 @@ body:has(.sidebar.sidebar--pinned) .app-header {
    flip in dark mode. */
 .topbar-btn {
     color: var(--text);
+    /* .bell-badge below is position:absolute — without this, it has no
+       positioned ancestor to anchor to and escapes up to the nearest one
+       that exists (the topbar), landing in the browser's corner instead
+       of pinned to the bell icon, and still eating clicks there since
+       it's DOM-wise still inside this button. */
+    position: relative;
 }
 
 /* Dark-mode toggle — segmented sun/moon pill. Purely visual; the
