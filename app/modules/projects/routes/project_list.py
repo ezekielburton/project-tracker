@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import nullslast, func, case
 from sqlalchemy.orm import joinedload, selectinload
 from app.modules.core.shared.extensions import db
-from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel, ActivityLog, ProjectNote, ProjectActivitySeen
+from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel, ActivityLog, ProjectNote, ProjectActivitySeen, DeliverableAssignment
 from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 from app.modules.core.shared.services.status_tracking import bulk_project_status_started_at, bulk_project_client_approved_at
 
@@ -1003,7 +1003,10 @@ def expand(project_id):
             })
         return render_template('project_list/_expand_rows.html', rows=rows, today=date.today())
 
-    rows = [_serialize_deliverable_row(d) for d in project.project_deliverables]
+    deliverables = Deliverable.query.filter_by(project_id=project.id).options(
+        selectinload(Deliverable.disciplines).joinedload(DeliverableAssignment.designer)
+    ).order_by(Deliverable.id).all()
+    rows = [_serialize_deliverable_row(d) for d in deliverables]
     return render_template('project_list/_deliverable_table.html', rows=rows, today=date.today(), brief_type='standard')
 
 @project_list_bp.route('/customer/<int:project_customer_id>/expand')
@@ -1015,7 +1018,10 @@ def expand_customer(project_customer_id):
     the wire only once someone actually clicks that customer's toggle.
     """
     pc = ProjectCustomer.query.get_or_404(project_customer_id)
-    rows = [_serialize_deliverable_row(d) for d in pc.deliverables]
+    deliverables = Deliverable.query.filter_by(project_customer_id=pc.id).options(
+        selectinload(Deliverable.disciplines).joinedload(DeliverableAssignment.designer)
+    ).order_by(Deliverable.id).all()
+    rows = [_serialize_deliverable_row(d) for d in deliverables]
     return render_template('project_list/_deliverable_table.html', rows=rows, today=date.today(), brief_type='ccm')
 
 # ---- Sorting ----

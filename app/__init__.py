@@ -56,7 +56,7 @@ def _compute_static_version():
 
 def create_app(config=Config):
     app = Flask(__name__)
-    app.config.from_object(Config)
+    app.config.from_object(config)
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -178,7 +178,6 @@ def create_app(config=Config):
     app.register_blueprint(project_preproduction_bp)
     app.register_blueprint(project_notes_bp)
 
-    @app.context_processor
     @app.context_processor
     def inject_notifications():
         import json

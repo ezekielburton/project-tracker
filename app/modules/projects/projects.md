@@ -1,94 +1,61 @@
 # projects
 
-The largest module in the app: everything behind the Projects page and the
-project detail overlay. Migrated in four stages (transfer → notes → list →
-overlay+preproduction) because of its size (~7,300 lines across five
-blueprints), but it is one module — the pieces are tightly coupled and belong
-together.
+The app's largest module: the Projects list page and the project detail overlay. It's one module — the pieces are tightly coupled.
 
 ## Structure
 ```
 app/modules/projects/
   routes/
-    transfer.py                # `transfer` — move/duplicate a C&CM deliverable
-    project_notes.py           # `project_notes` — notes + chat panels (JSON)
-    project_preproduction.py   # `project_preproduction` — 2D/3D/Technical streams
-    project_list.py            # `project_list` (/projects-new) — the list page
-    project_overlay.py         # `project_overlay` — the project detail overlay
+    transfer.py                # move/duplicate a C&CM deliverable
+    project_notes.py           # notes + chat panels (JSON)
+    project_preproduction.py   # 2D/3D/Technical streams
+    project_list.py            # the list page (/projects-new)
+    project_overlay/           # the project detail overlay (package)
   lib/
-    pptx_convert.py            # .pptx -> .pdf conversion (overlay-only)
-    submission_cache.py        # submission file caching/zipping (overlay-only)
+    pptx_convert.py            # .pptx -> .pdf (overlay only)
+    submission_cache.py        # submission file caching/zipping (overlay only)
   templates/
-    project_list/              # the list page + its row partials
-    project_overlay/           # the overlay shell + ~25 partials
+    project_list/              # list page + row partials
+    project_overlay/           # overlay shell + partials
   tests/
   projects.md
 ```
 
-## The five blueprints
-- **project_list** (`/projects-new`): the role-adaptive projects table — one page
-  that renders differently per viewing role — plus the JSON endpoints for its
-  filtering, sorting, row expansion, and saved table views. Also computes the
-  per-user unread indicators shown on each row (separate dots for new project
-  updates vs. new chat messages, cleared independently — see
-  ProjectActivitySeen and `mark_project_activity_seen()` in
-  `core/shared/lib/utils.py`), sourced from the same `ActivityLog` every
-  other project-change entry point already writes to.
-- **project_overlay**: the project detail overlay — Details, Deliverables,
-  Submissions, Flags, Chat, Notes, and Pre-Production surfaces, project creation
-  (create overlay + resumable drafts), status overrides, add/cancel project
-  customer, self-service editing-access requests (an assigned designer asking
-  for, and a CS Lead/Secondary CS granting, full deliverable-management rights
-  on one open project — see ProjectEditAccessRequest), a per-customer
-  deliverable catalog picker for C&CM (replacing free-text entry with a pick
-  from that customer's DeliverableType catalog, or add a new one to it
-  permanently) plus an Apply to Multiple flow to duplicate one customer's
-  deliverable set onto others on the same project, reference-file and
-  submission-file serving, and job-number generation. By far the biggest file
-  (~5,400 lines, 60 routes).
-- **project_preproduction**: the 2D/3D/Technical stream cycle after client
-  approval — assign, mark-done, approve, flag, Skip to Pre-Production, and the
-  Handed to Production cascade.
-- **project_notes**: the notes and chat panels (JSON endpoints; renders two of
-  the overlay's partials).
-- **transfer**: move or duplicate a C&CM deliverable to a different customer.
+### `project_overlay/` package
+The overlay was one ~5,400-line file. It's now a package of seven files sharing one blueprint:
 
-## Internal coupling
-`project_overlay` and `project_preproduction` import each other (the overlay's
-approval path calls into pre-production, and pre-production renders overlay
-sections). That circular relationship is why they are one module and were moved
-together.
+- `_common.py` — the `project_overlay_bp` blueprint (every other file imports and decorates onto it, so all `url_for('project_overlay.*')` names and the app-factory import stay unchanged), plus helpers used by two or more files.
+- `create.py` — create-draft flow: shell, draft list, finalize, delete.
+- `details.py` — Details read/save, project start, status overrides, cancel/uncancel, add customer, NAS link, hold toggle, edit-access requests.
+- `flags.py` — Brief Flags (create/reply/resolve/history).
+- `deliverables.py` — Deliverables tab, edit (Standard + C&CM), Apply to Multiple, team + people assignment.
+- `submissions.py` — Submissions tab: draft cards, file upload/manage, submit for review/to client, client revision, approve, internal-revision flagging.
+- `files.py` — Reference Files, job-number generation, submission file serving.
+
+## The five blueprints
+- **project_list** (`/projects-new`) — the role-adaptive projects table plus its JSON endpoints (filter, sort, row expansion, saved views). Shows per-user unread dots (project updates vs chat messages, cleared independently) sourced from `ActivityLog`. Relies on the activity-log and notes indexes to stay fast. Deep-links into a project's overlay via `?project=<id>`.
+- **project_overlay** — the detail overlay: Details, Deliverables, Submissions, Flags, Chat, Notes, Pre-Production, project creation (create overlay + resumable drafts), status overrides, add/cancel customer, edit-access requests, the per-customer C&CM catalog picker + Apply to Multiple, file serving, job numbers. Now the `project_overlay/` package above.
+- **project_preproduction** — the 2D/3D/Technical stream cycle after client approval (assign, mark-done, approve, flag, Skip to Pre-Production, Handed to Production).
+- **project_notes** — the notes and chat panels (JSON endpoints).
+- **transfer** — move or duplicate a C&CM deliverable to another customer.
+
+## Coupling
+`project_overlay` and `project_preproduction` import each other (the overlay's approval path calls into pre-production; pre-production renders overlay sections), so they stay in one module.
 
 ## Dependencies
-- **core/shared**: everything shared — db, models, nas, notifications, utils,
-  decorators, status_tracking, status_vocabulary, zip_utils, and the
-  achievements checker service. All imported directly from core/shared;
-  migrating this module closed the last remaining `app.achievements` shim
-  consumer.
-- **lib/**: `pptx_convert` and `submission_cache` are used only by the overlay,
-  so they live in the module's own `lib/`, not core/shared.
-- **No inbound feature seams**: nothing outside the projects files imports them
-  except the app factory.
+- **core/shared** — db, models, nas, notifications, utils, decorators, status tracking/vocabulary, zip utils, achievements service.
+- **lib/** — `pptx_convert` and `submission_cache`, used only by the overlay.
+- Nothing outside the module imports it except the app factory.
 
 ## Static
-The project-card JS set (15 JS + 3 CSS: project_list, project_overlay,
-project_overlay_create/edit, deliverables/details/flags/chat/notes/submissions
-cards, transfer, etc.) is still served from the global `/static` loader; it moves
-in the shared-static pass.
+The project-card JS/CSS still load from the global `/static`; they move in the shared-static pass.
 
-## Known follow-up (deferred to the per-module overhaul)
-`project_overlay.py` is ~5,400 lines. It was moved as-is; splitting it into
-smaller files (details / deliverables / submissions / flags / create) is a
-worthwhile future refactor, deliberately left for the planned overhaul of this
-feature rather than done during the relocation, to avoid changing behaviour on
-freshly-overhauled code.
+## Optimization status
+- Done: two N+1 fixes (draft-card history rendering; the list page's row expansion), each with a query-count test. The overlay split above.
+- Open: list-page live-refresh scaling — targeted single-row SSE updates instead of a full `/table-rows` refetch, plus a cap on full-view rebuilds.
 
 ## Not here
-The first-login account **wizard** was reassigned to the **profile** module — it
-sets the user's own account fields (name, password, birthday), which is profile
-territory, not projects.
+The first-login account wizard moved to the profile module.
 
 ## Tests
-`tests/test_projects_smoke.py` — per-blueprint auth checks, template resolution
-for the list and overlay, the two `lib/` helpers importable, and the overlay on
-the shared achievements service. Uses the shared fixtures from `core/shared`.
+`tests/` — smoke tests (per-blueprint auth, template resolution, lib imports, achievements) plus the two query-count perf tests above.

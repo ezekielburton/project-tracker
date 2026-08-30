@@ -337,11 +337,19 @@
                 '</span>';
         }
 
-        // NOTE: this URL is hardcoded to match project_detail.detail's
-        // route (/projects/<id>) rather than built with Flask's url_for —
-        // JS has no access to url_for, it only exists at Jinja render
-        // time. If that route's URL pattern ever changes, this must be
-        // updated to match by hand.
+        // NOTE: this URL is hardcoded to match project_list.index's route
+        // (/projects-new, reading a ?project=<id> query param to
+        // auto-open that project's overlay — see autoOpenFromUrl() in
+        // project_list.js) rather than built with Flask's url_for — JS
+        // has no access to url_for, it only exists at Jinja render time.
+        // If that route's URL pattern ever changes, this must be updated
+        // to match by hand. Switched from the old /projects/<id> detail
+        // page 27 Aug 2026, per Ezekiel: "wire up the dashboard clicks on
+        // projects to redirect to the new project overlay" — the
+        // server-rendered dash-row links (dash_due_row() etc. in
+        // _dashboard_macros.html) already pointed at project_list.index;
+        // only this JS mirror, used when these cards re-render
+        // client-side, still pointed at the old page.
         //
         // .dash-row-date (was a coloured .rag-badge rag-<colour> pill) and
         // .dash-row-next-action-tag (was plain .dash-row-next-action-text)
@@ -355,7 +363,7 @@
         // rows can (e.g. a project still 'in_queue' with no deliverable
         // deadlines set yet). Harmless no-op for Due since item.deadline
         // is always truthy there.
-        return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+        return '<a class="dash-row" href="/projects-new?project=' + item.project_id + '">' +
             '<span class="dash-row-date">' + escapeHtml(item.deadline || 'No deadline') + '</span>' +
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + title + '</span>' +
@@ -540,7 +548,7 @@
             // inline declarations or it would regress back to the broken
             // flex layout on the very next refresh.
             var gridRowStyle = 'display: grid !important; grid-template-columns: 2fr 2fr 1fr 1fr 130px 100px !important; align-items: center !important; gap: 1rem !important;';
-            var gridRow = '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard" style="display: contents !important;">' +
+            var gridRow = '<a class="dash-row" href="/projects-new?project=' + item.project_id + '" style="display: contents !important;">' +
                 '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
                 '<span class="dash-row-sub">' + escapeHtml(item.note) + '</span>' +
                 '<span class="dash-decision-cell">' + ownerChip + '</span>' +
@@ -573,7 +581,7 @@
 
         // Same hardcoded-URL caveat as renderDueRow() above — no url_for()
         // available client-side.
-        var row = '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+        var row = '<a class="dash-row" href="/projects-new?project=' + item.project_id + '">' +
             '<span class="dash-row-main">' +
             '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
             '<span class="dash-row-sub">' + escapeHtml(item.note) + '</span>' +
@@ -1499,7 +1507,7 @@
     // tiles' bodies, a second, unrelated consumer of the same row shape —
     // the old name would have been misleading for that call site.
     function dashStatProjectRow(item) {
-        return '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+        return '<a class="dash-row" href="/projects-new?project=' + item.project_id + '">' +
             '<span class="dash-row-date">' + (item.deadline ? item.deadline : 'No deadline') + '</span>' +
             '<span class="dash-row-main">' +
                 '<span class="dash-row-title">' + escapeHtml(item.name) + '</span>' +
@@ -1608,7 +1616,7 @@
             ? escapeHtml(item.customer_name) + ' <span class="dash-row-title-detail">&mdash; ' + escapeHtml(item.name) + '</span>'
             : escapeHtml(item.name);
         return '<div class="dash-decision-row dash-leadership-risk-row">' +
-            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+            '<a class="dash-row" href="/projects-new?project=' + item.project_id + '">' +
                 '<span class="dash-row-date">' + (item.deadline ? item.deadline : 'No deadline') + '</span>' +
                 '<span class="dash-row-main">' +
                     '<span class="dash-row-title">' + titleHtml + '</span>' +
@@ -1633,7 +1641,7 @@
                 'data-missing-teams="' + escapeHtml((item.missing_teams || []).join(',')) + '">Assign</button>';
         }
         return '<div class="dash-decision-row dash-leadership-waiting-row">' +
-            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+            '<a class="dash-row" href="/projects-new?project=' + item.project_id + '">' +
                 '<span class="dash-row-main">' +
                     '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
                     '<span class="dash-row-tags"><span class="dash-action-tag">Waiting for: ' + escapeHtml(item.waiting_for) + '</span></span>' +
@@ -1659,7 +1667,7 @@
             tags += '<span class="dash-action-tag">' + item.reply_count + ' repl' + (item.reply_count === 1 ? 'y' : 'ies') + '</span>';
         }
         return '<div class="dash-decision-row">' +
-            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+            '<a class="dash-row" href="/projects-new?project=' + item.project_id + '">' +
                 '<span class="dash-row-main">' +
                     '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +
                     '<span class="dash-row-tags">' + tags + '</span>' +
@@ -1685,7 +1693,7 @@
         }
         var peopleRow = showRaisedBy ? '<span class="dash-row-people">' + personChip(item.raised_by) + '</span>' : '';
         return '<div class="dash-decision-row">' +
-            '<a class="dash-row" href="/projects/' + item.project_id + '?from=dashboard">' +
+            '<a class="dash-row" href="/projects-new?project=' + item.project_id + '">' +
                 '<span class="dash-row-date">' + escapeHtml(item.resolved_display || '—') + '</span>' +
                 '<span class="dash-row-main">' +
                     '<span class="dash-row-title">' + escapeHtml(item.project_name) + '</span>' +

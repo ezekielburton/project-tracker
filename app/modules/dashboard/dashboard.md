@@ -54,7 +54,16 @@ Pure functions with no app imports: `get_project_rag`, `compute_clashes`,
 
 ## Static
 `css/dashboard.css`, `js/dashboard.js` — served from the global `/static` loader;
-move in the shared-static pass.
+move in the shared-static pass. `dashboard.js`'s client-rendered row links
+(`renderDueRow()` and the other card renderers — used when a card
+re-renders after a live refresh, sort, etc., not just on first page load)
+point at `project_list.index` (`/projects-new?project=<id>`, which
+auto-opens that project's overlay — see `autoOpenFromUrl()` in
+`project_list.js`, and projects.md), matching the server-rendered rows in
+`_dashboard_macros.html`. Updated 27 Aug 2026, per Ezekiel ("wire up the
+dashboard clicks on projects to redirect to the new project overlay") —
+previously hardcoded to the old `/projects/<id>` detail page, with an
+unused `?from=dashboard` param dropped in the same fix.
 
 ## Tests
 `tests/test_dashboard_smoke.py` — the dashboard requires authentication, its role

@@ -39,7 +39,7 @@ run.py                  # entry point
 
 Feature modules: `achievements`, `admin`, `auth`, `blog`, `client_directory`, `dashboard`, `feedback`, `file_templates`, `notifications`, `profile`, `projects`, `time_tracking`, `wiki`.
 
-The rule is simple: anything one feature needs lives in that feature's folder; anything two or more features share moves to `core/shared`. Features don't reach into each other's internals — they meet in `core/shared`. Want to change one feature? Open its module, change it, done — nothing else has to move.
+The rule is simple: anything one feature needs lives in that feature's folder; anything two or more features share moves to `core/shared`. Features don't reach into each other's internals — they meet in `core/shared`. Want to change one feature? Open its module, change it, done — nothing else has to move. IMPORTANT: Helix doesn't have any tests at the moment. All modules or features must have tests - add to any previous modules if retouching them for overhauls.
 
 ---
 
