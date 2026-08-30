@@ -55,6 +55,9 @@ The project-card JS/CSS still load from the global `/static`; they move in the s
 - Done: list-page live updates (Group C). A change refreshes just the one changed row (`/projects-new/table-rows/<id>`, or `204` if that project isn't in the current view); the full-table refetch is the fallback for a project entering the view. Very large views are capped at 500 rows with a banner. A targeted update doesn't reorder rows or fix group counts — those settle on the next full refresh.
 - Done (C3): the single-row endpoint answers without rebuilding the whole view — it looks up just that project and checks it against the same base query and filter rules the full list uses. Same result as the full list, far less work per update; a test pins the two together.
 
+## Column layout
+Name is a fixed column: it always sits right after the expand toggle, can't be dragged to a different spot, and stays pinned on screen when the table scrolls right (the expand toggle is pinned too, so there's no gap next to it). Every other column can still be resized and reordered freely. This only applies to the plain table — Group by view still scrolls normally, columns included.
+
 ## Not here
 The first-login account wizard moved to the profile module.
 

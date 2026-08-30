@@ -306,13 +306,56 @@
     height: 1px;
 }
 
+/* Expand and Name are pinned to the left of the table and stay on screen
+   as the table scrolls right. They need a solid background so scrolled
+   columns don't show through underneath them, and a z-index so they sit
+   above those columns. left: 2.5rem on Name matches Expand's fixed width
+   exactly, so the two sit flush against each other with no gap.
+
+   overflow: hidden matters here specifically because these two are
+   sticky: a name too long for its column used to just spill into the
+   next column's space and sit harmlessly behind it. Now that this column
+   is pinned above the others, that same overflow would paint on top of
+   whatever column is scrolled underneath it instead - clipping it stops
+   that. */
 .project-col-expand {
     grid-column: var(--pos-expand, 1);
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--white);
+    overflow: hidden;
 }
 
 .project-col-name {
     grid-column: var(--pos-name, 2);
     gap: var(--space-2);
+    position: sticky;
+    left: 2.5rem;
+    z-index: 2;
+    background: var(--white);
+    overflow: hidden;
+}
+
+/* .project-table-header>span (further down) sets position: relative on
+   every header cell, for the resize handle to anchor to. Its selector
+   (a class plus a type) is more specific than .project-col-expand/
+   .project-col-name's own class-only selector, so on header cells it was
+   silently winning and turning sticky back into relative.
+
+   That's not just a scroll-time bug: "left" means something different
+   for the two. Sticky only uses left as a threshold - at rest, before
+   there's anything to stick to, the element sits at its normal grid
+   position with no offset at all. Relative always applies left as a
+   permanent shift from that same normal position. So with relative
+   winning, the header's Expand and Name cells were pushed right by
+   their own left values (0 and 2.5rem) even with the table unscrolled,
+   landing on top of the columns after them - while the body cells below,
+   still genuinely sticky, sat correctly at rest. Restated here with two
+   classes so header cells win back their sticky positioning. */
+.project-table-header .project-col-expand,
+.project-table-header .project-col-name {
+    position: sticky;
 }
 
 /* Unread dots (26/27 Aug 2026, per Ezekiel) — small, distinct colors so

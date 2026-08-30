@@ -112,6 +112,16 @@
         }
     });
 
+    // Name is pinned right after Expand and can no longer be dragged (see
+    // the reorder section below). The sticky CSS assumes it's always at
+    // that spot, so move it there even if an older saved layout has it
+    // somewhere else from before this was a fixed column.
+    const nameIndex = layout.findIndex((c) => c.key === 'name');
+    if (nameIndex > 0) {
+        const [nameCol] = layout.splice(nameIndex, 1);
+        layout.unshift(nameCol);
+    }
+
     function applyLayout() {
         table.style.setProperty('--track-1', '2.5rem');
         table.style.setProperty('--pos-expand', 1);
@@ -272,9 +282,11 @@
     });
 
     // ---- Reorder ----
+    // Name is left out of this list on purpose: it's a fixed column, so it
+    // can't be dragged, and other columns can't be dropped onto it either.
     const headerCells = Array.from(
         table.querySelectorAll('.project-table-header > span[data-col-key]')
-    );
+    ).filter((cell) => cell.dataset.colKey !== 'name');
 
     headerCells.forEach((cell) => {
         cell.addEventListener('mousedown', (e) => {
