@@ -50,18 +50,20 @@ def client(app):
 
 @pytest.fixture()
 def db_session(app):
-    # _db.engine needs an app context to look itself up — pushed only for
-    # this setup/teardown, never held open across the test body (see the
-    # comment on the `app` fixture above for why that matters).
+    # Flask-SQLAlchemy's scoped session keys itself on the current app
+    # context's identity, so every db_session.add()/.query() call — not
+    # just the initial engine lookup — needs one active. Held open across
+    # the whole test here is safe: this pushes a brand-new AppContext (and
+    # g) per test function, unlike the `app` fixture's context above, which
+    # would have been the SAME context for the entire session.
     with app.app_context():
         connection = _db.engine.connect()
         transaction = connection.begin()
         _db.session.remove()
         _db.session.configure(bind=connection, join_transaction_mode="create_savepoint")
-    try:
-        yield _db.session
-    finally:
-        with app.app_context():
+        try:
+            yield _db.session
+        finally:
             _db.session.remove()
             transaction.rollback()
             connection.close()
