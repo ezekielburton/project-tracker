@@ -242,3 +242,16 @@ def save_sound_prefs():
     current_user.notification_prefs = json.dumps(prefs)
     db.session.commit()
     return jsonify({'success': True})
+
+
+@auth.route('/account/theme-prefs', methods=['POST'])
+@login_required
+def save_theme_prefs():
+    """Save the user's light/dark theme choice, fire-and-forget from the toggle."""
+    data = request.get_json(silent=True)
+    if data is None or data.get('theme') not in ('light', 'dark'):
+        return jsonify({'success': False, 'error': 'Invalid theme'}), 400
+
+    current_user.theme_preference = data['theme']
+    db.session.commit()
+    return jsonify({'success': True})

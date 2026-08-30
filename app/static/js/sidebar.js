@@ -14,6 +14,9 @@
     var toggleBtn   = document.getElementById('sidebar-toggle-btn');
     var pinBtn      = document.getElementById('sidebar-pin-btn');
     var mainContent = document.getElementById('main-content');
+    var loadingBar = document.getElementById('header-loading-bar');
+    var pageNameEl = document.getElementById('app-header-page-name');
+    var themeToggle = document.getElementById('dark-mode-toggle');
 
     if (!sidebar) return;
 
@@ -162,43 +165,43 @@
     }
 
     function navigateTo(url, push) {
+        startLoadingBar();
         fetch(url, {
             headers: { 'X-Nav-Request': '1' }
         })
-        .then(function (r) {
-            if (!r.ok) throw new Error('nav-failed');
-            // Capture the title header before consuming the body
-            var pageTitle = r.headers.get('X-Page-Title');
-            return r.text().then(function (html) {
-                return { html: html, title: pageTitle };
+            .then(function (r) {
+                if (!r.ok) throw new Error('nav-failed');
+                var pageTitle = r.headers.get('X-Page-Title');
+                return r.text().then(function (html) {
+                    return { html: html, title: pageTitle };
+                });
+            })
+            .then(function (result) {
+                mainContent.style.opacity = '0';
+                setTimeout(function () {
+                    mainContent.innerHTML = result.html;
+                    execScripts(mainContent);
+                    if (result.title) {
+                        var _ta = document.createElement('textarea');
+                        _ta.innerHTML = decodeURIComponent(result.title);
+                        document.title = _ta.value;
+                        setHeaderPageName(_ta.value);
+                    }
+                    if (push !== false) { history.pushState(null, '', url); }
+                    document.dispatchEvent(new CustomEvent('helix:navigated'));
+                    mainContent.style.opacity = '1';
+                    setActiveItem(url);
+                    finishLoadingBar();
+                }, 150);
+            })
+            .catch(function () {
+                finishLoadingBar();
+                window.location.href = url; // graceful fallback
             });
-        })
-        .then(function (result) {
-            mainContent.style.opacity = '0';
-            setTimeout(function () {
-                mainContent.innerHTML = result.html;
-                execScripts(mainContent);
-                if (result.title) {
-                    // decodeURIComponent undoes the quote() percent-encoding added in __init__.py.
-                    // The textarea trick decodes HTML entities (&amp; → &, etc.) because
-                    // document.title expects plain text, not HTML — without this, project names
-                    // containing & show as &amp; in the browser tab.
-                    var _ta = document.createElement('textarea');
-                    _ta.innerHTML = decodeURIComponent(result.title);
-                    document.title = _ta.value;
-                }
-                if (push !== false) { history.pushState(null, '', url); }
-                document.dispatchEvent(new CustomEvent('helix:navigated'));
-                mainContent.style.opacity = '1';
-                setActiveItem(url);
-            }, 150); // matches the 0.15s CSS transition on .main-content
-        })
-        .catch(function () {
-            window.location.href = url; // graceful fallback
-        });
     }
 
     window.navigateTo = navigateTo;
+    window.helixExecScripts = execScripts; // reused by settings-overlay.js to load account.html into a modal
 
     document.addEventListener('click', function (e) {
         var item = e.target.closest('.sidebar-item--nav');
@@ -213,5 +216,72 @@
     window.addEventListener('popstate', function () {
         navigateTo(window.location.pathname, false);
     });
+
+    /* ── 10. Header: loading bar, page name, dark-mode toggle stub ────
+   Loading bar and page name live outside #main-content so they
+   survive SPA swaps — navigateTo() above drives them directly. */
+
+    function startLoadingBar() {
+        if (!loadingBar) return;
+        loadingBar.style.transition = 'none';
+        loadingBar.style.width = '0%';
+        loadingBar.style.opacity = '1';
+        loadingBar.offsetHeight; // force reflow so the width transition below actually animates
+        loadingBar.style.transition = '';
+        loadingBar.style.width = '80%';
+    }
+
+    function finishLoadingBar() {
+        if (!loadingBar) return;
+        loadingBar.style.width = '100%';
+        setTimeout(function () { loadingBar.style.opacity = '0'; }, 150);
+    }
+
+    function setHeaderPageName(title) {
+        if (pageNameEl && title) pageNameEl.textContent = title;
+    }
+
+    // Full page load has no fetch to hook into — just mirror the <title>
+    // the server already rendered. SPA nav updates this itself, above.
+    setHeaderPageName(document.title);
+
+    // Dark-mode toggle. Exposed on window so Settings > Appearance's own
+    // toggle can drive the same state — repaints every .theme-toggle
+    // currently on the page, header's included, so both stay in sync.
+    // Persisted both ways: localStorage for instant no-flash reload, and a
+    // fire-and-forget POST to the account so it follows the user cross-device
+    // (same auto-save pattern as the notification/sound prefs above).
+    window.helixSetThemeStub = function (isDark) {
+        var theme = isDark ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+            btn.classList.toggle('theme-toggle--light', !isDark);
+            btn.classList.toggle('theme-toggle--dark', isDark);
+        });
+        try { localStorage.setItem('helix-theme', theme); } catch (e) {}
+        fetch('/account/theme-prefs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: theme })
+        }).catch(function () {});
+    };
+
+    // Sync the toggle's own visual state to whatever data-theme is already
+    // on <html> (set by the server render or the no-flash inline script,
+    // before this file ever runs) — just a repaint, not a user action, so
+    // it doesn't touch localStorage or POST.
+    (function () {
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+            btn.classList.toggle('theme-toggle--light', !isDark);
+            btn.classList.toggle('theme-toggle--dark', isDark);
+        });
+    })();
+
+    if (themeToggle) {
+        themeToggle.addEventListener('click', function () {
+            window.helixSetThemeStub(!themeToggle.classList.contains('theme-toggle--dark'));
+        });
+    }
 
 })();

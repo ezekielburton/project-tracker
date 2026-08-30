@@ -4,286 +4,260 @@
 
 {% block content %}
 <div class="page-container">
-    <h1>My Account</h1>
+    <h1 class="hidden">My Account</h1>
 
     {# Embed current email prefs as a JS constant — read by the toggle init script below #}
     <script>
-        const NOTIF_PREFS = {{ notification_prefs | tojson }};
+        window.NOTIF_PREFS = {{ notification_prefs | tojson }};
     </script>
 
-    <!-- 2×2 equal grid — all four cards the same width -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+    {# Section list (left) + one panel visible at a time (right) — per the
+       Settings wireframe. All four panels are already in the DOM (this is
+       all one fetch, loaded once into the overlay), so switching sections
+       is just show/hide, no extra round-trip. See the switcher script below. #}
+    <div class="settings-layout">
 
-        <!-- ① Profile -->
-        <div class="form-card" style="max-width: none;">
-            <h2>Profile</h2>
-            <div class="detail-fields" style="margin-top: 1rem;">
-                <div class="detail-field">
-                    <span class="detail-label">Name</span>
-                    <span class="detail-value">{{ current_user.name }}</span>
-                </div>
-                <div class="detail-field">
-                    <span class="detail-label">Email</span>
-                    <span class="detail-value">{{ current_user.email }}</span>
-                </div>
-                <div class="detail-field">
-                    <span class="detail-label">Role</span>
-                    <span class="detail-value">{{ current_user.role | replace('_', ' ') | title }}</span>
-                </div>
-            </div>
-        </div>
+        <nav class="settings-nav">
+            <div class="settings-nav-title">Settings</div>
 
-        <!-- ② Change Password -->
-        <div class="form-card" style="max-width: none;">
-            <h2>Change Password</h2>
-            <form method="POST" action="{{ url_for('auth.account') }}" style="margin-top: 1rem;">
-                <div class="form-group">
-                    <label for="current_password">Current Password</label>
-                    <input type="password" id="current_password" name="current_password" required>
-                </div>
-                <div class="form-group">
-                    <label for="new_password">New Password</label>
-                    <input type="password" id="new_password" name="new_password" required>
-                </div>
-                <div class="form-group">
-                    <label for="confirm_password">Confirm New Password</label>
-                    <input type="password" id="confirm_password" name="confirm_password" required>
-                </div>
-                <button type="submit" class="btn-primary">Update Password</button>
-            </form>
-            <script>
-                document.getElementById('current_password').closest('form').addEventListener('submit', function (e) {
-                    e.preventDefault();
-                    var form = this;
-                    showConfirm(
-                        "Changing your password will log you out of all active sessions. You'll need to sign in again.",
-                        function () { form.submit(); },
-                        'You will be logged out'
-                    );
-                });
-            </script>
-        </div>
+            <button type="button" class="settings-nav-item active" data-settings-section="account">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M20 21a8 8 0 1 0-16 0" />
+                </svg>
+                <span>Account</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-section="password">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>Password</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-section="notifications">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                <span>Notifications</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-section="appearance">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                </svg>
+                <span>Appearance</span>
+            </button>
+        </nav>
 
-        <!-- ③ Email Notifications -->
-        <div class="form-card" style="max-width: none;">
-            <h2>Email Notifications</h2>
-            <p style="margin: 0.5rem 0 1.25rem; color: var(--grey-dark); font-size: 0.9rem;">
-                Choose which events send you an email. In-app notifications are always on.
-            </p>
+        <div class="settings-panels">
 
-            {# 2-column grid — each item is a tight flex row: label left, toggle right #}
-            <div id="email-pref-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.5rem;">
-
-                {# Reusable row style: label fills remaining space, toggle stays right #}
-                {% macro pref_row(label, key) %}
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid var(--sandstone);">
-                    <span style="font-size: 0.85rem; color: var(--black);">{{ label }}</span>
-                    <label class="toggle-switch" style="flex-shrink: 0; margin-left: 0.75rem;">
-                        <input type="checkbox" class="notif-pref-toggle" data-key="{{ key }}">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                {% endmacro %}
-
-                {# Designer / Team Lead #}
-                {% if current_user.role in ['designer', 'team_lead'] %}
-                    {{ pref_row('New project for my team', 'new_project') }}
-                    {{ pref_row('Assigned as lead designer', 'lead_assigned') }}
-                    {{ pref_row('Assigned to Concept / KV', 'concept_kv_assigned') }}
-                    {{ pref_row('Project was started', 'project_started') }}
-                    {{ pref_row('Deliverable flagged for revision', 'revision_flag') }}
-                    {# 23 Aug 2026, per Ezekiel — notify_designer_of_stream_approved in
-                    notifications.py, fired from approve_stream() in
-                    project_preproduction.py: until Production has its own access to
-                    file storage/the app, the designer has to manually email the files
-                    over once approved, so they need to know the moment that happens. #}
-                    {{ pref_row('Pre-Production stream approved (share files)', 'preprod_stream_approved') }}
-                {% endif %}
-
-                {# CS / Management / Admin #}
-                {% if current_user.role in ['cs', 'admin', 'management'] %}
-                    {{ pref_row('Designer raised a flag', 'brief_flag') }}
-                    {{ pref_row('Designer resubmitted for review', 'revision_submitted') }}
-                    {{ pref_row('Project was started', 'project_started') }}
-                    {{ pref_row('Deliverable status changed', 'deliverable_status') }}
-                {% endif %}
-
-                {# Project Owner (23 Aug 2026, per Ezekiel — notify_project_owner_of_
-                stream_uploaded in notifications.py, fired from mark_stream_done in
-                project_preproduction.py). project_owner is its own role, separate
-                from cs/admin/management, so it needs its own gate even though a
-                project's actual Project Owner is very often also one of those. #}
-                {% if current_user.role in ['project_owner', 'cs', 'admin', 'management'] %}
-                    {{ pref_row('Pre-Production stream ready for review', 'preprod_stream_uploaded') }}
-                {% endif %}
-
-                {# All roles #}
-                {{ pref_row('Someone replied to my flag', 'flag_reply') }}
-                {{ pref_row('My flag was resolved', 'flag_resolved') }}
-
-                {% if current_user.role in ['cs', 'admin', 'designer', 'team_lead'] %}
-                    {{ pref_row('Lead designer changed', 'lead_changed') }}
-                {% endif %}
-
-                {% if current_user.role in ['admin', 'management', 'designer', 'team_lead'] %}
-                    {{ pref_row('Project submitted to client', 'project_submitted_client') }}
-                {% endif %}
-
-                {{ pref_row('Project approved', 'project_approved') }}
-
-            </div>
-
-            <p id="pref-save-status" style="margin-top: 1rem; font-size: 0.85rem; color: var(--pine); display: none;">
-                Preferences saved.
-            </p>
-        </div>
-
-        <!-- ④ Notification Preferences (browser / sound) -->
-        <div class="form-card" style="max-width: none;">
-            <h2>Notification Preferences</h2>
-            <p style="margin: 0.5rem 0 1.25rem; color: var(--grey-dark); font-size: 0.9rem;">
-                These settings are saved in your browser. Enabling desktop notifications will trigger a browser permission prompt.
-            </p>
-
-            <div class="detail-fields">
-                <div class="detail-field" style="align-items: center;">
-                    <span class="detail-label">Desktop Notifications</span>
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="toggle-browser-notif">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <img id="browser-notif-icon" src="" alt="" style="width: 32px; height: 32px; object-fit: contain;">
-                        <span id="browser-notif-status" style="font-size: 0.85rem; color: var(--grey-dark);">Loading…</span>
-                        <button type="button" class="btn-secondary" id="test-browser-notif-btn" style="font-size:0.8rem;padding:0.3rem 0.75rem;">
-                            Test Notification
-                        </button>
+            {# ── Account ─────────────────────────────────────────────── #}
+            <div class="settings-panel" data-settings-panel="account">
+                <h2 class="settings-panel-title">Account</h2>
+                <div class="detail-fields">
+                    <div class="detail-field">
+                        <span class="detail-label">Name</span>
+                        <span class="detail-value">{{ current_user.name }}</span>
+                    </div>
+                    <div class="detail-field">
+                        <span class="detail-label">Email</span>
+                        <span class="detail-value">{{ current_user.email }}</span>
+                    </div>
+                    <div class="detail-field">
+                        <span class="detail-label">Role</span>
+                        <span class="detail-value">{{ current_user.role | replace('_', ' ') | title }}</span>
                     </div>
                 </div>
-                <div class="detail-field" style="align-items: center;">
-                    <span class="detail-label">Notification Sound</span>
-                    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="toggle-audio-notif">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span id="audio-notif-status" style="font-size: 0.85rem; color: var(--grey-dark);">Loading…</span>
-                        <select id="sound-choice" class="form-select">
-                            <option value="" data-url="">Default chime</option>
-                            {% for sound in available_sounds %}
-                            <option value="{{ sound.id }}" data-url="{{ url_for('static', filename='sounds/' + sound.filename) }}">{{
-                                sound.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                            <input type="range" id="sound-volume" min="0" max="100" style="width: 100px;">
-                            <span id="sound-volume-label" style="font-size: 0.8rem; color: var(--grey-dark); width: 2.5em;">100%</span>
+            </div>
+
+            {# ── Password ────────────────────────────────────────────── #}
+            <div class="settings-panel hidden" data-settings-panel="password">
+                <h2 class="settings-panel-title">Password</h2>
+                <form method="POST" action="{{ url_for('auth.account') }}" style="max-width: 360px;">
+                    <div class="form-group">
+                        <label for="current_password">Current Password</label>
+                        <input type="password" id="current_password" name="current_password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new_password">New Password</label>
+                        <input type="password" id="new_password" name="new_password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm_password">Confirm New Password</label>
+                        <input type="password" id="confirm_password" name="confirm_password" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Update Password</button>
+                </form>
+                <script>
+                    document.getElementById('current_password').closest('form').addEventListener('submit', function (e) {
+                        e.preventDefault();
+                        var form = this;
+                        showConfirm(
+                            "Changing your password will log you out of all active sessions. You'll need to sign in again.",
+                            function () { form.submit(); },
+                            'You will be logged out'
+                        );
+                    });
+                </script>
+            </div>
+
+            {# ── Notifications ───────────────────────────────────────── #}
+            <div class="settings-panel hidden" data-settings-panel="notifications">
+                <h2 class="settings-panel-title">Notifications</h2>
+
+                <div class="settings-subsection">
+                    <div class="settings-subsection-title">Email notifications</div>
+                    <p class="settings-subsection-desc">
+                        Choose which events send you an email. In-app notifications are always on.
+                    </p>
+
+                    <div id="email-pref-list">
+
+                        {% macro pref_row(label, key) %}
+                        <div class="settings-toggle-row">
+                            <span class="settings-toggle-label">{{ label }}</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" class="notif-pref-toggle" data-key="{{ key }}">
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
-                        <button type="button" class="btn-secondary" id="test-sound-btn"
-                            style="font-size:0.8rem;padding:0.3rem 0.75rem;">
-                            Test Sound
-                        </button>
+                        {% endmacro %}
+
+                        {# Designer / Team Lead #}
+                        {% if current_user.role in ['designer', 'team_lead'] %}
+                            {{ pref_row('New project for my team', 'new_project') }}
+                            {{ pref_row('Assigned as lead designer', 'lead_assigned') }}
+                            {{ pref_row('Assigned to Concept / KV', 'concept_kv_assigned') }}
+                            {{ pref_row('Project was started', 'project_started') }}
+                            {{ pref_row('Deliverable flagged for revision', 'revision_flag') }}
+                            {# 23 Aug 2026, per Ezekiel — notify_designer_of_stream_approved in
+                            notifications.py, fired from approve_stream() in
+                            project_preproduction.py: until Production has its own access to
+                            file storage/the app, the designer has to manually email the files
+                            over once approved, so they need to know the moment that happens. #}
+                            {{ pref_row('Pre-Production stream approved (share files)', 'preprod_stream_approved') }}
+                        {% endif %}
+
+                        {# CS / Management / Admin #}
+                        {% if current_user.role in ['cs', 'admin', 'management'] %}
+                            {{ pref_row('Designer raised a flag', 'brief_flag') }}
+                            {{ pref_row('Designer resubmitted for review', 'revision_submitted') }}
+                            {{ pref_row('Project was started', 'project_started') }}
+                            {{ pref_row('Deliverable status changed', 'deliverable_status') }}
+                        {% endif %}
+
+                        {# Project Owner (23 Aug 2026, per Ezekiel — notify_project_owner_of_
+                        stream_uploaded in notifications.py, fired from mark_stream_done in
+                        project_preproduction.py). project_owner is its own role, separate
+                        from cs/admin/management, so it needs its own gate even though a
+                        project's actual Project Owner is very often also one of those. #}
+                        {% if current_user.role in ['project_owner', 'cs', 'admin', 'management'] %}
+                            {{ pref_row('Pre-Production stream ready for review', 'preprod_stream_uploaded') }}
+                        {% endif %}
+
+                        {# All roles #}
+                        {{ pref_row('Someone replied to my flag', 'flag_reply') }}
+                        {{ pref_row('My flag was resolved', 'flag_resolved') }}
+
+                        {% if current_user.role in ['cs', 'admin', 'designer', 'team_lead'] %}
+                            {{ pref_row('Lead designer changed', 'lead_changed') }}
+                        {% endif %}
+
+                        {% if current_user.role in ['admin', 'management', 'designer', 'team_lead'] %}
+                            {{ pref_row('Project submitted to client', 'project_submitted_client') }}
+                        {% endif %}
+
+                        {{ pref_row('Project approved', 'project_approved') }}
+
+                    </div>
+
+                    <p id="pref-save-status" style="margin-top: 1rem; font-size: 0.85rem; color: var(--pine); display: none;">
+                        Preferences saved.
+                    </p>
+                </div>
+
+                <div class="settings-subsection">
+                    <div class="settings-subsection-title">Browser &amp; sound</div>
+                    <p class="settings-subsection-desc">
+                        These settings are saved in your browser. Enabling desktop notifications will trigger a browser permission prompt.
+                    </p>
+
+                    <div class="settings-toggle-row">
+                        <span class="settings-toggle-label">
+                            Desktop Notifications
+                            <span class="settings-toggle-sublabel" id="browser-notif-status">Saved in this browser</span>
+                        </span>
+                        <div class="settings-toggle-extra">
+                            <img id="browser-notif-icon" src="" alt="" style="width: 28px; height: 28px; object-fit: contain;">
+                            <button type="button" class="btn-secondary" id="test-browser-notif-btn"
+                                style="font-size:0.78rem;padding:0.3rem 0.65rem;">Test</button>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="toggle-browser-notif">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="settings-toggle-row">
+                        <span class="settings-toggle-label">
+                            Sound Alerts
+                            <span class="settings-toggle-sublabel" id="audio-notif-status">Loading…</span>
+                        </span>
+                        <div class="settings-toggle-extra">
+                            <select id="sound-choice" class="form-select" style="font-size:0.85rem;">
+                                <option value="" data-url="">Default chime</option>
+                                {% for sound in available_sounds %}
+                                <option value="{{ sound.id }}" data-url="{{ url_for('static', filename='sounds/' + sound.filename) }}">{{
+                                    sound.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="range" id="sound-volume" min="0" max="100" style="width: 80px;">
+                            <span id="sound-volume-label" style="font-size: 0.78rem; color: var(--grey-dark); width: 2.2em;">100%</span>
+                            <button type="button" class="btn-secondary" id="test-sound-btn"
+                                style="font-size:0.78rem;padding:0.3rem 0.65rem;">Test</button>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="toggle-audio-notif">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-    </div> <!-- end 2×2 grid -->
-    </div> <!-- end 2×2 grid -->
-    
-    <!-- ⑤ Active Rewards -->
-    <div class="form-card" style="max-width: none; margin-top: 1.5rem;">
-        <h2>Active Rewards</h2>
-        <p style="margin: 0.5rem 0 1.25rem; color: var(--grey-dark); font-size: 0.9rem;">
-            Choose which earned badge, title, and border show on your profile. Leave any as "None" to use the default.
-        </p>
-    
-        <div class="detail-fields">
-            <div class="detail-field" style="align-items: center;">
-                <span class="detail-label">Active Badge</span>
-                {# Options are UserAchievement ids — matches what save_display_settings expects for active_badge_id #}
-                <select id="active-badge-select" class="form-select">
-                    <option value="">— None —</option>
-                    {% for ua in earned_achievements %}
-                    <option value="{{ ua.id }}" {% if display_settings and display_settings.active_badge_id==ua.id
-                        %}selected{% endif %}>
-                        {{ ua.achievement.name }}
-                    </option>
-                    {% endfor %}
-                </select>
+            {# ── Appearance ──────────────────────────────────────────── #}
+            <div class="settings-panel hidden" data-settings-panel="appearance">
+                <h2 class="settings-panel-title">Appearance</h2>
+                <div class="settings-toggle-row">
+                    <span class="settings-toggle-label">Dark Mode</span>
+                    {# Mirrors the header's toggle — see the sync script below.
+                       Purely visual stub; real theming is Brief 2. #}
+                    <button type="button" id="settings-dark-mode-toggle" class="theme-toggle theme-toggle--light" title="Toggle dark mode">
+                        <span class="theme-toggle-icon theme-toggle-icon--sun">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="4" />
+                                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                            </svg>
+                        </span>
+                        <span class="theme-toggle-icon theme-toggle-icon--moon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                            </svg>
+                        </span>
+                    </button>
+                </div>
+                <p class="settings-subsection-desc" style="margin-top: 0.75rem;">
+                    Saved to your account — follows you across devices.
+                </p>
             </div>
-            <div class="detail-field" style="align-items: center;">
-                <span class="detail-label">Active Title</span>
-                {# Pre-filtered to only achievements with a reward_title (see title_choices in profile.py) #}
-                <select id="active-title-select" class="form-select">
-                    <option value="">— None —</option>
-                    {% for ua in title_choices %}
-                    <option value="{{ ua.id }}" {% if display_settings and display_settings.active_title_id==ua.id
-                        %}selected{% endif %}>
-                        {{ ua.achievement.reward_title }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="detail-field" style="align-items: center;">
-                <span class="detail-label">Active Border</span>
-                {# Options are AchievementBorder ids directly, not UserAchievement ids — #}
-                {# borders are earned indirectly, via achievements that reference them. #}
-                <select id="active-border-select" class="form-select">
-                    <option value="">— None —</option>
-                    {% for border in border_choices %}
-                    <option value="{{ border.id }}" {% if display_settings and display_settings.active_border_id==border.id
-                        %}selected{% endif %}>
-                        {{ border.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
+
         </div>
-    
-        <p id="rewards-save-status" style="margin-top: 1rem; font-size: 0.85rem; color: var(--pine); display: none;">
-            Rewards saved.
-        </p>
-    </div>
-    
-    <!-- ⑥ Pinned Achievements -->
-    <div class="form-card" style="max-width: none; margin-top: 1.5rem;">
-        <h2>Pinned Achievements</h2>
-        <p style="margin: 0.5rem 0 1.25rem; color: var(--grey-dark); font-size: 0.9rem;">
-            Drag up to 5 earned achievements into "Pinned" — these show first on your profile, in the order you arrange
-            them.
-        </p>
-    
-        <div class="achievement-pin-columns">
-            <div>
-                <p class="achievement-pin-column-title">Earned</p>
-                {# Everything earned that ISN'T currently pinned. pinned_achievement_ids #}
-                {# is just an id list — cheap membership check, no extra query needed. #}
-                <ul id="earned-pin-list" class="achievement-pin-list">
-                    {% for ua in earned_achievements %}
-                    {% if ua.id not in pinned_achievement_ids %}
-                    <li class="achievement-pin-item" data-user-achievement-id="{{ ua.id }}">{{ ua.achievement.name }}</li>
-                    {% endif %}
-                    {% endfor %}
-                </ul>
-            </div>
-            <div>
-                <p class="achievement-pin-column-title">Pinned (max 5)</p>
-                {# Already in pin_order — this is pinned_achievements_ordered from #}
-                {# Chunk 3's patch, NOT earned_achievements, since order matters here. #}
-                <ul id="pinned-pin-list" class="achievement-pin-list">
-                    {% for ua in pinned_achievements_ordered %}
-                    <li class="achievement-pin-item" data-user-achievement-id="{{ ua.id }}">{{ ua.achievement.name }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-    
-        <button type="button" class="btn-primary" id="save-pinned-btn" style="margin-top: 1rem;">Save Pinned
-            Achievements</button>
-        <p id="pinned-save-status" style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--pine); display: none;">
-            Pinned achievements saved.
-        </p>
     </div>
 
 </div>
@@ -386,7 +360,7 @@
     function getBrowserNotifLabel() {
         if (!('Notification' in window)) return 'Not supported in this browser';
         if (Notification.permission === 'denied') return 'Blocked by browser — check site settings';
-        return browserOn ? 'On' : 'Off';
+        return browserOn ? 'Saved in this browser · On' : 'Saved in this browser · Off';
     }
 
     function syncUI() {
@@ -472,110 +446,45 @@
             return;
         }
         // Fire directly — no fetch, no backend, no email, no in-app record
-        new Notification('Vitamin-E', {
+        new Notification('OVP', {
             body: 'Test notification',
             icon: '/static/images/notiftoggle2.png'
         });
     });
 })();
 
-    // ── Active Rewards (badge / title / border) ─────────────────────────────
-    // Auto-saves on change, same UX pattern as the sound/browser toggles above
-    // — no separate Save button, since each dropdown is a single independent
-    // choice rather than a batch of edits like the pinning UI below.
-    (function () {
-        var badgeSelect = document.getElementById('active-badge-select');
-        var titleSelect = document.getElementById('active-title-select');
-        var borderSelect = document.getElementById('active-border-select');
-        var status = document.getElementById('rewards-save-status');
-        var statusTimer = null;
+// ── Settings section switcher — left nav swaps which panel shows ───────────────
+(function () {
+    var navItems = document.querySelectorAll('.settings-nav-item');
+    var panels = document.querySelectorAll('.settings-panel');
 
-        function saveRewards() {
-            fetch('/account/display-settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    // Empty string (unselected "— None —") becomes null, matching
-                    // what save_display_settings expects for "clear this slot".
-                    active_badge_id: badgeSelect.value || null,
-                    active_title_id: titleSelect.value || null,
-                    active_border_id: borderSelect.value || null
-                })
-            })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data.success) {
-                        status.style.display = 'block';
-                        clearTimeout(statusTimer);
-                        statusTimer = setTimeout(function () { status.style.display = 'none'; }, 2500);
-                    } else {
-                        showToast(data.error || 'Could not save rewards.', 'error');
-                    }
-                })
-                .catch(function () {
-                    showToast('Could not save rewards.', 'error');
-                });
-        }
-
-        [badgeSelect, titleSelect, borderSelect].forEach(function (select) {
-            select.addEventListener('change', saveRewards);
-        });
-    })();
-
-    // ── Pinned Achievements drag-and-drop ────────────────────────────────────
-    (function () {
-        var earnedList = document.getElementById('earned-pin-list');
-        var pinnedList = document.getElementById('pinned-pin-list');
-        var saveBtn = document.getElementById('save-pinned-btn');
-        var status = document.getElementById('pinned-save-status');
-
-        if (!earnedList || !pinnedList) return; // defensive — nothing to wire if the cards aren't on the page
-
-        // Shared 'group' name lets items drag freely between the two lists.
-        // SortableJS has no built-in max-items option, so the 5-item cap on
-        // Pinned is enforced by hand in onAdd below.
-        new Sortable(earnedList, {
-            group: 'pinned-achievements',
-            animation: 150
-        });
-
-        new Sortable(pinnedList, {
-            group: 'pinned-achievements',
-            animation: 150,
-            onAdd: function (evt) {
-                if (pinnedList.children.length > 5) {
-                    // Over the limit — bounce it back to Earned rather than
-                    // trying to guess which existing pinned item should be
-                    // displaced instead.
-                    earnedList.appendChild(evt.item);
-                    showToast('You can only pin up to 5 achievements.', 'warning');
-                }
-            }
-        });
-
-        saveBtn.addEventListener('click', function () {
-            var pinnedIds = Array.from(pinnedList.children).map(function (li) {
-                return parseInt(li.dataset.userAchievementId, 10);
+    navItems.forEach(function (item) {
+        item.addEventListener('click', function () {
+            var section = item.dataset.settingsSection;
+            navItems.forEach(function (i) { i.classList.toggle('active', i === item); });
+            panels.forEach(function (p) {
+                p.classList.toggle('hidden', p.dataset.settingsPanel !== section);
             });
-
-            fetch('/account/pinned-achievements', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pinned_ids: pinnedIds })
-            })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data.success) {
-                        status.style.display = 'block';
-                        setTimeout(function () { status.style.display = 'none'; }, 2500);
-                    } else {
-                        showToast(data.error || 'Could not save pinned achievements.', 'error');
-                    }
-                })
-                .catch(function () {
-                    showToast('Could not save pinned achievements.', 'error');
-                });
         });
-    })();
+    });
+})();
+
+// ── Appearance: mirror the header's dark-mode toggle ────────────────────────
+// helixSetThemeStub (sidebar.js) repaints every .theme-toggle on the page,
+// header's included, so clicking either one keeps both in sync.
+(function () {
+    var toggle = document.getElementById('settings-dark-mode-toggle');
+    if (!toggle) return;
+
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    toggle.classList.toggle('theme-toggle--light', !isDark);
+    toggle.classList.toggle('theme-toggle--dark', isDark);
+
+    toggle.addEventListener('click', function () {
+        if (window.helixSetThemeStub) {
+            window.helixSetThemeStub(!toggle.classList.contains('theme-toggle--dark'));
+        }
+    });
+})();
 </script>
 {% endblock %}

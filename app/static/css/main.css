@@ -109,6 +109,324 @@
     --border:        #D4CCBE;
     --border-subtle: #EDE8E0;
     --surface-hover: #EDEAE4;
+
+    /* Role tokens (2.4.1 dark mode) — light values, same as current colours
+       so nothing changes yet. The sweep phase re-routes raw hexes to these. */
+    --surface-sunken: var(--background);
+    --surface: var(--white);
+    --surface-raised: var(--plain-white);
+    --text: var(--black);
+    --text-faint: var(--grey-mid);
+    --border-strong: var(--grey-mid);
+    --scrim: rgba(245, 240, 232, 0.85); /* matches .modal-overlay's current backdrop */
+
+    /* Promoted neutral greys (2.4.1 dark-mode sweep) — exact light values preserved */
+    --gray-f0f6ee: #F0F6EE;
+    --gray-666666: #666666;
+    --gray-444444: #444444;
+    --gray-fbf8f4: #FBF8F4;
+    --gray-999999: #999999;
+    --gray-eaf0e8: #EAF0E8;
+    --gray-e0e0e0: #E0E0E0;
+    --gray-e8f0e8: #E8F0E8;
+    --gray-f0eee8: #F0EEE8;
+    --gray-cccccc: #CCCCCC;
+    --gray-bbbbbb: #BBBBBB;
+    --gray-e5e5e5: #E5E5E5;
+    --gray-f7f5f5: #F7F5F5;
+    --gray-fefefe: #FEFEFE;
+    --gray-dddddd: #DDDDDD;
+    --gray-f5f5f5: #F5F5F5;
+    --gray-777777: #777777;
+    --gray-f0f0f0: #F0F0F0;
+    --gray-525659: #525659;
+
+    /* Promoted tinted colours (badges/tags) — exact light values preserved */
+    --tint-e60000: #E60000;
+    --tint-c0392b: #C0392B;
+    --tint-f59e0b: #F59E0B;
+    --tint-fde8eb: #FDE8EB;
+    --tint-8a1a28: #8A1A28;
+    --tint-e8909a: #E8909A;
+    --tint-00c400: #00C400;
+    --tint-3e5e66: #3E5E66;
+    --tint-f9eced: #F9ECED;
+    --tint-f4e0e2: #F4E0E2;
+    --tint-e0d9d0: #E0D9D0;
+    --tint-a03040: #A03040;
+    --tint-fce8ea: #FCE8EA;
+    --tint-b45309: #B45309;
+    --tint-d1fae5: #D1FAE5;
+    --tint-065f46: #065F46;
+    --tint-6b5d00: #6B5D00;
+    --tint-eaf3f5: #EAF3F5;
+    --tint-fdeee7: #FDEEE7;
+    --tint-f0ece5: #F0ECE5;
+    --tint-7a6a55: #7A6A55;
+    --tint-edf7f1: #EDF7F1;
+    --tint-2e7a50: #2E7A50;
+    --tint-a8d9bc: #A8D9BC;
+    --tint-fdf0f2: #FDF0F2;
+    --tint-f0b8c0: #F0B8C0;
+    --tint-9a2535: #9A2535;
+    --tint-fef3c7: #FEF3C7;
+    --tint-6ee7b7: #6EE7B7;
+    --tint-a05060: #A05060;
+    --tint-3d7da6: #3D7DA6;
+    --tint-8a7328: #8A7328;
+    --tint-ffeb00: #FFEB00;
+    --tint-ff0000: #FF0000;
+    --tint-faecea: #FAECEA;
+    --tint-fdfae8: #FDFAE8;
+    --tint-a89c2a: #A89C2A;
+    --tint-faeced: #FAECED;
+    --tint-a0555d: #A0555D;
+    --tint-fdf8f4: #FDF8F4;
+    --tint-b94040: #B94040;
+    --tint-e8edf5: #E8EDF5;
+    --tint-e8e2d8: #E8E2D8;
+    --tint-d9cfc3: #D9CFC3;
+    --tint-eef2f7: #EEF2F7;
+    --tint-4a6080: #4A6080;
+    --tint-c5d3e0: #C5D3E0;
+    --tint-fff8ec: #FFF8EC;
+    --tint-a06020: #A06020;
+    --tint-f5d89a: #F5D89A;
+    --tint-3a6b30: #3A6B30;
+    --tint-9ecb90: #9ECB90;
+    --tint-fef3e2: #FEF3E2;
+    --tint-92510a: #92510A;
+    --tint-f5c07a: #F5C07A;
+    --tint-fdf0f1: #FDF0F1;
+    --tint-7a6a00: #7A6A00;
+    --tint-c2838a: #C2838A;
+    --tint-f3b297: #F3B297;
+    --tint-bfdbfe: #BFDBFE;
+    --tint-c43d3d: #C43D3D;
+    --tint-3f8f3f: #3F8F3F;
+    --tint-009900: #009900;
+    --tint-e06b3f: #E06B3F;
+    --tint-fef9c3: #FEF9C3;
+    --tint-78650a: #78650A;
+    --tint-f0dc6a: #F0DC6A;
+    --tint-ffe4d0: #FFE4D0;
+    --tint-9a4a1a: #9A4A1A;
+    --tint-f9c094: #F9C094;
+    --tint-d4f0d4: #D4F0D4;
+    --tint-1e6b1e: #1E6B1E;
+    --tint-a8dfa8: #A8DFA8;
+    --tint-c98a90: #C98A90;
+    --tint-ebf5eb: #EBF5EB;
+    --tint-fdecea: #FDECEA;
+    --tint-fef9e7: #FEF9E7;
+    --tint-f5efe8: #F5EFE8;
+    --tint-fef6f1: #FEF6F1;
+    --tint-f0ebe3: #F0EBE3;
+    --tint-4a6fa5: #4A6FA5;
+    --tint-fdf0f0: #FDF0F0;
+    --tint-ece5d8: #ECE5D8;
+    --tint-d0c8bc: #D0C8BC;
+    --tint-fdf6e3: #FDF6E3;
+    --tint-8a6800: #8A6800;
+    --tint-f0d878: #F0D878;
+    --tint-fdfbec: #FDFBEC;
+    --tint-dcefd8: #DCEFD8;
+    --tint-e8f0e5: #E8F0E5;
+    --tint-92400e: #92400E;
+    --tint-fde68a: #FDE68A;
+    --tint-78350f: #78350F;
+    --tint-ddd6fe: #DDD6FE;
+    --tint-4c1d95: #4C1D95;
+    --tint-1e3a5f: #1E3A5F;
+    --tint-eff6ff: #EFF6FF;
+    --tint-fffbea: #FFFBEA;
+    --tint-fff8e0: #FFF8E0;
+    --tint-3a5a62: #3A5A62;
+    --tint-8a7a1e: #8A7A1E;
+    --tint-fbe3e3: #FBE3E3;
+    --tint-fbf3d9: #FBF3D9;
+    --tint-dff3df: #DFF3DF;
+    --tint-ffd5d5: #FFD5D5;
+    --tint-8a2020: #8A2020;
+    --tint-f5aaaa: #F5AAAA;
+    --tint-e8f4f8: #E8F4F8;
+    --tint-1a5276: #1A5276;
+    --tint-aed6f1: #AED6F1;
+}
+
+/* ── Dark theme — set via <html data-theme="dark"> ───────────────────────
+   Redefines role tokens, neutral colour vars, and the existing semantic
+   aliases above (--text-muted etc.) so their 251 existing usages get dark
+   values for free. --tangerine and feature accents (--sage, --sky, etc.)
+   are untouched — only --coral gets a brighter dark value for buttons/pills. */
+:root[data-theme="dark"] {
+    --background: #14110D;
+    --page-background: #14110D;
+    --surface-sunken: #14110D;
+    --surface: #211D17;
+    --surface-raised: #262019;
+
+    --white: #211D17;
+    --plain-white: #262019;
+    --black: #F2EDE4;
+
+    --text: #F2EDE4;
+    --text-faint: #7d7466;
+    --text-muted: #b3a89a;
+    --text-primary: #F2EDE4;
+    --color-text: #F2EDE4;
+
+    --grey-light: #372F26;
+    --grey-mid: #7d7466;
+    --grey-dark: #b3a89a;
+
+    --border: #372F26;
+    --border-subtle: #2b251d;
+    --border-strong: #4a4033;
+    --surface-hover: #2b251d;
+
+    --scrim: rgba(20, 17, 13, 0.85);
+
+    --coral: #FF9A73;
+
+    /* --sandstone is also used as a plain panel/callout background (settings
+       nav, admin panel header, wiki callouts) — needs a dark value or those
+       stay stuck light. A bit lighter than --surface so those panels still
+       read as a distinct fill, not a bug. */
+    --sandstone: #2f281f;
+
+    /* Promoted neutral greys — dark equivalents */
+    --gray-f0f6ee: #211D17;
+    --gray-666666: #b3a89a;
+    --gray-444444: #F2EDE4;
+    --gray-fbf8f4: #211D17;
+    --gray-999999: #7d7466;
+    --gray-eaf0e8: #211D17;
+    --gray-e0e0e0: #2b251d;
+    --gray-e8f0e8: #2b251d;
+    --gray-f0eee8: #211D17;
+    --gray-cccccc: #372F26;
+    --gray-bbbbbb: #372F26;
+    --gray-e5e5e5: #2b251d;
+    --gray-f7f5f5: #211D17;
+    --gray-fefefe: #211D17;
+    --gray-dddddd: #2b251d;
+    --gray-f5f5f5: #211D17;
+    --gray-777777: #b3a89a;
+    --gray-f0f0f0: #211D17;
+    --gray-525659: #F2EDE4;
+
+    /* Promoted tinted colours — dark equivalents (auto-derived, calibrated to the brief's coral/oak/clover/poppy examples) */
+    --tint-e60000: #F87D7D;
+    --tint-c0392b: #E39E97;
+    --tint-f59e0b: #F5D399;
+    --tint-fde8eb: #311217;
+    --tint-8a1a28: #D85B6B;
+    --tint-e8909a: #F7DFE1;
+    --tint-00c400: #5CF65C;
+    --tint-3e5e66: #83A7B0;
+    --tint-f9eced: #2B181A;
+    --tint-f4e0e2: #2B191B;
+    --tint-e0d9d0: #27231F;
+    --tint-a03040: #D68994;
+    --tint-fce8ea: #301316;
+    --tint-b45309: #EE9C5D;
+    --tint-d1fae5: #133122;
+    --tint-065f46: #19DBA4;
+    --tint-6b5d00: #EDD00C;
+    --tint-eaf3f5: #1B2628;
+    --tint-fdeee7: #311C12;
+    --tint-f0ece5: #27231D;
+    --tint-7a6a55: #BCB1A2;
+    --tint-edf7f1: #1B2920;
+    --tint-2e7a50: #73C497;
+    --tint-a8d9bc: #1C2B22;
+    --tint-fdf0f2: #301318;
+    --tint-f0b8c0: #2F161A;
+    --tint-9a2535: #D77684;
+    --tint-fef3c7: #342D10;
+    --tint-6ee7b7: #DDF8ED;
+    --tint-a05060: #D2ACB4;
+    --tint-3d7da6: #9CBFD6;
+    --tint-8a7328: #CFB972;
+    --tint-ffeb00: #F9F194;
+    --tint-ff0000: #F99494;
+    --tint-faecea: #2D1916;
+    --tint-fdfae8: #312D12;
+    --tint-a89c2a: #DBD386;
+    --tint-faeced: #2C1718;
+    --tint-a0555d: #D3B1B5;
+    --tint-fdf8f4: #2E2015;
+    --tint-b94040: #DEAAAA;
+    --tint-e8edf5: #1A2029;
+    --tint-e8e2d8: #27241E;
+    --tint-d9cfc3: #27241F;
+    --tint-eef2f7: #1B2128;
+    --tint-4a6080: #99A9C0;
+    --tint-c5d3e0: #1D2329;
+    --tint-fff8ec: #34260F;
+    --tint-a06020: #DCA773;
+    --tint-f5d89a: #332913;
+    --tint-3a6b30: #7DB971;
+    --tint-9ecb90: #E7F1E4;
+    --tint-fef3e2: #332510;
+    --tint-92510a: #E89943;
+    --tint-f5c07a: #FAEDDB;
+    --tint-fdf0f1: #301316;
+    --tint-7a6a00: #F3D616;
+    --tint-c2838a: #F0E3E5;
+    --tint-f3b297: #331D14;
+    --tint-bfdbfe: #102035;
+    --tint-c43d3d: #E2ADAD;
+    --tint-3f8f3f: #92CB92;
+    --tint-009900: #34F434;
+    --tint-e06b3f: #F1CBBD;
+    --tint-fef9c3: #353210;
+    --tint-78650a: #E3C42E;
+    --tint-f0dc6a: #FAF5DC;
+    --tint-ffe4d0: #351F0F;
+    --tint-9a4a1a: #DD9265;
+    --tint-f9c094: #352112;
+    --tint-d4f0d4: #192B19;
+    --tint-1e6b1e: #52C652;
+    --tint-a8dfa8: #1A2D1A;
+    --tint-c98a90: #F1E4E5;
+    --tint-ebf5eb: #1C281C;
+    --tint-fdecea: #311612;
+    --tint-fef9e7: #332B11;
+    --tint-f5efe8: #29221A;
+    --tint-fef6f1: #311E12;
+    --tint-f0ebe3: #28231C;
+    --tint-4a6fa5: #A9BBD5;
+    --tint-fdf0f0: #301313;
+    --tint-ece5d8: #29241C;
+    --tint-d0c8bc: #272420;
+    --tint-fdf6e3: #322912;
+    --tint-8a6800: #F4C125;
+    --tint-f0d878: #F9F3DC;
+    --tint-fdfbec: #312D13;
+    --tint-dcefd8: #1D2A1A;
+    --tint-e8f0e5: #20271D;
+    --tint-92400e: #E4854A;
+    --tint-fde68a: #362F11;
+    --tint-78350f: #DC743A;
+    --tint-ddd6fe: #161034;
+    --tint-4c1d95: #9467DA;
+    --tint-1e3a5f: #4D7EBF;
+    --tint-eff6ff: #0F1F34;
+    --tint-fffbea: #342D0F;
+    --tint-fff8e0: #342C0F;
+    --tint-3a5a62: #7DA4AE;
+    --tint-8a7a1e: #D5C462;
+    --tint-fbe3e3: #301414;
+    --tint-fbf3d9: #312A13;
+    --tint-dff3df: #1A2B1A;
+    --tint-ffd5d5: #350F0F;
+    --tint-8a2020: #D46565;
+    --tint-f5aaaa: #321414;
+    --tint-e8f4f8: #18272C;
+    --tint-1a5276: #4F9DD0;
+    --tint-aed6f1: #152631;
 }
 
 /* =====================
@@ -184,11 +502,11 @@
 
 .account-dropdown-item.logout {
     border-top: 1px solid var(--grey-light);
-    color: #C0392B;
+    color: var(--tint-c0392b);
 }
 
 .account-dropdown-item.logout:hover {
-    background-color: #FAECEA;
+    background-color: var(--tint-faecea);
 }
 
 /* =====================
@@ -263,6 +581,13 @@ select,
 textarea {
     font-family: var(--font-body);
     font-size: 1rem;
+    /* Baseline fallback so a field left unstyled by its own component CSS
+       doesn't fall back to the browser's literal white/black — that was
+       invisible against the light page but is a glaring white box in dark
+       mode. Lowest specificity (bare element selector), so any existing
+       per-component background/color rule still wins over this. */
+    background: var(--surface);
+    color: var(--text);
 }
 
 /* =====================
@@ -586,7 +911,7 @@ textarea {
 .sidebar-expand-tab {
     position: fixed;
     left: var(--sidebar-min);
-    top: 1.25rem;
+    top: 4.25rem;
     z-index: 301;
     background: var(--white);
     border: 1.5px solid var(--grey-light);
@@ -613,41 +938,98 @@ body:has(.sidebar.sidebar--pinned) .sidebar-expand-tab {
 }
 
 /* =====================
-   TOPBAR RIGHT
+   APP HEADER
 ===================== */
 
-/* Floating pill anchored to the top-right of the viewport.
-   Contains admin trigger, notification bell, account menu. */
-.topbar-right {
+/* Docked above the content column only — left edge sits at the
+   sidebar's current width, same trick already used for .main-content
+   and .footer below, so it shifts out when the sidebar expands. */
+.app-header {
     position: fixed;
-    top: 0.75rem;
-    right: 1.25rem;
-    z-index: 400;
+    top: 0;
+    left: var(--sidebar-min);
+    right: 0;
+    height: 3.75rem;
+    z-index: 250;
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    justify-content: space-between;
+    padding: 0 1.5rem;
     background-color: var(--white);
-    border: 1.5px solid var(--grey-light);
-    border-radius: 10px;
-    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--grey-light);
     box-shadow: var(--shadow);
+    transition: left var(--sidebar-transition);
 }
 
-/* Individual button inside the topbar */
+body:has(.sidebar.sidebar--expanded) .app-header,
+body:has(.sidebar.sidebar--pinned) .app-header {
+    left: var(--sidebar-max);
+}
+
+.app-header-page-name {
+    font-family: var(--font-headline);
+    font-size: 1.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--black);
+}
+
+.app-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+/* Header icon buttons (admin panel trigger, notification bell) were never
+   given their own color — their SVGs use stroke="currentColor", so they
+   were just inheriting the browser's default black text, which doesn't
+   flip in dark mode. */
 .topbar-btn {
+    color: var(--text);
+}
+
+/* Dark-mode toggle — segmented sun/moon pill. Purely visual; the
+   active side flips via JS, real theming lands in Brief 2. */
+.theme-toggle {
     position: relative;
-    color: var(--grey-dark);
-    padding: 0.35rem;
-    border-radius: var(--radius);
-    transition: color 0.2s ease, background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    background-color: var(--sandstone);
+    border-radius: 999px;
+    padding: 0.2rem;
+    cursor: pointer;
+}
+
+.theme-toggle-icon {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    color: var(--grey-dark);
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.topbar-btn:hover {
+.theme-toggle--light .theme-toggle-icon--sun,
+.theme-toggle--dark .theme-toggle-icon--moon {
+    background-color: var(--white);
     color: var(--tangerine);
-    background-color: var(--sandstone);
+    box-shadow: var(--shadow);
+}
+
+/* Thin bar along the header's bottom edge — width/opacity driven by
+   sidebar.js during SPA navigation, see navigateTo(). */
+.header-loading-bar {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 0%;
+    height: 3px;
+    background-color: var(--tangerine);
+    opacity: 0;
+    transition: width 0.2s ease, opacity 0.2s ease;
 }
 
 /* =====================
@@ -723,11 +1105,177 @@ body:has(.sidebar.sidebar--pinned) .sidebar-expand-tab {
 
 .account-dropdown-item.logout {
     border-top: 1px solid var(--grey-light);
-    color: #C0392B;
+    color: var(--tint-c0392b);
 }
 
 .account-dropdown-item.logout:hover {
-    background-color: #FAECEA;
+    background-color: var(--tint-faecea);
+}
+
+button.account-dropdown-item {
+    width: 100%;
+    text-align: left;
+}
+
+/* =====================
+   SETTINGS OVERLAY
+===================== */
+
+.settings-modal-box {
+    position: relative;
+    background: var(--white);
+    border-radius: var(--radius);
+    width: min(880px, 94vw);
+    height: min(600px, 85vh);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    display: flex;
+}
+
+.settings-modal-close {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    z-index: 2;
+    font-size: 1.4rem;
+    color: var(--grey-dark);
+    opacity: 0.6;
+    line-height: 1;
+}
+
+.settings-modal-close:hover {
+    opacity: 1;
+}
+
+.settings-modal-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Section list (left) + one panel visible at a time (right) */
+.settings-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+.settings-nav {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: 230px;
+    background-color: var(--sandstone);
+    padding: 1.75rem 1.25rem;
+    gap: 0.25rem;
+    overflow-y: auto;
+}
+
+.settings-nav-title {
+    font-family: var(--font-headline);
+    font-size: 1.3rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--black);
+    margin-bottom: 1rem;
+}
+
+.settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    text-align: left;
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--grey-dark);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-nav-item svg {
+    flex-shrink: 0;
+}
+
+.settings-nav-item:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+}
+
+:root[data-theme="dark"] .settings-nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.settings-nav-item.active {
+    background-color: rgba(242, 127, 85, 0.14);
+    color: var(--tangerine);
+    font-weight: 600;
+}
+
+.settings-panels {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 1.75rem 2.5rem 2rem;
+}
+
+.settings-panel-title {
+    font-family: var(--font-headline);
+    font-size: 1.4rem;
+    color: var(--black);
+    margin-bottom: 1.5rem;
+}
+
+.settings-subsection {
+    margin-bottom: 2rem;
+}
+
+.settings-subsection-title {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--black);
+    margin-bottom: 0.25rem;
+}
+
+.settings-subsection-desc {
+    font-size: 0.85rem;
+    color: var(--grey-dark);
+    margin-bottom: 1rem;
+}
+
+.settings-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1.1rem;
+    border: 1px solid var(--grey-light);
+    border-radius: var(--radius);
+    margin-bottom: 0.6rem;
+}
+
+.settings-toggle-row:last-child {
+    margin-bottom: 0;
+}
+
+.settings-toggle-label {
+    font-size: 0.9rem;
+    color: var(--black);
+}
+
+.settings-toggle-sublabel {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--grey-dark);
+    margin-top: 0.15rem;
+}
+
+.settings-toggle-extra {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
 }
 
 /* =====================
@@ -744,8 +1292,18 @@ body:has(.sidebar.sidebar--pinned) .sidebar-expand-tab {
 /* Authenticated: shift right to clear the minimized sidebar */
 body.has-sidebar .main-content {
     margin-left: var(--sidebar-min);
-    padding-top: 4.5rem;
-    /* clears the topbar-right floating bar */
+    padding-top: 3.5rem;
+    /* clears the sticky app-header */
+}
+
+/* Shared page-root wrappers — none of these carried their own spacing, so
+   their first child sat flush against the sticky header (only .project-list-page
+   has its own padding, which is why Projects never had this problem).
+   2rem matches that padding so every page gets the same top clearance. */
+.page-container,
+.page-header,
+.wiki-wrapper {
+    padding-top: 2rem;
 }
 
 /* Sidebar expanded (hover or pinned) — shift further right */
@@ -803,25 +1361,25 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
 }
 
 .flash-success {
-    background-color: #EBF5EB;
+    background-color: var(--tint-ebf5eb);
     border-left-color: var(--pine);
     color: var(--pine);
 }
 
 .flash-error {
-    background-color: #FDECEA;
-    border-left-color: #C0392B;
-    color: #C0392B;
+    background-color: var(--tint-fdecea);
+    border-left-color: var(--tint-c0392b);
+    color: var(--tint-c0392b);
 }
 
 .flash-info {
-    background-color: #EAF3F5;
+    background-color: var(--tint-eaf3f5);
     border-left-color: var(--ashen);
     color: var(--ashen);
 }
 
 .flash-warning {
-    background-color: #FEF9E7;
+    background-color: var(--tint-fef9e7);
     border-left-color: var(--oak);
     color: var(--oak);
 }
@@ -901,7 +1459,7 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     align-items: center;
     justify-content: center;
     background-color: transparent;
-    color: #C0392B;
+    color: var(--tint-c0392b);
     font-family: var(--font-mono);
     font-size: 0.8rem;
     font-weight: 500;
@@ -909,12 +1467,12 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     text-transform: uppercase;
     padding: 0.65rem 1.5rem;
     border-radius: var(--radius);
-    border: 2px solid #C0392B;
+    border: 2px solid var(--tint-c0392b);
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .btn-danger:hover {
-    background-color: #C0392B;
+    background-color: var(--tint-c0392b);
     color: var(--white);
 }
 
@@ -942,6 +1500,41 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
 .btn-danger-sm:hover {
     background-color: var(--rose);
     color: var(--white);
+}
+
+/* ── Dark-mode action buttons (2.4.1) — Option A: tinted, not solid-fill.
+   Light mode above is untouched; these only apply under data-theme="dark". */
+:root[data-theme="dark"] .btn-primary {
+    background-color: rgba(143, 196, 240, 0.15);
+    color: #8FC4F0;
+    border-color: rgba(143, 196, 240, 0.45);
+}
+:root[data-theme="dark"] .btn-primary:hover {
+    background-color: rgba(143, 196, 240, 0.24);
+    color: #8FC4F0;
+}
+
+:root[data-theme="dark"] .btn-approve-customer,
+:root[data-theme="dark"] .btn-approve-direct {
+    background-color: rgba(76, 175, 90, 0.18);
+    color: #6FD07E;
+    border-color: rgba(111, 208, 126, 0.45);
+}
+:root[data-theme="dark"] .btn-approve-customer:hover,
+:root[data-theme="dark"] .btn-approve-direct:hover {
+    background-color: rgba(76, 175, 90, 0.27);
+}
+
+:root[data-theme="dark"] .btn-danger,
+:root[data-theme="dark"] .btn-danger-sm {
+    background-color: rgba(255, 79, 79, 0.14);
+    color: #FF7A7A;
+    border-color: rgba(255, 122, 122, 0.4);
+}
+:root[data-theme="dark"] .btn-danger:hover,
+:root[data-theme="dark"] .btn-danger-sm:hover {
+    background-color: rgba(255, 79, 79, 0.22);
+    color: #FF7A7A;
 }
 
 /* Button loading spinner */
@@ -995,7 +1588,7 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     height: 18px;
     left: 3px;
     top: 3px;
-    background-color: #fff;
+    background-color: var(--plain-white);
     border-radius: 50%;
     transition: transform 0.2s;
 }
@@ -1426,7 +2019,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 }
 
 .data-table tbody tr:hover {
-    background-color: #FBF8F4;
+    background-color: var(--gray-fbf8f4);
 }
 
 .data-table tbody tr.clickable {
@@ -1434,11 +2027,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 }
 
 .data-table tbody tr.overdue {
-    background-color: #F9ECED;
+    background-color: var(--tint-f9eced);
 }
 
 .data-table tbody tr.overdue:hover {
-    background-color: #F4E0E2;
+    background-color: var(--tint-f4e0e2);
 }
 
 .data-table td {
@@ -1477,9 +2070,9 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 /* Corner cell: sticky left + sticky top — must sit above both (z-index 4 for header row, 2 for sticky columns) */
 .data-table thead th:first-child { z-index: 5; background-color: var(--sandstone); }
 .data-table tbody td:first-child { background-color: var(--white); }
-.data-table tbody tr.overdue td:first-child { background-color: #F9ECED; }
-.data-table tbody tr:hover td:first-child { background-color: #FBF8F4; }
-.data-table tbody tr.overdue:hover td:first-child { background-color: #F4E0E2; }
+.data-table tbody tr.overdue td:first-child { background-color: var(--tint-f9eced); }
+.data-table tbody tr:hover td:first-child { background-color: var(--gray-fbf8f4); }
+.data-table tbody tr.overdue:hover td:first-child { background-color: var(--tint-f4e0e2); }
 
 /* Shadow on rightmost sticky column — visual separator from scrolling content.
    For tables without a chevron, that's the first column. */
@@ -1499,9 +2092,9 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 
 .data-table--with-chevron thead th:nth-child(2) { z-index: 5; background-color: var(--sandstone); }
 .data-table--with-chevron tbody td:nth-child(2) { background-color: var(--white); }
-.data-table--with-chevron tbody tr.overdue td:nth-child(2) { background-color: #F9ECED; }
-.data-table--with-chevron tbody tr:hover td:nth-child(2) { background-color: #FBF8F4; }
-.data-table--with-chevron tbody tr.overdue:hover td:nth-child(2) { background-color: #F4E0E2; }
+.data-table--with-chevron tbody tr.overdue td:nth-child(2) { background-color: var(--tint-f9eced); }
+.data-table--with-chevron tbody tr:hover td:nth-child(2) { background-color: var(--gray-fbf8f4); }
+.data-table--with-chevron tbody tr.overdue:hover td:nth-child(2) { background-color: var(--tint-f4e0e2); }
 
 /* =====================
    BADGES & TAGS
@@ -1522,32 +2115,32 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 }
 
 .badge-tangerine {
-    background-color: #FDEEE7;
+    background-color: var(--tint-fdeee7);
     color: var(--tangerine);
 }
 
 .badge-pine {
-    background-color: #EAF0E8;
+    background-color: var(--gray-eaf0e8);
     color: var(--pine);
 }
 
 .badge-ashen {
-    background-color: #EAF3F5;
+    background-color: var(--tint-eaf3f5);
     color: var(--ashen);
 }
 
 .badge-canary {
-    background-color: #FDFAE8;
-    color: #A89C2A;
+    background-color: var(--tint-fdfae8);
+    color: var(--tint-a89c2a);
 }
 
 .badge-rose {
-    background-color: #FAECED;
-    color: #A0555D;
+    background-color: var(--tint-faeced);
+    color: var(--tint-a0555d);
 }
 
 .badge-oak {
-    background-color: #F5EFE8;
+    background-color: var(--tint-f5efe8);
     color: var(--oak);
 }
 
@@ -1573,45 +2166,45 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 }
 
 .team-3d {
-    background-color: #EAF3F5;
+    background-color: var(--tint-eaf3f5);
     color: var(--ashen);
 }
 
 .team-2d {
-    background-color: #FDEEE7;
+    background-color: var(--tint-fdeee7);
     color: var(--tangerine);
 }
 
 .team-technical {
-    background-color: #EAF0E8;
+    background-color: var(--gray-eaf0e8);
     color: var(--pine);
 }
 
 .importance-low {
-    background-color: #EAF0E8;
+    background-color: var(--gray-eaf0e8);
     color: var(--pine);
 }
 
 .importance-medium {
-    background-color: #FDFAE8;
-    color: #A89C2A;
+    background-color: var(--tint-fdfae8);
+    color: var(--tint-a89c2a);
 }
 
 .importance-urgent {
-    background-color: #FAECED;
-    color: #A0555D;
+    background-color: var(--tint-faeced);
+    color: var(--tint-a0555d);
 }
 
 .customer-pill {
     padding: 8px 18px;
-    border: 2px solid #e0d9d0;
+    border: 2px solid var(--tint-e0d9d0);
     border-radius: 99px;
     background: white;
     cursor: pointer;
     font-family: 'Public Sans', sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
-    color: #666;
+    color: var(--gray-666666);
     transition: all 0.2s ease;
     user-select: none;
 }
@@ -1813,16 +2406,16 @@ decision. */
 }
 
 .notification-item:hover {
-    background-color: #FBF8F4;
+    background-color: var(--gray-fbf8f4);
 }
 
 .notification-item.unread {
     border-left: 3px solid var(--tangerine);
-    background-color: #FEF6F1;
+    background-color: var(--tint-fef6f1);
 }
 
 .notification-item.unread:hover {
-    background-color: #FDEEE7;
+    background-color: var(--tint-fdeee7);
 }
 
 .notification-message {
@@ -2330,12 +2923,12 @@ decision. */
 }
 
 .draft-item:hover {
-    background: #fdf8f4;
+    background: var(--tint-fdf8f4);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .draft-item.active {
-    background: #fdf8f4;
+    background: var(--tint-fdf8f4);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -2376,7 +2969,7 @@ decision. */
 .draft-meta {
     font-family: 'DM Mono', monospace;
     font-size: 0.72rem;
-    color: #999;
+    color: var(--gray-999999);
 }
 
 .draft-actions {
@@ -2414,7 +3007,7 @@ decision. */
 }
 
 .btn--danger {
-    background: #B94040;
+    background: var(--tint-b94040);
     color: white;
     border: none;
     padding: 8px 16px;
@@ -2539,7 +3132,7 @@ decision. */
 .completion-bar-track {
     width: 100%;
     height: 8px;
-    background: #e0d9d0;
+    background: var(--tint-e0d9d0);
     border-radius: 99px;
     overflow: hidden;
     align-items: center;
@@ -2557,14 +3150,14 @@ decision. */
 .completion-label {
     font-family: 'DM Mono', monospace;
     font-size: 0.7rem;
-    color: #999;
+    color: var(--gray-999999);
 }
 
 .autosave-status {
 
     font-family: 'DM Mono', monospace;
     font-size: 0.72rem;
-    color: #aaa;
+    color: var(--grey-mid);
 }
 
 .create-body {
@@ -2593,7 +3186,7 @@ decision. */
     color: var(--ink);
     margin: 0 0 20px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #ede8e0;
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .create-subsection-heading {
@@ -2606,13 +3199,13 @@ decision. */
 .create-section-hint {
     font-family: 'Public Sans', sans-serif;
     font-size: 0.85rem;
-    color: #999;
+    color: var(--gray-999999);
     margin: -12px 0 2px;
 }
 
 .brief-type-selector {
     display: flex;
-    background: #f0ebe3;
+    background: var(--tint-f0ebe3);
     border-radius: 8px;
     padding: 4px;
     gap: 4px;
@@ -2629,7 +3222,7 @@ decision. */
     font-family: 'Barlow Condensed', sans-serif;
     font-size: 1.15rem;
     font-weight: 700;
-    color: #999;
+    color: var(--gray-999999);
 }
 
 .brief-type-btn.active {
@@ -2639,19 +3232,19 @@ decision. */
 }
 
 .brief-type-btn:hover:not(.active) {
-    color: #666;
+    color: var(--gray-666666);
 }
 
 .customer-pill {
     padding: 8px 18px;
-    border: 2px solid #e0d9d0;
+    border: 2px solid var(--tint-e0d9d0);
     border-radius: 99px;
     background: white;
     cursor: pointer;
     font-family: 'Public Sans', sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
-    color: #666;
+    color: var(--gray-666666);
     transition: all 0.2s ease;
     user-select: none;
 }
@@ -2672,7 +3265,7 @@ decision. */
 .deliverables-customer-block {
     margin-bottom: 28px;
     padding-bottom: 28px;
-    border-bottom: 1px solid #ede8e0;
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .deliverables-customer-block:last-child {
@@ -2694,8 +3287,8 @@ decision. */
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    background: #fafafa;
-    border: 1px solid #ede8e0;
+    background: var(--white);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     margin-bottom: 8px;
 }
@@ -2716,29 +3309,29 @@ decision. */
     font-size: 0.68rem;
     padding: 2px 8px;
     border-radius: 4px;
-    background: #ede8e0;
-    color: #666;
+    background: var(--border-subtle);
+    color: var(--gray-666666);
 }
 
 .discipline-tag.tag--2d {
-    background: #e8f0e8;
+    background: var(--gray-e8f0e8);
     color: var(--pine);
 }
 
 .discipline-tag.tag--3d {
-    background: #e8edf5;
-    color: #4a6fa5;
+    background: var(--tint-e8edf5);
+    color: var(--tint-4a6fa5);
 }
 
 .discipline-tag.tag--technical {
-    background: #f0eee8;
+    background: var(--gray-f0eee8);
     color: var(--oak);
 }
 
 .btn-remove-deliverable {
     background: none;
     border: none;
-    color: #ccc;
+    color: var(--gray-cccccc);
     font-size: 1.1rem;
     cursor: pointer;
     padding: 2px 6px;
@@ -2747,8 +3340,8 @@ decision. */
 }
 
 .btn-remove-deliverable:hover {
-    color: #B94040;
-    background: #fdf0f0;
+    color: var(--tint-b94040);
+    background: var(--tint-fdf0f0);
 }
 
 
@@ -2769,14 +3362,14 @@ decision. */
 
 .region-btn {
     padding: 8px 28px;
-    border: 2px solid #e0d9d0;
+    border: 2px solid var(--tint-e0d9d0);
     border-radius: 99px;
     background: white;
     cursor: pointer;
     font-family: 'Public Sans', sans-serif;
     font-size: 0.9rem;
     font-weight: 700;
-    color: #888;
+    color: var(--text-muted);
     transition: all 0.2s ease;
 }
 
@@ -2787,8 +3380,8 @@ decision. */
 }
 
 .region-btn:hover:not(.active) {
-    border-color: #ccc;
-    color: #555;
+    border-color: var(--gray-cccccc);
+    color: var(--grey-dark);
 }
 
 .deliverables-region-section {
@@ -2807,7 +3400,7 @@ decision. */
     letter-spacing: 0.08em;
     margin-bottom: 14px;
     padding-bottom: 8px;
-    border-bottom: 1px solid #ede8e0;
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 /* ── Section 17: Review Modal ─────────────────────────── */
@@ -2828,7 +3421,7 @@ decision. */
 }
 
 .modal--review {
-    background: #ffffff;
+    background: var(--plain-white);
     border-radius: 10px;
     width: 100%;
     max-width: 560px;
@@ -3014,7 +3607,7 @@ decision. */
 }
 
 .brief-customer-summary:hover {
-    background: #ece5d8;
+    background: var(--tint-ece5d8);
 }
 
 .brief-customer-summary-name {
@@ -3062,7 +3655,7 @@ decision. */
     padding: 0.4rem 0.75rem;
     background: white;
     border-radius: 4px;
-    border: 1px solid #e8e2d8;
+    border: 1px solid var(--tint-e8e2d8);
 }
 
 .brief-deliverable-name {
@@ -3153,7 +3746,7 @@ decision. */
     flex-wrap: wrap;
     gap: 0.4rem;
     background: white;
-    border: 1px solid #e8e2d8;
+    border: 1px solid var(--tint-e8e2d8);
     border-radius: 4px;
     padding: 0.2rem 0.5rem;
 }
@@ -3177,7 +3770,7 @@ decision. */
     font-family: var(--font-body);
     font-size: 0.72rem;
     padding: 0.15rem 0.3rem;
-    border: 1px solid #d0c8bc;
+    border: 1px solid var(--tint-d0c8bc);
     border-radius: 4px;
     background: var(--sandstone);
     color: var(--color-text);
@@ -3221,7 +3814,7 @@ decision. */
 }
 
 .brief-assignment-name.muted {
-    color: #aaa;
+    color: var(--grey-mid);
     font-style: italic;
 }
 
@@ -3404,51 +3997,51 @@ decision. */
 }
 
 .status-select.s-briefed {
-    background-color: #f0ece5;
-    color: #7a6a55;
-    border-color: #d9cfc3;
+    background-color: var(--tint-f0ece5);
+    color: var(--tint-7a6a55);
+    border-color: var(--tint-d9cfc3);
 }
 
 .status-select.s-in_queue {
-    background-color: #eef2f7;
-    color: #4a6080;
-    border-color: #c5d3e0;
+    background-color: var(--tint-eef2f7);
+    color: var(--tint-4a6080);
+    border-color: var(--tint-c5d3e0);
 }
 
 .status-select.s-in_progress {
-    background-color: #fff8ec;
-    color: #a06020;
-    border-color: #f5d89a;
+    background-color: var(--tint-fff8ec);
+    color: var(--tint-a06020);
+    border-color: var(--tint-f5d89a);
 }
 
 .status-select.s-submitted {
-    background-color: #edf7f1;
-    color: #2e7a50;
-    border-color: #a8d9bc;
+    background-color: var(--tint-edf7f1);
+    color: var(--tint-2e7a50);
+    border-color: var(--tint-a8d9bc);
 }
 
 .status-select.s-revision_in_queue {
-    background-color: #fdf0f2;
-    color: #a03040;
-    border-color: #f0b8c0;
+    background-color: var(--tint-fdf0f2);
+    color: var(--tint-a03040);
+    border-color: var(--tint-f0b8c0);
 }
 
 .status-select.s-revision_in_progress {
-    background-color: #fde8eb;
-    color: #8a1a28;
-    border-color: #e8909a;
+    background-color: var(--tint-fde8eb);
+    color: var(--tint-8a1a28);
+    border-color: var(--tint-e8909a);
 }
 
 .status-select.s-approved {
-    background-color: #f0f6ee;
-    color: #3a6b30;
-    border-color: #9ecb90;
+    background-color: var(--gray-f0f6ee);
+    color: var(--tint-3a6b30);
+    border-color: var(--tint-9ecb90);
 }
 
 .status-select.s-on_hold {
-    background-color: #fce8ea;
-    color: #9a2535;
-    border-color: #D9A2A8;
+    background-color: var(--tint-fce8ea);
+    color: var(--tint-9a2535);
+    border-color: var(--rose);
 }
 
 /* ── Status Badge (read-only pill) ──────────────────────────────────────────
@@ -3464,80 +4057,80 @@ decision. */
     border-radius: 6px;
     border: 1.5px solid transparent;
     /* Fallback colour if no s-* modifier is present */
-    background-color: #f0ece5;
-    color: #7a6a55;
+    background-color: var(--tint-f0ece5);
+    color: var(--tint-7a6a55);
 }
 
 .status-badge.s-briefed {
-    background-color: #f0ece5;
-    color: #7a6a55;
-    border-color: #d9cfc3;
+    background-color: var(--tint-f0ece5);
+    color: var(--tint-7a6a55);
+    border-color: var(--tint-d9cfc3);
 }
 
 .status-badge.s-in_queue {
-    background-color: #eef2f7;
-    color: #4a6080;
-    border-color: #c5d3e0;
+    background-color: var(--tint-eef2f7);
+    color: var(--tint-4a6080);
+    border-color: var(--tint-c5d3e0);
 }
 
 .status-badge.s-in_progress {
-    background-color: #fff8ec;
-    color: #a06020;
-    border-color: #f5d89a;
+    background-color: var(--tint-fff8ec);
+    color: var(--tint-a06020);
+    border-color: var(--tint-f5d89a);
 }
 
 .status-badge.s-internal_review {
-    background-color: #fdf6e3;
-    color: #8a6800;
-    border-color: #f0d878;
+    background-color: var(--tint-fdf6e3);
+    color: var(--tint-8a6800);
+    border-color: var(--tint-f0d878);
 }
 
 .status-badge.s-internal_revision {
-    background-color: #fdf0f2;
-    color: #a03040;
-    border-color: #f0b8c0;
+    background-color: var(--tint-fdf0f2);
+    color: var(--tint-a03040);
+    border-color: var(--tint-f0b8c0);
 }
 
 .status-badge.s-submitted_to_client {
-    background-color: #edf7f1;
-    color: #2e7a50;
-    border-color: #a8d9bc;
+    background-color: var(--tint-edf7f1);
+    color: var(--tint-2e7a50);
+    border-color: var(--tint-a8d9bc);
 }
 
 .status-badge.s-submitted {
-    background-color: #edf7f1;
-    color: #2e7a50;
-    border-color: #a8d9bc;
+    background-color: var(--tint-edf7f1);
+    color: var(--tint-2e7a50);
+    border-color: var(--tint-a8d9bc);
 }
 
 .status-badge.s-revision_in_queue {
-    background-color: #fdf0f2;
-    color: #a03040;
-    border-color: #f0b8c0;
+    background-color: var(--tint-fdf0f2);
+    color: var(--tint-a03040);
+    border-color: var(--tint-f0b8c0);
 }
 
 .status-badge.s-revision_in_progress {
-    background-color: #fde8eb;
-    color: #8a1a28;
-    border-color: #e8909a;
+    background-color: var(--tint-fde8eb);
+    color: var(--tint-8a1a28);
+    border-color: var(--tint-e8909a);
 }
 
 .status-badge.s-approved {
-    background-color: #f0f6ee;
-    color: #3a6b30;
-    border-color: #9ecb90;
+    background-color: var(--gray-f0f6ee);
+    color: var(--tint-3a6b30);
+    border-color: var(--tint-9ecb90);
 }
 
 .status-badge.s-on_hold {
-    background-color: #fce8ea;
-    color: #9a2535;
-    border-color: #D9A2A8;
+    background-color: var(--tint-fce8ea);
+    color: var(--tint-9a2535);
+    border-color: var(--rose);
 }
 
 .status-badge.s-awaiting_posm_details {
-    background-color: #fef3e2;
-    color: #92510a;
-    border-color: #f5c07a;
+    background-color: var(--tint-fef3e2);
+    color: var(--tint-92510a);
+    border-color: var(--tint-f5c07a);
 }
 
 /* ── Hold / Resume buttons ───────────────────────────── */
@@ -3624,7 +4217,7 @@ decision. */
     padding: 0.3rem 0.85rem;
     border-radius: var(--radius);
     border: 1.5px solid var(--pine);
-    background-color: #f0f6ee;
+    background-color: var(--gray-f0f6ee);
     color: var(--pine);
     white-space: nowrap;
 }
@@ -3638,7 +4231,7 @@ decision. */
     padding: 0.3rem 0.85rem;
     border-radius: var(--radius);
     border: 1.5px solid var(--rose);
-    background-color: #fdf0f1;
+    background-color: var(--tint-fdf0f1);
     color: var(--rose);
     white-space: nowrap;
 }
@@ -3669,8 +4262,8 @@ decision. */
 
 .btn-customer-cancel {
     border-color: var(--canary);
-    background-color: #fdfbec;
-    color: #7a6a00;
+    background-color: var(--tint-fdfbec);
+    color: var(--tint-7a6a00);
 }
 
 .btn-customer-cancel:hover {
@@ -3679,7 +4272,7 @@ decision. */
 
 .btn-customer-remove {
     border-color: var(--rose);
-    background-color: #fdf0f1;
+    background-color: var(--tint-fdf0f1);
     color: var(--rose);
 }
 
@@ -3702,7 +4295,7 @@ decision. */
     display: flex;
     align-items: center;
     gap: 1rem;
-    background: #f0f6ee;
+    background: var(--gray-f0f6ee);
     border: 1.5px solid var(--pine);
     border-radius: var(--radius);
     padding: 0.65rem 1rem;
@@ -3727,7 +4320,7 @@ decision. */
     font-family: var(--font-mono);
     font-size: 0.75rem;
     color: var(--pine);
-    background: #f0f6ee;
+    background: var(--gray-f0f6ee);
     border: 1px solid var(--pine);
     border-radius: var(--radius);
     padding: 0.2rem 0.6rem;
@@ -3747,7 +4340,7 @@ decision. */
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--pine);
-    background: #f0f6ee;
+    background: var(--gray-f0f6ee);
     border: 1px solid var(--pine);
     border-radius: var(--radius);
     padding: 0.5rem 0.85rem;
@@ -3757,7 +4350,7 @@ decision. */
 }
 
 .posm-history-toggle:hover {
-    background: #dcefd8;
+    background: var(--tint-dcefd8);
 }
 
 .posm-history-body {
@@ -3767,7 +4360,7 @@ decision. */
 .posm-customer-select-wrap {
     margin-bottom: 0.9rem;
     padding: 0.75rem;
-    background: #f0f6ee;
+    background: var(--gray-f0f6ee);
     border: 1.5px solid var(--pine);
     border-radius: var(--radius);
 }
@@ -3809,20 +4402,20 @@ decision. */
 .pill-reset-btn:hover {
     background: var(--rose);
     border-color: var(--rose);
-    color: #fff;
+    color: var(--plain-white);
 }
 
 /* Danger variant (Reset ↺) — always rose, not just on hover */
 .pill-reset-btn--danger {
     background: var(--rose);
     border-color: var(--rose);
-    color: #fff;
+    color: var(--plain-white);
 }
 
 .pill-reset-btn--danger:hover {
-    background: #c2838a;
-    border-color: #c2838a;
-    color: #fff;
+    background: var(--tint-c2838a);
+    border-color: var(--tint-c2838a);
+    color: var(--plain-white);
 }
 
 .posm-channel-pill {
@@ -3843,7 +4436,7 @@ decision. */
 }
 
 .posm-channel-pill:hover {
-    background: #e8f0e5;
+    background: var(--tint-e8f0e5);
     border-color: var(--pine);
     color: var(--grey-dark);
 }
@@ -3851,7 +4444,7 @@ decision. */
 .posm-channel-pill--active {
     background: var(--pine);
     border-color: var(--pine);
-    color: #fff;
+    color: var(--plain-white);
 }
 
 .posm-pill-label {
@@ -3879,7 +4472,7 @@ decision. */
 }
 
 .posm-pill-status--internal_revision {
-    color: #c0392b;
+    color: var(--tint-c0392b);
 }
 
 .posm-pill-status--revision_in_queue,
@@ -3893,12 +4486,12 @@ decision. */
 .posm-channel-pill--active .posm-pill-status--internal_revision,
 .posm-channel-pill--active .posm-pill-status--revision_in_queue,
 .posm-channel-pill--active .posm-pill-status--revision_in_progress {
-    color: #fff;
+    color: var(--plain-white);
 }
 
 .posm-channel-pill--cancelled {
     border-color: var(--rose);
-    background: #fce8ea;
+    background: var(--tint-fce8ea);
     opacity: 0.75;
 }
 
@@ -3936,7 +4529,7 @@ decision. */
 }
 
 /* Header — faded tangerine.
-   #F3B297 = rgba(242,127,85,0.55) pre-composited over sandstone (#F5F0E8).
+   var(--tint-f3b297) = rgba(242,127,85,0.55) pre-composited over sandstone (var(--sandstone)).
    Using an opaque value on every th (not rgba) so sticky and non-sticky cells
    look identical regardless of what parent background sits behind the table. */
 .data-table--card-rows thead {
@@ -3946,7 +4539,7 @@ decision. */
 
 .data-table--card-rows thead th,
 .data-table--card-rows thead th:first-child {
-    background-color: #F3B297 !important;
+    background-color: var(--tint-f3b297) !important;
     color: var(--white);
     border-bottom: none; /* card-rows have no header separator line */
 }
@@ -3980,11 +4573,11 @@ decision. */
 /* Overdue */
 .data-table--card-rows tbody tr.overdue td,
 .data-table--card-rows tbody tr.overdue td:first-child {
-    background: #F9ECED;
+    background: var(--tint-f9eced);
 }
 .data-table--card-rows tbody tr.overdue:hover td,
 .data-table--card-rows tbody tr.overdue:hover td:first-child {
-    background: #F4E0E2;
+    background: var(--tint-f4e0e2);
 }
 
 /* ── Section header row (title + set-default button) ─────── */
@@ -4022,10 +4615,10 @@ decision. */
 
 /* ── On Hold banner ──────────────────────────────────── */
 .on-hold-banner {
-    background-color: #fce8ea;
-    border: 2px solid #D9A2A8;
+    background-color: var(--tint-fce8ea);
+    border: 2px solid var(--rose);
     border-radius: var(--radius);
-    color: #9a2535;
+    color: var(--tint-9a2535);
     font-family: var(--font-mono);
     font-size: 0.85rem;
     letter-spacing: 0.03em;
@@ -4039,9 +4632,9 @@ decision. */
     font-family: var(--font-mono);
     font-size: 0.65rem;
     font-weight: 700;
-    background: #fde8eb;
-    color: #8a1a28;
-    border: 1.5px solid #e8909a;
+    background: var(--tint-fde8eb);
+    color: var(--tint-8a1a28);
+    border: 1.5px solid var(--tint-e8909a);
     border-radius: 4px;
     padding: 0.1rem 0.35rem;
     margin-left: 0.4rem;
@@ -4054,9 +4647,9 @@ decision. */
     font-family: var(--font-mono);
     font-size: 0.7rem;
     font-weight: 700;
-    background: #fde8eb;
-    color: #8a1a28;
-    border: 1.5px solid #e8909a;
+    background: var(--tint-fde8eb);
+    color: var(--tint-8a1a28);
+    border: 1.5px solid var(--tint-e8909a);
     border-radius: 6px;
     padding: 0.25rem 0.5rem;
     white-space: nowrap;
@@ -4067,8 +4660,8 @@ decision. */
     font-size: 0.7rem;
     font-weight: 700;
     background: transparent;
-    color: #a03040;
-    border: 1.5px solid #e8909a;
+    color: var(--tint-a03040);
+    border: 1.5px solid var(--tint-e8909a);
     border-radius: 6px;
     padding: 0.25rem 0.55rem;
     cursor: pointer;
@@ -4077,8 +4670,8 @@ decision. */
 }
 
 .btn-flag-revision:hover {
-    background: #fde8eb;
-    color: #8a1a28;
+    background: var(--tint-fde8eb);
+    color: var(--tint-8a1a28);
 }
 
 /* ── Brief Flag System ────────────────────────────── */
@@ -4087,17 +4680,17 @@ decision. */
     font-family: var(--font-mono);
     font-size: 0.72rem;
     padding: 0.25rem 0.6rem;
-    border: 1px solid #f59e0b;
+    border: 1px solid var(--tint-f59e0b);
     border-radius: 4px;
     background: transparent;
-    color: #b45309;
+    color: var(--tint-b45309);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s;
 }
 
 .btn-brief-flag:hover {
-    background: #fef3c7;
+    background: var(--tint-fef3c7);
 }
 
 .btn-nas-folder {
@@ -4122,12 +4715,16 @@ decision. */
     color: var(--ashen);
 }
 
+:root[data-theme="dark"] .btn-nas-folder:hover {
+    background: color-mix(in srgb, var(--ashen) 20%, transparent);
+}
+
 .brief-flag-indicator {
     font-size: 0.72rem;
     font-family: var(--font-mono);
-    color: #b45309;
-    background: #fef3c7;
-    border: 1px solid #f59e0b;
+    color: var(--tint-b45309);
+    background: var(--tint-fef3c7);
+    border: 1px solid var(--tint-f59e0b);
     border-radius: 4px;
     padding: 0.18rem 0.5rem;
     cursor: default;
@@ -4139,14 +4736,14 @@ decision. */
     margin: 1.5rem 0;
     padding: 1.25rem 1.5rem;
     background: var(--card-bg);
-    border: 1px solid #f59e0b;
+    border: 1px solid var(--tint-f59e0b);
     border-radius: 8px;
 }
 
 .flag-panel-title {
     font-family: var(--font-heading);
     font-size: 1.1rem;
-    color: #92400e;
+    color: var(--tint-92400e);
     margin: 0 0 1rem;
     letter-spacing: 0.04em;
 }
@@ -4182,23 +4779,23 @@ decision. */
 }
 
 .flag-type-project {
-    background: #fde68a;
-    color: #78350f;
+    background: var(--tint-fde68a);
+    color: var(--tint-78350f);
 }
 
 .flag-type-concept {
-    background: #ddd6fe;
-    color: #4c1d95;
+    background: var(--tint-ddd6fe);
+    color: var(--tint-4c1d95);
 }
 
 .flag-type-kv {
-    background: #bfdbfe;
-    color: #1e3a5f;
+    background: var(--tint-bfdbfe);
+    color: var(--tint-1e3a5f);
 }
 
 .flag-type-deliverable {
-    background: #d1fae5;
-    color: #065f46;
+    background: var(--tint-d1fae5);
+    color: var(--tint-065f46);
 }
 
 .flag-subject {
@@ -4216,9 +4813,9 @@ decision. */
 .flag-open-badge {
     font-size: 0.68rem;
     font-family: var(--font-mono);
-    background: #fef3c7;
-    color: #b45309;
-    border: 1px solid #f59e0b;
+    background: var(--tint-fef3c7);
+    color: var(--tint-b45309);
+    border: 1px solid var(--tint-f59e0b);
     border-radius: 3px;
     padding: 0.1rem 0.4rem;
 }
@@ -4226,9 +4823,9 @@ decision. */
 .flag-resolved-badge {
     font-size: 0.68rem;
     font-family: var(--font-mono);
-    background: #d1fae5;
-    color: #065f46;
-    border: 1px solid #6ee7b7;
+    background: var(--tint-d1fae5);
+    color: var(--tint-065f46);
+    border: 1px solid var(--tint-6ee7b7);
     border-radius: 3px;
     padding: 0.1rem 0.4rem;
 }
@@ -4252,8 +4849,8 @@ decision. */
 }
 
 .flag-message--mine {
-    background: #eff6ff;
-    border-color: #bfdbfe;
+    background: var(--tint-eff6ff);
+    border-color: var(--tint-bfdbfe);
 }
 
 .flag-message-header {
@@ -4308,7 +4905,7 @@ decision. */
 
 .flag-reply-input:focus {
     outline: none;
-    border-color: #f59e0b;
+    border-color: var(--tint-f59e0b);
 }
 
 .flag-reply-actions {
@@ -4328,16 +4925,16 @@ decision. */
     font-family: var(--font-mono);
     font-size: 0.72rem;
     padding: 0.28rem 0.65rem;
-    border: 1px solid #6ee7b7;
+    border: 1px solid var(--tint-6ee7b7);
     border-radius: 4px;
     background: transparent;
-    color: #065f46;
+    color: var(--tint-065f46);
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .btn-flag-resolve:hover {
-    background: #d1fae5;
+    background: var(--tint-d1fae5);
 }
 
 .btn-flag-reply-submit {
@@ -4346,8 +4943,8 @@ decision. */
     padding: 0.3rem 0.85rem;
     border: none;
     border-radius: 4px;
-    background: #f27f55;
-    color: #fff;
+    background: var(--tangerine);
+    color: var(--plain-white);
     cursor: pointer;
     font-weight: 600;
     transition: opacity 0.15s;
@@ -4410,7 +5007,7 @@ decision. */
 
 .flag-create-textarea:focus {
     outline: none;
-    border-color: #f59e0b;
+    border-color: var(--tint-f59e0b);
 }
 
 .btn-brief-flag-submit {
@@ -4419,8 +5016,8 @@ decision. */
     padding: 0.4rem 1rem;
     border: none;
     border-radius: 4px;
-    background: #f59e0b;
-    color: #fff;
+    background: var(--tint-f59e0b);
+    color: var(--plain-white);
     cursor: pointer;
     font-weight: 600;
     transition: opacity 0.15s;
@@ -4490,6 +5087,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     font-size: 1.1rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    color: var(--text);
 }
 
 #close-admin-panel {
@@ -5316,7 +5914,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: linear-gradient(135deg, #fffbea 0%, #fff8e0 100%);
+    background: linear-gradient(135deg, var(--tint-fffbea) 0%, var(--tint-fff8e0) 100%);
     border: 1.5px solid var(--canary);
     border-left: 4px solid var(--tangerine);
     border-radius: var(--radius);
@@ -5670,6 +6268,10 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 /* Supplementary file rows attached to a submission — same layout as the main
    reference-file-item but slightly inset with a dashed border so it reads as
    "secondary" relative to the primary submission deck above it. */
+:root[data-theme="dark"] .submission-extra-file {
+    background: color-mix(in srgb, var(--sandstone) 60%, transparent);
+}
+
 .submission-extra-file {
     border-style: dashed;
     background: color-mix(in srgb, var(--sandstone) 30%, white);
@@ -5772,14 +6374,14 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 /* Rose — CS has flagged an issue with the deck */
 .submission-status--flagged {
     background: color-mix(in srgb, var(--rose) 15%, transparent);
-    color: #a05060;
+    color: var(--tint-a05060);
     border: 1px solid var(--rose);
 }
 
 /* Amber — deck is in internal review, awaiting CS action */
 .submission-status--review {
     background: color-mix(in srgb, var(--canary) 18%, transparent);
-    color: #7a6a00;
+    color: var(--tint-7a6a00);
     border: 1px solid color-mix(in srgb, var(--canary) 70%, transparent);
 }
 
@@ -5800,13 +6402,13 @@ select.s-internal_review {
 select.s-internal_revision {
     background-color: color-mix(in srgb, var(--rose) 15%, transparent);
     border-color: var(--rose);
-    color: #a05060;
+    color: var(--tint-a05060);
 }
 
 select.s-awaiting_posm_details {
-    background-color: #fef3e2;
-    color: #92510a;
-    border-color: #f5c07a;
+    background-color: var(--tint-fef3e2);
+    color: var(--tint-92510a);
+    border-color: var(--tint-f5c07a);
 }
 
 /* Badge in the submission card title to show current state at a glance */
@@ -5830,7 +6432,7 @@ select.s-awaiting_posm_details {
 
 .submission-badge--revision {
     background: color-mix(in srgb, var(--rose) 15%, transparent);
-    color: #a05060;
+    color: var(--tint-a05060);
     border: 1px solid var(--rose);
 }
 
@@ -5998,7 +6600,7 @@ select.s-awaiting_posm_details {
     display: inline-block;
     background: color-mix(in srgb, var(--ashen) 14%, transparent);
     border: 1px solid color-mix(in srgb, var(--ashen) 50%, transparent);
-    color: #3a5a62;
+    color: var(--tint-3a5a62);
     border-radius: 4px;
     padding: 2px 8px;
     font-size: 0.8rem;
@@ -6008,7 +6610,7 @@ select.s-awaiting_posm_details {
 
 /* Campaign asset tag variant (Concept / KV) — pine-coloured border */
 .submission-deliverable-tag--campaign {
-    background: #f0f6ee;
+    background: var(--gray-f0f6ee);
     border-color: var(--pine);
     color: var(--pine);
     font-weight: 600;

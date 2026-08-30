@@ -817,40 +817,47 @@ def table_row(project_id):
     return render_template('project_list/_single_row.html', row=row, today=date.today())
 
 
-@project_list_bp.route('/')
-@login_required
-def index():
-    """ Three fixes presets. Set now as we build it out"""
-    user = _effective_user()
-    # Remember which tab the user was last on —
-    # the sidebar's "Projects" link is a static href with no query string,
-    # so a plain visit here would otherwise always default to 'my' instead
-    # of wherever they left off. Session-scoped, not a DB column: meant to
-    # survive across navigations in one browsing session, not follow the
-    # user to a different device or across a logout.
-    view = request.args.get('view')
-    if view:
-        session['last_project_view'] = view
-    else:
-        view = session.get('last_project_view', 'my')
+def _redirect_target_for_fresh_saved_view(view, user):
+    """
+    Fresh landing on a saved view (just clicked its tab, no filter params
+    yet) - the caller should redirect to replay its saved filters as real
+    query params, so every existing filter/sort/group code path (all of
+    which read from request.args) picks them up for free instead of
+    needing its own separate "saved filter" code path. `len(request.args)
+    <= 1` is the "fresh landing" check - only `view` itself is present so
+    far. Returns the dict of params to redirect to (always including
+    `view`), or None when this isn't that case.
 
-    # Fresh landing on a saved view (just clicked its tab, no filter params
-    # yet) - replay its saved filters as real query params via a redirect,
-    # so every existing filter/sort/group code path (all of which read from
-    # request.args) picks them up for free instead of needing its own
-    # separate "saved filter" code path. `len(request.args) <= 1` is the
-    # "fresh landing" check - only `view` itself is present so far.
-    if view.startswith('view-') and len(request.args) <= 1:
-        try:
-            view_id = int(view.split('-', 1)[1])
-        except ValueError:
-            view_id = None
-        saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
-        if saved_view is not None and saved_view.filters:
-            params = dict(saved_view.filters)
-            params['view'] = view
-            return redirect(url_for('project_list.index', **params))
+    Shared by index() and page_state() (28 Aug 2026 — see that route's
+    docstring) so both replay a saved view's filters via the exact same
+    real HTTP redirect rather than two copies of this logic — fetch()
+    follows redirects transparently, so page_state()'s caller lands on
+    the resolved URL for free, same as a real navigation does for index().
+    """
+    if not (view.startswith('view-') and len(request.args) <= 1):
+        return None
+    try:
+        view_id = int(view.split('-', 1)[1])
+    except ValueError:
+        return None
+    saved_view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first() if view_id else None
+    if saved_view is None or not saved_view.filters:
+        return None
+    params = dict(saved_view.filters)
+    params['view'] = view
+    return params
 
+
+def _build_page_context(view, user):
+    """
+    Everything index.html (and, since 28 Aug 2026, page_state()'s JSON
+    fragments) needs to render the page for one resolved `view` + the
+    current request's filter/sort/group/search args. Factored out of
+    index() so page_state() — the AJAX/soft-navigation counterpart added
+    per Ezekiel's "can we have this spa injected too?" — builds the exact
+    same context a real navigation would, instead of drifting out of sync
+    with a second copy of this logic.
+    """
     table_key = f'project_list:{view}'
 
     layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key=table_key).first()
@@ -953,13 +960,97 @@ def index():
     baseline_params = dict(active_saved_view.filters) if active_saved_view and active_saved_view.filters else {}
     is_dirty = current_params != baseline_params
 
-    return render_template('project_list/index.html', rows=rows, view=view, effective_role=user.role, today=date.today(), filter_options=filter_options,
+    return dict(rows=rows, view=view, effective_role=user.role, today=date.today(), filter_options=filter_options,
                        active_filters=active_filters, filter_counts=filter_counts, view_total=view_total, table_key=table_key, saved_layout=saved_layout, active_filter_count=active_filter_count,
                        saved_deliverable_layout=saved_deliverable_layout, saved_customer_layout=saved_customer_layout, is_admin=(user.role == 'admin'),
                        sort_options=SORT_OPTIONS, sort_field=sort_field, sort_dir=sort_dir,
                        saved_views=saved_views, current_base_view=current_base_view, is_dirty=is_dirty,
                        group_options=GROUP_FIELDS, group_field=group_field, groups=groups, show_cancelled=_show_cancelled(),
                        view_capped=view_capped, view_row_cap=_VIEW_ROW_CAP, )
+
+
+@project_list_bp.route('/')
+@login_required
+def index():
+    """ Three fixes presets. Set now as we build it out"""
+    user = _effective_user()
+    # Remember which tab the user was last on —
+    # the sidebar's "Projects" link is a static href with no query string,
+    # so a plain visit here would otherwise always default to 'my' instead
+    # of wherever they left off. Session-scoped, not a DB column: meant to
+    # survive across navigations in one browsing session, not follow the
+    # user to a different device or across a logout.
+    view = request.args.get('view')
+    if view:
+        session['last_project_view'] = view
+    else:
+        view = session.get('last_project_view', 'my')
+
+    redirect_params = _redirect_target_for_fresh_saved_view(view, user)
+    if redirect_params is not None:
+        return redirect(url_for('project_list.index', **redirect_params))
+
+    context = _build_page_context(view, user)
+    return render_template('project_list/index.html', **context)
+
+
+@project_list_bp.route('/page-state')
+@login_required
+def page_state():
+    """
+    AJAX/JSON counterpart to index() — same context via _build_page_context(),
+    but returns rendered fragments (tab strip / filter panel / sort panel /
+    table) plus the handful of scalar bits index.html's inline <script>
+    sets as window.__savedTableLayout etc., instead of a full HTML page.
+    Lets the client swap views/filters/sort/group/search/show-cancelled in
+    place instead of a full page navigation — see softNavigate() in
+    project_list.js. Added 28 Aug 2026, per Ezekiel: "can we have this spa
+    injected too?"
+
+    Mirrors index()'s "fresh landing on a saved view replays its saved
+    filters" behaviour via a REAL redirect to this same route (not
+    index()) rather than a second copy of that logic — fetch() follows
+    redirects transparently, landing here again with the resolved query
+    string, and response.url then tells the client what to show in the
+    address bar, exactly as a real navigation's redirect would.
+
+    Does NOT touch session['last_project_view'] — same reasoning as
+    table_rows() above: this isn't a real navigation, so it shouldn't
+    change where a plain visit to /projects-new lands next time.
+    """
+    user = _effective_user()
+    view = request.args.get('view') or session.get('last_project_view', 'my')
+
+    redirect_params = _redirect_target_for_fresh_saved_view(view, user)
+    if redirect_params is not None:
+        return redirect(url_for('project_list.page_state', **redirect_params))
+
+    context = _build_page_context(view, user)
+    sort_field = context['sort_field']
+    group_field = context['group_field']
+    sort_badge_count = 2 if (sort_field and group_field) else (1 if (sort_field or group_field) else 0)
+
+    return jsonify({
+        'view': context['view'],
+        'tab_strip_html': render_template('project_list/_tab_strip.html', **context),
+        'filter_panel_html': render_template('project_list/_filter_panel_body.html', **context),
+        'sort_panel_html': render_template('project_list/_sort_panel_body.html', **context),
+        'table_html': render_template('project_list/_table_rows.html', rows=context['rows'], groups=context['groups'], today=context['today']),
+        'table_key': context['table_key'],
+        'saved_layout': context['saved_layout'],
+        'saved_deliverable_layout': context['saved_deliverable_layout'],
+        'saved_customer_layout': context['saved_customer_layout'],
+        'current_base_view': context['current_base_view'],
+        'is_dirty': context['is_dirty'],
+        'groups': bool(context['groups']),
+        'active_filter_count': context['active_filter_count'],
+        'sort_badge_count': sort_badge_count,
+        'show_cancelled': context['show_cancelled'],
+        'search': context['active_filters']['search'],
+        'view_total': context['view_total'],
+        'shown_count': len(context['rows']),
+    })
+
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required

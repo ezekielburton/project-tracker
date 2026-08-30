@@ -68,7 +68,7 @@
 }
 
 .project-list-tab-menu-item-danger {
-    color: var(--red, #c0392b);
+    color: var(--red, var(--tint-c0392b));
 }
 
 .project-list-tab-rename-input {
@@ -115,8 +115,8 @@
 
 .project-list-tab-confirm-yes {
     color: var(--white);
-    background: var(--red, #c0392b);
-    border-color: var(--red, #c0392b);
+    background: var(--red, var(--tint-c0392b));
+    border-color: var(--red, var(--tint-c0392b));
 }
 
 /* Popover for naming a brand-new saved view — anchored under the
@@ -1453,7 +1453,7 @@ body.is-resizing-column * {
 .filter-panel-cap-warning {
     font-size: var(--text-xs);
     font-weight: 600;
-    color: #b45309;
+    color: var(--tint-b45309);
     margin-bottom: var(--space-3);
 }
 
@@ -1718,6 +1718,7 @@ body.is-resizing-column * {
 
 .date-range-picker-cancel {
     background: none;
+    color: var(--text);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-4);

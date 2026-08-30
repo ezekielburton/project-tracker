@@ -22,9 +22,7 @@
                 {# someone else's page should never show a pencil that would  #}
                 {# secretly edit YOUR data while looking at THEIRS. #}
                 {% if is_own_profile %}
-                <button type="button" class="profile-banner-edit-btn" id="edit-banner-btn"
-                    title="Change banner">✎</button>
-                <a href="{{ url_for('auth.account') }}" class="profile-settings-gear" title="Settings">⚙</a>
+                <button type="button" class="profile-banner-edit-btn" id="edit-banner-btn" title="Change banner">✎</button>
                 {% endif %}
             </div>
 
@@ -229,13 +227,6 @@
 </div>
 
 {% if is_own_profile %}
-{# ── Customize achievements data ────────────────────────────────────────── #}
-{# Serialised using the <script> block pattern — NEVER in HTML              #}
-{# value="" attributes, which break silently when values contain quotes.    #}
-{# active_title_ua_id and active_border_id are included so that saving a    #}
-{# new badge from here doesn't accidentally clear the user's saved title    #}
-{# and border (the /account/display-settings route writes all three slots   #}
-{# in one go, so we must echo the current values back when only one changes)#}
 <script>
 {% set ds = customize_context.display_settings %}
 window.PROFILE_CUSTOMIZE = {

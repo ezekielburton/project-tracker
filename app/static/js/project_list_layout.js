@@ -38,8 +38,16 @@
 
     if (!table) return;
 
-    const tableKey = table.dataset.tableKey;
-    const saveUrl = table.dataset.saveLayoutUrl;
+    // let, not const (28 Aug 2026) — re-read in refreshForCurrentTable()
+    // below on every soft-navigated view switch, since a different view
+    // has its own table_key and its own saved layout. Before that fix,
+    // switching views left these pointed at whatever view the page
+    // happened to load with: column widths silently stayed the OLD view's,
+    // and dragging a column after switching would have POSTed the change
+    // under the OLD view's table_key, corrupting its saved layout with
+    // data that actually belonged to the new one.
+    let tableKey = table.dataset.tableKey;
+    let saveUrl = table.dataset.saveLayoutUrl;
 
     // Absolute floor for each column — matches this build's current sizing.
     // A column added later gets its own entry here at that time.
@@ -86,41 +94,53 @@
         { key: 'job', width: 'max-content' },
     ];
 
-    let layout = (window.__savedTableLayout && window.__savedTableLayout.length)
-        ? window.__savedTableLayout
-        : DEFAULT_LAYOUT.map((c) => ({ ...c }));
+    // Factored out of top-level code into its own function (28 Aug 2026)
+    // so refreshForCurrentTable() below can re-derive `layout` from
+    // whatever view's saved layout window.__savedTableLayout holds *right
+    // now*, not just once at module load — see the `let tableKey` comment
+    // above for why a stale `layout` is a real correctness bug, not just
+    // a cosmetic one.
+    function deriveLayout() {
+        const derived = (window.__savedTableLayout && window.__savedTableLayout.length)
+            ? window.__savedTableLayout
+            : DEFAULT_LAYOUT.map((c) => ({ ...c }));
 
-    // Auto-heal: an account that used this table before Pass 4 may have a
-    // saved layout with the old fr-based widths (either an untouched
-    // default, like '2fr', or a value a drag ended on, since the drag
-    // handler used to compute its floor from an already fr-inflated
-    // rendered width). Upgrade any fr-suffixed width to 'max-content'
-    // transparently, so the fix applies immediately without asking anyone
-    // to reset their saved column widths by hand.
-    layout.forEach((col) => {
-        if (typeof col.width === 'string' && /fr$/.test(col.width.trim())) {
-            col.width = 'max-content';
+        // Auto-heal: an account that used this table before Pass 4 may have a
+        // saved layout with the old fr-based widths (either an untouched
+        // default, like '2fr', or a value a drag ended on, since the drag
+        // handler used to compute its floor from an already fr-inflated
+        // rendered width). Upgrade any fr-suffixed width to 'max-content'
+        // transparently, so the fix applies immediately without asking anyone
+        // to reset their saved column widths by hand.
+        derived.forEach((col) => {
+            if (typeof col.width === 'string' && /fr$/.test(col.width.trim())) {
+                col.width = 'max-content';
+            }
+        });
+
+        // Defensive: if a column gets added in some future build, an older
+        // saved layout won't know about it yet — append it at its default
+        // width instead of letting it silently disappear for existing users.
+        DEFAULT_LAYOUT.forEach((def) => {
+            if (!derived.find((c) => c.key === def.key)) {
+                derived.push({ ...def });
+            }
+        });
+
+        // Name is pinned right after Expand and can no longer be dragged (see
+        // the reorder section below). The sticky CSS assumes it's always at
+        // that spot, so move it there even if an older saved layout has it
+        // somewhere else from before this was a fixed column.
+        const nameIndex = derived.findIndex((c) => c.key === 'name');
+        if (nameIndex > 0) {
+            const [nameCol] = derived.splice(nameIndex, 1);
+            derived.unshift(nameCol);
         }
-    });
 
-    // Defensive: if a column gets added in some future build, an older
-    // saved layout won't know about it yet — append it at its default
-    // width instead of letting it silently disappear for existing users.
-    DEFAULT_LAYOUT.forEach((def) => {
-        if (!layout.find((c) => c.key === def.key)) {
-            layout.push({ ...def });
-        }
-    });
-
-    // Name is pinned right after Expand and can no longer be dragged (see
-    // the reorder section below). The sticky CSS assumes it's always at
-    // that spot, so move it there even if an older saved layout has it
-    // somewhere else from before this was a fixed column.
-    const nameIndex = layout.findIndex((c) => c.key === 'name');
-    if (nameIndex > 0) {
-        const [nameCol] = layout.splice(nameIndex, 1);
-        layout.unshift(nameCol);
+        return derived;
     }
+
+    let layout = deriveLayout();
 
     function applyLayout() {
         table.style.setProperty('--track-1', '2.5rem');
@@ -340,7 +360,26 @@
     } // end bindColumnControls()
 
     bindColumnControls();
-    window.helixRebindProjectTableColumns = bindColumnControls;
+
+    // 28 Aug 2026 — refreshes tableKey/saveUrl/layout from the table's
+    // current dataset + window.__savedTableLayout before re-binding, so a
+    // soft-navigated view switch (project_list.js's applyPageState()) picks
+    // up that new view's own saved column widths/order instead of silently
+    // continuing to use whichever view's layout happened to be loaded
+    // first — see the `let tableKey` and deriveLayout() comments above.
+    // For a same-view refresh (filters/sort/search, or the SSE live
+    // refresh) this just re-derives the identical values and reapplies
+    // them — a harmless no-op beyond the fresh header-cell rebind
+    // bindColumnControls() always needed to do anyway.
+    function refreshForCurrentTable() {
+        tableKey = table.dataset.tableKey;
+        saveUrl = table.dataset.saveLayoutUrl;
+        layout = deriveLayout();
+        applyLayout();
+        bindColumnControls();
+    }
+
+    window.helixRebindProjectTableColumns = refreshForCurrentTable;
 
     window.addEventListener('resize', syncStickyScrollbar);
 

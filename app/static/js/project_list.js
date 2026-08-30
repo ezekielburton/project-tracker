@@ -672,6 +672,19 @@
         } else {
             closeProjectOverlay(false);
         }
+        // Re-sync the tab strip / filter+sort panels / table from wherever
+        // Back/Forward just landed — a soft-navigated view/filter/sort
+        // change is a history entry too (see softNavigate below), so this
+        // has to cover it the same way the overlay branch above does.
+        // No history write here — the browser already moved; this only
+        // patches the DOM to match.
+        syncPageStateFromLocation(window.location.pathname + window.location.search, {
+            onDone: (finalQuery, failed) => {
+                if (!failed && finalQuery && finalQuery !== window.location.search) {
+                    history.replaceState({ softNav: true }, '', `${window.location.pathname}${finalQuery}`);
+                }
+            },
+        });
     });
 
     // Direct load / refresh with `?project=<id>` already in the URL —
@@ -686,6 +699,156 @@
     // ---- Row expansion + row-click-to-open (existing table, unchanged structure) ----
 
     const table = document.querySelector('.project-table');
+
+    // ---- Soft navigation: tabs / filters / sort / group / search / show-cancelled ----
+    // Added 28 Aug 2026, per Ezekiel: "can we have this spa injected too?"
+    // — every one of these previously did `window.location.href = url`, a
+    // full page reload (the original complaint was specifically about
+    // switching view tabs, but every other toolbar control did the exact
+    // same full-reload thing, so this covers all of them). Now they fetch
+    // /projects-new/page-state and patch the existing DOM instead.
+    //
+    // #filter-panel, #sort-panel and .tab-strip only ever get their
+    // INNERHTML replaced below — never the elements themselves — so the
+    // delegated listeners already bound directly on them (chip clicks and
+    // #filter-clear-all on filterPanel; sort/group option clicks and
+    // #sort-clear-all on sortPanel; tab/menu/confirm clicks on tabStrip)
+    // keep working with no re-binding needed, exactly the same reasoning
+    // _table_rows.html's swap into #project-table has always relied on.
+    const tabStrip = document.querySelector('.tab-strip');
+
+    // Bug fix (28 Aug 2026, found via console error after Ezekiel reported
+    // a reload-flash on soft navigation): sortToggle/sortPanel/
+    // showCancelledToggle/saveNewViewBtn/toolbarSearch are declared again
+    // further down, but INSIDE the nested `if (filterToggle &&
+    // filterPanel) { ... }` block that wires up their listeners — a
+    // block-scoped `const`, invisible up here. applyPageState() below
+    // referencing that inner `sortPanel` threw "ReferenceError: sortPanel
+    // is not defined" on every call, which softNavigate's catch() silently
+    // swallowed before falling back to a full page reload — the actual
+    // cause of the flash. These are separate, harmless duplicate
+    // getElementById lookups (cheap, and this file already does the same
+    // "unconditional lookup + guarded listener attachment" split for
+    // filterToggle/filterPanel above) purely so applyPageState() has its
+    // own outer-scope reference; the inner block's own `const` of the same
+    // name still shadows these within its own listener-wiring code, untouched.
+    const sortToggle = document.getElementById('sort-toggle');
+    const sortPanel = document.getElementById('sort-panel');
+    const showCancelledToggle = document.getElementById('show-cancelled-toggle');
+    const saveNewViewBtn = document.getElementById('save-new-view-btn');
+    const toolbarSearch = document.getElementById('toolbar-search');
+
+    function toPageStateUrl(url) {
+        const qIndex = url.indexOf('?');
+        const query = qIndex >= 0 ? url.slice(qIndex + 1) : '';
+        return '/projects-new/page-state' + (query ? '?' + query : '');
+    }
+
+    function applyPageState(data) {
+        // Matches refreshWholeTable()'s existing guard below: a resize or
+        // reorder drag holds direct references to the exact header-cell
+        // nodes and live measurements off them, so touching the table
+        // (content, table_key, or the saved-layout globals) mid-drag would
+        // either freeze it or have it silently fail against now-detached
+        // nodes. Skip the whole table side of this update — the next
+        // soft-nav or SSE ping picks it up once the user lets go.
+        if (!isColumnDragInProgress()) {
+            table.innerHTML = data.table_html;
+            table.classList.toggle('project-table--grouped', !!data.groups);
+            table.dataset.tableKey = data.table_key;
+            window.__savedTableLayout = data.saved_layout;
+            window.__savedDeliverableTableLayout = data.saved_deliverable_layout;
+            window.__currentBaseView = data.current_base_view;
+            if (window.helixRebindProjectTableColumns) {
+                window.helixRebindProjectTableColumns();
+            }
+        }
+
+        if (tabStrip) tabStrip.innerHTML = data.tab_strip_html;
+        if (filterPanel) filterPanel.innerHTML = data.filter_panel_html;
+        if (sortPanel) sortPanel.innerHTML = data.sort_panel_html;
+
+        if (filterToggle) {
+            filterToggle.classList.toggle('is-active', !!data.active_filter_count);
+            filterToggle.textContent = 'Filter' + (data.active_filter_count ? ' / ' + data.active_filter_count : '');
+        }
+        if (sortToggle) {
+            sortToggle.classList.toggle('is-active', !!data.sort_badge_count);
+            sortToggle.textContent = 'Sort' + (data.sort_badge_count ? ' / ' + data.sort_badge_count : '');
+        }
+        if (showCancelledToggle) {
+            showCancelledToggle.classList.toggle('is-active', !!data.show_cancelled);
+        }
+        if (saveNewViewBtn) {
+            saveNewViewBtn.hidden = !data.is_dirty;
+        }
+        if (toolbarSearch) {
+            toolbarSearch.value = data.search || '';
+        }
+    }
+
+    // requestId guards against a fast double-click (e.g. two tabs clicked
+    // before the first fetch resolves) applying stale data out of order —
+    // only the most recently issued request is allowed to touch the DOM.
+    let pageStateRequestId = 0;
+
+    function syncPageStateFromLocation(url, { onDone } = {}) {
+        const requestId = ++pageStateRequestId;
+        fetch(toPageStateUrl(url))
+            .then((res) => {
+                if (!res.ok) throw new Error('page-state fetch failed: ' + res.status);
+                // response.url is the final URL after following any redirect
+                // — the "fresh landing on a saved view replays its saved
+                // filters" case (see page_state()'s docstring in
+                // project_list.py) — so its query string, not the one we
+                // requested, is what the address bar should end up showing.
+                const finalQuery = new URL(res.url, window.location.origin).search;
+                return res.json().then((data) => ({ data, finalQuery }));
+            })
+            .then(({ data, finalQuery }) => {
+                if (requestId !== pageStateRequestId) return;
+                applyPageState(data);
+                if (onDone) onDone(finalQuery, false);
+            })
+            .catch((err) => {
+                if (requestId !== pageStateRequestId) return;
+                // Logged, not swallowed (28 Aug 2026) — this catch covers
+                // both a real fetch/network failure AND any exception
+                // thrown inside applyPageState() above (a thrown error
+                // inside a .then() lands here too), and the caller's
+                // onDone(..., true) falls back to a full page reload
+                // either way. Without this log, that fallback silently
+                // masks whatever actually went wrong — the reload lands on
+                // index() and looks fine, so the only visible symptom is
+                // the flash of a real navigation where a soft one was
+                // expected. See it in the console instead of guessing.
+                console.error('page-state sync failed, falling back to a full navigation:', err);
+                if (onDone) onDone(null, true);
+            });
+    }
+
+    function softNavigate(url) {
+        // Optimistic history entry first, same instant-feel precedent as
+        // the overlay's openProjectOverlay/closeProjectOverlay pushState
+        // calls above — corrected via replaceState below only in the rare
+        // saved-view-replay case where the resolved URL differs from what
+        // was actually clicked.
+        history.pushState({ softNav: true }, '', url);
+        syncPageStateFromLocation(url, {
+            onDone: (finalQuery, failed) => {
+                if (failed) {
+                    // Something went wrong (network blip, non-OK response)
+                    // — fall back to a real navigation rather than leaving
+                    // the click looking like it silently did nothing.
+                    window.location.href = url;
+                    return;
+                }
+                if (finalQuery && finalQuery !== window.location.search) {
+                    history.replaceState({ softNav: true }, '', `${window.location.pathname}${finalQuery}`);
+                }
+            },
+        });
+    }
 
     if (!table) return;
 
@@ -856,7 +1019,7 @@
         if (statusCell && statusCell.dataset.statusValue === 'Handed to Production') {
             e.preventDefault();
             e.stopPropagation();
-            window.location.href = '/projects-new/?view=design_complete';
+            softNavigate('/projects-new/?view=design_complete');
             return;
         }
 
@@ -946,13 +1109,30 @@
         }
 
         function applyFilters() {
-            window.location.href = buildFilterUrl();
+            softNavigate(buildFilterUrl());
         }
 
         // Clicking any chip row toggles its own selected state, then applies
         // instantly — one delegated listener on the whole panel handles
-        // every group, rather than one listener per chip.
+        // every group (and, since 28 Aug 2026, #filter-clear-all too —
+        // folded in here rather than bound separately, so it survives
+        // filterPanel.innerHTML getting replaced on every soft navigation;
+        // see applyPageState() above), rather than one listener per chip.
         filterPanel.addEventListener('click', (e) => {
+            if (e.target.closest('#filter-clear-all')) {
+                // Clears filters only — sort/group are a separate control
+                // with its own Clear button, so they stay active across this click.
+                const existing = new URLSearchParams(window.location.search);
+                const params = new URLSearchParams();
+                params.set('view', existing.get('view') || 'my');
+                if (existing.get('sort')) {
+                    params.set('sort', existing.get('sort'));
+                    if (existing.get('dir')) params.set('dir', existing.get('dir'));
+                }
+                if (existing.get('group')) params.set('group', existing.get('group'));
+                softNavigate(`${window.location.pathname}?${params.toString()}`);
+                return;
+            }
             const chip = e.target.closest('.filter-chip-row');
             if (!chip) return;
             chip.classList.toggle('is-selected');
@@ -968,23 +1148,6 @@
             searchInput.addEventListener('input', () => {
                 clearTimeout(searchTimeout);
                 searchTimeout = setTimeout(applyFilters, 400);
-            });
-        }
-
-        const clearAllBtn = document.getElementById('filter-clear-all');
-        if (clearAllBtn) {
-            clearAllBtn.addEventListener('click', () => {
-                // Clears filters only — sort/group are a separate control
-                // with its own Clear button, so they stay active across this click.
-                const existing = new URLSearchParams(window.location.search);
-                const params = new URLSearchParams();
-                params.set('view', existing.get('view') || 'my');
-                if (existing.get('sort')) {
-                    params.set('sort', existing.get('sort'));
-                    if (existing.get('dir')) params.set('dir', existing.get('dir'));
-                }
-                if (existing.get('group')) params.set('group', existing.get('group'));
-                window.location.href = `${window.location.pathname}?${params.toString()}`;
             });
         }
 
@@ -1009,7 +1172,7 @@
                 } else {
                     params.set('status', 'Cancelled');
                 }
-                window.location.href = `${window.location.pathname}?${params.toString()}`;
+                softNavigate(`${window.location.pathname}?${params.toString()}`);
             });
         }
 
@@ -1081,7 +1244,7 @@
                         .then((res) => res.json())
                         .then((data) => {
                             if (data.id) {
-                                window.location.href = `${window.location.pathname}?view=view-${data.id}`;
+                                softNavigate(`${window.location.pathname}?view=view-${data.id}`);
                             }
                         });
                 });
@@ -1093,30 +1256,47 @@
             });
         }
 
-        // ---- Saved-view tabs: rename / delete ----
-        document.querySelectorAll('.project-list-tab-wrap').forEach((wrap) => {
-            const menuBtn = wrap.querySelector('.project-list-tab-menu-btn');
-            const menu = wrap.querySelector('.project-list-tab-menu');
-            const label = wrap.querySelector('.project-list-tab-label');
-            const viewId = wrap.dataset.viewId;
-            if (!menuBtn || !menu || !label || !viewId) return;
-
-            menuBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                document.querySelectorAll('.project-list-tab-menu').forEach((m) => {
-                    if (m !== menu) m.hidden = true;
-                });
-                menu.hidden = !menu.hidden;
-            });
-
-            menu.querySelectorAll('.project-list-tab-menu-item').forEach((item) => {
-                item.addEventListener('click', (e) => {
+        // ---- Tab strip: plain tab clicks, saved-view rename / delete ----
+        // One delegated listener on tabStrip (28 Aug 2026, replacing what
+        // was a per-element .forEach(wrap => ...) bind) — tabStrip.innerHTML
+        // gets replaced on every soft navigation (see applyPageState above),
+        // which would otherwise silently drop these listeners the first
+        // time a tab, filter, sort, or search changed. Delegation means
+        // they never need re-binding.
+        //
+        // Bug fix in the same pass: the delete-confirm handler used to
+        // check `wrap.classList.contains('is-active')` to decide whether
+        // the view being deleted was the current one — but the class this
+        // markup actually sets (_tab_strip.html) is `active`, not
+        // `is-active`, so that check was always false and deleting the
+        // active saved view fell through to a full reload instead of
+        // redirecting to My Projects.
+        if (tabStrip) {
+            tabStrip.addEventListener('click', (e) => {
+                const menuBtn = e.target.closest('.project-list-tab-menu-btn');
+                if (menuBtn) {
                     e.preventDefault();
                     e.stopPropagation();
-                    menu.hidden = true;
+                    const menu = menuBtn.closest('.project-list-tab-wrap').querySelector('.project-list-tab-menu');
+                    tabStrip.querySelectorAll('.project-list-tab-menu').forEach((m) => {
+                        if (m !== menu) m.hidden = true;
+                    });
+                    menu.hidden = !menu.hidden;
+                    return;
+                }
 
-                    if (item.dataset.action === 'rename') {
+                const menuItem = e.target.closest('.project-list-tab-menu-item');
+                if (menuItem) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const wrap = menuItem.closest('.project-list-tab-wrap');
+                    const menu = wrap.querySelector('.project-list-tab-menu');
+                    const label = wrap.querySelector('.project-list-tab-label');
+                    const viewId = wrap.dataset.viewId;
+                    menu.hidden = true;
+                    if (!label || !viewId) return;
+
+                    if (menuItem.dataset.action === 'rename') {
                         const currentName = label.textContent.trim();
                         const input = document.createElement('input');
                         input.type = 'text';
@@ -1136,7 +1316,7 @@
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ name: newName }),
-                            }).then(() => window.location.reload());
+                            }).then(() => syncPageStateFromLocation(window.location.pathname + window.location.search));
                         };
                         input.addEventListener('keydown', (ev) => {
                             if (ev.key === 'Enter') input.blur();
@@ -1145,7 +1325,7 @@
                         input.addEventListener('blur', commit, { once: true });
                     }
 
-                    if (item.dataset.action === 'delete') {
+                    if (menuItem.dataset.action === 'delete') {
                         // Small inline confirm, not window.confirm() — keeps
                         // every popover on this page the same custom style.
                         let confirmBox = wrap.querySelector('.project-list-tab-confirm-delete');
@@ -1159,32 +1339,56 @@
                             <button type="button" class="project-list-tab-confirm-no">Cancel</button>
                         `;
                         wrap.appendChild(confirmBox);
-
-                        confirmBox.querySelector('.project-list-tab-confirm-yes').addEventListener('click', (ev) => {
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                            fetch(`/projects-new/views/${viewId}/delete`, { method: 'POST' })
-                                .then(() => {
-                                    if (wrap.classList.contains('is-active')) {
-                                        window.location.href = `${window.location.pathname}?view=my`;
-                                    } else {
-                                        window.location.reload();
-                                    }
-                                });
-                        });
-                        confirmBox.querySelector('.project-list-tab-confirm-no').addEventListener('click', (ev) => {
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                            confirmBox.remove();
-                        });
                     }
-                });
-            });
-        });
+                    return;
+                }
 
-        document.addEventListener('click', () => {
-            document.querySelectorAll('.project-list-tab-menu').forEach((m) => { m.hidden = true; });
-        });
+                const confirmYes = e.target.closest('.project-list-tab-confirm-yes');
+                if (confirmYes) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const wrap = confirmYes.closest('.project-list-tab-wrap');
+                    const viewId = wrap.dataset.viewId;
+                    const wasActive = wrap.classList.contains('active');
+                    fetch(`/projects-new/views/${viewId}/delete`, { method: 'POST' })
+                        .then(() => {
+                            if (wasActive) {
+                                softNavigate(`${window.location.pathname}?view=my`);
+                            } else {
+                                syncPageStateFromLocation(window.location.pathname + window.location.search);
+                            }
+                        });
+                    return;
+                }
+
+                const confirmNo = e.target.closest('.project-list-tab-confirm-no');
+                if (confirmNo) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    confirmNo.closest('.project-list-tab-confirm-delete').remove();
+                    return;
+                }
+
+                // Plain tab click (My Projects / All-or-Team / Design
+                // Completed / a saved view's own link) — soft-navigate
+                // instead of a full page reload. Checked last so it never
+                // shadows the menu-btn/menu-item/confirm buttons above,
+                // all of which sit inside the same .tab-strip-item /
+                // .project-list-tab-wrap markup.
+                const tabLink = e.target.closest('.tab-strip-item');
+                if (tabLink && tabLink.tagName === 'A') {
+                    e.preventDefault();
+                    softNavigate(tabLink.href);
+                }
+            });
+
+            // Close any open tab menu on an outside click — tabStrip's own
+            // delegated handler above only sees clicks inside the tab strip.
+            document.addEventListener('click', (e) => {
+                if (tabStrip.contains(e.target)) return;
+                tabStrip.querySelectorAll('.project-list-tab-menu').forEach((m) => { m.hidden = true; });
+            });
+        }
 
         const searchToggle = document.getElementById('search-toggle');
         const toolbarSearch = document.getElementById('toolbar-search');
@@ -1228,13 +1432,29 @@
             // of whatever's already in the URL (view, filters, search)
             // rather than rebuilding the whole query string from scratch,
             // since sort is the only thing this needs to change.
+            //
+            // #sort-clear-all is folded into this same delegated listener
+            // (28 Aug 2026) rather than bound separately, so it survives
+            // sortPanel.innerHTML getting replaced on every soft
+            // navigation — same reasoning as #filter-clear-all above.
             sortPanel.addEventListener('click', (e) => {
+                if (e.target.closest('#sort-clear-all')) {
+                    // Clears both halves of this combined panel — Sort and
+                    // Group by — since they share this one Clear button.
+                    const params = new URLSearchParams(window.location.search);
+                    params.delete('sort');
+                    params.delete('dir');
+                    params.delete('group');
+                    softNavigate(`${window.location.pathname}?${params.toString()}`);
+                    return;
+                }
+
                 const option = e.target.closest('.project-sort-option');
                 if (option) {
                     const params = new URLSearchParams(window.location.search);
                     params.set('sort', option.dataset.sortField);
                     params.set('dir', option.dataset.sortDir);
-                    window.location.href = `${window.location.pathname}?${params.toString()}`;
+                    softNavigate(`${window.location.pathname}?${params.toString()}`);
                     return;
                 }
 
@@ -1251,22 +1471,9 @@
                     } else {
                         params.set('group', field);
                     }
-                    window.location.href = `${window.location.pathname}?${params.toString()}`;
+                    softNavigate(`${window.location.pathname}?${params.toString()}`);
                 }
             });
-
-            const sortClearBtn = document.getElementById('sort-clear-all');
-            if (sortClearBtn) {
-                sortClearBtn.addEventListener('click', () => {
-                    // Clears both halves of this combined panel — Sort and
-                    // Group by — since they share this one Clear button.
-                    const params = new URLSearchParams(window.location.search);
-                    params.delete('sort');
-                    params.delete('dir');
-                    params.delete('group');
-                    window.location.href = `${window.location.pathname}?${params.toString()}`;
-                });
-            }
         }
         // ---- Date range picker (Initial Deadline / Next Deadline) ----
         const dateRangePicker = document.getElementById('date-range-picker');

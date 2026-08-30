@@ -180,6 +180,10 @@
     border: 1.5px solid;
 }
 
+:root[data-theme="dark"] .profile-tag {
+    background-color: color-mix(in srgb, var(--sandstone) 70%, transparent);
+}
+
 /* Border+text back to full-strength accent colors — the lighter background
    above now provides the contrast, rather than diluting both together. */
 .profile-tag--title {
@@ -219,7 +223,7 @@
 .profile-achievements-card {
     /* Lighter than plain --sandstone — blended most of the way to white so
        these sub-cards feel airier against the white .profile-card behind them. */
-    background: color-mix(in srgb, var(--sandstone) 40%, white);
+    background: var(--page-background);
     border-radius: 12px;
     padding: 1.25rem 1.5rem;
     min-height: 160px;

@@ -1,0 +1,176 @@
+{#
+   app/modules/projects/templates/project_list/_filter_panel_body.html
+   ─────────────────────────────────────────────────────────────────
+   Inner content of #filter-panel (the count summary, cap warning, every
+   filter-chip column, and the two date-range buttons). Extracted out of
+   index.html (28 Aug 2026, per Ezekiel — "can we have this spa injected
+   too?") so the AJAX page-state endpoint in project_list.py can re-render
+   just this and the client can swap it into #filter-panel's innerHTML —
+   #filter-panel itself is never replaced, so the delegated click listener
+   project_list.js binds directly on it (chip clicks, #filter-clear-all)
+   survives every filter/sort/search/view change. index.html includes this
+   the same way for a normal page load.
+#}
+<div class="filter-panel-header">
+    <span class="filter-panel-count">Showing {{ rows|length }} of {{ view_total }} items</span>
+    <div class="filter-panel-header-actions">
+        <button type="button" class="filter-clear-all" id="filter-clear-all">Clear all</button>
+    </div>
+</div>
+{% if view_capped %}
+<div class="filter-panel-cap-warning">This view has more than {{ view_row_cap }} projects — only the first {{ view_row_cap }} are shown. Narrow your filters to see the rest.</div>
+{% endif %}
+
+<div class="filter-columns">
+
+    <div class="filter-column">
+        <div class="filter-column-label">CS Lead</div>
+        <div class="filter-column-list">
+            {% for u in filter_options.cs_leads %}
+            <button type="button"
+                class="filter-chip-row{% if u.id in active_filters.cs_lead %} is-selected{% endif %}"
+                data-filter-group="cs_lead" data-filter-value="{{ u.id }}">
+                <span class="filter-chip-text">{{ u.name }}</span>
+                <span class="filter-chip-count">{{ filter_counts.cs_lead.get(u.id, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-column">
+        <div class="filter-column-label">Designers</div>
+        <div class="filter-column-list">
+            {% for u in filter_options.designers %}
+            <button type="button"
+                class="filter-chip-row{% if u.id in active_filters.designers %} is-selected{% endif %}"
+                data-filter-group="designers" data-filter-value="{{ u.id }}">
+                <span class="filter-chip-text">{{ u.name }}</span>
+                <span class="filter-chip-count">{{ filter_counts.designers.get(u.id, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-column">
+        <div class="filter-column-label">Client</div>
+        <div class="filter-column-list">
+            {% for c in filter_options.clients %}
+            <button type="button"
+                class="filter-chip-row{% if c.id in active_filters.client %} is-selected{% endif %}"
+                data-filter-group="client" data-filter-value="{{ c.id }}">
+                <span class="filter-chip-text">{{ c.name }}</span>
+                <span class="filter-chip-count">{{ filter_counts.client.get(c.id, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-column">
+        <div class="filter-column-label">Brief Type</div>
+        <div class="filter-column-list">
+            {% for value, label in filter_options.brief_types %}
+            <button type="button"
+                class="filter-chip-row{% if value in active_filters.brief_type %} is-selected{% endif %}"
+                data-filter-group="brief_type" data-filter-value="{{ value }}">
+                <span class="filter-chip-text">{{ label }}</span>
+                <span class="filter-chip-count">{{ filter_counts.brief_type.get(value, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-column">
+        <div class="filter-column-label">Status</div>
+        <div class="filter-column-list">
+            {% for status in filter_options.statuses %}
+            <button type="button"
+                class="filter-chip-row{% if status in active_filters.status %} is-selected{% endif %}"
+                data-filter-group="status" data-filter-value="{{ status }}">
+                <span class="filter-chip-text">{{ status }}</span>
+                <span class="filter-chip-count">{{ filter_counts.status.get(status, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-column">
+        <div class="filter-column-label">Urgency</div>
+        <div class="filter-column-list">
+            {% for value, label in filter_options.urgencies %}
+            <button type="button"
+                class="filter-chip-row{% if value in active_filters.urgency %} is-selected{% endif %}"
+                data-filter-group="urgency" data-filter-value="{{ value }}">
+                <span class="filter-chip-text">{{ label }}</span>
+                <span class="filter-chip-count">{{ filter_counts.urgency.get(value, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-column">
+        <div class="filter-column-label">Team</div>
+        <div class="filter-column-list">
+            {% for value in filter_options.teams %}
+            <button type="button"
+                class="filter-chip-row{% if value in active_filters.team %} is-selected{% endif %}"
+                data-filter-group="team" data-filter-value="{{ value }}">
+                <span class="filter-chip-text">{{ value }}</span>
+                <span class="filter-chip-count">{{ filter_counts.team.get(value, 0) }}</span>
+            </button>
+            {% endfor %}
+            <button type="button"
+                class="filter-chip-row{% if active_filters.team_undefined %} is-selected{% endif %}"
+                data-filter-group="team" data-filter-value="undefined">
+                <span class="filter-chip-text">Undefined</span>
+                <span class="filter-chip-count">{{ filter_counts.team.get(None, 0) }}</span>
+            </button>
+        </div>
+    </div>
+
+    {# Design Type — backend (filter_options.design_types /
+    filter_counts.design_type / _apply_row_filters's
+    design_type branch) has existed since the original
+    build of this panel; this column itself was missing
+    from the template the whole time, so the filter was
+    silently uneffective no matter what a caller sent as
+    ?design_type=... (added 22 Aug 2026, per Ezekiel — "add
+    any filters that are missing"). Same Undefined-chip
+    pattern as Team above. #}
+    <div class="filter-column">
+        <div class="filter-column-label">Design Type</div>
+        <div class="filter-column-list">
+            {% for value, label in filter_options.design_types %}
+            <button type="button"
+                class="filter-chip-row{% if value in active_filters.design_type %} is-selected{% endif %}"
+                data-filter-group="design_type" data-filter-value="{{ value }}">
+                <span class="filter-chip-text">{{ label }}</span>
+                <span class="filter-chip-count">{{ filter_counts.design_type.get(value, 0) }}</span>
+            </button>
+            {% endfor %}
+            <button type="button"
+                class="filter-chip-row{% if active_filters.design_type_undefined %} is-selected{% endif %}"
+                data-filter-group="design_type" data-filter-value="undefined">
+                <span class="filter-chip-text">Undefined</span>
+                <span class="filter-chip-count">{{ filter_counts.design_type.get(None, 0) }}</span>
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<div class="filter-date-row">
+    <button type="button"
+        class="filter-date-btn{% if active_filters.initial_deadline_from or active_filters.initial_deadline_to %} is-active{% endif %}"
+        id="initial-deadline-filter-btn" data-param-prefix="initial_deadline"
+        data-from="{{ active_filters.initial_deadline_from }}"
+        data-to="{{ active_filters.initial_deadline_to }}">
+        Initial Deadline
+    </button>
+    <button type="button"
+        class="filter-date-btn{% if active_filters.next_deadline_from or active_filters.next_deadline_to %} is-active{% endif %}"
+        id="next-deadline-filter-btn" data-param-prefix="next_deadline"
+        data-from="{{ active_filters.next_deadline_from }}"
+        data-to="{{ active_filters.next_deadline_to }}">
+        Next Deadline
+    </button>
+</div>

@@ -32,6 +32,10 @@ class User(db.Model, UserMixin):
     wizard_completed = db.Column(db.Boolean, default=False, nullable=False)
     avatar_step_completed = db.Column(db.Boolean, nullable=False, default=False)
 
+    # 'light' or 'dark', per-account theme choice (2.4.1). Null = no saved
+    # preference yet — client falls back to localStorage, then light.
+    theme_preference = db.Column(db.String(10), nullable=True)
+
     def set_password(self, password):
         from werkzeug.security import generate_password_hash
         self.password_hash = generate_password_hash(password)

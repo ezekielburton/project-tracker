@@ -1,12 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}App Updates — Vitamin-E{% endblock %}
+{% block title %}App Updates — OVP{% endblock %}
 
 {% block content %}
 <div class="page-container">
 
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-        <h1 style="margin: 0; font-size: 2.4rem;">App Updates</h1>
+    <div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 0.75rem;">
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('blog.editor') }}" class="btn btn-primary">+ New Post</a>
         {% endif %}

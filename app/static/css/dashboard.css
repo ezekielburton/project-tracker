@@ -90,7 +90,7 @@
 
    SOFT-TINT variant, not solid fill (same-day follow-up — per Ezekiel:
    "make the tags less harsh on the eyes, make them soft colors"). A
-   solid #E60000/#00C400 background read as too intense for a bar that's
+   solid var(--tint-e60000)/var(--tint-00c400) background read as too intense for a bar that's
    glanced at constantly, unlike .dash-risk-tag's occasional pulsing-alert
    use. Light tinted background (~12% of the accent color) + a deepened,
    saturated text color carries the same red/amber/green signal at a much
@@ -119,22 +119,22 @@
 }
 
 .dash-focus-pill--red {
-    background: #FBE3E3;
-    color: #C43D3D;
+    background: var(--tint-fbe3e3);
+    color: var(--tint-c43d3d);
 }
-.dash-focus-pill--red .dash-focus-pill-dot { background: #C43D3D; }
+.dash-focus-pill--red .dash-focus-pill-dot { background: var(--tint-c43d3d); }
 
 .dash-focus-pill--amber {
-    background: #FBF3D9;
-    color: #8A7328;
+    background: var(--tint-fbf3d9);
+    color: var(--tint-8a7328);
 }
-.dash-focus-pill--amber .dash-focus-pill-dot { background: #8A7328; }
+.dash-focus-pill--amber .dash-focus-pill-dot { background: var(--tint-8a7328); }
 
 .dash-focus-pill--green {
-    background: #DFF3DF;
-    color: #3F8F3F;
+    background: var(--tint-dff3df);
+    color: var(--tint-3f8f3f);
 }
-.dash-focus-pill--green .dash-focus-pill-dot { background: #3F8F3F; }
+.dash-focus-pill--green .dash-focus-pill-dot { background: var(--tint-3f8f3f); }
 
 /* "Due today" pill exception (16 Jul 2026, per Ezekiel: "Due today should
    open a new section when clicked") — every other Focus pill stays
@@ -383,7 +383,7 @@
 
 .dash-priority-group-heading--urgent .dash-priority-group-dot,
 .dash-priority-group-heading--today .dash-priority-group-dot {
-    background: #E60000;
+    background: var(--tint-e60000);
 }
 
 .dash-priority-group-heading--this_week .dash-priority-group-dot {
@@ -787,9 +787,9 @@
     flex-shrink: 0;
 }
 
-.dash-role-tile-dot--red { background: #E60000; }
+.dash-role-tile-dot--red { background: var(--tint-e60000); }
 .dash-role-tile-dot--amber { background: var(--canary); }
-.dash-role-tile-dot--green { background: #00C400; }
+.dash-role-tile-dot--green { background: var(--tint-00c400); }
 
 .dash-role-tile-name {
     font-family: var(--font-body);
@@ -942,7 +942,7 @@
    slightly deepened from the dot purely for on-white legibility). Yellow
    was the same originally, but per Ezekiel's follow-up review (screenshot
    showing the dot/number mismatch) the yellow NUMBER now matches the dot
-   exactly — both #FFEB00 — even though that's a lighter, lower-contrast
+   exactly — both var(--tint-ffeb00) — even though that's a lighter, lower-contrast
    text colour than red/green's deepened variants. This is a deliberate
    trade against the general "deepen for legibility" rule above, made
    after seeing it rendered; if it reads as too washed out at some sizes,
@@ -979,14 +979,14 @@
     white-space: nowrap;
 }
 
-.dash-mini-stat--red .dash-mini-stat-dot { background: #FF0000; }
-.dash-mini-stat--red .dash-mini-stat-value { color: #E60000; }
+.dash-mini-stat--red .dash-mini-stat-dot { background: var(--tint-ff0000); }
+.dash-mini-stat--red .dash-mini-stat-value { color: var(--tint-e60000); }
 
-.dash-mini-stat--yellow .dash-mini-stat-dot { background: #FFEB00; }
-.dash-mini-stat--yellow .dash-mini-stat-value { color: #FFEB00; }
+.dash-mini-stat--yellow .dash-mini-stat-dot { background: var(--tint-ffeb00); }
+.dash-mini-stat--yellow .dash-mini-stat-value { color: var(--tint-ffeb00); }
 
-.dash-mini-stat--green .dash-mini-stat-dot { background: #00C400; }
-.dash-mini-stat--green .dash-mini-stat-value { color: #009900; }
+.dash-mini-stat--green .dash-mini-stat-dot { background: var(--tint-00c400); }
+.dash-mini-stat--green .dash-mini-stat-value { color: var(--tint-009900); }
 
 /* Orange (added 12 Jul 2026, tenth follow-up) — the first mini-stat
    colour that isn't part of the red/yellow/green RAG trio. Added for
@@ -1003,18 +1003,18 @@
 /* Blue/ashen (added 12 Jul 2026, twelfth follow-up) — for
    stat_pending.html's "Pending Approval" tile only. Not a RAG colour
    either (a neutral "waiting" count, not urgency), same reasoning orange
-   above uses. Dot uses --ashen directly; text uses the deepened #3E5E66
+   above uses. Dot uses --ashen directly; text uses the deepened var(--tint-3e5e66)
    (same shade .dash-action-tag uses) since raw --ashen is too light for
    bold text at the :only-child big-number size. */
 .dash-mini-stat--blue .dash-mini-stat-dot { background: var(--ashen); }
-.dash-mini-stat--blue .dash-mini-stat-value { color: #3E5E66; }
+.dash-mini-stat--blue .dash-mini-stat-value { color: var(--tint-3e5e66); }
 
 /* Oak (added 13 Jul 2026) — for stat_avg_time.html's "Average Time" tile
    only. Not a RAG colour (a neutral duration metric, not urgency), same
    reasoning orange/blue above use. The one brand token not already
    claimed by the other three stat tiles (green/ashen-blue/tangerine), so
    Average Time reads as its own distinct thing on the row rather than
-   reusing a colour that already means something else. --oak (#A07C5A) is
+   reusing a colour that already means something else. --oak (var(--oak)) is
    dark/muted enough to use directly for both dot and bold text without
    needing a deepened variant, unlike --ashen above. */
 .dash-mini-stat--oak .dash-mini-stat-dot { background: var(--oak); }
@@ -1757,7 +1757,7 @@ a.dash-row:hover {
    (the RAG badge already covers urgency). */
 .dash-action-tag {
     background: rgba(148, 180, 187, 0.22);
-    color: #3E5E66;
+    color: var(--tint-3e5e66);
 }
 
 /* Who's doing it — tangerine tint (the app's primary accent) so a name
@@ -1804,16 +1804,16 @@ a.dash-row:hover {
     font-size: 0.72rem;
     font-weight: 700;
     padding: 0.35rem 0.75rem;
-    border: 1px solid #6ee7b7;
+    border: 1px solid var(--tint-6ee7b7);
     border-radius: var(--radius-sm);
     background: transparent;
-    color: #065f46;
+    color: var(--tint-065f46);
     cursor: pointer;
     transition: background 0.15s;
 }
 
 .dash-resolve-btn:hover {
-    background: #d1fae5;
+    background: var(--tint-d1fae5);
 }
 
 .dash-resolve-btn:disabled {
@@ -2076,7 +2076,7 @@ a.dash-row:hover {
    since: 13 Jul"). Colour-coded via item.waiting_color ('red'/'amber' — see
    _compute_decisions()/_compute_next_actions()'s docstrings in
    dashboard.py for the exact classification rules): red reuses the same
-   deepened #E60000 every other "something's actually wrong" tag on this
+   deepened var(--tint-e60000) every other "something's actually wrong" tag on this
    page uses (.dash-risk-tag--red, .dash-risk-tag--overdue,
    .dash-clash-severity-tag--detected); amber is --canary, the RAG
    mini-stat's own amber/yellow brand token, at a readable dark-on-light
@@ -2104,12 +2104,12 @@ a.dash-row:hover {
 }
 
 .dash-waiting-tag--red {
-    background: #E60000;
+    background: var(--tint-e60000);
 }
 
 .dash-waiting-tag--amber {
     background: var(--canary);
-    color: #6B5D00;
+    color: var(--tint-6b5d00);
 }
 
 .dash-person-chip {
@@ -2174,19 +2174,19 @@ a.dash-row:hover {
    in the file — real bug, caught from Ezekiel's screenshot, not the usual
    bash/tool desync false alarm.
 
-   Colour dialed from pure #FF0000 down to #E60000 (13 Jul 2026, same-day
+   Colour dialed from pure var(--tint-ff0000) down to var(--tint-e60000) (13 Jul 2026, same-day
    follow-up, per Ezekiel: "adjust the red ... to be less bright slightly")
    — the same deepened red the RAG mini-stat's red TEXT already uses over
    its pure-red dot, reused here for a solid-fill tag background instead of
    inventing a third red. */
 .dash-risk-tag.dash-risk-tag--red {
-    background: #E60000;
+    background: var(--tint-e60000);
 }
 
 /* Overdue tag — red + pulsing (13 Jul 2026, same-day follow-up, per
    Ezekiel: "Make overdue red and make it pulse or flash", added
    alongside matching the At Risk card's row layout to Overdue's). Same
-   #E60000 red as .dash-risk-tag--red above, but visually distinguished
+   var(--tint-e60000) red as .dash-risk-tag--red above, but visually distinguished
    from that STATIC red via a looping opacity pulse — Overdue describes a
    live, worsening-by-the-day condition (unlike a missing designer, which
    is just a data gap until someone's assigned), so it earns its own
@@ -2198,7 +2198,7 @@ a.dash-row:hover {
    animation — pulsing/flashing chrome is exactly the kind of motion that
    preference exists to suppress. */
 .dash-risk-tag.dash-risk-tag--overdue {
-    background: #E60000;
+    background: var(--tint-e60000);
     animation: dash-risk-tag-pulse 1.4s ease-in-out infinite;
 }
 
@@ -2346,13 +2346,13 @@ a.dash-row:hover {
 
 /* Red + pulsing (13 Jul 2026, same-day follow-up, per Ezekiel: "make clash
    detected red and pulsing also") — matches At Risk's
-   .dash-risk-tag--overdue treatment exactly: same deepened #E60000 (not
-   pure #FF0000) and the same shared dash-risk-tag-pulse keyframes, reused
+   .dash-risk-tag--overdue treatment exactly: same deepened var(--tint-e60000) (not
+   pure var(--tint-ff0000)) and the same shared dash-risk-tag-pulse keyframes, reused
    rather than duplicated. Was var(--rose) (soft brand pink), flat, no
    animation. .dash-clash-severity-tag--potential (amber, static) is
    unchanged — this only touches the certain-conflict state. */
 .dash-clash-severity-tag--detected {
-    background: #E60000;
+    background: var(--tint-e60000);
     color: var(--white);
     animation: dash-risk-tag-pulse 1.4s ease-in-out infinite;
 }
@@ -2470,7 +2470,7 @@ a.dash-row:hover {
    convention across every component on this page instead of a second,
    slightly different one. */
 .dash-mini-stat--amber .dash-mini-stat-dot { background: var(--canary); }
-.dash-mini-stat--amber .dash-mini-stat-value { color: #6B5D00; }
+.dash-mini-stat--amber .dash-mini-stat-value { color: var(--tint-6b5d00); }
 
 /* Yellow "No Deadline" deadline text (per Ezekiel: "make that row's
    deadline text yellow 'No Deadline' instead of a date") — a modifier on
@@ -2482,7 +2482,7 @@ a.dash-row:hover {
    consistent "amber" reading across this whole page rather than a fourth
    slightly-different yellow. */
 .dash-row-date--warning {
-    color: #8A7328;
+    color: var(--tint-8a7328);
 }
 
 /* Revision/waiting-cs tag — compound selector, same specificity-safety
@@ -2495,7 +2495,7 @@ a.dash-row:hover {
    though the label text differs. */
 .dash-risk-tag.dash-risk-tag--amber {
     background: var(--canary);
-    color: #6B5D00;
+    color: var(--tint-6b5d00);
 }
 
 /* "INITIAL" tag — neutral/informational, not an urgency signal (the
@@ -2505,7 +2505,7 @@ a.dash-row:hover {
    REVISION/Waiting-on-CS tags in the same .dash-row-tags row. */
 .dash-risk-tag.dash-risk-tag--initial {
     background: rgba(148, 180, 187, 0.3);
-    color: #3E5E66;
+    color: var(--tint-3e5e66);
 }
 
 /* Spacing between the designer dashboard's stacked standalone sections
@@ -2601,6 +2601,6 @@ a.dash-row:hover {
    loud solid-red block sitting next to four calmer ones — same
    "colour the text, not the container" restraint .dash-stat-card--pending
    originally established for RAG numbers. */
-.dash-week-load-day--green .dash-week-load-day-count { color: #009900; }
-.dash-week-load-day--amber .dash-week-load-day-count { color: #6B5D00; }
-.dash-week-load-day--red .dash-week-load-day-count { color: #E60000; }
+.dash-week-load-day--green .dash-week-load-day-count { color: var(--tint-009900); }
+.dash-week-load-day--amber .dash-week-load-day-count { color: var(--tint-6b5d00); }
+.dash-week-load-day--red .dash-week-load-day-count { color: var(--tint-e60000); }

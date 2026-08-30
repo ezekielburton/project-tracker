@@ -264,6 +264,10 @@
     gap: 0.4rem;
 }
 
+:root[data-theme="dark"] .achievement-pin-list {
+    background: color-mix(in srgb, var(--sandstone) 70%, transparent);
+}
+
 .achievement-pin-item {
     background: var(--white);
     border: 1px solid var(--sandstone);
@@ -335,6 +339,10 @@
     gap: 0.5rem;
     padding: 0.6rem 0.85rem;
     background: color-mix(in srgb, var(--sandstone) 40%, white);
+}
+
+:root[data-theme="dark"] .ach-category-header {
+    background: color-mix(in srgb, var(--sandstone) 70%, transparent);
 }
 
 .ach-category-drag-handle,
@@ -604,7 +612,7 @@
     color: var(--white);
 }
 .pin-toggle-btn--active:hover {
-    background: #e06b3f;
-    border-color: #e06b3f;
+    background: var(--tint-e06b3f);
+    border-color: var(--tint-e06b3f);
     color: var(--white);
 }

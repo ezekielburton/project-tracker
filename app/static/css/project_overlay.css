@@ -357,6 +357,35 @@ moves read as the same color). */
     background: var(--salmon);
 }
 
+/* Dark-mode overrides for the sidebar lifecycle buttons (Put on Hold /
+   Resume / Cancel / Reactivate / Flag Issue) — a separate button family
+   from .overlay-file-action-btn and .btn-primary, missed by the original
+   sweep since it points at --sky/--black/--salmon rather than hardcoded
+   hex, so neither picked up a dark value on its own. Same Option A tinted
+   treatment as the other blue/danger buttons elsewhere. */
+:root[data-theme="dark"] .project-overlay-sidebar-action-btn--action {
+    color: #8FC4F0;
+    background: rgba(143, 196, 240, 0.15);
+    border-color: rgba(143, 196, 240, 0.45);
+}
+
+:root[data-theme="dark"] .project-overlay-sidebar-action-btn--action:hover {
+    color: #8FC4F0;
+    background: rgba(143, 196, 240, 0.24);
+    filter: none;
+}
+
+:root[data-theme="dark"] .project-overlay-sidebar-action-btn--danger {
+    color: #FF7A7A;
+    background: rgba(255, 79, 79, 0.14);
+    border-color: rgba(255, 122, 122, 0.4);
+}
+
+:root[data-theme="dark"] .project-overlay-sidebar-action-btn--danger:hover {
+    color: #FF7A7A;
+    background: rgba(255, 79, 79, 0.22);
+}
+
 /* Inline cancel-reason form — same expand-on-click pattern as
 .overlay-flag-revision-form elsewhere, just narrowed to fit the
 200px sidebar rather than a full-width card. */
@@ -395,7 +424,7 @@ moves read as the same color). */
     overflow-y: auto;
     padding: var(--space-5);
     min-width: 0;
-    background: #f7f5f5;
+    background: var(--gray-f7f5f5);
 }
 
 /* ------- Chat drawer — slides open from the right, independent of the rail tab. ------- */
@@ -635,6 +664,12 @@ moves read as the same color). */
     border-radius: var(--radius) var(--radius) 2px var(--radius);
 }
 
+:root[data-theme="dark"] .overlay-chat-message--own .overlay-chat-bubble {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
+}
+
 .overlay-chat-bubble-text {
     margin: 0;
     font-family: var(--font-body);
@@ -662,7 +697,7 @@ moves read as the same color). */
 /* @-mention highlight; own-bubble variant lightens against the darker background. */
 .overlay-chat-mention {
     font-weight: 700;
-    color: var(--sky-dark, #3D7DA6);
+    color: var(--sky-dark, var(--tint-3d7da6));
 }
 
 .overlay-chat-message--own .overlay-chat-mention {
@@ -675,7 +710,7 @@ moves read as the same color). */
     display: block;
     padding: var(--space-1) var(--space-2);
     margin-bottom: var(--space-2);
-    border-left: 3px solid var(--sky-dark, #3D7DA6);
+    border-left: 3px solid var(--sky-dark, var(--tint-3d7da6));
     background: rgba(0, 0, 0, 0.08);
     border-radius: 4px;
 }
@@ -691,7 +726,7 @@ moves read as the same color). */
     font-family: var(--font-body);
     font-size: var(--text-xs);
     font-weight: 700;
-    color: var(--sky-dark, #3D7DA6);
+    color: var(--sky-dark, var(--tint-3d7da6));
 }
 
 .overlay-chat-message--own .overlay-chat-quote-author {
@@ -819,7 +854,7 @@ moves read as the same color). */
 }
 
 .overlay-chat-menu-item-danger {
-    color: var(--red, #c0392b);
+    color: var(--red, var(--tint-c0392b));
 }
 
 /* ---- Quick-react popover — opened from the hover toolbar's smiley or the dropdown's React item. ---- */
@@ -1192,6 +1227,11 @@ button.overlay-chat-reaction-chip:hover {
     align-items: center;
     justify-content: center;
     transition: opacity 0.15s;
+}
+
+:root[data-theme="dark"] .overlay-chat-send-btn {
+    background: rgba(143, 196, 240, 0.18);
+    color: #8FC4F0;
 }
 
 .overlay-chat-send-btn:hover {
@@ -1816,6 +1856,45 @@ button.overlay-chat-reaction-chip:hover {
     filter: brightness(0.94);
 }
 
+/* Dark mode — same tinted language as .btn-primary, .btn-approve-*, .btn-danger.
+   Solid --sky/--clover/--tangerine fills read as pale, low-contrast blocks
+   against a dark page, so these get the same rgba tint + brighter text. */
+:root[data-theme="dark"] .overlay-file-action-btn--action {
+    color: #8FC4F0;
+    background: rgba(143, 196, 240, 0.15);
+    border-color: rgba(143, 196, 240, 0.45);
+}
+:root[data-theme="dark"] .overlay-file-action-btn--action:hover {
+    color: #8FC4F0;
+    background: rgba(143, 196, 240, 0.24);
+    border-color: rgba(143, 196, 240, 0.45);
+    filter: none;
+}
+
+:root[data-theme="dark"] .overlay-file-action-btn--primary {
+    color: #6FD07E;
+    background: rgba(76, 175, 90, 0.18);
+    border-color: rgba(111, 208, 126, 0.45);
+}
+:root[data-theme="dark"] .overlay-file-action-btn--primary:hover {
+    color: #6FD07E;
+    background: rgba(76, 175, 90, 0.27);
+    border-color: rgba(111, 208, 126, 0.45);
+    filter: none;
+}
+
+:root[data-theme="dark"] .overlay-file-action-btn--tangerine {
+    color: #FF9A73;
+    background: rgba(255, 133, 89, 0.16);
+    border-color: rgba(255, 133, 89, 0.45);
+}
+:root[data-theme="dark"] .overlay-file-action-btn--tangerine:hover {
+    color: #FF9A73;
+    background: rgba(255, 133, 89, 0.24);
+    border-color: rgba(255, 133, 89, 0.45);
+    filter: none;
+}
+
 /* Mark Approved layout: picker column (left) + notes textarea column
    (right) sit in .overlay-mark-approved-columns, a flex row. That row —
    not the picker alone, now that it shares space with the note column —
@@ -1910,6 +1989,12 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--black);
 }
 
+:root[data-theme="dark"] .overlay-draft-view-toggle-btn.active {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
+}
+
 .overlay-history-event-type {
     font-family: var(--font-body);
     font-size: var(--text-xs);
@@ -1994,6 +2079,17 @@ button.overlay-chat-reaction-chip:hover {
 .overlay-draft-main-deck-btn--active:hover {
     color: var(--black);
     border-color: var(--sky);
+}
+
+:root[data-theme="dark"] .overlay-draft-main-deck-btn--active {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
+}
+
+:root[data-theme="dark"] .overlay-draft-main-deck-btn--active:hover {
+    color: #8FC4F0;
+    border-color: rgba(143, 196, 240, 0.45);
 }
 
 .confirm-modal-card--wide {
@@ -2148,6 +2244,11 @@ button.overlay-chat-reaction-chip:hover {
 .deliverable-picker-option.is-selected {
     background: var(--sky);
     color: var(--black);
+}
+
+:root[data-theme="dark"] .deliverable-picker-option.is-selected {
+    background: rgba(143, 196, 240, 0.18);
+    color: #8FC4F0;
 }
 
 .deliverable-picker-empty {
@@ -2381,6 +2482,12 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--black);
 }
 
+:root[data-theme="dark"] .overlay-focus-toggle-btn.active {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
+}
+
 .overlay-deliverables-body.is-focused .overlay-deliverables-row[data-assigned-to-me="false"] {
     display: none;
 }
@@ -2571,6 +2678,12 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--black);
 }
 
+:root[data-theme="dark"] .overlay-deliverables-edit-toggle.is-active {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
+}
+
 .overlay-deliverables-edit-delete {
     font-family: var(--font-body);
     font-size: var(--text-xs);
@@ -2642,6 +2755,12 @@ button.overlay-chat-reaction-chip:hover {
     background: var(--sky);
     border-color: var(--sky);
     color: var(--black);
+}
+
+:root[data-theme="dark"] .overlay-apply-multiple-customer-tag.is-selected {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
 }
 
 .overlay-apply-multiple-customer-tag.is-hidden {
@@ -2977,6 +3096,12 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--black);
 }
 
+:root[data-theme="dark"] .overlay-submissions-view-toggle-btn.active {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
+}
+
 /* Shared "controls row" — left cluster (view/filter toggle) + right-pinned
    .overlay-scope-select — used by both the Submissions and Deliverables
    cards so the two stay visually consistent. Not card-specific. */
@@ -3251,7 +3376,7 @@ button.overlay-chat-reaction-chip:hover {
     padding: var(--space-3);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
-    background: var(--sandstone, #fafafa);
+    background: var(--sandstone, var(--white));
 }
 
 .overlay-preprod-history-panel.is-hidden {
@@ -3930,6 +4055,11 @@ margin here, so an empty panel (just the History button) stays tiny. */
     color: var(--white);
 }
 
+:root[data-theme="dark"] .project-overlay-create-step.active .project-overlay-create-step-num {
+    background: rgba(143, 196, 240, 0.24);
+    color: #8FC4F0;
+}
+
 .project-overlay-create-footer {
     flex-shrink: 0;
     display: flex;
@@ -3978,6 +4108,12 @@ margin here, so an empty panel (just the History button) stays tiny. */
     background: var(--sky);
     border-color: var(--sky);
     color: var(--white);
+}
+
+:root[data-theme="dark"] .overlay-create-brieftype-btn.active {
+    background: rgba(143, 196, 240, 0.18);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
 }
 
 /* Every field in create mode is permanently "live" (no view/edit toggle to
@@ -4281,6 +4417,19 @@ margin here, so an empty panel (just the History button) stays tiny. */
     border-color: var(--sky);
     filter: brightness(0.94);
     color: var(--black);
+}
+
+:root[data-theme="dark"] #overlay-visit-designer-picker .avatar-picker-action-label {
+    color: #8FC4F0;
+    background: rgba(143, 196, 240, 0.15);
+    border-color: rgba(143, 196, 240, 0.45);
+}
+
+:root[data-theme="dark"] #overlay-visit-designer-picker .avatar-picker-trigger:hover .avatar-picker-action-label {
+    background: rgba(143, 196, 240, 0.24);
+    border-color: rgba(143, 196, 240, 0.45);
+    color: #8FC4F0;
+    filter: none;
 }
 
 #overlay-visit-designer-picker .person-avatar {

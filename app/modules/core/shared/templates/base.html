@@ -1,11 +1,25 @@
 {% from '_macros.html' import user_avatar_visual %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"{% if current_user.is_authenticated and current_user.theme_preference %} data-theme="{{ current_user.theme_preference }}"{% endif %}>
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}One Vitamin Platform{% endblock %}</title>
+    <script>
+        // No-flash theme init — runs before any stylesheet paints. localStorage
+        // (this browser) wins over the server-rendered value (this account),
+        // since it reflects the most recent toggle even if the POST to save
+        // it account-side hasn't landed yet.
+        (function () {
+            try {
+                var saved = localStorage.getItem('helix-theme');
+                if (saved === 'dark' || saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', saved);
+                }
+            } catch (e) {}
+        })();
+    </script>
     <link rel="icon" type="image/png" href="static/images/favicon.png">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/blog.css') }}?v={{ config.STATIC_VERSION }}">
@@ -415,51 +429,80 @@
     </button>
 
     {# ─────────────────────────────────────────────
-    TOP-RIGHT FLOATING BAR
-    Fixed to viewport top-right. Contains admin trigger,
-    notification bell, and account menu — formerly in the navbar.
+    STICKY HEADER
+    Docked above the content column only — sidebar keeps its own
+    column. Page name left; apps/bell/dark toggle/account right.
+    Loading bar along the bottom edge, driven by sidebar.js.
     ───────────────────────────────────────────── #}
-    <div class="topbar-right" id="topbar-right">
-
-        {% if current_user.role == 'admin' %}
-        <button type="button" id="admin-panel-trigger" class="topbar-btn" title="Admin Panel">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-            </svg>
-        </button>
-        {% endif %}
-
-        <button type="button" id="notification-bell" class="topbar-btn nav-bell">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            {% if unread_count > 0 %}
-            <span class="bell-badge" id="notif-unread-badge">{{ unread_count }}</span>
-            {% endif %}
-        </button>
-
-        <div class="account-menu">
-            <button type="button" id="account-trigger" class="account-trigger topbar-btn">
-                {{ user_avatar_visual(current_user, 'profile') }}
-                <span class="account-name">{{ current_user.name.split()[0] }}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+    <header class="app-header" id="app-header">
+    
+        <span class="app-header-page-name" id="app-header-page-name"></span>
+    
+        <div class="app-header-actions">
+    
+            {% if current_user.role == 'admin' %}
+            <button type="button" id="admin-panel-trigger" class="topbar-btn" title="Admin Panel">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9" />
+                    <rect x="3" y="3" width="7" height="7" />
+                    <rect x="14" y="3" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" />
                 </svg>
             </button>
-            <div id="account-dropdown" class="account-dropdown hidden">
-                <a href="{{ url_for('profile.view') }}" class="account-dropdown-item sidebar-item--nav">Profile</a>
-                <a href="{{ url_for('auth.logout') }}" class="account-dropdown-item logout">Logout</a>
+            {% endif %}
+    
+            <button type="button" id="notification-bell" class="topbar-btn nav-bell">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {% if unread_count > 0 %}
+                <span class="bell-badge" id="notif-unread-badge">{{ unread_count }}</span>
+                {% endif %}
+            </button>
+    
+            {# Dark-mode toggle — segmented sun/moon pill, matches the wireframe.
+            Purely visual for now; the class flip + real theming land in Brief 2. #}
+            <button type="button" id="dark-mode-toggle" class="theme-toggle theme-toggle--light" title="Toggle dark mode">
+                <span class="theme-toggle-icon theme-toggle-icon--sun">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="4" />
+                        <path
+                            d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                    </svg>
+                </span>
+                <span class="theme-toggle-icon theme-toggle-icon--moon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                </span>    
+            </button>
+    
+            <div class="account-menu">
+                <button type="button" id="account-trigger" class="account-trigger topbar-btn">
+                    {{ user_avatar_visual(current_user, 'profile') }}
+                    <span class="account-name">{{ current_user.name.split()[0] }}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </button>
+                <div id="account-dropdown" class="account-dropdown hidden">
+                    <a href="{{ url_for('profile.view') }}" class="account-dropdown-item sidebar-item--nav">Profile</a>
+                    <button type="button" id="settings-dropdown-btn" class="account-dropdown-item">Settings</button>
+                    <a href="{{ url_for('auth.logout') }}" class="account-dropdown-item logout">Logout</a>          
+                </div>
             </div>
+    
         </div>
-
-    </div>
+    
+        <div class="header-loading-bar" id="header-loading-bar"></div>
+    
+        </header>
 
     {% endif %}{# end current_user.is_authenticated — sidebar + topbar #}
 
@@ -1028,6 +1071,16 @@
         </div>
     </div>
 
+    {# Settings overlay — settings-overlay.js fetches auth.account's content
+    the same way SPA nav does (X-Nav-Request) and drops it in here, so every
+    existing form/endpoint on that page keeps working unchanged. #}
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="settings-modal-box">
+            <button type="button" class="settings-modal-close" id="settings-modal-close">&times;</button>
+            <div class="settings-modal-body" id="settings-modal-body"></div>
+        </div>
+    </div>
+
     {# Main content area — shifts right to make room for sidebar when authenticated #}
     <main class="main-content" id="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -1182,14 +1235,6 @@
     <script src="{{ url_for('static', filename='js/preview.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/notifications.js') }}?v={{ config.STATIC_VERSION }}"></script>
-    {# detail.js tag removed 24 Aug 2026 — the file itself was deleted along
-    with the old pre-redesign detail page (app/static/js/detail.js, gone
-    since the "Old detail page removed" commit), but this <script> tag was
-    left behind loading it globally on every page. Same class of gap as the
-    assign-lead routes found the same day: a leftover reference to
-    something the cutover deleted, quietly 404ing (console-only, harmless —
-    the file's been gone since the cutover, so nothing has executed from it
-    in a long time) until someone actually looked at network requests. #}
     <script src="{{ url_for('static', filename='js/drag-drop.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('static', filename='js/rich-editor.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
@@ -1199,6 +1244,7 @@
     {% block extra_js %}{% endblock %}
     <!-- SPA:EXTRA_JS:END -->
     <script src="{{ url_for('static', filename='js/sidebar.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/settings-overlay.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}
     <script src="{{ url_for('static', filename='js/polling.js') }}?v={{ config.STATIC_VERSION }}"></script>

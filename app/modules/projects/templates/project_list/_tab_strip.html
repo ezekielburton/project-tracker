@@ -1,0 +1,37 @@
+{#
+   app/modules/projects/templates/project_list/_tab_strip.html
+   ───────────────────────────────────────────────────────────
+   Inner content of .tab-strip (My Projects / All-or-Team Projects /
+   Design Completed / saved views). Extracted out of index.html (28 Aug
+   2026, per Ezekiel — "can we have this spa injected too?", extended to
+   the whole toolbar, not just view switching) so the AJAX page-state
+   endpoint in project_list.py can re-render just this and the client can
+   swap it into .tab-strip's innerHTML without touching the .tab-strip
+   element itself — the delegated click listener project_list.js binds on
+   its stable parent (.project-list-header) survives every switch this way.
+   index.html includes this the same way for a normal page load.
+#}
+<a href="{{ url_for('project_list.index', view='my') }}"
+    class="tab-strip-item{% if view == 'my' %} active{% endif %}">My Projects</a>
+<a href="{{ url_for('project_list.index', view='all') }}"
+    class="tab-strip-item{% if view == 'all' %} active{% endif %}">
+    {% if effective_role in ('cs', 'admin', 'management') %}All Projects{% else %}Team Projects{% endif %}
+</a>
+<a href="{{ url_for('project_list.index', view='design_complete') }}"
+    class="tab-strip-item{% if view == 'design_complete' %} active{% endif %}">Design Completed</a>
+
+{% for sv in saved_views %}
+<div class="project-list-tab-wrap{% if view == 'view-' ~ sv.id %} active{% endif %}"
+    data-view-id="{{ sv.id }}">
+    <a href="{{ url_for('project_list.index', view='view-' ~ sv.id) }}"
+        class="tab-strip-item project-list-tab-saved{% if view == 'view-' ~ sv.id %} active{% endif %}">
+        <span class="project-list-tab-label">{{ sv.name }}</span>
+    </a>
+    <button type="button" class="project-list-tab-menu-btn" aria-label="View options">⋯</button>
+    <div class="project-list-tab-menu" hidden>
+        <button type="button" class="project-list-tab-menu-item" data-action="rename">Rename</button>
+        <button type="button" class="project-list-tab-menu-item project-list-tab-menu-item-danger"
+            data-action="delete">Delete</button>
+    </div>
+</div>
+{% endfor %}

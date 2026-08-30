@@ -100,7 +100,7 @@
 }
 
 .mini-stat-dot--red {
-    background: #E60000;
+    background: var(--tint-e60000);
 }
 
 .mini-stat-dot--amber {
@@ -108,7 +108,7 @@
 }
 
 .mini-stat-dot--green {
-    background: #00C400;
+    background: var(--tint-00c400);
 }
 
 .mini-stat-value {
@@ -148,7 +148,7 @@
 
 .tag--action {
     background: rgba(148, 180, 187, 0.22);
-    color: #3E5E66;
+    color: var(--tint-3e5e66);
 }
 
 .tag--owner {
@@ -169,18 +169,18 @@
 
 .tag--prioritize {
     background: rgba(229, 210, 89, 0.25);
-    color: #8A7A1E;
+    color: var(--tint-8a7a1e);
 }
 
 .tag--normal {
     background: rgba(0, 196, 0, 0.12);
-    color: #00c400;
+    color: var(--tint-00c400);
 }
 
 .tag--urgent,
 .tag--overdue {
     background: rgba(230, 0, 0, 0.12);
-    color: #E60000;
+    color: var(--tint-e60000);
 }
 
 /* Team tags — same colors as the .discipline-tag.tag--2d/3d/technical
@@ -190,17 +190,17 @@
    .discipline-tag directly) because the shared tag() macro only ever
    renders the base .tag class, never .discipline-tag. */
 .tag--2d {
-    background: #e8f0e8;
+    background: var(--gray-e8f0e8);
     color: var(--pine);
 }
 
 .tag--3d {
-    background: #e8edf5;
+    background: var(--tint-e8edf5);
     color: var(--ashen);
 }
 
 .tag--technical {
-    background: #f0eee8;
+    background: var(--gray-f0eee8);
     color: var(--oak);
 }
 
@@ -272,6 +272,47 @@
 
 .status-pill--salmon {
     background: var(--salmon);
+}
+
+/* ── Dark-mode status pills (2.4.1) — tinted, not solid-fill.
+   The 5 named project statuses use the brief's exact values; the remaining
+   modifiers (Briefed/sky, Submitted to Client/sage, canary, lavender) get
+   the same tinted treatment for visual consistency, brightened the same way. */
+:root[data-theme="dark"] .status-pill--coral {   /* In Design */
+    background: rgba(255, 133, 89, 0.16);
+    color: #FF9A73;
+}
+:root[data-theme="dark"] .status-pill--oak {     /* Pre-Production */
+    background: rgba(160, 124, 90, 0.18);
+    color: #C79E6B;
+}
+:root[data-theme="dark"] .status-pill--clover {  /* Handed to Production */
+    background: rgba(76, 175, 90, 0.18);
+    color: #6FD07E;
+}
+:root[data-theme="dark"] .status-pill--poppy {   /* On Hold */
+    background: rgba(255, 194, 77, 0.16);
+    color: #FFC24D;
+}
+:root[data-theme="dark"] .status-pill--salmon {  /* Cancelled */
+    background: rgba(255, 79, 79, 0.14);
+    color: #FF7A7A;
+}
+:root[data-theme="dark"] .status-pill--sky {     /* Briefed */
+    background: rgba(185, 222, 254, 0.16);
+    color: #C8E5FE;
+}
+:root[data-theme="dark"] .status-pill--sage {    /* Submitted to Client */
+    background: rgba(158, 212, 165, 0.16);
+    color: #B3DDB9;
+}
+:root[data-theme="dark"] .status-pill--canary {
+    background: rgba(229, 210, 89, 0.16);
+    color: #EBDC7E;
+}
+:root[data-theme="dark"] .status-pill--lavender {
+    background: rgba(179, 144, 255, 0.16);
+    color: #C4A8FF;
 }
 
 /*  ---- Tab Strip

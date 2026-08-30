@@ -1,0 +1,50 @@
+{#
+   app/modules/projects/templates/project_list/_sort_panel_body.html
+   ───────────────────────────────────────────────────────────────
+   Inner content of #sort-panel (Group by / Order by columns). Extracted
+   out of index.html (28 Aug 2026, per Ezekiel — "can we have this spa
+   injected too?") so the AJAX page-state endpoint in project_list.py can
+   re-render just this and the client can swap it into #sort-panel's
+   innerHTML — #sort-panel itself is never replaced, so the delegated
+   click listener project_list.js binds directly on it (sort/group option
+   clicks, #sort-clear-all) survives every filter/sort/search/view change.
+   index.html includes this the same way for a normal page load.
+#}
+<div class="sort-panel-header">
+    <span class="sort-panel-title">Sort</span>
+    <button type="button" class="sort-clear-all" id="sort-clear-all">Clear</button>
+</div>
+<div class="project-sort-panel-columns">
+    <div class="project-sort-panel-col">
+        <div class="project-sort-panel-col-title">Group by</div>
+        <div class="sort-panel-options">
+            {% for value, label in group_options %}
+            <button type="button"
+                class="project-group-option{% if group_field == value %} is-selected{% endif %}"
+                data-group-field="{{ value }}">
+                {{ label }}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="project-sort-panel-col">
+        <div class="project-sort-panel-col-title">Order by</div>
+        <div class="sort-panel-options">
+            {% for value, label in sort_options %}
+            <div class="sort-option-row">
+                <span class="sort-option-label">{{ label }}</span>
+                <div class="sort-option-directions">
+                    <button type="button"
+                        class="project-sort-option{% if sort_field == value and sort_dir == 'asc' %} is-selected{% endif %}"
+                        data-sort-field="{{ value }}" data-sort-dir="asc"
+                        aria-label="Sort {{ label }} ascending">▲</button>
+                    <button type="button"
+                        class="project-sort-option{% if sort_field == value and sort_dir == 'desc' %} is-selected{% endif %}"
+                        data-sort-field="{{ value }}" data-sort-dir="desc"
+                        aria-label="Sort {{ label }} descending">▼</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>

@@ -46,7 +46,7 @@ reuses that class elsewhere in the app is affected. */
     align-items: center;
     justify-content: center;
     overflow: auto;
-    background: #525659;
+    background: var(--gray-525659);
     /* neutral dark surround, same idea as a PDF reader */
 }
 

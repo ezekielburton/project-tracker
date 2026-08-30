@@ -29,7 +29,7 @@
     font-family: var(--font-logo);
     font-size: 1rem;
     letter-spacing: 0.12em;
-    color: #aaa;
+    color: var(--grey-mid);
     padding: 0 1.5rem;
     margin: 0 0 1.25rem;
     text-transform: uppercase;
@@ -45,7 +45,7 @@
     cursor: pointer;
     border: 1.5px solid var(--grey-light);
     border-radius: 10px;
-    background: #FFFFFF;
+    background: var(--plain-white);
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
@@ -87,9 +87,9 @@
 .blog-post-item-version-pill {
     font-family: var(--font-mono);
     font-size: 0.62rem;
-    background: #fefefe;
+    background: var(--gray-fefefe);
     color: var(--tangerine);
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--gray-e0e0e0);
     padding: 0.18rem 0.55rem;
     border-radius: 20px;
     letter-spacing: 0.03em;
@@ -97,8 +97,8 @@
 }
 
 .blog-post-item--draft .blog-post-item-date-pill {
-    color: #aaa;
-    border-color: #ddd;
+    color: var(--grey-mid);
+    border-color: var(--gray-dddddd);
 }
 
 /* ── Right: content area ─────────────────────────────────── */
@@ -155,7 +155,7 @@
 .blog-nav-num {
     font-family: var(--font-mono);
     font-size: 0.7rem;
-    color: #bbb;
+    color: var(--gray-bbbbbb);
     flex-shrink: 0;
     transition: color 0.15s;
 }
@@ -163,7 +163,7 @@
 .blog-nav-label {
     font-family: var(--font-body);
     font-size: 0.875rem;
-    color: #888;
+    color: var(--text-muted);
     flex: 1;
     transition: color 0.15s;
     text-transform: none;
@@ -259,7 +259,7 @@
 
 .blog-post-meta {
     font-size: 0.8rem;
-    color: #aaa;
+    color: var(--grey-mid);
     margin: 0.5rem 0 0;
 }
 
@@ -289,7 +289,7 @@
 .blog-body {
     font-size: 0.9rem;
     line-height: 1.7;
-    color: #444;
+    color: var(--gray-444444);
     margin: 0 0 0.75rem;
     white-space: pre-line;
 }
@@ -301,7 +301,7 @@
     padding: 0.85rem 1.1rem;
     font-size: 0.875rem;
     line-height: 1.6;
-    color: #555;
+    color: var(--grey-dark);
     margin: 1.25rem 0;
 }
 
@@ -317,7 +317,7 @@
 .blog-list li {
     font-size: 0.9rem;
     line-height: 1.7;
-    color: #444;
+    color: var(--gray-444444);
     margin-bottom: 0.35rem;
 }
 
@@ -372,7 +372,7 @@
 
 .blog-comment-date {
     font-size: 0.75rem;
-    color: #aaa;
+    color: var(--grey-mid);
 }
 
 .blog-comment-delete {
@@ -389,7 +389,7 @@
 .blog-comment-body {
     font-size: 0.875rem;
     line-height: 1.6;
-    color: #444;
+    color: var(--gray-444444);
     margin: 0 0 0.5rem;
 }
 
@@ -473,7 +473,7 @@
 
 .blog-no-comments {
     font-size: 0.85rem;
-    color: #aaa;
+    color: var(--grey-mid);
     margin: 0 0 1.25rem;
 }
 
@@ -555,7 +555,7 @@
 .blog-editor-block-type {
     font-family: var(--font-mono);
     font-size: 0.65rem;
-    color: #aaa;
+    color: var(--grey-mid);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     margin-bottom: 0.4rem;
@@ -594,7 +594,7 @@
     border-radius: 4px;
     background: var(--white);
     cursor: pointer;
-    color: #666;
+    color: var(--gray-666666);
 }
 
 .blog-block-btn:hover {
@@ -682,7 +682,7 @@
 
 .blog-notify-hint {
     font-size: 0.775rem;
-    color: #aaa;
+    color: var(--grey-mid);
     margin-left: 0.25rem;
 }
 
@@ -711,7 +711,7 @@
     border-bottom: 1px solid var(--grey-light);
     font-family: var(--font-body);
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-muted);
     cursor: pointer;
     text-align: left;
     letter-spacing: 0.02em;
