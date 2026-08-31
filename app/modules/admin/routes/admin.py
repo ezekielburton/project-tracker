@@ -33,7 +33,8 @@ def admin_required(f):
 @admin_required
 def list_users():
     users = User.query.order_by(User.name).all()
-    return jsonify([{'id': u.id, 'name': u.name, 'email': u.email, 'role': u.role, 'team': u.team} for u in users])
+    return jsonify([{'id': u.id, 'name': u.name, 'email': u.email, 'role': u.role,
+                     'team': u.team, 'is_active': u.is_active} for u in users])
 
 @admin_bp.route ('/admin/emulate/<int:user_id>', methods=['POST'])
 @login_required
@@ -42,6 +43,8 @@ def start_emulation(user_id):
     user = User.query.get_or_404(user_id)
     if user.role == 'admin':
      return jsonify({'success': False, 'error': 'Cannot emulate an admin account'}), 400
+    if not user.is_active:
+        return jsonify({'success': False, 'error': 'Cannot emulate a deactivated account'}), 400
     session['emulating_user_id'] = user.id
     return jsonify({'success': True, 'redirect_url': url_for('main.index')})
 
@@ -183,7 +186,8 @@ def update_user(user_id):
         user.set_password(password)
 
     db.session.commit()
-    return jsonify({'success': True, 'user': {'id': user.id, 'name': user.name, 'email': user.email, 'role': user.role, 'team': user.team}})
+    return jsonify({'success': True, 'user': {'id': user.id, 'name': user.name, 'email': user.email,
+                    'role': user.role, 'team': user.team, 'is_active': user.is_active}})
 
 
 @admin_bp.route('/admin/api/users/<int:user_id>/reset-password', methods=['POST'])
@@ -194,6 +198,26 @@ def admin_reset_password(user_id):
     user.set_password('Vitamin2026!')
     db.session.commit()
     return jsonify({'success': True})
+
+
+@admin_bp.route('/admin/api/users/<int:user_id>/active', methods=['POST'])
+@login_required
+@admin_required
+def set_user_active(user_id):
+    """Activate or deactivate an account. A deactivated user stays in the DB so
+    existing project ties still resolve, but is hidden from every picker and
+    blocked from login. Body: {"active": true|false}."""
+    if user_id == current_user.id:
+        return jsonify({'success': False, 'error': 'Cannot deactivate your own account'}), 400
+    user = User.query.get_or_404(user_id)
+    data = request.get_json(silent=True) or {}
+    user.is_active = bool(data.get('active'))
+    db.session.commit()
+    verb = 'reactivated' if user.is_active else 'deactivated'
+    log_activity('user_' + ('activated' if user.is_active else 'deactivated'),
+                 f'{current_user.name} {verb} account "{user.name}"',
+                 user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
+    return jsonify({'success': True, 'is_active': user.is_active})
 
 
 @admin_bp.route('/admin/api/users/<int:user_id>', methods=['DELETE'])

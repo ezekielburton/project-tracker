@@ -13,6 +13,7 @@ from flask_login import login_required, current_user
 
 from app.modules.core.shared.models import Project
 from app.modules.core.shared.lib.decorators import role_required
+from app.modules.core.shared.lib.users import active_users_query
 
 from ._common import (
     project_overlay_bp,
@@ -165,16 +166,16 @@ def _build_details_context(project, actor):
         or actor.role == 'project_owner'
     )
 
-    cs_lead_options = User.query.filter_by(role='cs').order_by(User.name).all() if can_reassign_cs_lead else []
+    cs_lead_options = active_users_query().filter_by(role='cs').order_by(User.name).all() if can_reassign_cs_lead else []
 
-    available_cs_users = User.query.filter(
+    available_cs_users = active_users_query().filter(
         User.role.in_(['cs', 'admin', 'management']),
         User.id != project.cs_lead_id,
         ~User.id.in_(secondary_cs_ids) if secondary_cs_ids else True
     ).order_by(User.name).all() if can_manage_cs else []
 
     if actor.role in ('admin', 'management') or actor.id == project.cs_lead_id:
-        owner_options = User.query.filter_by(role='project_owner').order_by(User.name).all()
+        owner_options = active_users_query().filter_by(role='project_owner').order_by(User.name).all()
     elif actor.role == 'project_owner':
         owner_options = [actor]
     else:
@@ -202,7 +203,7 @@ def _build_details_context(project, actor):
             or actor.team == team
             or (assignment and assignment.user_id == actor.id)
         )
-        options = User.query.filter(
+        options = active_users_query().filter(
             User.team == team,
             User.role.in_(['designer', 'team_lead'])
         ).order_by(User.name).all() if can_manage else []
@@ -218,7 +219,7 @@ def _build_details_context(project, actor):
     can_manage_concept_kv = can_manage_concept_kv_full or can_self_claim_concept_kv
 
     if can_manage_concept_kv_full:
-        concept_kv_designer_options = User.query.filter(
+        concept_kv_designer_options = active_users_query().filter(
             User.role.in_(['designer', 'team_lead'])
         ).order_by(User.name).all()
     elif can_self_claim_concept_kv:

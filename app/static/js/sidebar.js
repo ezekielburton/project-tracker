@@ -18,6 +18,52 @@
     var pageNameEl = document.getElementById('app-header-page-name');
     var themeToggle = document.getElementById('dark-mode-toggle');
 
+    /* Dark-mode toggle wiring lives here, ABOVE the `if (!sidebar) return`
+       bail-out below (2.4.1 follow-up, per Ezekiel) — it used to sit further
+       down with the rest of the sidebar setup, so on any unauthenticated
+       page (no #sidebar, e.g. login/register) the whole script exited
+       before ever reaching it and the toggle silently did nothing. Doesn't
+       reference `sidebar` at all, so it's safe to run unconditionally.
+       Exposed on window so Settings > Appearance's own toggle can drive
+       the same state — repaints every .theme-toggle currently on the
+       page, header's included, so both stay in sync. Persisted both ways:
+       localStorage for instant no-flash reload, and a fire-and-forget POST
+       to the account so it follows the user cross-device (same auto-save
+       pattern as the notification/sound prefs elsewhere in this file) —
+       that POST 401s harmlessly when logged out. */
+    window.helixSetThemeStub = function (isDark) {
+        var theme = isDark ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+            btn.classList.toggle('theme-toggle--light', !isDark);
+            btn.classList.toggle('theme-toggle--dark', isDark);
+        });
+        try { localStorage.setItem('helix-theme', theme); } catch (e) {}
+        fetch('/account/theme-prefs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: theme })
+        }).catch(function () {});
+    };
+
+    // Sync the toggle's own visual state to whatever data-theme is already
+    // on <html> (set by the server render or the no-flash inline script,
+    // before this file ever runs) — just a repaint, not a user action, so
+    // it doesn't touch localStorage or POST.
+    (function () {
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+            btn.classList.toggle('theme-toggle--light', !isDark);
+            btn.classList.toggle('theme-toggle--dark', isDark);
+        });
+    })();
+
+    if (themeToggle) {
+        themeToggle.addEventListener('click', function () {
+            window.helixSetThemeStub(!themeToggle.classList.contains('theme-toggle--dark'));
+        });
+    }
+
     if (!sidebar) return;
 
     /* ── 2. localStorage key ─────────────────────────────────────────
@@ -244,44 +290,5 @@
     // Full page load has no fetch to hook into — just mirror the <title>
     // the server already rendered. SPA nav updates this itself, above.
     setHeaderPageName(document.title);
-
-    // Dark-mode toggle. Exposed on window so Settings > Appearance's own
-    // toggle can drive the same state — repaints every .theme-toggle
-    // currently on the page, header's included, so both stay in sync.
-    // Persisted both ways: localStorage for instant no-flash reload, and a
-    // fire-and-forget POST to the account so it follows the user cross-device
-    // (same auto-save pattern as the notification/sound prefs above).
-    window.helixSetThemeStub = function (isDark) {
-        var theme = isDark ? 'dark' : 'light';
-        document.documentElement.setAttribute('data-theme', theme);
-        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
-            btn.classList.toggle('theme-toggle--light', !isDark);
-            btn.classList.toggle('theme-toggle--dark', isDark);
-        });
-        try { localStorage.setItem('helix-theme', theme); } catch (e) {}
-        fetch('/account/theme-prefs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ theme: theme })
-        }).catch(function () {});
-    };
-
-    // Sync the toggle's own visual state to whatever data-theme is already
-    // on <html> (set by the server render or the no-flash inline script,
-    // before this file ever runs) — just a repaint, not a user action, so
-    // it doesn't touch localStorage or POST.
-    (function () {
-        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
-            btn.classList.toggle('theme-toggle--light', !isDark);
-            btn.classList.toggle('theme-toggle--dark', isDark);
-        });
-    })();
-
-    if (themeToggle) {
-        themeToggle.addEventListener('click', function () {
-            window.helixSetThemeStub(!themeToggle.classList.contains('theme-toggle--dark'));
-        });
-    }
 
 })();

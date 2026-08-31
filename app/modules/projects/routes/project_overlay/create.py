@@ -8,6 +8,7 @@ details.py's _build_details_context needs them too.
 
 from flask import render_template, abort, request, jsonify
 from flask_login import login_required
+from app.modules.core.shared.lib.users import active_users_query
 
 from app.modules.core.shared.models import Project
 
@@ -76,8 +77,8 @@ def _create_mode_context(project, actor):
     )
 
     return {
-        'cs_lead_options': User.query.filter(User.role.in_(['cs', 'admin', 'management'])).order_by(User.name).all(),
-        'project_owner_options': User.query.filter_by(role='project_owner').order_by(User.name).all(),
+        'cs_lead_options': active_users_query().filter(User.role.in_(['cs', 'admin', 'management'])).order_by(User.name).all(),
+        'project_owner_options': active_users_query().filter_by(role='project_owner').order_by(User.name).all(),
         'client_options': Client.query.order_by(Client.name).all(),
         'design_type_options': DesignType.query.order_by(DesignType.name).all(),
         'design_direction_options': DesignDirection.query.order_by(DesignDirection.name).all(),

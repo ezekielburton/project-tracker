@@ -3,6 +3,7 @@ from flask_login import login_required
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Project, ProjectNote, User
 from app.modules.core.shared.lib.utils import log_activity, mark_project_activity_seen
+from app.modules.core.shared.lib.users import active_users_query
 
 project_notes_bp = Blueprint('project_notes', __name__, template_folder='../templates')
 
@@ -115,7 +116,7 @@ def overlay_notes(project_id):
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     site_visits = sorted(project.site_visits, key=lambda v: v.created_at, reverse=True)
-    designers = User.query.filter(
+    designers = active_users_query().filter(
         User.role.in_(['designer', 'team_lead'])
     ).order_by(User.name).all()
 

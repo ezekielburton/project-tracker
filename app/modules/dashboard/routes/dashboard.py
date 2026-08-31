@@ -7,6 +7,7 @@ from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectD
 from app.modules.core.shared.lib.utils import get_actor
 from app.modules.dashboard.lib.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer, needs_client_approval
 from app.modules.core.shared.lib.status_vocabulary import derive_project_status
+from app.modules.core.shared.lib.users import active_users_query
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for call for this blueprint's routes uses that, e.g.
@@ -149,8 +150,8 @@ def _resolve_dashboard_scope(user):
     management/admin user, and computing them here once is cheaper than
     every caller re-querying them.
     """
-    cs_leads = User.query.filter_by(role='cs').order_by(User.name.asc()).all()
-    designers = User.query.filter(User.role.in_(['designer', 'team_lead'])).order_by(User.name.asc()).all()
+    cs_leads = active_users_query().filter_by(role='cs').order_by(User.name.asc()).all()
+    designers = active_users_query().filter(User.role.in_(['designer', 'team_lead'])).order_by(User.name.asc()).all()
 
     if user.role not in _SCOPE_SWITCHER_ROLES:
         return None, user, cs_leads, designers
@@ -2370,7 +2371,7 @@ def _compute_role_snapshot():
     tiles_by_team = {'3D': [], '2D': [], 'Technical': []}
     tiles_unassigned = []
 
-    for u in User.query.filter(User.role.in_(_ROLE_SNAPSHOT_ROLES)).order_by(User.name.asc()).all():
+    for u in active_users_query().filter(User.role.in_(_ROLE_SNAPSHOT_ROLES)).order_by(User.name.asc()).all():
         scoped = _scoped_projects(u, active_only=True).all()
         active_count = len(scoped)
 

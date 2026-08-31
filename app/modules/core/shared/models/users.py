@@ -14,6 +14,9 @@ class User(db.Model, UserMixin):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_conditional_reviewer = db.Column(db.Boolean, default=False)
     team = db.Column(db.String(20), nullable=True)
+    # False = deactivated: hidden from every user picker and blocked from login.
+    # Row is kept so existing project ties still resolve the person's name.
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
     nas_url = db.Column(db.String(500), nullable=True)
 
     # JSON string storing per-type email notification opt-outs.

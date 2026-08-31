@@ -28,7 +28,7 @@
         <div class="filter-column-list">
             {% for u in filter_options.cs_leads %}
             <button type="button"
-                class="filter-chip-row{% if u.id in active_filters.cs_lead %} is-selected{% endif %}"
+                class="filter-chip-row{% if u.id in active_filters.cs_lead %} is-selected{% endif %}{% if not u.is_active %} is-deactivated{% endif %}"
                 data-filter-group="cs_lead" data-filter-value="{{ u.id }}">
                 <span class="filter-chip-text">{{ u.name }}</span>
                 <span class="filter-chip-count">{{ filter_counts.cs_lead.get(u.id, 0) }}</span>
@@ -42,10 +42,24 @@
         <div class="filter-column-list">
             {% for u in filter_options.designers %}
             <button type="button"
-                class="filter-chip-row{% if u.id in active_filters.designers %} is-selected{% endif %}"
+                class="filter-chip-row{% if u.id in active_filters.designers %} is-selected{% endif %}{% if not u.is_active %} is-deactivated{% endif %}"
                 data-filter-group="designers" data-filter-value="{{ u.id }}">
                 <span class="filter-chip-text">{{ u.name }}</span>
                 <span class="filter-chip-count">{{ filter_counts.designers.get(u.id, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-column">
+        <div class="filter-column-label">Project Owner</div>
+        <div class="filter-column-list">
+            {% for u in filter_options.project_owners %}
+            <button type="button"
+                class="filter-chip-row{% if u.id in active_filters.project_owner %} is-selected{% endif %}{% if not u.is_active %} is-deactivated{% endif %}"
+                data-filter-group="project_owner" data-filter-value="{{ u.id }}">
+                <span class="filter-chip-text">{{ u.name }}</span>
+                <span class="filter-chip-count">{{ filter_counts.project_owner.get(u.id, 0) }}</span>
             </button>
             {% endfor %}
         </div>

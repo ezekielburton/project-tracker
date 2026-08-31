@@ -95,6 +95,7 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project, ha
     from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status
     from app.modules.core.shared.services.status_tracking import bulk_deliverable_status_started_at
     from app.modules.core.shared.models import User
+    from app.modules.core.shared.lib.users import active_users_query
     status_by_id = {}
     assigned_ids = set()
     for d in deliverables:
@@ -112,7 +113,7 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project, ha
     for d in deliverables:
         needed_teams.update(_needed_teams(d))
     options_by_team = {
-        team: User.query.filter(User.role.in_(['designer', 'team_lead']), User.team == team)
+        team: active_users_query().filter(User.role.in_(['designer', 'team_lead']), User.team == team)
                          .order_by(User.name).all()
         for team in needed_teams
     }

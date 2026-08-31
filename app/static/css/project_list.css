@@ -1366,6 +1366,10 @@ body.is-resizing-column * {
     color: var(--black);
 }
 
+.filter-chip-row.is-deactivated {
+    opacity: 0.5;
+}
+
 .filter-chip-row:hover {
     background: var(--surface-hover);
 }

@@ -1,5 +1,6 @@
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Notification, User, ProjectSecondaryCS, ProjectSecondaryCsRegion
+from app.modules.core.shared.lib.users import active_users_query
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -198,18 +199,9 @@ def _send_notification_email(recipient, message, project=None):
 def create_notification(recipient, message, notification_type, project=None,
                         triggered_by=None, pref_key=None, link=None,
                         send_email=True):
-    """
-    Create a single in-app notification and (optionally) send an email.
-
-    pref_key  — the key to check against recipient.notification_prefs before
-                sending the email. If None, email always fires (backwards-
-                compatible for calls that predate the preference system).
-                In-app notification is ALWAYS created regardless of pref.
-    send_email — set to False to suppress the email entirely, regardless of
-                 pref_key. Use when a separate direct email has already been
-                 sent for the same event (e.g. notify_admin_of_new_feedback)
-                 to avoid duplicates. In-app notification is still created.
-    """
+    """Create an in-app notification and optionally email it. The in-app
+    notification is always created; the email is gated by pref_key (None =
+    always send) and skipped entirely when send_email is False."""
     notification = Notification(
         recipient_id=recipient.id,
         message=message,
@@ -241,7 +233,7 @@ def notify_team_leads_of_new_project(project, teams_requested, triggered_by):
     """
     for team_name in teams_requested:
         # Notify team leads — they need to action this by assigning designers
-        team_leads = User.query.filter_by(role='team_lead', team=team_name).all()
+        team_leads = active_users_query().filter_by(role='team_lead', team=team_name).all()
         for team_lead in team_leads:
             create_notification(
                 recipient=team_lead,
@@ -253,7 +245,7 @@ def notify_team_leads_of_new_project(project, teams_requested, triggered_by):
             )
 
         # Notify all designers on this team — so they're aware before assignment
-        designers = User.query.filter_by(role='designer', team=team_name).all()
+        designers = active_users_query().filter_by(role='designer', team=team_name).all()
         for designer in designers:
             create_notification(
                 recipient=designer,
@@ -366,21 +358,8 @@ def notify_cs_of_revision_submitted(project, triggered_by):
 
 
 def notify_project_owner_of_stream_uploaded(deliverable, project, stream_label, triggered_by):
-    """
-    Notify the Project Owner when a Pre-Production stream (2D/3D/Technical) is
-    marked done and ready for their review/Approve-or-Flag decision. Fired
-    from mark_stream_done() in project_preproduction.py — the only route that
-    puts a stream in front of the Project Owner this way.
-
-    No secondary-CS/region fan-out here (unlike notify_secondary_cs_of_
-    deliverable_status) — Approve/Flag for Reupload is scoped to
-    _can_manage_preproduction() (admin/management/Project Owner/CS Lead), but
-    the Project Owner specifically is who this stream is now waiting on, so
-    they're the one who needs the nudge. Self-triggered case (a Project Owner
-    who is also the one marking their own upload done) is excluded, same
-    "don't notify people about their own actions" rule every other notify_*
-    function here follows.
-    """
+    """Notify the Project Owner that a Pre-Production stream is ready for their
+    Approve/Flag decision. Only the owner is notified; skipped if they triggered it."""
     owner = User.query.get(project.project_owner_id) if project.project_owner_id else None
     if not owner or owner.id == triggered_by.id:
         return
@@ -397,17 +376,9 @@ def notify_project_owner_of_stream_uploaded(deliverable, project, stream_label, 
 
 
 def notify_designer_of_stream_approved(deliverable, project, stream_label, designer, triggered_by):
-    """
-    Notify the assigned designer when the Project Owner approves their
-    Pre-Production stream (2D/3D/Technical) — fired from approve_stream() in
-    project_preproduction.py. The designer needs to share the files by email
-    until production gets access to file storage in the app; the message says
-    as much, since there's no in-app hand-off yet.
-
-    designer can be None (a stream can technically be approved with no
-    DeliverableAssignment row — nothing forces one to exist first) — no-op
-    in that case, same as the self-triggered guard below, since there's no
-    one to notify either way."""
+    """Notify the assigned designer that their Pre-Production stream was approved.
+    The message asks them to share files with Production by email (no in-app
+    hand-off yet). No-op if there's no designer or they triggered it themselves."""
     if not designer or designer.id == triggered_by.id:
         return
 
@@ -645,27 +616,9 @@ def notify_of_ckv_posm_pending(project, triggered_by):
 
 
 def notify_of_posm_details_added(project, triggered_by):
-    """
-    Notify the project's assigned designers (project.assigned_designers —
-    the ProjectDesigner rows shown in every dashboard's "Assigned Designers"
-    column) when CS adds POSM customer details to a project that was paused
-    in 'awaiting_posm_details' status (the "Pause" choice from the C&KV-only
-    approval prompt — see notify_of_ckv_posm_pending for the sibling "Add
-    POSM" choice, which notifies immediately instead of waiting for this).
-
-    Deliberately uses project.assigned_designers rather than
-    _get_project_designers() (which is deliverable/concept/kv based) — at
-    this point no POSM deliverables have been assigned to anyone yet, so
-    that helper would likely return nothing useful. assigned_designers is
-    the project-level team assignment made back when the project was first
-    briefed, which is who actually needs to know work has resumed.
-
-    Only fires once — see the had_no_customers_before check in
-    update_project() (projects_brief.py) that gates the call site. The
-    project's status stays 'awaiting_posm_details' after this; a designer
-    must explicitly click "Resume" (resume_posm_project route) to move it
-    to in_progress, rather than this notification doing it automatically.
-    """
+    """Notify the project's assigned designers that POSM details were added and
+    work can resume. Uses project.assigned_designers (the briefed team), not
+    deliverable-based designers, since no POSM deliverables are assigned yet."""
     message = f'"{project.name}" — POSM customer details have been added. Resume the project to continue.'
 
     recipients = []
@@ -752,7 +705,7 @@ def broadcast_update_email(version, subject_line, intro_line, blog_url):
     app_url = 'https://app.vitamin-e.work'
     sent = 0
 
-    users = User.query.all()
+    users = active_users_query().all()
 
     for user in users:
         if not user.email:
@@ -988,7 +941,7 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
     blog_url = f'https://app.vitamin-e.work/blog#post-{post.id}'
     email_enabled = str(current_app.config.get('MAIL_ENABLED', 'false')).lower() == 'true'
 
-    users = User.query.all()
+    users = active_users_query().all()
 
     # ── In-app notifications (fast DB writes — keep synchronous) ──────────────
     if send_inapp:
@@ -1087,17 +1040,12 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
         threading.Thread(target=_send_emails, daemon=True).start()
 
 
-# ── Request Editing Access (26 Aug 2026, per Ezekiel) — see
-# project_overlay.py's request_edit_access()/approve_edit_access()/
-# deny_edit_access() for the full flow this backs. ─────────────────────────
+# ── Request Editing Access — backs project_overlay.py's
+# request_edit_access()/approve_edit_access()/deny_edit_access(). ───────────
 
 def notify_cs_of_edit_access_request(project, requester):
-    """Notify the CS Lead and every Secondary CS that a designer has
-    requested editing access on their project. Same recipient set as
-    notify_cs_of_brief_flag above — project_overlay.py's
-    _can_decide_edit_access_request grants approve/deny to that exact
-    tier (CS Lead, Secondary CS, management, admin, or the assigned
-    Project Owner)."""
+    """Notify the CS Lead and every Secondary CS that a designer requested
+    editing access on their project — the tier that can approve or deny it."""
     message = f'{requester.name} requested editing access to "{project.name}".'
 
     cs_lead = User.query.get(project.cs_lead_id)

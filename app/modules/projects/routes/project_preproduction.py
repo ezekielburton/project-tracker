@@ -37,6 +37,7 @@ Design:
 
 from flask import Blueprint, request, jsonify, render_template
 from flask_login import login_required, current_user
+from app.modules.core.shared.lib.users import active_users_query
 from datetime import datetime
 
 from app.modules.core.shared.models import Project, Deliverable
@@ -278,7 +279,7 @@ def _build_preproduction_row(d, actor, can_act):
         # queried when can_act — no point building an options list nobody
         # can use.
         if can_act:
-            stream_row['assign_options'] = User.query.filter(
+            stream_row['assign_options'] = active_users_query().filter(
                 User.team == cfg['team'],
                 User.role.in_(['designer', 'team_lead'])
             ).order_by(User.name).all()

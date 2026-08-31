@@ -54,6 +54,7 @@ def _eager_load(query):
     """
     return query.options(
         joinedload(Project.cs_lead),
+        joinedload(Project.project_owner),
         joinedload(Project.client_brand),
         selectinload(Project.assigned_designers).joinedload(ProjectDesigner.designer),
         selectinload(Project.project_customers),
@@ -296,6 +297,11 @@ def _row_passes_filters(row, exclude=None):
     if exclude != 'cs_lead':
         cs_lead_ids = _parse_ids('cs_lead')
         if cs_lead_ids and not (row['cs_lead'] and row['cs_lead']['id'] in cs_lead_ids):
+            return False
+
+    if exclude != 'project_owner':
+        owner_ids = _parse_ids('project_owner')
+        if owner_ids and not (row['project_owner'] and row['project_owner']['id'] in owner_ids):
             return False
 
     if exclude != 'client':
@@ -673,6 +679,7 @@ def _build_filter_counts(all_rows):
 
     return {
         'cs_lead': _count_by_id(_rows_excluding(all_rows, 'cs_lead'), 'cs_lead'),
+        'project_owner': _count_by_id(_rows_excluding(all_rows, 'project_owner'), 'project_owner'),
         'designers': designer_counts,
         'client': client_counts,
         'brief_type': _count_by_value(_rows_excluding(all_rows, 'brief_type'), 'brief_type'),
@@ -703,6 +710,7 @@ def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_ap
         'client_id': p.client_id,
         'job_number': p.job_number,
         'cs_lead': _serialize_person(p.cs_lead),
+        'project_owner': _serialize_person(p.project_owner),
         'designers': [_serialize_person(pd.designer) for pd in p.assigned_designers],
         'design_teams': [t.strip() for t in (p.design_teams_requested or '').split(',') if t.strip()],
         'design_type': 'ccm' if p.brief_type == 'ccm' else (str(p.design_type_id) if p.design_type_id else None),
@@ -881,8 +889,11 @@ def _build_page_context(view, user):
     view_total = view_total_query.count() if view_total_query is not None else 0
 
     filter_options = {
-        'cs_leads': UserModel.query.filter(UserModel.role.in_(['cs', 'admin'])).order_by(UserModel.name).all(),
-        'designers': UserModel.query.filter(UserModel.role.in_(['designer', 'team_lead'])).order_by(UserModel.name).all(),
+        # Deactivated people stay selectable (projects still reference them) but
+        # sort to the bottom via is_active.desc() — active first, then name.
+        'cs_leads': UserModel.query.filter(UserModel.role.in_(['cs', 'admin'])).order_by(UserModel.is_active.desc(), UserModel.name).all(),
+        'designers': UserModel.query.filter(UserModel.role.in_(['designer', 'team_lead'])).order_by(UserModel.is_active.desc(), UserModel.name).all(),
+        'project_owners': UserModel.query.filter_by(role='project_owner').order_by(UserModel.is_active.desc(), UserModel.name).all(),
         'clients': Client.query.order_by(Client.name).all(),
         'brief_types': [('standard', 'Standard'), ('ccm', 'C&CM')],
         # 'In Progress' removed — the C&CM aggregate's "In
@@ -907,6 +918,7 @@ def _build_page_context(view, user):
 
     active_filters = {
         'cs_lead': _parse_ids('cs_lead'),
+        'project_owner': _parse_ids('project_owner'),
         'client': _parse_ids('client'),
         'designers': _parse_ids('designers'),
         'brief_type': _parse_values('brief_type'),
@@ -927,6 +939,7 @@ def _build_page_context(view, user):
 
     active_filter_count = sum([
         bool(active_filters['cs_lead']),
+        bool(active_filters['project_owner']),
         bool(active_filters['client']),
         bool(active_filters['designers']),
         bool(active_filters['brief_type']),

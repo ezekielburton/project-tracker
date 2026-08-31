@@ -59,8 +59,8 @@
                 fetch('/admin/api/users')
                     .then(function (r) { return r.json(); })
                     .then(function (users) {
-                        allUsers = users;
-                        renderUserList(users);
+                        allUsers = users.filter(function (u) { return u.is_active; });
+                        renderUserList(allUsers);
                     });
             }
         });
@@ -171,8 +171,8 @@
                     fetch('/admin/api/users')
                         .then(function (r) { return r.json(); })
                         .then(function (users) {
-                            badgeUsers = users;
-                            renderBadgeUserList(users);
+                            badgeUsers = users.filter(function (u) { return u.is_active; });
+                            renderBadgeUserList(badgeUsers);
                             if (badgeUserSearch) badgeUserSearch.focus();
                         });
                 } else {
@@ -217,32 +217,41 @@
             .then(function (users) {
                 accountsUserList.innerHTML = '';
 
+                var activeUsers = users.filter(function (u) { return u.is_active; });
+                var deactivatedUsers = users.filter(function (u) { return !u.is_active; });
+
                 var groups = [
                     { label: 'CS & Admin', filter: function (u) { return u.role === 'cs' || u.role === 'admin'; } },
                     { label: 'Management', filter: function (u) { return u.role === 'management'; } },
+                    { label: 'Project Owners', filter: function (u) { return u.role === 'project_owner'; } },
                     { label: '2D Team', filter: function (u) { return u.team === '2D'; } },
                     { label: '3D Team', filter: function (u) { return u.team === '3D'; } },
                     { label: 'Technical', filter: function (u) { return u.team === 'Technical'; } }
                 ];
 
-                groups.forEach(function (group) {
-                    var members = users.filter(group.filter);
+                function renderGroup(label, members, rowClass) {
                     if (members.length === 0) return;
-
                     var heading = document.createElement('p');
                     heading.className = 'accounts-group-label';
-                    heading.textContent = group.label;
+                    heading.textContent = label;
                     accountsUserList.appendChild(heading);
-
                     members.forEach(function (user) {
                         var row = document.createElement('div');
-                        row.className = 'account-user-row';
+                        row.className = rowClass;
                         row.dataset.id = user.id;
                         row.innerHTML = renderAccountDisplay(user);
                         accountsUserList.appendChild(row);
                         attachRowActions(row, user);
                     });
+                }
+
+                groups.forEach(function (group) {
+                    renderGroup(group.label, activeUsers.filter(group.filter), 'account-user-row');
                 });
+
+                // Deactivated accounts, pulled out of their normal group into one
+                // muted list at the bottom so they can be found and reactivated.
+                renderGroup('Deactivated', deactivatedUsers, 'account-user-row account-user-row--deactivated');
 
                 if (accountsUserList.children.length === 0) {
                     accountsUserList.innerHTML = '<p class="no-notifications">No users found</p>';
@@ -252,12 +261,16 @@
 
     function renderAccountDisplay(user) {
         var teamTag = user.team ? '<span class="account-user-team">' + user.team + '</span>' : '';
+        var activeToggle = user.is_active
+            ? '<button type="button" class="account-deactivate-btn">Deactivate</button>'
+            : '<button type="button" class="account-reactivate-btn">Reactivate</button>';
         return '<div class="account-user-info">' +
             '<span class="account-user-name">' + user.name + '</span>' +
             '<span class="account-user-role">' + user.role + '</span>' +
             teamTag +
             '</div>' +
             '<div class="account-user-actions">' +
+            activeToggle +
             '<button type="button" class="account-edit-btn" data-name="' + user.name + '" data-role="' + user.role + '" data-team="' + (user.team || '') + '">Edit</button>' +
             '<button type="button" class="account-reset-btn" data-name="' + user.name + '">&#8635;</button>' +
             '<button type="button" class="account-delete-btn" data-name="' + user.name + '">&times;</button>' +
@@ -359,6 +372,30 @@
                                 setTimeout(function () { resetBtn.innerHTML = '&#8635;'; }, 2000);
                             }
                         });
+                });
+            });
+        }
+
+        var activeBtn = row.querySelector('.account-deactivate-btn, .account-reactivate-btn');
+        if (activeBtn) {
+            activeBtn.addEventListener('click', function () {
+                var makeActive = !user.is_active;
+                var word = makeActive ? 'Reactivate' : 'Deactivate';
+                showConfirm(word + ' ' + user.name + '?', function () {
+                    fetch('/admin/api/users/' + user.id + '/active', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ active: makeActive })
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (data.success) {
+                                loadAccountsSection();
+                            } else {
+                                showToast(data.error || 'Could not update account.', 'error');
+                            }
+                        })
+                        .catch(function () { showToast('Server error updating account.', 'error'); });
                 });
             });
         }

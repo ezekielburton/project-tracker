@@ -87,6 +87,10 @@ def login():
             # Preserve next so the redirect still works after a failed attempt
             return redirect(url_for('auth.login', next=request.form.get('next', '')))
 
+        if not user.is_active:
+            flash('This account has been deactivated. Contact an admin if this is a mistake.', 'error')
+            return redirect(url_for('auth.login', next=request.form.get('next', '')))
+
         login_user(user, remember=True)
         check_achievements(user, 'user_login')
         flash(f'Welcome back, {user.name}.', 'success')
