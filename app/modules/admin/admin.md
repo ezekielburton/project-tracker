@@ -13,11 +13,18 @@ app/modules/admin/
 ```
 
 ## Routes (the `admin` blueprint)
-A JSON API only — no templates. 44 endpoints under `/admin/api/*` covering
+A JSON API only — no templates. 45 endpoints under `/admin/api/*` covering
 list/create/update/delete for users, clients, customers, deliverable types,
 design types/directions, and notification sounds, plus a deliverable-type
 reference-image upload and an admin password reset. The Admin Panel UI that
 drives it lives in the shared `base.html` layout and `admin.js`.
+
+Account deactivation: `POST /admin/api/users/<id>/active` flips a user's
+`is_active` flag; the users list endpoint returns `is_active`, and
+start-emulation refuses a deactivated target. In the panel, deactivated
+accounts collect in a muted "Deactivated" group and are reactivated from there.
+Project owners have their own group in the account list. See `core.md` for what
+deactivation hides across the rest of the app.
 
 ## Models
 None of its own. Uses `User`, `Client`, `Customer`, `Project`, `ProjectFile`,

@@ -13,6 +13,7 @@ from flask_login import login_required, current_user
 
 from app.modules.core.shared.models import Project
 from app.modules.core.shared.lib.decorators import role_required
+from app.modules.projects.lib.teams import assignable_teams_for
 
 from ._common import (
     project_overlay_bp,
@@ -113,7 +114,7 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project, ha
     for d in deliverables:
         needed_teams.update(_needed_teams(d))
     options_by_team = {
-        team: active_users_query().filter(User.role.in_(['designer', 'team_lead']), User.team == team)
+        team: active_users_query().filter(User.role.in_(['designer', 'team_lead']), User.team.in_(assignable_teams_for(team)))
                          .order_by(User.name).all()
         for team in needed_teams
     }
@@ -124,9 +125,9 @@ def _build_deliverable_focus_context(deliverables, actor, can_manage_project, ha
         row = []
         for team in _needed_teams(d):
             existing = assignment_by_team.get(team)
-            if can_manage_project or (actor.role == 'team_lead' and actor.team == team):
+            if can_manage_project or (actor.role == 'team_lead' and actor.team in assignable_teams_for(team)):
                 mode = 'manage'
-            elif actor.role == 'designer' and actor.team == team:
+            elif actor.role == 'designer' and actor.team in assignable_teams_for(team):
                 mode = 'self'
             else:
                 mode = 'static'
@@ -746,7 +747,7 @@ def _can_write_deliverable_assignment(project, actor, team, target_designer_id, 
     caller's own assignment, never a teammate's."""
     if _can_manage_deliverables(project, actor):
         return True
-    if actor.role == 'team_lead' and actor.team == team:
+    if actor.role == 'team_lead' and actor.team in assignable_teams_for(team):
         return True
     return False
 
@@ -802,7 +803,7 @@ def assign_deliverable_team(project_id):
     ).first()
 
     if data.get('self_toggle'):
-        if actor.role != 'designer' or actor.team != team:
+        if actor.role != 'designer' or actor.team not in assignable_teams_for(team):
             return jsonify({'success': False, 'error': 'You do not have permission to assign this.'}), 403
         if existing and existing.designer_id == actor.id:
             db.session.delete(existing)
@@ -845,8 +846,8 @@ def assign_deliverable_team(project_id):
         return jsonify({'success': True, 'designer_id': None})
 
     target = User.query.get(designer_id)
-    if not target or target.role not in ('designer', 'team_lead') or target.team != team:
-        return jsonify({'success': False, 'error': f'That person is not on the {team} team.'}), 400
+    if not target or target.role not in ('designer', 'team_lead') or target.team not in assignable_teams_for(team):
+        return jsonify({'success': False, 'error': f'That person cannot be assigned to the {team} team.'}), 400
 
     if existing:
         existing.designer_id = designer_id
@@ -1126,7 +1127,7 @@ def assign_lead(project_id):
     if not team:
         return jsonify({'success': False, 'error': 'Team is required.'}), 400
 
-    if actor.role in ('designer', 'team_lead') and actor.team != team:
+    if actor.role in ('designer', 'team_lead') and actor.team not in assignable_teams_for(team):
         return jsonify({'success': False, 'error': 'You can only assign yourself to your own team.'}), 403
 
     target_id = int(raw_target_id) if raw_target_id else actor.id

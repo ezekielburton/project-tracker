@@ -11,7 +11,7 @@ refresh renders byte-identical row markup to a real page load. #}
 base.html's <head> instead of here — see the comment there for why. #}
 
 {% block content %}
-<div class="project-list-page">
+<div class="project-list-page" data-current-view="{{ view }}">
 
     <div class="project-list-header">
         <div class="tab-strip">
@@ -33,6 +33,8 @@ base.html's <head> instead of here — see the comment there for why. #}
                     aria-label="Search">🔍</button>
                 <input type="text" name="search" id="toolbar-search" class="project-toolbar-search-input"
                     placeholder="Search..." value="{{ active_filters.search }}" hidden>
+                <button type="button" id="search-clear" class="project-toolbar-search-clear"
+                    aria-label="Clear search" hidden>&times;</button>
             </div>
 
             <div class="project-filter-wrap">

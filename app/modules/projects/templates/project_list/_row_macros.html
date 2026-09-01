@@ -21,7 +21,9 @@ running count, which is exactly why this needs a namespace instead. #}
 {% macro project_row(row, ns) %}
 <a href="{{ url_for('project_list.index', **dict(request.args.to_dict(), project=row.id)) }}"
     class="project-row project-row--link"
-    data-project-id="{{ row.id }}" style="--row-num: {{ ns.row_num }};">
+    data-project-id="{{ row.id }}"
+    data-search="{{ ((row.name or '') ~ ' ' ~ (row.job_number or '')) | lower }}"
+    style="--row-num: {{ ns.row_num }};">
     <span class="project-col-expand">
         <button type="button" class="project-expand-toggle" aria-label="Show breakdown" aria-expanded="false"
             data-expand-url="{{ url_for('project_list.expand', project_id=row.id) }}">▸</button>

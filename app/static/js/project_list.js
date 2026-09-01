@@ -737,6 +737,75 @@
     const showCancelledToggle = document.getElementById('show-cancelled-toggle');
     const saveNewViewBtn = document.getElementById('save-new-view-btn');
     const toolbarSearch = document.getElementById('toolbar-search');
+    const searchClear = document.getElementById('search-clear');
+
+    // Fresh loads render the active tab from the user's saved view but leave
+    // ?view off the URL, so the toolbar handlers (search/filter/sort) would
+    // fall back to 'my'. Stamp the real current tab into the URL once on load.
+    (function ensureViewInUrl() {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.get('view')) {
+            const page = document.querySelector('.project-list-page');
+            const v = page && page.dataset.currentView;
+            if (v) {
+                params.set('view', v);
+                history.replaceState(history.state, '', window.location.pathname + '?' + params.toString());
+            }
+        }
+    })();
+
+    // Renumber the visible rows in one grid container so hiding rows never
+    // leaves a gap (rows are pinned to explicit grid rows via --row-num).
+    // Header row stays at 1; matching rows get 2, 3, 4 … in order.
+    function renumberContainer(container, needle) {
+        const rows = container.querySelectorAll(':scope > .project-row--link');
+        let n = 2;
+        let visible = 0;
+        rows.forEach((row) => {
+            const match = !needle || (row.dataset.search || '').includes(needle);
+            row.hidden = !match;
+            if (match) {
+                row.style.setProperty('--row-num', n);
+                n += 1;
+                visible += 1;
+            }
+        });
+        return visible;
+    }
+
+    // Instant client-side search: filters the rows already on screen as you
+    // type (project name + job number), no server round-trip. Re-run after any
+    // table re-render (soft-nav / live refresh) so it stays applied.
+    function applyClientSearch() {
+        if (!toolbarSearch || !table) return;
+        const needle = (toolbarSearch.value || '').trim().toLowerCase();
+        if (searchClear) searchClear.hidden = !toolbarSearch.value;
+        const grouped = table.classList.contains('project-table--grouped');
+        const containers = grouped ? table.querySelectorAll('.project-group-table') : [table];
+        let total = 0;
+        containers.forEach((c) => {
+            const visible = renumberContainer(c, needle);
+            total += visible;
+            if (grouped) {
+                const group = c.closest('.project-group');
+                if (group) group.hidden = visible === 0;
+                const countEl = group && group.querySelector('.project-group-count');
+                if (countEl) countEl.textContent = visible;
+            }
+        });
+        let empty = table.querySelector('.project-search-empty');
+        if (needle && total === 0) {
+            if (!empty) {
+                empty = document.createElement('p');
+                empty.className = 'project-list-empty project-search-empty';
+                empty.textContent = 'No projects match your search.';
+                table.appendChild(empty);
+            }
+            empty.hidden = false;
+        } else if (empty) {
+            empty.hidden = true;
+        }
+    }
 
     function toPageStateUrl(url) {
         const qIndex = url.indexOf('?');
@@ -782,9 +851,9 @@
         if (saveNewViewBtn) {
             saveNewViewBtn.hidden = !data.is_dirty;
         }
-        if (toolbarSearch) {
-            toolbarSearch.value = data.search || '';
-        }
+        // Search is client-side now — keep whatever the user has typed and
+        // re-apply it to the freshly rendered rows rather than overwriting it.
+        applyClientSearch();
     }
 
     // requestId guards against a fast double-click (e.g. two tabs clicked
@@ -931,6 +1000,7 @@
                 if (window.helixRebindProjectTableColumns) {
                     window.helixRebindProjectTableColumns();
                 }
+                applyClientSearch();
             })
             .catch(() => {
                 // Network blip — silently skip, same as every other poll/
@@ -1087,10 +1157,9 @@
                 if (btn.dataset.to) params.set(to, btn.dataset.to);
             });
 
-            const searchEl = document.querySelector('[name="search"]');
-            if (searchEl && searchEl.value.trim()) {
-                params.set('search', searchEl.value.trim());
-            }
+            // Search is client-side only (filters the loaded rows live), so it
+            // is deliberately NOT added to the URL here — that keeps the full
+            // row set available to filter as the user broadens their text.
 
             // Same idea as the view tab above — this function rebuilds the
             // whole query string from scratch, so without this, clicking any
@@ -1139,15 +1208,16 @@
             applyFilters();
         });
 
-        // Search debounces instead — reloading the page on every keystroke
-        // would be a rough experience, so wait for a short pause after typing
-        // stops before actually navigating.
-        const searchInput = document.querySelector('[name="search"]');
-        if (searchInput) {
-            let searchTimeout;
-            searchInput.addEventListener('input', () => {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(applyFilters, 400);
+        // Search filters the loaded rows live on every keystroke — no server
+        // round-trip, so it updates instantly as you type.
+        if (toolbarSearch) {
+            toolbarSearch.addEventListener('input', applyClientSearch);
+        }
+        if (searchClear && toolbarSearch) {
+            searchClear.addEventListener('click', () => {
+                toolbarSearch.value = '';
+                applyClientSearch();
+                toolbarSearch.focus();
             });
         }
 
@@ -1391,15 +1461,19 @@
         }
 
         const searchToggle = document.getElementById('search-toggle');
-        const toolbarSearch = document.getElementById('toolbar-search');
         if (searchToggle && toolbarSearch) {
             searchToggle.addEventListener('click', () => {
                 toolbarSearch.hidden = !toolbarSearch.hidden;
-                if (!toolbarSearch.hidden) {
+                if (toolbarSearch.hidden) {
+                    if (searchClear) searchClear.hidden = true;
+                } else {
                     toolbarSearch.focus();
+                    if (searchClear) searchClear.hidden = !toolbarSearch.value;
                 }
             });
         }
+        // Apply any server-rendered search value on load (and set clear state).
+        applyClientSearch();
 
         const newProjectBtn = document.getElementById('new-project-btn');
         if (newProjectBtn) {

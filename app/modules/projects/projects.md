@@ -28,7 +28,7 @@ app/modules/projects/
 ## The five blueprints
 - **project_list** (`/projects-new`): the role-adaptive projects table — one page
   that renders differently per viewing role — plus the JSON endpoints for its
-  filtering, sorting, row expansion, and saved table views. Also computes the
+  filtering, sorting, row expansion, and saved table views. Its people filters (CS Lead, Designer, Project Owner) list active users first and sink deactivated ones to the bottom, keeping them selectable for historical projects (see `core.md` on deactivation). Also computes the
   per-user unread indicators shown on each row (separate dots for new project
   updates vs. new chat messages, cleared independently — see
   ProjectActivitySeen and `mark_project_activity_seen()` in

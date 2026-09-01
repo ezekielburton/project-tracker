@@ -1551,6 +1551,31 @@ body.is-resizing-column * {
     border-radius: var(--radius-sm);
 }
 
+/* Search: clear button + client-side row hiding. .project-row uses
+   display:contents, which would beat the UA [hidden] rule, so hide the
+   filtered-out rows and empty groups explicitly (higher specificity). */
+.project-toolbar-search-clear {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 var(--space-2);
+}
+
+.project-toolbar-search-clear:hover {
+    color: var(--text);
+}
+
+.project-row--link[hidden] {
+    display: none;
+}
+
+.project-group[hidden] {
+    display: none;
+}
+
 .project-toolbar-icon-btn:hover,
 .project-filter-toggle:hover,
 .project-toolbar-sort-btn:hover {

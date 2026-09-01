@@ -14,6 +14,7 @@ from flask_login import login_required, current_user
 from app.modules.core.shared.models import Project
 from app.modules.core.shared.lib.decorators import role_required
 from app.modules.core.shared.lib.users import active_users_query
+from app.modules.projects.lib.teams import assignable_teams_for
 
 from ._common import (
     project_overlay_bp,
@@ -200,11 +201,11 @@ def _build_details_context(project, actor):
         assignment = assignments_by_team.get(team)
         can_manage = (
             actor.role in ('admin', 'management')
-            or actor.team == team
+            or actor.team in assignable_teams_for(team)
             or (assignment and assignment.user_id == actor.id)
         )
         options = active_users_query().filter(
-            User.team == team,
+            User.team.in_(assignable_teams_for(team)),
             User.role.in_(['designer', 'team_lead'])
         ).order_by(User.name).all() if can_manage else []
         designer_rows.append({

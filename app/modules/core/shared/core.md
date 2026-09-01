@@ -39,6 +39,8 @@ is purely organizational.
 ### lib/ (stateless helpers)
 - `decorators` — `role_required`
 - `utils` — `file_type_label`, `strip_html`, `get_actor`, `log_activity`
+- `users` — `active_users_query` / `active_users`: the base query for user
+  pickers, filtered to active (non-deactivated) accounts
 - `zip_utils` — build and serve one-shot zip downloads
 - `status_vocabulary` — pure `derive_*` functions turning raw status values
   into the (label, css_modifier) pairs templates render as status pills
@@ -86,6 +88,14 @@ Jinja's search path by the `core` blueprint, so any module can
   changed (no dates, milestone codes, or migration filenames).
 - **Module shape** — every feature module is `routes/ models/ templates/
   static/` plus a `<module>.md` and a `tests/` folder.
+- **Account deactivation** — `User.is_active` is the single offboarding switch.
+  A deactivated account stays in the database (so existing project ties still
+  resolve the person's name) but is hidden from every user picker and blocked
+  from login. Anything that offers a person to pick — a dropdown, filter,
+  @mention, or notification fan-out — must build its list from
+  `active_users_query()` (`lib/users`) so deactivated people drop out
+  everywhere at once. The admin panel is the one place that still lists them,
+  so they can be reactivated.
 
 ## Testing
 The shared pytest harness lives here:

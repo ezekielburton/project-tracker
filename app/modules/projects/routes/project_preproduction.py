@@ -38,6 +38,7 @@ Design:
 from flask import Blueprint, request, jsonify, render_template
 from flask_login import login_required, current_user
 from app.modules.core.shared.lib.users import active_users_query
+from app.modules.projects.lib.teams import assignable_teams_for
 from datetime import datetime
 
 from app.modules.core.shared.models import Project, Deliverable
@@ -280,7 +281,7 @@ def _build_preproduction_row(d, actor, can_act):
         # can use.
         if can_act:
             stream_row['assign_options'] = active_users_query().filter(
-                User.team == cfg['team'],
+                User.team.in_(assignable_teams_for(cfg['team'])),
                 User.role.in_(['designer', 'team_lead'])
             ).order_by(User.name).all()
         streams.append(stream_row)
