@@ -17,8 +17,22 @@
     color: var(--text);
 }
 
+/* overflow-x: auto paired with an EXPLICIT overflow-y: hidden — leaving
+   overflow-y unset here doesn't mean "don't scroll vertically", it means
+   the browser silently computes it as auto too (CSS's overflow-x/-y
+   visible-to-auto coercion rule): once that happens, THIS element (not
+   the page) becomes the sticky thead's positioning context, and since
+   it has no capped height it never actually scrolls internally — so the
+   sticky header just sits pinned to the top of this (very tall,
+   never-scrolled) box and disappears off-screen the moment the real
+   page scrolls past it. Same bug, same fix the Projects table already
+   applied to its own scroll wrapper (project_list.css's
+   .project-table-rounded-clip) — overflow-y: hidden here hands vertical
+   scrolling back to the page, which is what "position: sticky; top: 0"
+   on .cs-table thead th (below) actually needs to stick to. */
 .cs-table-scroll {
     overflow-x: auto;
+    overflow-y: hidden;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);

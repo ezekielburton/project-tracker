@@ -168,3 +168,96 @@ def test_feature_detail_shows_closed_note_for_a_closed_feature(app, client, db_s
 
     assert resp.status_code == 200
     assert 'Closed' in body
+
+
+def test_feature_detail_shows_cost_footer_to_admin(app, client, db_session):
+    user = _user(db_session, 'l', role='admin')
+    project = _project(db_session, 'l')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.feature_detail', feature_id=feature.id)
+    resp = client.get(url)
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert 'Costs, client charge and profit' in body
+
+
+def test_feature_detail_shows_cost_footer_to_management(app, client, db_session):
+    user = _user(db_session, 'm', role='management')
+    project = _project(db_session, 'm')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.feature_detail', feature_id=feature.id)
+    resp = client.get(url)
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert 'Costs, client charge and profit' in body
+
+
+def test_feature_detail_hides_cost_footer_from_other_roles(app, client, db_session):
+    user = _user(db_session, 'n', role='designer')
+    project = _project(db_session, 'n')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.feature_detail', feature_id=feature.id)
+    resp = client.get(url)
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert 'Costs, client charge and profit' not in body
+
+
+def test_feature_detail_footer_is_emulation_aware(app, client, db_session):
+    admin = _user(db_session, 'o', role='admin')
+    designer = _user(db_session, 'o2', role='designer')
+    project = _project(db_session, 'o')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, admin, 'password123')
+
+    with client.session_transaction() as sess:
+        sess['emulating_user_id'] = designer.id
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.feature_detail', feature_id=feature.id)
+    resp = client.get(url)
+    body = resp.get_data(as_text=True)
+
+    # Admin's own role would show the footer — but while emulating a
+    # designer, the emulated role is what should decide it.
+    assert resp.status_code == 200
+    assert 'Costs, client charge and profit' not in body
+
+
+def test_feature_detail_footer_ignores_emulation_from_a_non_admin(app, client, db_session):
+    management = _user(db_session, 'p', role='management')
+    designer = _user(db_session, 'p2', role='designer')
+    project = _project(db_session, 'p')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, management, 'password123')
+
+    with client.session_transaction() as sess:
+        # Only real admins can emulate elsewhere in the app — a stray
+        # emulating_user_id on a non-admin's session should be ignored,
+        # not honoured.
+        sess['emulating_user_id'] = designer.id
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.feature_detail', feature_id=feature.id)
+    resp = client.get(url)
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert 'Costs, client charge and profit' in body

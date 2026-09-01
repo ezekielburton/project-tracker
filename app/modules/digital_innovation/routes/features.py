@@ -9,25 +9,32 @@
 from datetime import datetime
 
 from flask import request, jsonify, abort, render_template
-from flask_login import login_required
+from flask_login import login_required, current_user
 
 from app.modules.core.shared.extensions import db
 from app.modules.digital_innovation.routes.blueprint import digital_innovation_bp
 from app.modules.digital_innovation.models import DiFeature, DiFeatureStep, DiProject, DI_STAGES
 from app.modules.digital_innovation.lib import step_engine
 from app.modules.digital_innovation.lib.feature_detail import build_feature_detail_context
+from app.modules.digital_innovation.lib.access import can_view_di_performance
 
 
 def _render_feature_detail(feature):
     """The one place that turns a feature into the modal's HTML fragment —
     used by the initial GET and by every mutating route below, so a tick,
     an add, a delete, an advance or a close all leave the modal showing
-    exactly what the GET route would show for that same feature."""
+    exactly what the GET route would show for that same feature.
+
+    can_view_costs gates the footer's cost/charge/profit note — reuses the
+    same admin/management choke point Performance and Cost breakdown
+    already gate through (lib/access.py), so adding a role to any of the
+    three is the one change in that one file."""
     context = build_feature_detail_context(feature)
     return render_template(
         'digital_innovation/_feature_detail.html',
         feature=feature,
         project=feature.project,
+        can_view_costs=can_view_di_performance(current_user),
         **context,
     )
 

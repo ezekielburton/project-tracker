@@ -374,11 +374,33 @@ the pair:
   that tries to move `project` elsewhere is still rendered with it
   first.
 
+## Sticky header fix (Chunk 7, feedback right after the sticky Project column)
+Ezekiel noticed the column header wasn't staying visible when scrolling
+DOWN a long table (separate from the earlier horizontal sticky-scrollbar
+fix). `.cs-table thead th` already had `position: sticky; top: 0;` — the
+actual bug was one level up, in `.cs-table-scroll`:
+
+`.cs-table-scroll` set `overflow-x: auto` but left `overflow-y` unset.
+CSS doesn't treat an unset axis as "don't scroll" when its sibling axis
+is non-`visible` — it silently computes the unset one as `auto` too.
+That made `.cs-table-scroll` itself (not the page) the sticky thead's
+positioning context, but since it has no capped height it never actually
+scrolls internally — so the header just sat pinned to the top of that
+(very tall, never-scrolled) box and rode off-screen the instant the real
+page scrolled past it.
+
+This is the exact same bug the Projects table hit and already fixed on
+its own scroll wrapper (`project_list.css`'s `.project-table-rounded-
+clip`, explicitly paired `overflow-x: auto` with `overflow-y: hidden`)
+— applied the identical fix to `.cs-table-scroll`. One-line CSS change,
+no JS or template changes needed; the header's `position: sticky; top:
+0;` was already correct.
+
 ## Status
 Chunks 1-6 shipped and verified — 40/40 tests passing (avatar-chip fix
 and the data-driven-columns foundation both confirmed on the live page).
 Chunk 7: resize (piece 2) BUILT AND CONFIRMED WORKING live by Ezekiel;
 sticky-scrollbar fix BUILT, not yet confirmed live; reorder (piece 3)
-BUILT, not yet verified; sticky Project column (follow-up feedback)
-just built, not yet verified. Next: click-to-sort (piece 4), then a
-final full test pass.
+BUILT, not yet verified; sticky Project column BUILT, not yet verified;
+sticky-header fix BUILT, not yet verified. Next: click-to-sort (piece
+4), then a final full test pass.
