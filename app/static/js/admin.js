@@ -600,6 +600,7 @@ if (addSoundForm) {
         else if (name === 'design-types') loadPTDesignTypes();
         else if (name === 'design-directions') loadPTDesignDirections();
         else if (name === 'job-numbers') loadPTJobNumbers(); // Job Numbers tab
+        else if (name === 'cs-scopes') loadPTCsScopes();
     }
 
     // ── Clients ───────────────────────────────────────────────────
@@ -1228,6 +1229,31 @@ ptAddDelForm.addEventListener('submit', function (e) {
                     .catch(function () { btnDone(submitBtn); });
             });
         }
+
+        // ── CS Scopes (Chunk 6) ──────────────────────────────────────
+        var addCsScopeToggle = document.getElementById('pt-add-cs-scope-toggle');
+        var addCsScopeForm = document.getElementById('pt-add-cs-scope-form');
+        var addCsScopeCancel = document.getElementById('pt-add-cs-scope-cancel');
+        if (addCsScopeToggle) {
+            addCsScopeToggle.addEventListener('click', function () { addCsScopeForm.classList.toggle('hidden'); });
+            addCsScopeCancel.addEventListener('click', function () { addCsScopeForm.classList.add('hidden'); });
+            addCsScopeForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var name = document.getElementById('pt-new-cs-scope-name').value.trim();
+                if (!name) return;
+                var submitBtn = addCsScopeForm.querySelector('button[type="submit"]');
+                btnLoading(submitBtn);
+                fetch('/client-servicing/scopes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name }) })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d.error) { showToast(d.error, 'error'); btnDone(submitBtn); return; }
+                        document.getElementById('pt-new-cs-scope-name').value = '';
+                        addCsScopeForm.classList.add('hidden');
+                        loadPTCsScopes();
+                    })
+                    .catch(function () { btnDone(submitBtn); });
+            });
+        }
     });
 
     function loadPTDesignDirections() {
@@ -1280,6 +1306,88 @@ ptAddDelForm.addEventListener('submit', function (e) {
                                 .catch(function () { btnDone(saveBtn); });
                         });
                         row.querySelector('.pt-dd-cancel').addEventListener('click', function () { loadPTDesignDirections(); });
+                    });
+                });
+            });
+    }
+
+    // ── CS Scopes (Chunk 6) — the Client Servicing table's own Scope
+    // dropdown. Deactivate, not delete: a deactivated scope drops out of
+    // future selection (backend already filters on it) but any row still
+    // pointing at it keeps showing its name fine. Uses the
+    // client_servicing module's own routes, not /admin/api/* — that
+    // module owns this data, admin.js is just driving its shared UI. ──
+    function loadPTCsScopes() {
+        fetch('/client-servicing/scopes')
+            .then(function (r) { return r.json(); })
+            .then(function (scopes) {
+                var list = document.getElementById('pt-cs-scopes-list');
+                if (scopes.length === 0) {
+                    list.innerHTML = '<p class="empty-state">No scopes yet.</p>';
+                    return;
+                }
+
+                function rowHtml(scope) {
+                    var toggleBtn = scope.active
+                        ? '<button type="button" class="account-deactivate-btn pt-cs-scope-toggle" data-id="' + scope.id + '" data-active="true">Deactivate</button>'
+                        : '<button type="button" class="account-reactivate-btn pt-cs-scope-toggle" data-id="' + scope.id + '" data-active="false">Reactivate</button>';
+                    return '<div class="account-user-row' + (scope.active ? '' : ' account-user-row--deactivated') + '" id="pt-cs-scope-' + scope.id + '">' +
+                        '<div class="account-user-info"><span class="account-user-name">' + scope.name + '</span></div>' +
+                        '<div class="account-user-actions">' +
+                        '<button class="account-edit-btn pt-cs-scope-edit" data-id="' + scope.id + '" data-name="' + scope.name + '">Edit</button>' +
+                        toggleBtn +
+                        '</div></div>';
+                }
+
+                var active = scopes.filter(function (s) { return s.active; });
+                var inactive = scopes.filter(function (s) { return !s.active; });
+                var html = active.map(rowHtml).join('');
+                if (inactive.length) {
+                    html += '<div class="accounts-group-label">Deactivated</div>' + inactive.map(rowHtml).join('');
+                }
+                list.innerHTML = html;
+
+                list.querySelectorAll('.pt-cs-scope-toggle').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var id = this.dataset.id;
+                        var makeActive = this.dataset.active !== 'true';
+                        fetch('/client-servicing/scopes/' + id, {
+                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ active: makeActive }),
+                        })
+                            .then(function (r) { return r.json(); })
+                            .then(function (d) { if (!d.error) { loadPTCsScopes(); } else { showToast(d.error, 'error'); } });
+                    });
+                });
+
+                list.querySelectorAll('.pt-cs-scope-edit').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var id = this.dataset.id;
+                        var row = document.getElementById('pt-cs-scope-' + id);
+                        var currentName = this.dataset.name;
+                        row.innerHTML =
+                            '<div class="pt-inline-edit">' +
+                            '<input type="text" class="form-input pt-edit-name" value="' + currentName + '" style="max-width:240px;">' +
+                            '<button class="btn-primary pt-cs-scope-save" data-id="' + id + '">Save</button>' +
+                            '<button class="account-delete-btn pt-cs-scope-cancel">Cancel</button>' +
+                            '</div>';
+                        row.querySelector('.pt-cs-scope-save').addEventListener('click', function () {
+                            var newName = row.querySelector('.pt-edit-name').value.trim();
+                            if (!newName) return;
+                            var saveBtn = this;
+                            btnLoading(saveBtn);
+                            fetch('/client-servicing/scopes/' + id, {
+                                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: newName }),
+                            })
+                                .then(function (r) { return r.json(); })
+                                .then(function (d) {
+                                    if (d.success || !d.error) { loadPTCsScopes(); }
+                                    else { showToast(d.error, 'error'); btnDone(saveBtn); }
+                                })
+                                .catch(function () { btnDone(saveBtn); });
+                        });
+                        row.querySelector('.pt-cs-scope-cancel').addEventListener('click', function () { loadPTCsScopes(); });
                     });
                 });
             });

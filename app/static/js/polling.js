@@ -57,6 +57,9 @@
     // _roleDashboardStream), not started/stopped by hand around an overlay
     // open/close.
     var _projectTableStream = null;
+    // Client Servicing table (its own page, same generic /sse/dashboard
+    // doorbell) — same convention as _projectTableStream above.
+    var _clientServicingTableStream = null;
 
     // How often the fallback interval polls, when SSE isn't available or
     // has dropped — matches the cadence the old setInterval-only design used.
@@ -332,6 +335,10 @@
             _projectTableStream.close();
             _projectTableStream = null;
         }
+        if (_clientServicingTableStream !== null) {
+            _clientServicingTableStream.close();
+            _clientServicingTableStream = null;
+        }
     }
 
     function stopOverlayStream() {
@@ -433,6 +440,14 @@
         if (document.querySelector('.project-list-page')) {
             _projectTableStream = _connectLiveStream('/sse/dashboard', function (projectId) {
                 if (window.helixRefreshProjectTable) window.helixRefreshProjectTable(projectId);
+            }, _FALLBACK_INTERVAL_MS);
+        }
+
+        // Client Servicing table — same doorbell, refresh owned by
+        // window.helixRefreshClientServicingTable() (see client_servicing.js).
+        if (document.querySelector('.client-servicing-page')) {
+            _clientServicingTableStream = _connectLiveStream('/sse/dashboard', function () {
+                if (window.helixRefreshClientServicingTable) window.helixRefreshClientServicingTable();
             }, _FALLBACK_INTERVAL_MS);
         }
     }

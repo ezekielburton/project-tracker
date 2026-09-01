@@ -1,0 +1,237 @@
+/* Client Servicing page — read-only table for now (no cell editing yet).
+   All colours are role tokens, per theming.md — no hard-coded hex. */
+
+.client-servicing-page {
+    padding: var(--space-6);
+}
+
+.cs-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-5);
+}
+
+.cs-page-header h1 {
+    font-size: var(--text-xl);
+    color: var(--text);
+}
+
+.cs-table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.cs-table {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+}
+
+.cs-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface-raised);
+    color: var(--text-muted);
+    text-align: left;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+}
+
+.cs-table tbody td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.cs-table tbody tr:hover {
+    background: var(--surface-hover);
+}
+
+.cs-muted {
+    color: var(--text-faint);
+}
+
+.cs-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--space-6) !important;
+    white-space: normal !important;
+}
+
+.cs-col-open {
+    width: 1%;
+}
+
+/* Chunk 7 — sticky Project-name column, mirroring the Projects page's
+   pinned Expand+Name pair: "Open in Projects" and Project both stay on
+   screen as the table scrolls right, so which row you're on is never
+   lost. Project is pinned right after Open — table.py's
+   _ordered_columns() always puts it first, and client_servicing.js
+   excludes it from the reorder-drag — so its position never changes.
+   Scoped to th/td specifically (not the bare [data-col-key="project"]
+   attribute) so this doesn't also catch the resize handle <span> that
+   carries the same data-col-key inside the header cell. */
+.cs-table th.cs-col-open,
+.cs-table td.cs-col-open,
+.cs-table th[data-col-key="project"],
+.cs-table td[data-col-key="project"] {
+    position: sticky;
+    z-index: 2;
+    background: var(--surface);
+}
+
+/* The header row is already sticky to the top (thead th, below) — these
+   two columns are ALSO sticky to the left, making their header cells a
+   pinned corner that needs to outrank both the plain sticky header row
+   and the plain sticky body columns to stay on top while scrolling in
+   either direction. */
+.cs-table thead th.cs-col-open,
+.cs-table thead th[data-col-key="project"] {
+    z-index: 3;
+    background: var(--surface-raised);
+}
+
+.cs-table th.cs-col-open,
+.cs-table td.cs-col-open {
+    left: 0;
+}
+
+.cs-table th[data-col-key="project"],
+.cs-table td[data-col-key="project"] {
+    /* Set by client_servicing.js's syncStickyProjectOffset() to the Open
+       column's actual rendered width — unlike the Projects page's
+       fixed-size icon-only Expand column, "Open in Projects" is a text
+       button with no fixed, known width to hard-code here. */
+    left: var(--cs-sticky-project-left, 0px);
+}
+
+.cs-open-btn {
+    padding: 0.35rem 0.75rem;
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.cs-table .person-chip {
+    margin-right: var(--space-1);
+}
+
+.cs-editable {
+    cursor: pointer;
+}
+
+.cs-editable:hover {
+    background: var(--surface-hover);
+}
+
+.cs-cell-editing {
+    padding: var(--space-1) var(--space-2) !important;
+}
+
+.cs-table .cs-cell-editing input,
+.cs-table .cs-cell-editing select {
+    width: 100%;
+    min-width: 7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-sm);
+}
+
+.cs-cell-error {
+    outline: 2px solid var(--coral);
+    outline-offset: -2px;
+}
+
+/* Chunk 6 — inline "+ Add new..." mini-form (Scope / Client SPOC cells).
+   Same td, no overlay: a name input + Add/Cancel, replacing the select
+   for the moment it takes to create the record. Colour comes from the
+   shared .btn-primary/.btn-secondary classes (already theme-safe,
+   including their dark-mode overrides in main.css) — this only shrinks
+   them to fit inside a table cell. */
+.cs-quick-add {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.cs-quick-add-input {
+    width: 100%;
+    min-width: 7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-sm);
+}
+
+.cs-quick-add-actions {
+    display: flex;
+    gap: var(--space-1);
+}
+
+.cs-quick-add-actions .cs-quick-add-btn {
+    padding: 0.2rem 0.6rem;
+    font-size: var(--text-xs);
+}
+
+/* Chunk 7 (piece 2) — column resize. Drag a header's right edge; width
+   is saved per user via colgroup <col> widths (see _table_rows.html). */
+.cs-table th {
+    position: relative;
+}
+
+.cs-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    user-select: none;
+}
+
+.cs-resize-handle:hover,
+.cs-resize-handle--active {
+    background: var(--border-strong);
+}
+
+/* Chunk 7 (piece 3) — column reorder. Draggable headers get a grab
+   cursor; the resize handle above sits inside the same <th> and keeps
+   its own col-resize cursor since a child's explicit cursor wins over
+   its parent's when the mouse is directly over it. */
+.cs-table th[data-col-key] {
+    cursor: grab;
+}
+
+.cs-th-dragging {
+    opacity: 0.4;
+}
+
+/* Sticky horizontal scrollbar (Chunk 7) — a thin bar pinned to the
+   bottom of the viewport (not the table) so it's reachable without
+   scrolling all the way down a long table first. Mirrors the Projects
+   page's own #sticky-scrollbar; width/visibility are kept in sync with
+   the real table by client_servicing.js. */
+.cs-sticky-scrollbar {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    height: 14px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+}
+
+.cs-sticky-scrollbar-inner {
+    height: 1px;
+}

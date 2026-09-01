@@ -1,0 +1,92 @@
+{# Feature detail — rendered server-side and dropped straight into
+   #di-feature-detail-body by digital_innovation_board.js's
+   openDiFeatureDetail(), the same "fetch an HTML fragment" pattern
+   Client Servicing's table-rows endpoint already uses elsewhere in the
+   app, rather than hand-building this markup in JS from JSON. Every
+   mutating action below (tick/add/delete a step, advance, close) POSTs
+   and swaps this same fragment back in, so the modal always reflects the
+   feature's true current state. "Edit template" is still the next
+   chunk — no link to it yet. #}
+<div class="di-feature-detail-header">
+    <div>
+        <span class="di-feature-badge">{{ project.name }} · Feature</span>
+        <h3 class="di-feature-detail-title">{{ feature.name }}</h3>
+    </div>
+    <button type="button" class="di-feature-detail-close" id="di-feature-detail-close" aria-label="Close">&times;</button>
+</div>
+
+{% if feature.projected_date or logged_hours %}
+<div class="di-feature-detail-pills">
+    {% if feature.projected_date %}
+    <span class="di-feature-pill">Due {{ feature.projected_date.strftime('%d %b %Y') }}</span>
+    {% endif %}
+    {% if logged_hours %}
+    <span class="di-feature-pill">{{ logged_hours | round(1) }}h logged</span>
+    {% endif %}
+</div>
+{% endif %}
+
+<hr class="di-detail-divider">
+
+{% if is_closed %}
+<p class="di-feature-closed-note">Closed {{ feature.closed_at.strftime('%d %b %Y') if feature.closed_at else '' }}</p>
+{% else %}
+<span class="di-status-label">Status</span>
+<div class="di-status-row">
+    {% for row in stage_rows %}
+    <span class="di-status-pill di-status-pill--{{ row.state }}{% if row.state == 'current' %} di-column-header--{{ row.colour }}{% endif %}">
+        {% if row.state == 'done' %}<span class="di-status-check">&#10003;</span>{% endif %}
+        {{ row.label }}
+    </span>
+    {% endfor %}
+</div>
+
+<div class="di-feature-steps-header">
+    <span>{{ current_stage_label }} · steps {{ steps_done_count }} of {{ steps_total_count }} done</span>
+</div>
+
+<ul class="di-step-list">
+    {% for row in step_rows %}
+    <li class="di-step di-step--{{ row.state }}{% if row.state == 'active' %} di-column-header--{{ current_stage_colour }}{% endif %}" data-step-id="{{ row.step.id }}" data-step-done="{{ 'true' if row.step.is_done else 'false' }}">
+        <span class="di-step-check">{% if row.state == 'done' %}&#10003;{% endif %}</span>
+        <span class="di-step-label">
+            {{ row.step.title }}
+            {% if row.step.details %}<span class="di-step-details">{{ row.step.details }}</span>{% endif %}
+        </span>
+        {% if row.state == 'active' %}<span class="di-step-badge">Active</span>{% endif %}
+        <button type="button" class="btn-danger-sm di-step-delete" aria-label="Delete step">&times;</button>
+    </li>
+    {% else %}
+    <li class="di-step-empty">No steps configured for this stage yet.</li>
+    {% endfor %}
+</ul>
+
+<div class="di-step-add">
+    <div class="di-step-add-row">
+        <input type="text" class="di-step-add-input" id="di-step-add-title" placeholder="Add a step…">
+        <button type="button" class="btn-secondary di-step-add-btn" id="di-step-add-btn">Add</button>
+    </div>
+    <input type="text" class="di-step-add-details-input" id="di-step-add-details" placeholder="Details (optional)">
+</div>
+
+{% if steps_total_count > 0 and steps_done_count == steps_total_count %}
+    {% if is_last_stage %}
+    <div class="di-advance-banner">
+        <p>All Implementation steps are done — add another step above, or close this feature.</p>
+        <button type="button" class="btn-primary di-close-feature-btn">Close this feature</button>
+    </div>
+    {% else %}
+    <div class="di-advance-banner">
+        <p>All steps are done — advance to <strong>{{ next_stage_label }}</strong>. It loads {{ next_stage_label }}'s step template automatically.</p>
+        <button type="button" class="btn-primary di-advance-feature-btn">Advance to {{ next_stage_label }}</button>
+    </div>
+    {% endif %}
+{% elif not is_last_stage and steps_total_count > 0 %}
+<div class="di-advance-banner di-advance-banner--muted">
+    <p>Finish all steps, then advance to <strong>{{ next_stage_label }}</strong> — it loads {{ next_stage_label }}'s step template automatically.</p>
+</div>
+{% endif %}
+{% endif %}
+
+<hr class="di-detail-divider">
+<p class="di-feature-footer-note">Costs, client charge and profit are tracked once, at the project level.</p>

@@ -906,34 +906,13 @@ textarea {
     color: var(--tangerine);
 }
 
-/* Expand tab — protrudes from the right edge of the minimised sidebar.
-   Sits outside the sidebar element so it isn't clipped by overflow:hidden. */
-.sidebar-expand-tab {
-    position: fixed;
-    left: var(--sidebar-min);
-    top: 4.25rem;
-    z-index: 301;
-    background: var(--white);
-    border: 1.5px solid var(--grey-light);
-    border-left: none;
-    border-radius: 0 var(--radius) var(--radius) 0;
-    padding: 0.5rem 0.4rem;
-    color: var(--grey-dark);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.07);
-    transition: color 0.15s ease;
-}
-
-.sidebar-expand-tab:hover {
-    color: var(--tangerine);
-}
-
-/* Disappears once sidebar is expanded — collapse lives in the header instead */
-body:has(.sidebar.sidebar--expanded) .sidebar-expand-tab,
-body:has(.sidebar.sidebar--pinned) .sidebar-expand-tab {
+/* Expand toggle — now a normal .sidebar-item living inline at the top of
+   the rail (see base.html), not a tab protruding over the page content.
+   .sidebar-item already gives it the right size/shape/hover; this just
+   layers on visibility. Disappears once expanded/pinned — collapse lives
+   in the header's .sidebar-toggle-btn instead. */
+.sidebar.sidebar--expanded .sidebar-expand-tab,
+.sidebar.sidebar--pinned .sidebar-expand-tab {
     display: none;
 }
 

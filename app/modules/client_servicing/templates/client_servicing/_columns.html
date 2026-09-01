@@ -1,0 +1,64 @@
+{# One macro per Client Servicing table column — each returns the exact
+   <td> markup for that column, unchanged from before this file existed.
+   Which columns appear, and in what order, is driven by the `columns`
+   list built in table.py (COLUMNS) and rendered by _table_rows.html —
+   this file only answers "how do I render column X", never "which
+   columns, in what order". That separation is what makes column
+   resize/reorder (Chunk 7) possible without touching this file.
+
+   Every <td> carries data-col-key matching its column's key in COLUMNS —
+   the reorder-drag JS (client_servicing.js) uses it to find and move each
+   row's cell alongside its <th>/<col> when the user drags a header. #}
+{% from '_shared_macros.html' import person_chip, status_pill %}
+
+{% macro cell_client(row) %}<td data-col-key="client">{{ row.client or '—' }}</td>{% endmacro %}
+
+{% macro cell_project(row) %}<td data-col-key="project">{{ row.name }}</td>{% endmacro %}
+
+{% macro cell_brief_date(row) %}<td data-col-key="brief_date">{{ row.briefing_date.strftime('%d %b %Y') if row.briefing_date else '—' }}</td>{% endmacro %}
+
+{% macro cell_designers(row) %}
+<td data-col-key="designers">
+    {% if row.designers %}
+        {% for designer in row.designers %}{{ person_chip(designer) }}{% endfor %}
+    {% else %}
+        <span class="cs-muted">—</span>
+    {% endif %}
+</td>
+{% endmacro %}
+
+{% macro cell_client_approval(row) %}<td data-col-key="client_approval">{{ row.client_approved_at.strftime('%d %b %Y') if row.client_approved_at else '—' }}</td>{% endmacro %}
+
+{% macro cell_status(row) %}<td data-col-key="status">{{ status_pill(row.status_label, row.status_class) }}</td>{% endmacro %}
+
+{% macro cell_job_number(row) %}<td data-col-key="job_number" class="cs-editable" data-field="job_number" data-value="{{ row.job_number or '' }}">{{ row.job_number or '—' }}</td>{% endmacro %}
+
+{% macro cell_cs_lead(row) %}<td data-col-key="cs_lead" class="cs-editable" data-field="cs_lead_id" data-value="{{ row.cs_lead.id if row.cs_lead else '' }}">{{ person_chip(row.cs_lead, missing_label='—', missing_class='cs-muted') }}</td>{% endmacro %}
+
+{% macro cell_project_owner(row) %}<td data-col-key="project_owner" class="cs-editable" data-field="project_owner_id" data-value="{{ row.project_owner.id if row.project_owner else '' }}">{{ person_chip(row.project_owner, missing_label='—', missing_class='cs-muted') }}</td>{% endmacro %}
+
+{% macro cell_client_spoc(row) %}<td data-col-key="client_spoc" class="cs-editable" data-field="contact_id" data-value="{{ row.contact_id or '' }}" data-client-id="{{ row.client_id or '' }}">{{ row.client_spoc or '—' }}</td>{% endmacro %}
+
+{% macro cell_installation_date(row) %}<td data-col-key="installation_date" class="cs-editable" data-field="installation_date" data-value="{{ row.installation_date.isoformat() if row.installation_date else '' }}">{{ row.installation_date.strftime('%d %b %Y') if row.installation_date else '—' }}</td>{% endmacro %}
+
+{% macro cell_value(row) %}<td data-col-key="value" class="cs-editable" data-field="value" data-value="{{ row.value if row.value is not none else '' }}">{{ '{:,.0f}'.format(row.value) if row.value is not none else '—' }}</td>{% endmacro %}
+
+{% macro cell_due_date(row) %}<td data-col-key="due_date" class="cs-editable" data-field="first_output_deadline" data-value="{{ row.due_date.isoformat() if row.due_date else '' }}">{{ row.due_date.strftime('%d %b %Y') if row.due_date else '—' }}</td>{% endmacro %}
+
+{% macro cell_scope(row) %}<td data-col-key="scope" class="cs-editable" data-field="scope_id" data-value="{{ row.scope_id or '' }}">{{ row.scope or '—' }}</td>{% endmacro %}
+
+{% macro cell_lpo(row) %}<td data-col-key="lpo" class="cs-editable" data-field="lpo" data-value="{{ row.lpo or '' }}">{{ row.lpo or '—' }}</td>{% endmacro %}
+
+{% macro cell_store_location(row) %}<td data-col-key="store_location" class="cs-editable" data-field="store_location" data-value="{{ row.store_location or '' }}">{{ row.store_location or '—' }}</td>{% endmacro %}
+
+{% macro cell_removal_date(row) %}<td data-col-key="removal_date" class="cs-editable" data-field="removal_date" data-value="{{ row.removal_date.isoformat() if row.removal_date else '' }}">{{ row.removal_date.strftime('%d %b %Y') if row.removal_date else '—' }}</td>{% endmacro %}
+
+{% macro cell_invoice_month(row) %}<td data-col-key="invoice_month" class="cs-editable" data-field="invoice_month" data-value="{{ row.invoice_month or '' }}">{{ row.invoice_month or '—' }}</td>{% endmacro %}
+
+{% macro cell_cost_to_client(row) %}<td data-col-key="cost_to_client" class="cs-editable" data-field="cost_to_client" data-value="{{ row.cost_to_client if row.cost_to_client is not none else '' }}">{{ '{:,.2f}'.format(row.cost_to_client) if row.cost_to_client is not none else '—' }}</td>{% endmacro %}
+
+{% macro cell_inward_cost(row) %}<td data-col-key="inward_cost" class="cs-editable" data-field="inward_cost" data-value="{{ row.inward_cost if row.inward_cost is not none else '' }}">{{ '{:,.2f}'.format(row.inward_cost) if row.inward_cost is not none else '—' }}</td>{% endmacro %}
+
+{% macro cell_margin_percent(row) %}<td data-col-key="margin_percent" data-field="margin_percent">{{ '%.1f'|format(row.margin_percent) + '%' if row.margin_percent is not none else '—' }}</td>{% endmacro %}
+
+{% macro cell_priority(row) %}<td data-col-key="priority" class="cs-editable" data-field="priority" data-value="{{ row.priority or '' }}">{{ row.priority or '—' }}</td>{% endmacro %}

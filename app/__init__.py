@@ -134,6 +134,7 @@ def create_app(config=Config):
     from app.modules.auth.routes.auth import auth
     from app.modules.notifications.routes.notifications import notifications_bp
     from app.modules.core.shared.models import Notification
+    from app.modules.client_servicing.models import ClientServicing, ClientServicingScope  # registers the tables with SQLAlchemy
     from flask_login import current_user
     from app.modules.admin.routes.admin import admin_bp
     from app.modules.blog.routes.blog import blog_bp
@@ -153,6 +154,16 @@ def create_app(config=Config):
     from app.modules.projects.routes.project_overlay import project_overlay_bp # Projects detail overlay
     from app.modules.projects.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend (13 Aug 2026)
     from app.modules.projects.routes.project_notes import project_notes_bp  # Project Notes & Site Visits
+    from app.modules.digital_innovation.models import DiProject, DiFeature, DiFeatureStep, DiStepTemplate, DiCostEntry, DiSetting, DiPeriodSnapshot, DiIntakeItem  # registers the tables with SQLAlchemy
+    from app.modules.digital_innovation.routes import board as di_board  # registers board routes on digital_innovation_bp
+    from app.modules.digital_innovation.routes import projects as di_projects  # registers project-create route on digital_innovation_bp
+    from app.modules.digital_innovation.routes import features as di_features  # registers feature routes on digital_innovation_bp
+    from app.modules.digital_innovation.routes.blueprint import digital_innovation_bp
+    from app.modules.client_servicing.routes import table as client_servicing_table  # registers routes on client_servicing_bp
+    from app.modules.client_servicing.routes import edit as client_servicing_edit  # field-update endpoint
+    from app.modules.client_servicing.routes import scopes_admin as client_servicing_scopes_admin  # CS Scopes CRUD + quick-add
+    from app.modules.client_servicing.routes import layout as client_servicing_layout  # per-user column widths/order
+    from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 
 
     app.register_blueprint(core_bp)  # shared templates (later static) on the Jinja search path
@@ -177,6 +188,8 @@ def create_app(config=Config):
     app.register_blueprint(project_overlay_bp)
     app.register_blueprint(project_preproduction_bp)
     app.register_blueprint(project_notes_bp)
+    app.register_blueprint(digital_innovation_bp)
+    app.register_blueprint(client_servicing_bp)
 
     @app.context_processor
     def inject_notifications():

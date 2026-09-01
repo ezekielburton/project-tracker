@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 
 PROJECT_CHANGES_CHANNEL = 'project_changes'
 USER_NOTIFICATIONS_CHANNEL = 'user_notifications'
+DI_CHANGES_CHANNEL = 'di_changes'
 
 # Models whose changes matter to the dashboard/detail SSE channel, and how
 # to get from an instance of each to the project_id it affects. Matched by
@@ -91,6 +92,16 @@ _PROJECT_ID_GETTERS = {
     'ProjectNoteReaction': lambda obj: obj.note.project_id,
 }
 
+# Digital Innovation models -> the di_project_id (board) each change
+# belongs to.
+_DI_PROJECT_ID_GETTERS = {
+    'DiProject':     lambda obj: obj.id,
+    'DiFeature':     lambda obj: obj.di_project_id,
+    'DiFeatureStep': lambda obj: obj.feature.di_project_id,
+    'DiCostEntry':   lambda obj: obj.di_project_id,
+    'DiIntakeItem':  lambda obj: obj.di_project_id,
+}
+
 
 def _collect_ids(objects, seen, getters):
     for obj in objects:
@@ -114,6 +125,11 @@ def _before_flush(session, flush_context, instances):
     _collect_ids(session.dirty, project_ids, _PROJECT_ID_GETTERS)
     _collect_ids(session.deleted, project_ids, _PROJECT_ID_GETTERS)
 
+    di_project_ids = session.info.setdefault('_touched_di_project_ids', set())
+    _collect_ids(session.new, di_project_ids, _DI_PROJECT_ID_GETTERS)
+    _collect_ids(session.dirty, di_project_ids, _DI_PROJECT_ID_GETTERS)
+    _collect_ids(session.deleted, di_project_ids, _DI_PROJECT_ID_GETTERS)
+
     user_ids = session.info.setdefault('_touched_notification_user_ids', set())
     _collect_ids(session.new, user_ids, {'Notification': lambda obj: obj.recipient_id})
 
@@ -131,6 +147,15 @@ def _before_commit(session):
         # re-notify for IDs already announced, and nothing lingers into
         # whatever the next transaction on this same Session turns out to be.
         session.info['_touched_project_ids'] = set()
+
+    di_project_ids = session.info.get('_touched_di_project_ids')
+    if di_project_ids:
+        for did in di_project_ids:
+            session.execute(
+                text('SELECT pg_notify(:channel, :payload)'),
+                {'channel': DI_CHANGES_CHANNEL, 'payload': str(did)}
+            )
+        session.info['_touched_di_project_ids'] = set()
 
     user_ids = session.info.get('_touched_notification_user_ids')
     if user_ids:
