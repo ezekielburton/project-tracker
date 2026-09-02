@@ -1,55 +1,74 @@
-{# Performance table — period label, prev/next arrows, the 3 summary
-   stat cards, and the per-project rollup table, all sharing the "view" /
-   "period_key" / "rollup" / "currency" context routes/performance.py's
-   performance_screen() computes once. No separate fragment route for
-   this one (unlike _board_columns.html / _cost_breakdown.html) —
-   Performance has no live-refresh requirement, so switching tabs or
-   periods is just a plain link + the app's existing SPA-nav page swap,
-   not an AJAX fetch.
+{# Performance table — the 3 summary stat cards and the per-project
+   rollup table, sharing the "view" / "period_key" / "rollup" / "currency"
+   context routes/performance.py's performance_screen() computes once.
+   The Weekly/Monthly/Quarterly tabs and the prev/next period nav live in
+   performance.html now, not here — Ezekiel's wireframe (2 Sep 2026) puts
+   them on one row with the nav right-aligned, and that row also carries
+   the page's Export button, so it made more sense as part of the page
+   shell than this fragment. No separate fragment route for this file
+   (unlike _board_columns.html / _cost_breakdown.html) — Performance has
+   no live-refresh requirement, so switching tabs or periods is just a
+   plain link + the app's existing SPA-nav page swap, not an AJAX fetch.
 
    Cost / Charge / Profit per project are LIFETIME totals — identical to
    what that project's own Cost Breakdown shows, unchanged no matter
-   which period you're viewing. Only Dev Hours (rolled up from THIS
+   which period you're viewing. Only Dev Time (rolled up from THIS
    period's dev-time entries) and which projects even appear change with
    the selected period (confirmed with Ezekiel, 2 Sep 2026). The three
    cards up top are the one place this page shows a period-scoped
-   figure: Total cost = ledger entries dated in this window; Closed /
-   Projected profit = the lifetime profit of every project touching this
-   period, split by whether it's closed or still open.
+   figure: Total cost = ledger entries dated in this window (its caption
+   lists which cost types actually have entries — dev/Claude/hardware/
+   licensing — via rollup.cost_type_labels); Closed profit = the
+   lifetime profit of every project that closed during this exact
+   period (a closed project only ever overlaps the one period-instance
+   it closed in, at any granularity — see lib/periods.py — so "closed
+   this {{ view }}" is always accurate, not just true for the week
+   view); Projected profit = charge minus costs so far, across every
+   still-open project touching this period — a static caption, not a
+   period-scoped count, since it's describing the formula rather than
+   naming specific projects.
 
-   The expanded feature subtable's "Total hours" is that feature's dev
-   hours logged within THIS period (same scoping as the project row's
-   Dev hours column) — "Stage" is just the feature's current status,
-   unrelated to which stage those hours were logged under. Header row
-   added 2 Sep 2026 after Ezekiel flagged the columns reading as if the
-   hours belonged to the stage shown next to them.
+   Closed profit reads in --pine (the app's existing green), Projected
+   profit in the DI stage system's existing blue text token
+   (di-column-header--sky) — a deliberate colour split so "money already
+   banked" and "money we're still estimating" don't look interchangeable
+   (Ezekiel's wireframe, 2 Sep 2026).
 
-   "di-perf-stats" alongside "di-cost-stats" on the card row below: the
-   Cost Breakdown modal (the other user of .di-cost-stat-card) always has
-   a white .modal-box behind it, but Performance's copy sits straight on
-   the bare page background — .di-cost-stat-card has no border/shadow of
-   its own (just a flat --surface-hover fill), so on the page it barely
-   separates from the page colour in light mode even though it reads
-   fine in dark (see the scoped border in digital_innovation.css).
-   Ezekiel, 2 Sep 2026. #}
-<div class="di-perf-nav">
-    <a class="di-perf-nav-arrow" href="{{ url_for('digital_innovation.performance_screen', view=view, period=prev_period) }}" aria-label="Previous period">&larr;</a>
-    <span class="di-perf-period-label">{{ rollup.period_label }}</span>
-    <a class="di-perf-nav-arrow" href="{{ url_for('digital_innovation.performance_screen', view=view, period=next_period) }}" aria-label="Next period">&rarr;</a>
-</div>
+   Every currency figure here is whole-number + thousands-separated
+   (Jinja's '{:,.0f}' format), with profit additionally getting an
+   explicit +/- sign (Python's '{:+,.0f}' format flag) — Cost Breakdown's
+   ledger keeps its existing 2-decimal style; this page's numbers are
+   always rollups/estimates, not ledger entries, so whole dollars read
+   better per the wireframe.
 
+   Expanded features render as their own rows directly under the SAME
+   six columns as their parent project (name indented under Project, a
+   small coloured stage pill under Status, hours under Dev Time, Cost/
+   Charge/Profit blank) rather than a separate mini-table with its own
+   header — Ezekiel's wireframe drops the FEATURE/STAGE/TOTAL HOURS
+   subheader added earlier today in favour of this: putting the hours in
+   the literal same "Dev Time" column as every other row already makes
+   it unambiguous they're not somehow scoped to the stage shown next to
+   them, without needing a caption to say so. #}
 <div class="di-cost-stats di-perf-stats">
     <div class="di-cost-stat-card">
         <span class="di-cost-stat-label">Total {{ view }}ly cost</span>
-        <span class="di-cost-stat-value">{{ currency }} {{ '%.2f' | format(rollup.total_cost) }}</span>
+        <span class="di-cost-stat-value">{{ currency }} {{ '{:,.0f}'.format(rollup.total_cost) }}</span>
+        <span class="di-perf-stat-caption">
+            Costs dated in {{ rollup.period_label_primary }}{% if rollup.cost_type_labels %} &middot; {{ rollup.cost_type_labels | join(', ') }}{% endif %}
+        </span>
     </div>
     <div class="di-cost-stat-card">
         <span class="di-cost-stat-label">{{ view_labels[view] }} closed profit</span>
-        <span class="di-cost-stat-value di-perf-profit">{{ currency }} {{ '%.2f' | format(rollup.closed_profit) }}</span>
+        <span class="di-cost-stat-value di-perf-profit">{{ currency }} {{ '{:,.0f}'.format(rollup.closed_profit) }}</span>
+        <span class="di-perf-stat-caption">
+            {% if rollup.closed_project_count %}Profit from {{ rollup.closed_project_count }} project{{ '' if rollup.closed_project_count == 1 else 's' }} closed this {{ view }}{% else %}No projects closed this {{ view }}{% endif %}
+        </span>
     </div>
     <div class="di-cost-stat-card">
         <span class="di-cost-stat-label">Projected {{ view }}ly profit</span>
-        <span class="di-cost-stat-value di-perf-profit">{{ currency }} {{ '%.2f' | format(rollup.projected_profit) }}</span>
+        <span class="di-cost-stat-value di-column-header--sky">{{ currency }} {{ '{:,.0f}'.format(rollup.projected_profit) }}</span>
+        <span class="di-perf-stat-caption">Charge &minus; costs so far, across open projects</span>
     </div>
 </div>
 
@@ -59,7 +78,7 @@
             <tr>
                 <th>Project</th>
                 <th>Status</th>
-                <th>Dev hours</th>
+                <th>Dev time</th>
                 <th>Cost</th>
                 <th>Charge</th>
                 <th>Profit</th>
@@ -67,47 +86,37 @@
         </thead>
         <tbody>
             {% for row in rollup.projects %}
-            <tr class="di-perf-project-row" data-di-project-row="{{ row.id }}">
+            {% set is_closed = row.lifecycle in ('closed', 'archived') %}
+            <tr class="di-perf-project-row{% if is_closed %} di-perf-project-row--closed{% endif %}" data-di-project-row="{{ row.id }}">
                 <td class="di-perf-project-cell">
                     {% if row.features %}
-                    <button type="button" class="di-perf-expand-btn" aria-label="Expand features" aria-expanded="false">&#9656;</button>
+                    <button type="button" class="di-perf-expand-btn" aria-label="Expand features" aria-expanded="false">&rsaquo;</button>
                     {% endif %}
                     <span class="di-dot di-dot--{{ row.colour or 'oak' }}"></span>
-                    <span class="di-perf-project-name">{{ row.name }}</span>
+                    <span class="di-perf-project-name">
+                        {{ row.name }}
+                        {% if row.client_label %}<span class="di-perf-project-client-label">{{ row.client_label }}</span>{% endif %}
+                    </span>
                     <span class="di-perf-feature-count">{{ row.active_feature_count }} active{% if row.closed_feature_count %}, {{ row.closed_feature_count }} closed{% endif %} feature{{ '' if (row.active_feature_count + row.closed_feature_count) == 1 else 's' }}</span>
                 </td>
-                <td>{{ 'Closed' if row.lifecycle in ('closed', 'archived') else 'Active' }}</td>
-                <td>{{ row.dev_hours | round(1) }}h</td>
-                <td>{{ currency }} {{ '%.2f' | format(row.total_cost) }}</td>
-                <td>{% if row.client_charge is not none %}{{ currency }} {{ '%.2f' | format(row.client_charge) }}{% else %}&mdash;{% endif %}</td>
-                <td class="{% if row.profit is not none %}di-perf-profit{% endif %}">
-                    {% if row.profit is not none %}{{ currency }} {{ '%.2f' | format(row.profit) }}{% if row.lifecycle == 'active' %} <span class="di-perf-projected-tag">proj</span>{% endif %}{% else %}&mdash;{% endif %}
+                <td><span class="di-perf-status-pill di-column-count--{{ 'clover' if is_closed else 'sky' }}">{% if is_closed %}&check; Closed{% else %}In progress{% endif %}</span></td>
+                <td>{{ row.dev_hours | round(0) | int }}h</td>
+                <td>{{ currency }} {{ '{:,.0f}'.format(row.total_cost) }}</td>
+                <td>{% if row.client_charge is not none %}{{ currency }} {{ '{:,.0f}'.format(row.client_charge) }}{% else %}&mdash;{% endif %}</td>
+                <td class="{% if row.profit is not none %}{{ 'di-perf-profit' if is_closed else 'di-column-header--sky' }}{% endif %}">
+                    {% if row.profit is not none %}{{ currency }} {{ '{:+,.0f}'.format(row.profit) }}{% if not is_closed %} <span class="di-perf-projected-tag">proj</span>{% endif %}{% else %}&mdash;{% endif %}
                 </td>
             </tr>
-            {% if row.features %}
-            <tr class="di-perf-feature-subrow hidden" data-di-project-features="{{ row.id }}">
-                <td colspan="6">
-                    <table class="di-perf-feature-subtable">
-                        <thead>
-                            <tr>
-                                <th>Feature</th>
-                                <th>Stage</th>
-                                <th>Total hours</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for feature in row.features %}
-                            <tr>
-                                <td class="di-perf-feature-name">{{ feature.name }}</td>
-                                <td class="di-perf-feature-status">{{ feature.status_label }}</td>
-                                <td class="di-perf-feature-hours">{{ feature.dev_hours | round(1) }}h</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </td>
+            {% for feature in row.features %}
+            <tr class="di-perf-feature-row hidden" data-di-project-features="{{ row.id }}">
+                <td class="di-perf-feature-cell">{{ feature.name }}</td>
+                <td><span class="di-perf-status-pill di-column-count--{{ feature.status_colour }}">{{ feature.status_label }}</span></td>
+                <td>{{ feature.dev_hours | round(0) | int }}h</td>
+                <td></td>
+                <td></td>
+                <td></td>
             </tr>
-            {% endif %}
+            {% endfor %}
             {% else %}
             <tr><td colspan="6" class="di-cost-ledger-empty">No projects in this period.</td></tr>
             {% endfor %}

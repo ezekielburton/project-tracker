@@ -78,6 +78,97 @@ def test_get_period_rollup_excludes_a_project_with_no_client_charge_from_both_pr
     assert rollup['projected_profit'] == 0.0
 
 
+def test_get_period_rollup_passes_through_the_project_client_label(db_session):
+    project = _project(db_session, 'm', created_at=datetime.datetime(2026, 1, 1))
+    project.client_label = 'Landing rebuild'
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    assert rollup['projects'][0]['client_label'] == 'Landing rebuild'
+
+
+def test_get_period_rollup_client_label_is_none_when_unset(db_session):
+    _project(db_session, 'n', created_at=datetime.datetime(2026, 1, 1))
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    assert rollup['projects'][0]['client_label'] is None
+
+
+def test_get_period_rollup_cost_type_labels_only_lists_types_present_in_the_period(db_session):
+    project = _project(db_session, 'o', created_at=datetime.datetime(2026, 1, 1))
+    costs.add_cost_entry(project, datetime.date(2026, 8, 18), 'claude', amount=50)
+    # Outside the week — its type must not show up in the caption either.
+    costs.add_cost_entry(project, datetime.date(2026, 8, 25), 'licensing', amount=20)
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    assert rollup['cost_type_labels'] == ['Claude']
+
+
+def test_get_period_rollup_cost_type_labels_follow_di_cost_types_order(db_session):
+    project = _project(db_session, 'p', created_at=datetime.datetime(2026, 1, 1))
+    feature = engine.create_feature(project, 'Some feature')
+    # Added out of DI_COST_TYPES order (licensing, then dev_time) — the
+    # caption should still read in the canonical dev/Claude/hardware/
+    # licensing order, not insertion order.
+    costs.add_cost_entry(project, datetime.date(2026, 8, 18), 'licensing', amount=20)
+    costs.add_cost_entry(project, datetime.date(2026, 8, 19), 'dev_time', hours=1, feature=feature)
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    assert rollup['cost_type_labels'] == ['dev', 'licensing']
+
+
+def test_get_period_rollup_cost_type_labels_empty_when_no_costs_in_the_period(db_session):
+    _project(db_session, 'q', created_at=datetime.datetime(2026, 1, 1))
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    assert rollup['cost_type_labels'] == []
+
+
+def test_get_period_rollup_closed_project_count_counts_closed_projects_with_profit(db_session):
+    closed_a = _project(
+        db_session, 'closed-a', client_charge=1000.0,
+        created_at=datetime.datetime(2026, 1, 1),
+        closed_at=datetime.datetime(2026, 8, 19), lifecycle='closed',
+    )
+    costs.add_cost_entry(closed_a, datetime.date(2026, 8, 1), 'hardware', amount=100)
+    closed_b = _project(
+        db_session, 'closed-b', client_charge=500.0,
+        created_at=datetime.datetime(2026, 1, 1),
+        closed_at=datetime.datetime(2026, 8, 20), lifecycle='closed',
+    )
+    costs.add_cost_entry(closed_b, datetime.date(2026, 8, 1), 'hardware', amount=50)
+    # Still active — must not count even though it's in the period.
+    _project(db_session, 'active-c', client_charge=200.0, created_at=datetime.datetime(2026, 1, 1))
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    assert rollup['closed_project_count'] == 2
+
+
+def test_get_period_rollup_closed_project_count_excludes_a_closed_project_with_no_client_charge(db_session):
+    closed = _project(
+        db_session, 'closed-d', client_charge=None,
+        created_at=datetime.datetime(2026, 1, 1),
+        closed_at=datetime.datetime(2026, 8, 19), lifecycle='closed',
+    )
+    costs.add_cost_entry(closed, datetime.date(2026, 8, 1), 'hardware', amount=100)
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    assert rollup['closed_project_count'] == 0
+
+
 def test_get_period_rollup_only_lists_active_features_when_expanded(db_session):
     project = _project(db_session, 'h', created_at=datetime.datetime(2026, 1, 1))
     engine.create_feature(project, 'Still going')
@@ -91,6 +182,7 @@ def test_get_period_rollup_only_lists_active_features_when_expanded(db_session):
     assert row['active_feature_count'] == 1
     assert row['closed_feature_count'] == 1
     assert [f['name'] for f in row['features']] == ['Still going']
+    assert row['features'][0]['status'] == 'researching'  # DI_STAGES[0], create_feature()'s starting stage
 
 
 def test_get_period_rollup_current_month_is_never_snapshotted(db_session):

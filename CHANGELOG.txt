@@ -8,19 +8,19 @@ v2.4.1
 New Features:
 
 - Dark mode added to OVP! Toggle in settings or on the top header bar.
-- Added the Digital Innovation section. Keep track of what's happening in OVP!
-- Client Servicing Module is LIVE! Use this going forward, instead of the Excel! One table for everything, with a charts and weekly/monthly/yearly view.
+- Added the Digital Innovation section. Keep track of what's happening in OVP!.
+- Client Servicing Module is LIVE! Use this going forward, instead of the Excel!
 
 Adjustments:
 
-- SPA navigation done for projects tabs & filtering navigations
-- Loading bar added for in app navigation
+- SPA navigation done for projects tabs & filtering navigations.
+- Loading bar added for in app navigation.
 
 
 
 Bug Fixes:
 
-- 
+- Fixed deliverables page loading extremely slowly.
 
 ================================================================================
 v2.4

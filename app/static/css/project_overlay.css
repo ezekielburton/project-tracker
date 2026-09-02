@@ -4150,6 +4150,22 @@ margin here, so an empty panel (just the History button) stays tiny. */
     cursor: pointer;
 }
 
+/* Teams Required edit-mode checkbox group (Details tab). Layout only; the
+   labels reuse .overlay-create-checkbox-inline above. The .is-hidden pair
+   is the same specificity trick documented for .overlay-edit-input higher
+   up — a two-class selector so is-hidden wins over this rule regardless of
+   source order, keeping the group hidden outside edit mode. */
+.overlay-teams-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.overlay-teams-edit.is-hidden {
+    display: none;
+}
+
 .overlay-create-subfields {
     display: flex;
     flex-direction: column;

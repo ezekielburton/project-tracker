@@ -22,7 +22,21 @@ from sqlalchemy import func
 
 from app.modules.core.shared.extensions import db
 from app.modules.digital_innovation.lib import periods, costs
-from app.modules.digital_innovation.models import DiCostEntry, DiPeriodSnapshot, DI_STAGE_LABELS
+from app.modules.digital_innovation.models import (
+    DiCostEntry, DiPeriodSnapshot, DI_STAGE_LABELS, DI_STAGE_COLOURS, DI_COST_TYPES,
+)
+
+# Short, lower-case labels for the "Total cost" card's caption ("dev,
+# Claude, hardware, licensing") — deliberately its own small map rather
+# than reusing lib/costs.py's DI_COST_TYPE_LABELS, which is Title Case
+# for the Cost Breakdown ledger's type pills, a different display
+# context (Ezekiel's wireframe, 2 Sep 2026).
+_COST_TYPE_CAPTION_LABELS = {
+    'dev_time': 'dev',
+    'claude': 'Claude',
+    'hardware': 'hardware',
+    'licensing': 'licensing',
+}
 
 
 def get_period_rollup(period_type, period_key):
@@ -48,10 +62,12 @@ def _compute_rollup(period_type, period_key):
 
     dev_hours_by_project, dev_hours_by_feature = _period_dev_hours(project_ids, period_start, period_end)
     period_cost = _period_total_cost(project_ids, period_start, period_end)
+    cost_types_present = _period_cost_types(project_ids, period_start, period_end)
 
     project_rows = []
     closed_profit = 0.0
     projected_profit = 0.0
+    closed_project_count = 0
 
     for project in overlapping:
         summary = costs.cost_summary(project)
@@ -61,6 +77,7 @@ def _compute_rollup(period_type, period_key):
         if profit is not None:
             if is_closed:
                 closed_profit += profit
+                closed_project_count += 1
             else:
                 projected_profit += profit
 
@@ -70,6 +87,7 @@ def _compute_rollup(period_type, period_key):
         project_rows.append({
             'id': project.id,
             'name': project.name,
+            'client_label': project.client_label,
             'colour': project.colour,
             'lifecycle': project.lifecycle,
             'dev_hours': round(dev_hours_by_project.get(project.id, 0.0), 2),
@@ -82,6 +100,8 @@ def _compute_rollup(period_type, period_key):
                 {
                     'id': f.id,
                     'name': f.name,
+                    'status': f.status,
+                    'status_colour': DI_STAGE_COLOURS.get(f.status, 'oak'),
                     'status_label': DI_STAGE_LABELS.get(f.status, f.status),
                     'dev_hours': round(dev_hours_by_feature.get(f.id, 0.0), 2),
                 }
@@ -89,12 +109,18 @@ def _compute_rollup(period_type, period_key):
             ],
         })
 
+    period_label_primary, period_label_secondary = periods.format_period_label_parts(period_type, period_key)
+
     return {
         'period_type': period_type,
         'period_key': period_key,
         'period_label': periods.format_period_label(period_type, period_key),
+        'period_label_primary': period_label_primary,
+        'period_label_secondary': period_label_secondary,
         'total_cost': period_cost,
+        'cost_type_labels': [_COST_TYPE_CAPTION_LABELS[t] for t in DI_COST_TYPES if t in cost_types_present],
         'closed_profit': closed_profit,
+        'closed_project_count': closed_project_count,
         'projected_profit': projected_profit,
         'projects': project_rows,
     }
@@ -125,6 +151,26 @@ def _period_dev_hours(project_ids, period_start, period_end):
         if feature_id is not None:
             by_feature[feature_id] = by_feature.get(feature_id, 0.0) + hours
     return by_project, by_feature
+
+
+def _period_cost_types(project_ids, period_start, period_end):
+    """Set of DiCostEntry.type values with at least one entry dated
+    inside the window, across the projects that overlap it — feeds the
+    'Total cost' card's caption (e.g. "dev, Claude, hardware, licensing"
+    when all four show up, fewer names when they don't)."""
+    if not project_ids:
+        return set()
+    rows = (
+        db.session.query(DiCostEntry.type)
+        .filter(
+            DiCostEntry.di_project_id.in_(project_ids),
+            DiCostEntry.date >= period_start,
+            DiCostEntry.date <= period_end,
+        )
+        .distinct()
+        .all()
+    )
+    return {row[0] for row in rows}
 
 
 def _period_total_cost(project_ids, period_start, period_end):

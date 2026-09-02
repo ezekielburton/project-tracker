@@ -74,3 +74,74 @@ def build_cost_ledger_workbook(di_project, summary):
     wb.save(buffer)
     buffer.seek(0)
     return buffer
+
+
+def build_performance_workbook(rollup, currency):
+    """Performance page export (Ezekiel's wireframe, 2 Sep 2026) — one
+    row per project in the current period's rollup, same columns as the
+    on-screen table, plus the three summary figures up top. `rollup` is
+    whatever lib.snapshots.get_period_rollup() returned; the route
+    already has it (it just rendered the page from it), so this doesn't
+    re-query either, same choice build_cost_ledger_workbook() above
+    makes for the same reason."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Performance'
+
+    bold = Font(bold=True)
+    header_font = Font(bold=True, color='FFFFFF')
+
+    ws['A1'] = f"Digital Innovation Performance — {rollup['period_label']}"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A2'] = f'Exported {datetime.utcnow().strftime("%d %b %Y")}'
+    ws['A2'].font = Font(italic=True, color='666666')
+
+    ws['A4'] = 'Total cost'
+    ws['A4'].font = bold
+    ws['B4'] = rollup['total_cost']
+    ws['A5'] = 'Closed profit'
+    ws['A5'].font = bold
+    ws['B5'] = rollup['closed_profit']
+    ws['A6'] = 'Projected profit'
+    ws['A6'].font = bold
+    ws['B6'] = rollup['projected_profit']
+
+    headers = ['Project', 'Status', 'Dev hours', 'Cost', 'Charge', 'Profit']
+    header_row = 8
+    for col, label in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col, value=label)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='left')
+        cell.fill = _HEADER_FILL
+
+    row = header_row + 1
+    for project in rollup['projects']:
+        is_closed = project['lifecycle'] in ('closed', 'archived')
+        ws.cell(row=row, column=1, value=project['name'])
+        ws.cell(row=row, column=2, value='Closed' if is_closed else 'In progress')
+        ws.cell(row=row, column=3, value=project['dev_hours'])
+        ws.cell(row=row, column=4, value=project['total_cost'])
+        ws.cell(row=row, column=5, value=project['client_charge'])
+        ws.cell(row=row, column=6, value=project['profit'])
+        row += 1
+
+    if not rollup['projects']:
+        ws.cell(row=row, column=1, value='No projects in this period.')
+
+    for col in (4, 5, 6):
+        for r in range(header_row + 1, row):
+            cell = ws.cell(row=r, column=col)
+            if cell.value is not None:
+                cell.number_format = f'"{currency}" #,##0'
+    ws['B4'].number_format = f'"{currency}" #,##0'
+    ws['B5'].number_format = f'"{currency}" #,##0'
+    ws['B6'].number_format = f'"{currency}" #,##0'
+
+    widths = [26, 12, 11, 14, 14, 14]
+    for col, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer

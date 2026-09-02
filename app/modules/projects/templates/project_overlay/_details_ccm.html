@@ -71,6 +71,7 @@ the first one. See project_details_card.js. #}
                     {% endif %}
                 </span>
             </div>
+            {% include "project_overlay/_details_teams_required.html" %}
             <div class="overlay-property-row"{% if can_edit_project %} data-field="first_output_deadline"
                 data-field-type="date"{% endif %}>
                 <span class="overlay-property-label">Initial Deadline</span>

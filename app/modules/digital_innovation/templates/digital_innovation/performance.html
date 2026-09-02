@@ -15,13 +15,35 @@
                     <h1 class="di-board-title">Performance</h1>
                     <p class="di-board-subtitle">Digital Innovation &middot; profitability &amp; cost tracking</p>
                 </div>
+                <div class="di-board-header-actions">
+                    <a class="btn-secondary di-perf-export-btn"
+                       href="{{ url_for('digital_innovation.export_performance', view=view, period=period_key) }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Export
+                    </a>
+                </div>
             </div>
 
-            <div class="di-perf-tabs">
-                {% for tab in ('week', 'month', 'quarter') %}
-                <a href="{{ url_for('digital_innovation.performance_screen', view=tab) }}"
-                   class="di-perf-tab{% if view == tab %} di-perf-tab--active{% endif %}">{{ view_labels[tab] }}</a>
-                {% endfor %}
+            <div class="di-perf-tabs-row">
+                <div class="di-perf-tabs">
+                    {% for tab in ('week', 'month', 'quarter') %}
+                    <a href="{{ url_for('digital_innovation.performance_screen', view=tab) }}"
+                       class="di-perf-tab{% if view == tab %} di-perf-tab--active{% endif %}">{{ view_labels[tab] }}</a>
+                    {% endfor %}
+                </div>
+
+                <div class="di-perf-nav">
+                    <a class="di-perf-nav-arrow" href="{{ url_for('digital_innovation.performance_screen', view=view, period=prev_period) }}" aria-label="Previous period">&larr;</a>
+                    <span class="di-perf-period-label">
+                        <span class="di-perf-period-primary">{{ rollup.period_label_primary }}</span>
+                        {% if rollup.period_label_secondary %}<span class="di-perf-period-secondary">{{ rollup.period_label_secondary }}</span>{% endif %}
+                    </span>
+                    <a class="di-perf-nav-arrow" href="{{ url_for('digital_innovation.performance_screen', view=view, period=next_period) }}" aria-label="Next period">&rarr;</a>
+                </div>
             </div>
 
             {% include "digital_innovation/_performance_table.html" %}
@@ -31,5 +53,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/digital_innovation_shell.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/digital_innovation_performance.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

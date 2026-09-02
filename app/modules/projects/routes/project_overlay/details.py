@@ -408,6 +408,7 @@ _DETAILS_FIELD_LABELS = {
     'concept_options_required': 'Options Required',
     'campaign_notes': 'Campaign Notes',
     'kv_requirements': 'Concept & KV Details',
+    'design_teams_requested': 'Teams Required',
 }
 
 
@@ -504,6 +505,38 @@ def overlay_details_save(project_id):
             changes.append({'field': field_name, 'old': old_value, 'new': new_value})
             setattr(project, attr_name, new_value)
 
+    # Teams Required (design_teams_requested) — not a simple whitelisted field:
+    # dropping a team also clears that team's Design Lead (per Ezekiel), so it's
+    # reconciled here rather than through FIELD_MAP. Validated to the three
+    # known teams; stored canonically-ordered and comma-joined (same shape as
+    # the create brief writes).
+    removed_lead_notes = []
+    if 'design_teams_requested' in fields:
+        from app.modules.core.shared.models import ProjectDesigner
+        _TEAMS = ['2D', '3D', 'Technical']
+        _canon = {'2d': '2D', '3d': '3D', 'technical': 'Technical'}
+        new_teams = []
+        for tok in (fields.get('design_teams_requested') or '').split(','):
+            t = tok.strip()
+            if not t:
+                continue
+            key = _canon.get(t.lower())
+            if not key:
+                return jsonify({'success': False, 'error': f'Unknown design team: {t}'}), 400
+            if key not in new_teams:
+                new_teams.append(key)
+        new_value = ','.join(t for t in _TEAMS if t in new_teams)
+        old_value = project.design_teams_requested or ''
+        if new_value != old_value:
+            old_teams = [t.strip() for t in old_value.split(',') if t.strip()]
+            for team in [t for t in old_teams if t not in new_teams]:
+                assignment = ProjectDesigner.query.filter_by(project_id=project.id, team=team).first()
+                if assignment:
+                    removed_lead_notes.append(f'{team} lead {assignment.designer.name}')
+                    db.session.delete(assignment)
+            project.design_teams_requested = new_value
+            changes.append({'field': 'design_teams_requested', 'old': old_value, 'new': new_value})
+
     if not changes:
         return jsonify({'success': True, 'changed': False})
 
@@ -526,6 +559,15 @@ def overlay_details_save(project_id):
         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
         changes=logged_changes,
     )
+
+    # A separate, discoverable entry when a team drop cleared its Design Lead —
+    # mirrors assign_lead's own lead_* activity entries.
+    if removed_lead_notes:
+        log_activity(
+            'lead_removed',
+            f'{actor.name} removed {", ".join(removed_lead_notes)} on "{project.name}" (team no longer required)',
+            user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+        )
 
     return jsonify({'success': True, 'changed': True, 'changes': [c['field'] for c in changes]})
 

@@ -113,6 +113,20 @@ admins manage the full list from the "CS Scopes" tab in the Admin Panel
 The sidebar shell has three: **Table** (built), **Calendar** and **Invoicing**
 (real, clickable placeholder pages, content not yet built).
 
+## TEMPORARY: main-sidebar link disabled (2 Sep 2026)
+Ezekiel is deploying other changes and wants this module visible-but-disabled
+in the global app sidebar (management can see it exists) without exposing a
+working link to a still-half-built page. Only `base.html` changed: the CS
+sidebar entry is a `<span class="sidebar-item sidebar-item--unlinked">`
+instead of `<a ... class="sidebar-item sidebar-item--nav">` — greyed out, no
+href, same pattern already used there for Design Outing Board / Birthday
+Calendar. Still gated on `can_access_client_servicing`, so it only shows
+(greyed out) to people who could actually use a direct link. Nothing else
+changed — the page, its routes, and its access gate are exactly as before;
+still fully reachable at `/client-servicing/` for anyone with access.
+**To restore**: swap that `<span>`/`sidebar-item--unlinked` back for the
+`<a>`/`sidebar-item--nav` + `href="{{ url_for('client_servicing.index') }}"`.
+
 ## Remaining scope
 - **Invoicing** — real content. The finance fields deliberately kept off the
   table land here: LPO/PO Number, LPO Date, Invoice #/Date/Amount, Collected

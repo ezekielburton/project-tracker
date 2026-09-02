@@ -95,6 +95,28 @@ def test_format_period_label_quarter():
     assert periods.format_period_label('quarter', '2026-Q3') == 'Q3 2026'
 
 
+# ── format_period_label_parts ────────────────────────────────────────────
+# The (primary, secondary) split the Performance header renders as two
+# lines — format_period_label() above is just these two joined with ', '.
+
+def test_format_period_label_parts_week_splits_primary_and_secondary():
+    assert periods.format_period_label_parts('week', '2026-W34') == ('Week 34', 'Aug 17-23, 2026')
+
+
+def test_format_period_label_parts_week_spanning_two_months():
+    # Week 36, 2026 runs Aug 31 - Sep 6 — the cross-month branch needs its
+    # own format (both ends spelled out) since "Aug 31-06" would misread.
+    assert periods.format_period_label_parts('week', '2026-W36') == ('Week 36', 'Aug 31 - Sep 06, 2026')
+
+
+def test_format_period_label_parts_month_has_no_secondary_line():
+    assert periods.format_period_label_parts('month', '2026-09') == ('September 2026', '')
+
+
+def test_format_period_label_parts_quarter_has_no_secondary_line():
+    assert periods.format_period_label_parts('quarter', '2026-Q3') == ('Q3 2026', '')
+
+
 # ── period_has_ended ───────────────────────────────────────────────────
 
 def test_period_has_ended_true_for_a_past_month():

@@ -23,10 +23,28 @@
     padding-bottom: 0;
 }
 
+/* .di-shell's height used to be a percentage chain (.di-page/.di-shell
+   both height:100%, relying on .main-content's flex:1 to give them
+   something definite to resolve against) — found 3 Sep 2026 this
+   doesn't actually work: .main-content is only a flex ITEM of body's
+   flex column, not itself a flex container with a definite resolved
+   height, and client_servicing.css already documented hitting and
+   confirming this exact failure (a headless Chromium repro: "no flex
+   container in the chain having a truly definite height, flex items
+   skip growth-clamping entirely and just size to their content").
+   Explains why the percentage-chain fix never visibly changed anything
+   across several rounds of live-testing. Switched to the same technique
+   client_servicing.js already proved out for its own scrolling table
+   (syncTableScrollHeight) — digital_innovation_shell.js measures the
+   real gap between .di-shell's top and the footer with
+   getBoundingClientRect() and sets --di-shell-height directly, once per
+   DI screen load. The calc(100vh - 200px) here is only the pre-JS
+   fallback (same "roughly clears the fixed chrome" convention as
+   wiki.css's identical calc). */
 .di-shell {
     display: flex;
     align-items: stretch;
-    min-height: calc(100vh - 3.5rem);
+    height: var(--di-shell-height, calc(100vh - 200px));
 }
 
 /* ── Module's own secondary sidebar ── */
@@ -461,6 +479,27 @@
     margin: var(--space-2) 0;
 }
 
+
+/* #di-board-body (see _board_columns.html) is a plain <div> inserted
+   2 Sep 2026 as the live-refresh JS's swap target (diRefreshBoard) — it
+   sits between .di-board (flex column, see above) and .di-columns/
+   .di-closed-strip below, so without its own flex participation those
+   two lose the flex chain .di-board is set up to hand them: .di-columns'
+   own flex:1/overflow-y:auto (meant to grow and become the scrollable
+   region) and .di-closed-strip's flex-shrink:0 (meant to stay pinned at
+   natural height below it) both do nothing once their direct parent is
+   an ordinary block box instead of a flex container. This is what was
+   actually behind the "board/closed-features shrunk to a quarter of the
+   page" regression — not a caching issue (found 2 Sep 2026, confirmed
+   after Ezekiel ruled out stale CSS by restarting the server and still
+   seeing it). Re-establishes exactly the flex column .di-columns/
+   .di-closed-strip were designed to sit in directly. */
+#di-board-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
 
 .di-columns {
     display: flex;
@@ -1332,33 +1371,45 @@
 }
 
 
+.di-perf-tabs-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+}
+
 .di-perf-tabs {
     display: flex;
     gap: var(--space-2);
-    margin-bottom: var(--space-4);
 }
 
 .di-perf-tab {
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-sm);
-    background: var(--surface-hover);
-    color: var(--text-muted);
+    background: rgba(46, 109, 164, 0.14);
+    color: var(--di-sky-text);
     text-decoration: none;
     font-size: var(--text-sm);
     font-weight: 600;
 }
 
+:root[data-theme="dark"] .di-perf-tab {
+    background: rgba(185, 222, 254, 0.16);
+    color: #C8E5FE;
+}
+
 .di-perf-tab--active {
-    background: var(--surface-raised);
-    color: var(--text);
-    border: 1px solid var(--border-strong);
+    background: var(--sky);
+    color: var(--di-sky-text);
+    border: 1px solid var(--di-sky-text);
 }
 
 .di-perf-nav {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    margin-bottom: var(--space-4);
 }
 
 .di-perf-nav-arrow {
@@ -1368,24 +1419,57 @@
     width: 28px;
     height: 28px;
     border-radius: var(--radius-sm);
-    background: var(--surface-hover);
-    color: var(--text);
+    background: rgba(46, 109, 164, 0.14);
+    color: var(--di-sky-text);
     text-decoration: none;
 }
 
-.di-perf-nav-arrow:hover {
-    background: var(--surface-raised);
+:root[data-theme="dark"] .di-perf-nav-arrow {
+    background: rgba(185, 222, 254, 0.16);
+    color: #C8E5FE;
 }
 
+.di-perf-nav-arrow:hover {
+    background: var(--sky);
+    color: var(--di-sky-text);
+}
+
+:root[data-theme="dark"] .di-perf-nav-arrow:hover {
+    background: var(--sky);
+    color: var(--di-sky-text);
+}
+
+/* Two lines per Ezekiel's wireframe (2 Sep 2026) — "Week 36" bold, the
+   actual date range small and muted underneath. A month/quarter has no
+   secondary line (lib/periods.py's format_period_label_parts() returns
+   '' for those — the whole label already reads fine as one line), so
+   this still needs to look right with only the primary child present. */
 .di-perf-period-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.25;
+}
+
+.di-perf-period-primary {
     font-weight: 600;
     color: var(--text);
+}
+
+.di-perf-period-secondary {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
 }
 
 /* --pine is the app's established positive/success text colour, used as
    plain `color:` throughout main.css with no dark-mode override needed
    (it's muted enough to read fine in both modes) — reused here rather
-   than inventing a new "profit green". */
+   than inventing a new "profit green". Projected profit instead reuses
+   .di-column-header--sky directly in the template (the DI stage
+   system's existing blue text token, already dark-tuned) rather than a
+   colour rule of its own here — "money already banked" vs "money still
+   being estimated" read as visibly different colours without a third
+   colour system (Ezekiel's wireframe, 2 Sep 2026). */
 .di-perf-profit {
     color: var(--pine);
 }
@@ -1398,18 +1482,59 @@
 /* .di-cost-stat-card (shared with the Cost Breakdown modal) is a flat
    --surface-hover fill with no border/shadow of its own — fine inside
    Cost Breakdown's white .modal-box, but Performance's copy sits
-   straight on the bare page background, where --surface-hover is only
-   a few RGB units off the page colour in light mode (it happens to read
-   fine in dark, where that same token step is much more perceptible —
-   Ezekiel, 2 Sep 2026). A scoped border here — not on the shared class,
-   so the modal's cards are untouched — gives the cards a real edge to
-   read against the page in both modes. */
+   straight on the bare page background. A 1px --border edge alone
+   (first attempt) still barely read against the page — --surface-hover
+   (#EDEAE4 light mode) is only ~8 RGB units off --background (#f5f1ed),
+   and --border (#D4CCBE) is itself a light tan, so the "border" was
+   nearly invisible in a real screenshot (Ezekiel, 2 Sep 2026: "make the
+   cards white"). Switched to the same true-white recipe
+   .di-cost-stat-card--total already uses below (--surface-raised is
+   literal #FFFFFF / --border-strong is a real grey, #AAAAAA) — scoped
+   here, not on the shared class, so Cost Breakdown's own (unelevated,
+   inside-a-white-modal) cards are untouched. */
 .di-perf-stats .di-cost-stat-card {
-    border: 1px solid var(--border);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
 }
 
+.di-perf-stat-caption {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+}
+
+.di-perf-export-btn {
+    gap: var(--space-2);
+}
+
+/* Same "true white, not just --white" fix as the stat cards above —
+   .table-wrapper's own var(--white) (#fafafa light mode) is only ~5-13
+   RGB units off the page background, so the table read as blending into
+   the page too (Ezekiel, 2 Sep 2026). Overrides just for Performance's
+   copy, same specificity so this rule (declared after .table-wrapper in
+   the cascade) wins without touching the shared class other DI screens
+   use. */
 .di-perf-table-wrapper {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border-strong);
     margin-bottom: var(--space-4);
+}
+
+.di-perf-table thead,
+.di-perf-table thead th,
+.di-perf-table thead th:first-child {
+    background-color: var(--surface-raised);
+}
+
+.di-perf-table th:first-child,
+.di-perf-table td:first-child {
+    position: static;
+    box-shadow: none;
+}
+
+.di-perf-table tbody td:first-child {
+    background-color: inherit;
 }
 
 .di-perf-project-cell {
@@ -1420,6 +1545,13 @@
 
 .di-perf-project-name {
     font-weight: 600;
+}
+
+.di-perf-project-client-label {
+    margin-left: var(--space-2);
+    font-weight: 400;
+    font-style: italic;
+    color: var(--text-muted);
 }
 
 .di-perf-feature-count {
@@ -1433,39 +1565,55 @@
     border: none;
     cursor: pointer;
     color: var(--text-muted);
-    font-size: var(--text-sm);
+    font-size: var(--text-med);
+    line-height: 1;
     padding: 0;
+    transition: transform 0.15s ease;
 }
 
-.di-perf-feature-subrow td {
+/* Rotating the same "›" glyph 90° reads as a down-chevron when expanded
+   — one glyph, no JS innerHTML-swapping needed (digital_innovation_
+   performance.js just toggles the aria-expanded attribute). */
+.di-perf-expand-btn[aria-expanded="true"] {
+    transform: rotate(90deg);
+}
+
+/* Closed row: a faint permanent green wash (not a hover state) so a
+   closed/profitable project reads at a glance without hunting for the
+   Status pill — same low-alpha-over-page-background technique
+   .di-column-count--clover's fill already uses, which is why this needs
+   no separate dark-mode rule (Ezekiel's wireframe, 2 Sep 2026). */
+.di-perf-project-row--closed {
+    background: rgba(76, 175, 90, 0.06);
+}
+
+.di-perf-project-row--closed:hover {
+    background: rgba(76, 175, 90, 0.1);
+}
+
+/* Feature rows reuse the SAME six columns as their parent project row
+   (see _performance_table.html's comment) instead of a separate
+   mini-table — this just indents/mutes the one cell that needs it. */
+.di-perf-feature-row {
     background: var(--surface-hover);
-    padding: 0;
 }
 
-.di-perf-feature-subtable {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.di-perf-feature-subtable td {
-    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
+.di-perf-feature-cell {
+    padding-left: var(--space-6);
+    color: var(--text-muted);
     font-size: var(--text-sm);
-    color: var(--text-muted);
-    border: none;
 }
 
-.di-perf-feature-subtable th {
-    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-6);
+/* Small filled pill for a project's or feature's status. Reuses
+   .di-column-count--<colour>'s existing tinted-fill recipe (already
+   dark-tuned per colour) for the fill; this just adds the padding a
+   short text label needs that a numeric count badge didn't. */
+.di-perf-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
+    border-radius: 999px;
     font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    text-align: left;
     font-weight: 600;
-    border: none;
-    border-bottom: 1px solid var(--border);
-}
-
-.di-perf-feature-name {
-    color: var(--text);
+    white-space: nowrap;
 }

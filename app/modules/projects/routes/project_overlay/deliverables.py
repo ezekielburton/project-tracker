@@ -187,7 +187,8 @@ def _annotate_offhour_time(deliverables):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables')
 @login_required
 def overlay_deliverables(project_id):
-    from app.modules.core.shared.models import BriefFlag, Deliverable
+    from app.modules.core.shared.models import BriefFlag, Deliverable, DeliverableType, DeliverableAssignment
+    from sqlalchemy.orm import selectinload, joinedload
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     can_manage = _can_manage_deliverables(project, actor)
@@ -242,9 +243,18 @@ def overlay_deliverables(project_id):
             **_build_deliverable_focus_context(all_deliverables, actor, can_manage, has_edit_access_grant),
         )
 
-    deliverables = Deliverable.query.filter_by(
-        project_id=project_id, project_customer_id=None
-    ).order_by(Deliverable.id).all()
+    # Eager-load the per-row relationships the assignment tags + team list
+    # read, so this scales with a couple of bulk queries instead of one per
+    # deliverable (matches the C&CM path in _build_ccm_deliverable_sections).
+    deliverables = (
+        Deliverable.query.filter_by(project_id=project_id, project_customer_id=None)
+        .options(
+            selectinload(Deliverable.disciplines).joinedload(DeliverableAssignment.designer),
+            selectinload(Deliverable.deliverable_type).selectinload(DeliverableType.disciplines),
+        )
+        .order_by(Deliverable.id)
+        .all()
+    )
     return render_template(
         'project_overlay/_deliverables_standard.html',
         project=project,

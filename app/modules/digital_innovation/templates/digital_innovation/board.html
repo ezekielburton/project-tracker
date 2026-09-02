@@ -169,5 +169,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/digital_innovation_shell.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/digital_innovation_board.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

@@ -20,13 +20,21 @@
 
             var row = expandBtn.closest('.di-perf-project-row');
             var projectId = row && row.getAttribute('data-di-project-row');
-            var subrow = projectId && document.querySelector('[data-di-project-features="' + projectId + '"]');
-            if (!subrow) return;
+            if (!projectId) return;
+            // One <tr> per feature now (they render as their own rows
+            // under the project's own columns, not a single subrow
+            // holding a nested table) — toggle every row in the group,
+            // not just the first match.
+            var featureRows = document.querySelectorAll('[data-di-project-features="' + projectId + '"]');
+            if (!featureRows.length) return;
 
             var expanded = expandBtn.getAttribute('aria-expanded') === 'true';
-            subrow.classList.toggle('hidden', expanded);
+            featureRows.forEach(function (featureRow) {
+                featureRow.classList.toggle('hidden', expanded);
+            });
+            // The glyph itself doesn't change — digital_innovation.css
+            // rotates it 90° on [aria-expanded="true"] instead.
             expandBtn.setAttribute('aria-expanded', String(!expanded));
-            expandBtn.innerHTML = expanded ? '&#9656;' : '&#9662;';
         });
     }
 })();

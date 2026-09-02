@@ -113,3 +113,49 @@ def test_performance_falls_back_to_the_current_period_for_a_garbage_period_value
         url = url_for('digital_innovation.performance_screen', view='week', period='not-a-real-period')
     resp = client.get(url)
     assert resp.status_code == 200
+
+
+# ── export_performance ───────────────────────────────────────────────────
+# Same shape as test_costs_routes.py's export_cost_ledger coverage — this
+# route doesn't render a page, so it needs no _permanent_project() seed.
+
+def test_export_performance_requires_auth(app, client, db_session):
+    with app.test_request_context():
+        url = url_for('digital_innovation.export_performance')
+    resp = client.get(url)
+    assert resp.status_code in (302, 401)
+
+
+def test_export_performance_403s_for_a_designer(app, client, db_session):
+    user = _user(db_session, 'h', role='designer')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.export_performance')
+    resp = client.get(url)
+    assert resp.status_code == 403
+
+
+def test_export_performance_returns_an_xlsx_download(app, client, db_session):
+    user = _user(db_session, 'i', role='admin')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.export_performance')
+    resp = client.get(url)
+
+    assert resp.status_code == 200
+    assert resp.mimetype == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    assert 'attachment' in resp.headers.get('Content-Disposition', '')
+
+
+def test_export_performance_honours_the_view_and_period_querystring(app, client, db_session):
+    user = _user(db_session, 'j', role='admin')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.export_performance', view='month', period='2026-09')
+    resp = client.get(url)
+
+    assert resp.status_code == 200
+    assert 'di_performance_month_2026-09.xlsx' in resp.headers.get('Content-Disposition', '')

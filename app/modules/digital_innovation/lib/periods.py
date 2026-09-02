@@ -81,9 +81,14 @@ def shift_period(period_type, period_key, direction):
     return current_period_key(period_type, today=anchor)
 
 
-def format_period_label(period_type, period_key):
-    """Human label for the period header, e.g. 'Week 34, Aug 17-23,
-    2026', 'September 2026', 'Q3 2026'."""
+def format_period_label_parts(period_type, period_key):
+    """(primary, secondary) for the Performance header's two-line period
+    display — e.g. ('Week 34', 'Aug 17-23, 2026') for a week. A month or
+    quarter's whole label already reads fine as one line, so secondary is
+    '' for those (the template just skips rendering a second line when
+    it's empty). format_period_label() below is the single-string form
+    older/other callers use — it's built from this pair rather than
+    duplicating the same date arithmetic twice."""
     start, end = period_bounds(period_type, period_key)
     if period_type == 'week':
         _, week_num, _ = start.isocalendar()
@@ -91,12 +96,19 @@ def format_period_label(period_type, period_key):
             range_str = f'{start.strftime("%b")} {start.day}-{end.day}, {end.year}'
         else:
             range_str = f'{start.strftime("%b %d")} - {end.strftime("%b %d")}, {end.year}'
-        return f'Week {week_num}, {range_str}'
+        return f'Week {week_num}', range_str
     if period_type == 'month':
-        return start.strftime('%B %Y')
+        return start.strftime('%B %Y'), ''
     if period_type == 'quarter':
-        return f'Q{(start.month - 1) // 3 + 1} {start.year}'
+        return f'Q{(start.month - 1) // 3 + 1} {start.year}', ''
     raise ValueError(f"Unknown period type '{period_type}'.")
+
+
+def format_period_label(period_type, period_key):
+    """Human label for the period header, e.g. 'Week 34, Aug 17-23,
+    2026', 'September 2026', 'Q3 2026'."""
+    primary, secondary = format_period_label_parts(period_type, period_key)
+    return f'{primary}, {secondary}' if secondary else primary
 
 
 def period_has_ended(period_type, period_key, today=None):
