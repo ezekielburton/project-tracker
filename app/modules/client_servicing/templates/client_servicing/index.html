@@ -3,21 +3,26 @@
 {% block title %}Client Servicing{% endblock %}
 
 {% block content %}
-<div class="client-servicing-page">
-    <div class="cs-page-header">
-        <h1>Client Servicing</h1>
-    </div>
-    <div class="cs-table-scroll" id="cs-table-scroll">
-        <div id="client-servicing-table-body">
-            {% include 'client_servicing/_table_rows.html' %}
-        </div>
-    </div>
-    {# Sticky horizontal scrollbar (Chunk 7) — the real one only shows at
-       the very bottom of a table that can run to hundreds of rows, so
-       without this someone has to scroll all the way down just to scroll
-       sideways. Mirrors the Projects page's own #sticky-scrollbar. #}
-    <div class="cs-sticky-scrollbar" id="cs-sticky-scrollbar">
-        <div class="cs-sticky-scrollbar-inner" id="cs-sticky-scrollbar-inner"></div>
+{# The module's own internal sidebar shell (Table / Invoicing / Calendar) —
+   see _sidebar.html. .cs-page/.cs-shell/.cs-sidebar/.cs-main are the shell;
+   the table under .cs-main keeps its own sticky-header/height-sync JS
+   (client_servicing.js) — see client_servicing.css. #}
+<div class="cs-page">
+    <div class="cs-shell">
+        {% with active_nav = 'table' %}
+        {% include "client_servicing/_sidebar.html" %}
+        {% endwith %}
+        <main class="cs-main">
+            <div class="client-servicing-page">
+                {# .cs-table-scroll is height-capped and scrolls internally on
+                   both axes — see client_servicing.css. #}
+                <div class="cs-table-scroll" id="cs-table-scroll">
+                    <div id="client-servicing-table-body">
+                        {% include 'client_servicing/_table_rows.html' %}
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 </div>
 {% endblock %}

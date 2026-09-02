@@ -9,13 +9,13 @@ public write path — same notifications and activity-log entries a change
 on the Projects overlay would produce, just reached through a broader
 permission check (any CS/management/admin user, not only that project's
 own assigned people — the CS table is meant to be edited by the whole
-team, per Ezekiel).
+team).
 """
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from flask import request, jsonify, abort
-from flask_login import login_required, current_user
+from flask_login import login_required
 
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Project, User
@@ -23,7 +23,7 @@ from app.modules.core.shared.models import Project, User
 from app.modules.projects.services import mutations as project_mutations
 
 from app.modules.client_servicing.models import ClientServicing, ClientServicingScope
-from app.modules.client_servicing.lib.access import can_access_client_servicing
+from app.modules.client_servicing.lib.access import can_access_client_servicing, _effective_user
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 from app.modules.client_servicing.routes.table import _serialize_person
 
@@ -162,7 +162,12 @@ def _save_cs_only_field(project, field, raw_value):
 @client_servicing_bp.route('/<int:project_id>', methods=['PATCH'])
 @login_required
 def update_field(project_id):
-    if not can_access_client_servicing(current_user):
+    # Resolved once and reused for both the permission check and every
+    # mutation call below — an admin previewing the page while emulating
+    # someone else should be gated, and have the resulting notification/
+    # activity-log entry attributed, as that person, not the real admin.
+    actor = _effective_user()
+    if not can_access_client_servicing(actor):
         abort(403)
 
     project = Project.query.get_or_404(project_id)
@@ -179,19 +184,18 @@ def update_field(project_id):
     try:
         if field == 'cs_lead_id':
             new_lead = _resolve_person(raw_value, 'cs')
-            project_mutations.reassign_cs_lead(project, new_lead, current_user)
-            # 'person' lets the table swap in the real avatar chip instead
-            # of plain text right away, same as a live-refresh would show
-            # (Chunk 7 — was a known cosmetic gap since Chunk 4).
+            project_mutations.reassign_cs_lead(project, new_lead, actor)
+            # 'person' lets the table show the avatar chip immediately
+            # instead of plain text, same as a live-refresh would.
             return jsonify({'field': field, 'value': new_lead.name, 'person': _serialize_person(new_lead)})
 
         if field == 'project_owner_id':
             new_owner = _resolve_person(raw_value, 'project_owner')
-            project_mutations.set_project_owner(project, new_owner, current_user)
+            project_mutations.set_project_owner(project, new_owner, actor)
             return jsonify({'field': field, 'value': new_owner.name, 'person': _serialize_person(new_owner)})
 
         if field in project_mutations.DETAIL_FIELDS:
-            saved = project_mutations.save_detail_field(project, current_user, field, raw_value)
+            saved = project_mutations.save_detail_field(project, actor, field, raw_value)
             return jsonify({'field': field, 'value': _display_detail_value(field, saved)})
     except project_mutations.FieldError as e:
         return jsonify({'error': str(e)}), 400

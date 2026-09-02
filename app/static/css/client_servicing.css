@@ -1,8 +1,98 @@
 /* Client Servicing page — read-only table for now (no cell editing yet).
    All colours are role tokens, per theming.md — no hard-coded hex. */
 
+/* ── Module's own internal sidebar shell (Table / Invoicing / Calendar),
+   added 2 Sep 2026 — same pattern as the Digital Innovation module's
+   .di-page/.di-shell/.di-sidebar (digital_innovation.css), copied
+   deliberately rather than shared, per the modular-build convention:
+   each module owns its own CSS even when the pattern is identical.
+   .client-servicing-page (below) is left completely alone — it's now
+   nested inside .cs-main instead of sitting directly in .main-content,
+   but it still owns its own padding/content exactly as before, so
+   nothing about the table, its sticky header, or the JS-measured
+   height (client_servicing.js's syncTableScrollHeight — footer-relative,
+   doesn't care what's to its left) had to change. ── */
+
+.cs-page {
+    padding: 0;
+}
+
+/* Let the sidebar run flush against the global sidebar and flush to the
+   viewport's right edge — .main-content's blanket 2rem padding (meant
+   for ordinary pages) otherwise leaves a 32px gap on both sides.
+   .cs-sidebar and .client-servicing-page re-add their own inner
+   padding, so content still isn't jammed against the edges. */
+.main-content:has(.cs-page) {
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+}
+
+/* No min-height here (unlike Digital Innovation's .di-shell, which this
+   was otherwise copied from) — deliberately, found via testing 2 Sep
+   2026: a fixed min-height on this row acts as a floor that can pin the
+   row's rendered height above what .cs-table-scroll's own height
+   currently needs, which breaks syncTableScrollHeight()'s one-step delta
+   convergence (client_servicing.js) — it assumes growing the box grows
+   this row by the same amount, which isn't true once a floor is
+   dominating. The sidebar (align-self: stretch, below) still visually
+   matches whatever height the table box ends up at without a floor;
+   Digital Innovation doesn't have this problem because nothing on its
+   board screen depends on measuring the row's height back against the
+   viewport the way this table's height sync does. */
+.cs-shell {
+    display: flex;
+    align-items: stretch;
+}
+
+.cs-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: var(--space-5) var(--space-4);
+    position: sticky;
+    top: 0;
+    align-self: stretch;
+}
+
+.cs-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.cs-nav-item {
+    display: block;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.cs-nav-item--active {
+    background: var(--surface-hover);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.cs-main {
+    flex: 1;
+    min-width: 0;
+}
+
+/* No padding-bottom here (top/left/right keep var(--space-6)) —
+   removed 2 Sep 2026, Ezekiel: "fix the gap at the bottom thats above
+   the footer". Any bottom padding here is literal dead space between
+   the table box's bottom edge and the footer; syncTableScrollHeight()
+   (client_servicing.js) sizes the box to reach exactly where the
+   footer starts, so this padding was the whole gap, not a rounding
+   error. See client_servicing.js for the other half of this fix — the
+   height formula itself also had to change, not just this padding. */
 .client-servicing-page {
     padding: var(--space-6);
+    padding-bottom: 0;
 }
 
 .cs-page-header {
@@ -17,25 +107,97 @@
     color: var(--text);
 }
 
-/* overflow-x: auto paired with an EXPLICIT overflow-y: hidden — leaving
-   overflow-y unset here doesn't mean "don't scroll vertically", it means
-   the browser silently computes it as auto too (CSS's overflow-x/-y
-   visible-to-auto coercion rule): once that happens, THIS element (not
-   the page) becomes the sticky thead's positioning context, and since
-   it has no capped height it never actually scrolls internally — so the
-   sticky header just sits pinned to the top of this (very tall,
-   never-scrolled) box and disappears off-screen the moment the real
-   page scrolls past it. Same bug, same fix the Projects table already
-   applied to its own scroll wrapper (project_list.css's
-   .project-table-rounded-clip) — overflow-y: hidden here hands vertical
-   scrolling back to the page, which is what "position: sticky; top: 0"
-   on .cs-table thead th (below) actually needs to stick to. */
+/* CORRECTED 1 Sep 2026 — the previous fix here (overflow-y: hidden,
+   "hands vertical scrolling back to the page") was wrong and never
+   actually worked; Ezekiel asked for the sticky header again and a
+   headless-browser reproduction of this exact markup/CSS confirmed why:
+   overflow-y: hidden is STILL a non-"visible" value, so it still makes
+   this element a scroll container in its own right (same as auto would)
+   — the only difference from the original bug is that this container
+   can no longer scroll even internally. Either way, "position: sticky;
+   top: 0" on .cs-table thead th (below) sticks to the top of THIS box,
+   not the page, and since this box has no capped height it just travels
+   up and off-screen as the real page scrolls past it. There is no
+   overflow-y value that both keeps overflow-x: auto working AND lets Y
+   overflow pass through to the page for a page-level sticky header —
+   CSS's own visible-to-auto coercion rule (a real value on one axis
+   forces the other off "visible" too) makes that combination impossible
+   on a single element.
+
+   The actual fix: give this element a capped height and let IT scroll
+   internally on both axes — the same technique main.css's own
+   .table-wrapper already uses elsewhere in this app (overflow-y: auto +
+   max-height: 65vh, "auto so the wrapper itself scrolls vertically —
+   required for position: sticky on thead th to work"). Once this box
+   itself has real, boundable scroll — not the page — "position: sticky;
+   top: 0" sticks correctly against IT, confirmed live in a headless
+   Chromium repro of this exact structure (marker header cell stays
+   inside the viewport after scrolling the wrapper).
+
+   UPDATED 1 Sep 2026 — max-height: 65vh replaced with a fixed height
+   (Ezekiel: "extend the container there's too much white space" — 65vh
+   left a large blank gap under the table on tall viewports since it
+   doesn't track the actual viewport minus this page's own chrome).
+
+   A pure flexbox alternative (.client-servicing-page as a flex column,
+   this box flex:1; min-height:0) was tried first and reverted — it
+   does NOT work with this app's shell: body only sets min-height:100vh,
+   not height:100vh, and .main-content isn't itself display:flex. With
+   no flex container in the chain having a truly definite height, flex
+   items skip growth-clamping entirely and just size to their content —
+   confirmed in a headless Chromium repro of this exact page structure,
+   this box grew to fit all 40 rows with scrollHeight === clientHeight
+   (no scroll boundary at all, sticky header had nothing to stick
+   against).
+
+   height: var(--cs-table-scroll-height, calc(100vh - 180px)) — the
+   custom property is set live by client_servicing.js's
+   syncTableScrollHeight(), which measures this box's actual top offset
+   and the real .footer height and computes exactly how much viewport
+   is left, the same "measure it, don't guess" approach already used
+   for --cs-sticky-project-left just above. The calc(100vh - 180px)
+   fallback (180px approximating the fixed chrome above/below this box,
+   same "roughly clears" convention as client_directory.css's own
+   calc(100vh - 180px) and wiki.css's calc(100vh - 200px)) only applies
+   before JS runs or if it's disabled — it shipped as the ONLY rule
+   first, then swapped for the JS-measured value 1 Sep 2026 after
+   Ezekiel reported the vertical scrollbar was still visible on
+   Chrome/Edge: the box's own scrollbar-hide rule below tested fine in
+   a repro (both normal and forced-classic/non-overlay scrollbar modes),
+   so a fixed 180px guess a few px off from Ezekiel's REAL header/
+   footer/padding sizes leaving the page itself with a sliver of
+   overflow — triggering the BROWSER's own outer page scrollbar, a
+   different scrollbar entirely from this box's, which this file has no
+   power to hide — was the more likely explanation. Measuring live
+   removes the guess entirely instead of re-guessing a more precise
+   constant.
+
+   Still a real overflow value on both axes, so position: sticky on
+   thead th below keeps working exactly as before — only how the box's
+   height is determined changed, not that it scrolls internally.
+
+   Vertical scrollbar hidden below (Ezekiel: "we also dont need a scroll
+   bar on the right side") — WebKit/Blink only, see comment there. */
 .cs-table-scroll {
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
+    height: var(--cs-table-scroll-height, calc(100vh - 180px));
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
+}
+
+/* Hide only the vertical scrollbar, not the horizontal one — WebKit/
+   Blink/Safari support this per-axis :vertical/:horizontal pseudo-class
+   on ::-webkit-scrollbar; Firefox's scrollbar-width property has no
+   per-axis equivalent (it's all-or-nothing), so it's deliberately left
+   unset here rather than hiding both axes there — Firefox users keep
+   both scrollbars, a minor cross-browser inconsistency accepted in
+   favour of not breaking horizontal-scroll discoverability in Firefox.
+   The box still scrolls vertically via wheel/trackpad/keyboard; only the
+   visible bar is gone. */
+.cs-table-scroll::-webkit-scrollbar:vertical {
+    display: none;
 }
 
 .cs-table {
@@ -65,6 +227,26 @@
     font-size: var(--text-sm);
     color: var(--text);
     white-space: nowrap;
+}
+
+/* Project name — cut to a sane default width and let long names wrap
+   onto a second line, instead of the nowrap-everywhere default above
+   forcing the whole column (and the sticky-pinned space it eats) as
+   wide as the single longest project name on the page.
+
+   The <col> width is what actually governs this in an auto-layout
+   table: an inline width set on it (drag-resize already writes one —
+   see scheduleLayoutSave()/column_widths in table.py, same mechanism
+   every other column uses) always wins over this stylesheet default,
+   so dragging the column wider still works exactly like it does for
+   every other column — this default only applies until someone does. */
+.cs-table col[data-col-key="project"] {
+    width: 220px;
+}
+
+.cs-table td[data-col-key="project"] {
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 
 .cs-table tbody tr:hover {
@@ -230,22 +412,30 @@
     opacity: 0.4;
 }
 
-/* Sticky horizontal scrollbar (Chunk 7) — a thin bar pinned to the
-   bottom of the viewport (not the table) so it's reachable without
-   scrolling all the way down a long table first. Mirrors the Projects
-   page's own #sticky-scrollbar; width/visibility are kept in sync with
-   the real table by client_servicing.js. */
-.cs-sticky-scrollbar {
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    height: 14px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
+/* Chunk 7 (piece 10) — click-to-sort. A small arrow after the label
+   shows which column (if any) the table is currently sorted by and in
+   which direction; client_servicing.js toggles these two classes on the
+   sorted <th>, removing them from every other header first. Not
+   persisted (see client_servicing.js's own note) — purely a same-page
+   visual state. */
+.cs-th-sorted-asc::after,
+.cs-th-sorted-desc::after {
+    margin-left: var(--space-1);
+    font-size: 0.65em;
 }
 
-.cs-sticky-scrollbar-inner {
-    height: 1px;
+.cs-th-sorted-asc::after {
+    content: '\25B2'; /* ▲ */
 }
+
+.cs-th-sorted-desc::after {
+    content: '\25BC'; /* ▼ */
+}
+
+/* .cs-sticky-scrollbar (a thin bar pinned to the viewport bottom, built
+   for a table with no height cap where the real scrollbar could be
+   pushed far below the fold) removed 1 Sep 2026 — .cs-table-scroll is
+   now height-capped (Chunk 7's corrected sticky-header fix) and scrolls
+   internally, so its own native scrollbar is always in the viewport;
+   the synthetic one just duplicated it (Ezekiel caught two stacked
+   scrollbars live). Matching removal in client_servicing.js/index.html. */

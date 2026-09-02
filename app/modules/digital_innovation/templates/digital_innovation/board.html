@@ -5,110 +5,78 @@
 {% block content %}
 <div class="di-page">
     <div class="di-shell">
-        <aside class="di-sidebar">
-            <nav class="di-sidebar-nav">
-                <a href="{{ url_for('digital_innovation.project_board', di_project_id=project.id) }}" class="di-nav-item di-nav-item--active">Board</a>
-                {# Performance isn't built until Phase 4 — shown disabled rather than
-                   a dead link, but only to people who'll actually get to use it. #}
-                {% if can_view_performance %}
-                <span class="di-nav-item di-nav-item--disabled" title="Coming in a later phase">Performance</span>
-                {% endif %}
-            </nav>
+        {% with active_nav = 'board' %}
+        {% include "digital_innovation/_sidebar.html" %}
+        {% endwith %}
 
-            <div class="di-sidebar-section">
-                <span class="di-sidebar-section-label">Projects</span>
-                <ul class="di-project-list">
-                    {% for p in sidebar_projects %}
-                    <li>
-                        <a href="{{ url_for('digital_innovation.project_board', di_project_id=p.id) }}"
-                           class="di-project-item{% if p.id == project.id %} di-project-item--active{% endif %}">
-                            <span class="di-dot di-dot--{{ p.colour or 'oak' }}"></span>
-                            {{ p.name }}
-                        </a>
-                    </li>
-                    {% endfor %}
-                </ul>
-                <button type="button" class="di-new-project-btn" id="di-new-project-trigger">+ New project</button>
-            </div>
-        </aside>
-
-        <main class="di-board">
+        <main class="di-board" data-di-project-id="{{ project.id }}">
             <div class="di-board-header">
-                <div>
+                <div class="di-board-heading">
                     <h1 class="di-board-title">{{ project.name }}</h1>
+                    {% if not project.is_permanent %}
+                        {% if project.linked_project %}
+                        {# Read-only for viewers; editors get a click/Enter
+                           target that opens #di-link-project-modal to
+                           change or clear it — same modal either way, see
+                           digital_innovation_board.js. #}
+                        <span class="di-linked-badge{% if can_edit_board %} di-linked-badge--editable{% endif %}"
+                              {% if can_edit_board %}id="di-linked-badge" role="button" tabindex="0"{% endif %}>
+                            part of &rarr; {{ project.linked_project.name }}
+                        </span>
+                        {% elif can_edit_board %}
+                        <button type="button" class="di-link-project-trigger" id="di-link-project-trigger">+ Link to project</button>
+                        {% endif %}
+                    {% endif %}
                     <p class="di-board-subtitle">Project board · {{ open_feature_count }} active feature{{ 's' if open_feature_count != 1 else '' }}</p>
                 </div>
+                {% if can_edit_board or can_view_performance %}
+                {# Every button here wrapped together so .di-board-header's
+                   justify-content:space-between pushes this whole group
+                   to the right as one unit, keeping Incoming and
+                   + New project next to each other — without the
+                   wrapper, space-between would spread all 3 header
+                   children apart instead (Ezekiel, 1 Sep 2026: "place it
+                   next to new project button"). All sized down with the
+                   shared .btn-sm modifier per the same feedback.
+
+                   The wrapper itself now renders for can_view_performance
+                   too (not just can_edit_board) so a management-role user
+                   — who can view/add/delete costs but not edit the board —
+                   still gets the Cost breakdown button; the other three
+                   buttons stay individually gated on can_edit_board /
+                   project.is_permanent below, unchanged. #}
+                <div class="di-board-header-actions">
+                    {% if can_view_performance %}
+                    {# Every project, active/closed/archived alike, can carry cost
+                       history — gated on the same can_view_di_performance choke
+                       point as Performance itself, not can_edit_board, since
+                       viewing/adding/deleting entries all share that one gate
+                       (Ezekiel, 1 Sep 2026). #}
+                    <button type="button" class="btn-secondary btn-sm di-cost-trigger" id="di-cost-trigger" data-di-project-id="{{ project.id }}">Cost breakdown</button>
+                    {% endif %}
+                    {% if can_edit_board and project.is_permanent %}
+                    {# Only the permanent OVP board ever has intake items —
+                       opens the Incoming overlay (see #di-incoming-modal
+                       below) rather than an inline tray, per Ezekiel (1 Sep
+                       2026): "a button next to new project that opens an
+                       overlay where I can easily see them as cards". #}
+                    <button type="button" class="btn-secondary btn-sm di-incoming-trigger" id="di-incoming-trigger" data-di-project-id="{{ project.id }}">
+                        Incoming
+                        {% if pending_intake_items %}<span class="di-incoming-badge">{{ pending_intake_items | length }}</span>{% endif %}
+                    </button>
+                    {% endif %}
+                    {% if can_edit_board %}
+                    {# Moved here from the sidebar (was next to "Archive") so the
+                       header matches the wireframe — same #di-new-project-trigger
+                       id, so digital_innovation_board.js's delegated click
+                       handler picks it up here without any JS change. #}
+                    <button type="button" class="btn-primary btn-sm" id="di-new-project-trigger">+ New project</button>
+                    {% endif %}
+                </div>
+                {% endif %}
             </div>
 
-            <div class="di-columns">
-                {% for stage in stages %}
-                <div class="di-column">
-                    <div class="di-column-header di-column-header--{{ stage_colours[stage] }}">
-                        <span>{{ stage_labels[stage] }}</span>
-                        <span class="di-column-count">{{ columns[stage] | length }}</span>
-                    </div>
-                    <div class="di-column-cards">
-                        {% for entry in columns[stage] %}
-                        <div class="di-card" data-feature-id="{{ entry.feature.id }}">
-                            <div class="di-card-title">{{ entry.feature.name }}</div>
-                            {% if entry.total > 0 %}
-                            <div class="di-card-progress">
-                                <div class="di-card-progress-fill di-dot--{{ stage_colours[stage] }}" style="width: {{ entry.progress_pct }}%;"></div>
-                            </div>
-                            <div class="di-card-step di-card-step--{{ stage_colours[stage] }}">
-                                Step {{ entry.current_step_number }} of {{ entry.total }}{% if entry.active_step_label %} · {{ entry.active_step_label }}{% endif %}
-                            </div>
-                            {% else %}
-                            <div class="di-card-step di-card-step--empty">No steps configured</div>
-                            {% endif %}
-                            {% if entry.feature.projected_date or entry.logged_hours %}
-                            <div class="di-card-meta">
-                                {% if entry.feature.projected_date %}
-                                <span class="di-card-date">
-                                    <svg class="di-card-date-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                                    </svg>
-                                    {{ entry.feature.projected_date.strftime('%d %b') }}
-                                </span>
-                                {% endif %}
-                                {% if entry.logged_hours %}
-                                <span class="di-card-hours">{{ entry.logged_hours | round(1) }}h logged</span>
-                                {% endif %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-                        {% if loop.first %}
-                        {# New features always start in the first stage, so
-                           this is the only column that gets an add control —
-                           not repeated on the other 6. #}
-                        <button type="button" class="di-add-feature-btn" id="di-add-feature-trigger" data-di-project-id="{{ project.id }}">+ Add feature</button>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            <details class="di-closed-strip">
-                <summary class="di-closed-strip-toggle">
-                    Closed features
-                    <span class="di-closed-strip-count">{{ closed_features | length }}</span>
-                    <span class="di-closed-strip-hint">completed on this project — expand for full history</span>
-                </summary>
-                <div class="di-closed-strip-list">
-                    {% for feature in closed_features %}
-                    <div class="di-closed-feature-row" data-feature-id="{{ feature.id }}">
-                        <span>{{ feature.name }}</span>
-                        <span class="di-card-date">Closed {{ feature.closed_at.strftime('%d %b %Y') if feature.closed_at else '' }}</span>
-                    </div>
-                    {% else %}
-                    <p class="di-closed-strip-empty">No closed features yet.</p>
-                    {% endfor %}
-                </div>
-            </details>
+{% include "digital_innovation/_board_columns.html" %}
         </main>
     </div>
 </div>
@@ -147,12 +115,57 @@
     </div>
 </div>
 
+{% if project.is_permanent %}
+<div id="di-incoming-modal" class="modal-overlay hidden">
+    <div class="modal-box modal-box--wide">
+        <div class="di-incoming-modal-header">
+            <h3 class="modal-title">Incoming</h3>
+            <button type="button" class="di-incoming-modal-close" id="di-incoming-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="di-incoming-cards">
+            {% include "digital_innovation/_incoming_cards.html" %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if can_edit_board and not project.is_permanent %}
+{# Search-as-you-type picker (see routes/projects.py::search_projects) —
+   the shared Project table can run into the hundreds, so a plain <select>
+   the way the app does it for short lists (e.g. Clients) isn't practical
+   here. Rendered for editors only, whether or not a link is currently
+   set, since the trigger that opens it (badge or "+ Link to project")
+   changes based on that same condition. #}
+<div id="di-link-project-modal" class="modal-overlay hidden" data-di-project-id="{{ project.id }}">
+    <div class="modal-box">
+        <div class="di-link-modal-header">
+            <h3 class="modal-title">Link to project</h3>
+            <button type="button" class="di-link-modal-close" id="di-link-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <input type="text" class="di-link-search-input" id="di-link-search-input" placeholder="Search by project name or client…" autocomplete="off">
+        <div class="di-link-results" id="di-link-results"></div>
+        {% if project.linked_project %}
+        <button type="button" class="btn-secondary di-link-clear-btn" id="di-link-clear-btn">Clear link</button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div id="di-feature-detail-modal" class="modal-overlay hidden">
     <div class="modal-box modal-box--wide">
         <p class="di-feature-detail-error hidden" id="di-feature-detail-error"></p>
         <div id="di-feature-detail-body"></div>
     </div>
 </div>
+
+{% if can_view_performance %}
+<div id="di-cost-modal" class="modal-overlay hidden">
+    <div class="modal-box modal-box--wide di-cost-modal-box">
+        <p class="di-cost-error hidden" id="di-cost-error"></p>
+        <div id="di-cost-body"></div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

@@ -16,7 +16,7 @@ from app.modules.digital_innovation.routes.blueprint import digital_innovation_b
 from app.modules.digital_innovation.models import DiFeature, DiFeatureStep, DiProject, DI_STAGES
 from app.modules.digital_innovation.lib import step_engine
 from app.modules.digital_innovation.lib.feature_detail import build_feature_detail_context
-from app.modules.digital_innovation.lib.access import can_view_di_performance
+from app.modules.digital_innovation.lib.access import can_view_di_performance, can_edit_di_board
 
 
 def _render_feature_detail(feature):
@@ -28,20 +28,32 @@ def _render_feature_detail(feature):
     can_view_costs gates the footer's cost/charge/profit note — reuses the
     same admin/management choke point Performance and Cost breakdown
     already gate through (lib/access.py), so adding a role to any of the
-    three is the one change in that one file."""
+    three is the one change in that one file. can_edit_board gates every
+    interactive control (tick a step, delete it, the add-step form, the
+    advance/close buttons) — the board is view-only for anyone it's False
+    for, so the template renders those controls at all only when it's
+    True, rather than rendering-then-disabling them."""
     context = build_feature_detail_context(feature)
     return render_template(
         'digital_innovation/_feature_detail.html',
         feature=feature,
         project=feature.project,
         can_view_costs=can_view_di_performance(current_user),
+        can_edit_board=can_edit_di_board(current_user),
         **context,
     )
+
+
+def _require_board_write_access():
+    if not can_edit_di_board(current_user):
+        abort(403)
 
 
 @digital_innovation_bp.route('/<int:di_project_id>/features', methods=['POST'])
 @login_required
 def create_feature(di_project_id):
+    _require_board_write_access()
+
     project = DiProject.query.filter_by(id=di_project_id, lifecycle='active').first()
     if not project:
         abort(404)
@@ -82,6 +94,7 @@ def add_feature_step(feature_id):
     "add a step" input, and also how the Implementation-stage "add
     another step" choice is handled (same action, step_engine.add_step
     doesn't distinguish the two)."""
+    _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 
     data = request.get_json(silent=True) or {}
@@ -103,6 +116,7 @@ def add_feature_step(feature_id):
 @digital_innovation_bp.route('/steps/<int:step_id>/tick', methods=['POST'])
 @login_required
 def tick_feature_step(step_id):
+    _require_board_write_access()
     step = DiFeatureStep.query.get_or_404(step_id)
     feature = step.feature
 
@@ -122,6 +136,7 @@ def tick_feature_step(step_id):
 @digital_innovation_bp.route('/steps/<int:step_id>', methods=['DELETE'])
 @login_required
 def delete_feature_step(step_id):
+    _require_board_write_access()
     step = DiFeatureStep.query.get_or_404(step_id)
     feature = step.feature
 
@@ -138,6 +153,7 @@ def delete_feature_step(step_id):
 @digital_innovation_bp.route('/features/<int:feature_id>/advance', methods=['POST'])
 @login_required
 def advance_feature(feature_id):
+    _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 
     try:
@@ -158,6 +174,7 @@ def close_feature_route(feature_id):
     step_engine.close_feature() itself doesn't gate on stage/completeness
     (it's a plain state-set used e.g. by tests), so that check belongs
     here, at the HTTP boundary."""
+    _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 
     if feature.status != DI_STAGES[-1] or not step_engine.is_stage_complete(feature):

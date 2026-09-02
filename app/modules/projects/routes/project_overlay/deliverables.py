@@ -871,10 +871,8 @@ def set_project_owner(project_id):
     
     """
     from app.modules.core.shared.models import Project, User
-    from app.modules.core.shared.extensions import db
     from flask import request, jsonify, session
-    from app.modules.core.shared.lib.utils import log_activity
-    from app.modules.core.shared.services.notifications import create_notification
+    from app.modules.projects.services import mutations as project_mutations
 
     project = Project.query.get_or_404(project_id)
 
@@ -894,27 +892,9 @@ def set_project_owner(project_id):
     if not new_owner or new_owner.role != 'project_owner':
         return jsonify({'success': False, 'error': 'Selected user is not a Project Owner'}), 400
 
-    previous_owner = project.project_owner
-    project.project_owner_id = new_owner.id
-    db.session.commit()
-
-    # Skip the you've been assigned notification when it's a self-claim
-
-    if new_owner.id != actor.id:
-        create_notification(
-            recipient=new_owner,
-            message=f'You have been assigned as Project Owner on "{project.name}" by {actor.name}.',
-            notification_type='project_owner_assigned',
-            project=project,
-            triggered_by=actor,
-        )
-
-    log_activity (
-        'project_owner_assigned',
-        f'{actor.name} assigned {new_owner.name} as Project Owner on "{project.name}"' + (f' (previously {previous_owner.name})' if previous_owner else ''),
-        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id       
-    )
-
+    # Mutation + notification + activity log live in the projects service,
+    # so a change from here and from the Client Servicing table behave alike.
+    project_mutations.set_project_owner(project, new_owner, actor)
     return jsonify({'success': True, 'owner_name': new_owner.name})
 
 
@@ -928,9 +908,7 @@ def reassign_cs_lead(project_id):
     """CS Lead picker at the top of the Details tab. Admin/management only — a
     real ownership change."""
     from app.modules.core.shared.models import User
-    from app.modules.core.shared.extensions import db
-    from app.modules.core.shared.lib.utils import log_activity
-    from app.modules.core.shared.services.notifications import create_notification
+    from app.modules.projects.services import mutations as project_mutations
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -946,32 +924,7 @@ def reassign_cs_lead(project_id):
     if not new_cs_lead or new_cs_lead.role != 'cs':
         return jsonify({'success': False, 'error': 'CS lead not found.'}), 404
 
-    previous_cs_lead = project.cs_lead
-    project.cs_lead_id = new_cs_lead.id
-    db.session.commit()
-
-    create_notification(
-        recipient=new_cs_lead,
-        message=f'You have been assigned as CS lead on "{project.name}" by {actor.name}.',
-        notification_type='cs_lead_reassigned',
-        project=project,
-        triggered_by=actor,
-    )
-    if previous_cs_lead and previous_cs_lead.id != new_cs_lead.id:
-        create_notification(
-            recipient=previous_cs_lead,
-            message=f'{new_cs_lead.name} has taken over as CS lead on "{project.name}" (reassigned by {actor.name}).',
-            notification_type='cs_lead_reassigned',
-            project=project,
-            triggered_by=actor,
-        )
-
-    log_activity(
-        'cs_lead_reassigned',
-        f'{actor.name} reassigned CS lead on "{project.name}" to {new_cs_lead.name}'
-        + (f' (previously {previous_cs_lead.name})' if previous_cs_lead else ''),
-        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id
-    )
+    project_mutations.reassign_cs_lead(project, new_cs_lead, actor)
     return jsonify({'success': True})
 
 

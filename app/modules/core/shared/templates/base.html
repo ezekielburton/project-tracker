@@ -176,7 +176,21 @@
                                 <span class="sidebar-item-label">Projects</span>
                             </a>
 
-                            {# Client Servicing — internal nav link, JS intercepts and loads without refresh #}
+                            {# Client Servicing — internal nav link, JS intercepts and loads without refresh.
+                               Gated on the exact same function every CS route itself checks
+                               (can_access_client_servicing, registered as a Jinja global in
+                               app/__init__.py) rather than a role list copied into this
+                               template — one place to update when the allowed roles change,
+                               same reasoning as lib/access.py's own docstring. Uses
+                               effective_user (1 Sep 2026 — CS routes became emulation-aware,
+                               via lib/access.py's _effective_user(), matching how the rest of
+                               the app already worked: an admin previewing the page while
+                               emulating someone else now gets gated as that person, so the
+                               icon has to match) — same as the Outing Board gate further down
+                               this sidebar. Unlike those, the Admin Panel link stays on
+                               current_user: that one's deliberately real-admin-only so
+                               emulating someone else never locks the real admin out of it. #}
+                            {% if can_access_client_servicing(effective_user) %}
                             <a href="{{ url_for('client_servicing.index') }}" class="sidebar-item sidebar-item--nav"
                                 data-link="client-servicing" title="Client Servicing">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -188,6 +202,7 @@
                                 </svg>
                                 <span class="sidebar-item-label">Client Servicing</span>
                             </a>
+                            {% endif %}
 
                             {# File Storage — external link, opens NAS in new tab #}
                             <a href="http://quickconnect.to/vitaminNAS26/drive" target="_blank"

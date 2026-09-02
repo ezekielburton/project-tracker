@@ -1,5 +1,5 @@
-"""Coverage for Chunk 7's column-width and column-order persistence
-(piece 2 and piece 3): POST /client-servicing/layout (routes/layout.py)
+"""Coverage for column-width and column-order persistence:
+POST /client-servicing/layout (routes/layout.py)
 and table.py's _column_widths()/_ordered_columns() reading it back into
 the rendered <colgroup>/<thead>."""
 import json
@@ -128,15 +128,19 @@ def test_saved_order_is_reflected_in_rendered_column_order(app, client, db_sessi
     user = _user(db_session, 'h')
     login_as(client, app, user, 'password123')
 
-    # Put the last three default columns first; everything else keeps
-    # its relative order behind them, unaffected keys included.
+    # Put the last three default columns right after priority/margin/
+    # inward_cost; everything else keeps its relative order behind them,
+    # unaffected keys included. Project isn't part of this saved layout
+    # at all, but it's pinned (see test_project_column_is_pinned_first_
+    # even_if_saved_layout_says_otherwise below) so it still comes first.
     reordered = [{'key': 'priority', 'width': 100}, {'key': 'margin_percent', 'width': 100},
                  {'key': 'inward_cost', 'width': 100}]
     resp = _post_layout(client, app, reordered)
     assert resp.status_code == 200
 
     order = _rendered_column_order(client, app)
-    assert order[:3] == ['priority', 'margin_percent', 'inward_cost']
+    assert order[0] == 'project'
+    assert order[1:4] == ['priority', 'margin_percent', 'inward_cost']
     # every other column still present, just pushed after the three above
     assert set(order) == {c['key'] for c in COLUMNS}
 
@@ -167,7 +171,10 @@ def test_stale_unknown_key_in_saved_layout_is_ignored(app, client, db_session):
 
     order = _rendered_column_order(client, app)
     assert 'not_a_real_column' not in order
-    assert order[0] == 'client'
+    # project is pinned first regardless of what's saved (see the pinning
+    # test below); client is next since it's the only real key saved
+    assert order[0] == 'project'
+    assert order[1] == 'client'
     assert set(order) == {c['key'] for c in COLUMNS}
 
 

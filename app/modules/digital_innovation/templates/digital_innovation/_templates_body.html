@@ -1,0 +1,30 @@
+{# Fragment swapped into #di-templates-body by
+   digital_innovation_templates.js after every add/edit/delete/move —
+   same "fetch an HTML fragment and swap it in" pattern used throughout
+   this module (board cards, the feature detail modal). #}
+{% for stage in stages %}
+<section class="di-template-stage">
+    <div class="di-template-stage-header di-column-header--{{ stage_colours[stage] }}">
+        <span>{{ stage_labels[stage] }}</span>
+        <button type="button" class="di-template-add-btn" data-stage="{{ stage }}">+ Add step</button>
+    </div>
+    <ul class="di-template-step-list">
+        {% for template in stage_steps[stage] %}
+        <li class="di-template-step" data-step-id="{{ template.id }}" data-title="{{ template.title }}" data-details="{{ template.details or '' }}">
+            <div class="di-template-step-move">
+                <button type="button" class="di-template-move-btn" data-direction="up" {% if loop.first %}disabled{% endif %} aria-label="Move up">&uarr;</button>
+                <button type="button" class="di-template-move-btn" data-direction="down" {% if loop.last %}disabled{% endif %} aria-label="Move down">&darr;</button>
+            </div>
+            <span class="di-step-label">
+                {{ template.title }}
+                {% if template.details %}<span class="di-step-details">{{ template.details }}</span>{% endif %}
+            </span>
+            <button type="button" class="btn-secondary di-template-edit-btn">Edit</button>
+            <button type="button" class="btn-danger-sm di-template-delete-btn" aria-label="Delete step">&times;</button>
+        </li>
+        {% else %}
+        <li class="di-step-empty">No default steps configured for this stage yet.</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endfor %}

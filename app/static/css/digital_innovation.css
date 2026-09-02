@@ -88,6 +88,11 @@
     gap: var(--space-1);
 }
 
+.di-project-row {
+    display: flex;
+    align-items: center;
+}
+
 .di-project-item {
     display: flex;
     align-items: center;
@@ -97,6 +102,26 @@
     font-size: var(--text-sm);
     color: var(--text);
     text-decoration: none;
+    flex: 1;
+    min-width: 0;
+}
+
+.di-project-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    line-height: 1;
+    padding: var(--space-1) var(--space-2);
+    margin-right: var(--space-1);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.di-project-close-btn:hover {
+    color: var(--text);
+    background: var(--surface-hover);
 }
 
 .di-project-item:hover {
@@ -115,19 +140,63 @@
     flex-shrink: 0;
 }
 
-.di-new-project-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-    padding: var(--space-2) var(--space-3);
-    cursor: pointer;
-    text-align: left;
-    width: 100%;
+.di-archive-link {
+    margin-top: var(--space-1);
 }
 
-.di-new-project-btn:hover {
+/* ── Archive screen ── */
+
+.di-archive-section {
+    margin-bottom: var(--space-6);
+}
+
+.di-archive-section-title {
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-3) 0;
+}
+
+.di-archive-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-archive-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.di-archive-name {
+    flex: 1;
+    font-size: var(--text-sm);
+    font-weight: 600;
     color: var(--text);
+}
+
+.di-archive-date {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-archive-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.di-archive-empty {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    padding: var(--space-2) 0;
 }
 
 /* ── Board area ── */
@@ -140,11 +209,43 @@
     flex-direction: column;
 }
 
+/* Same recipe as .di-closed-strip further down — this module's existing
+   "footer" bar at the bottom of the board — mirrored to sit at the top
+   instead (1 Sep 2026, per Ezekiel: "same style as the footer, slimmer,
+   next to the sidebar and below the global header"). Negative margins
+   cancel .di-board's own padding on 3 sides so the bar bleeds flush
+   against the DI sidebar (left), the content's right edge, and up
+   against the global .app-header (top) — no border-radius, since a
+   flush bar shouldn't read as a floating card. border-left is skipped
+   because .di-sidebar already draws its own border-right there. */
 .di-board-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    margin-bottom: var(--space-5);
+    gap: var(--space-4);
+    margin-top: calc(-1 * var(--space-5));
+    margin-left: calc(-1 * var(--space-6));
+    margin-right: calc(-1 * var(--space-6));
+    margin-bottom: var(--space-4);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: var(--space-4) var(--space-6);
+    flex-shrink: 0;
+}
+
+.di-board-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.di-board-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-2);
 }
 
 .di-board-title {
@@ -156,8 +257,210 @@
 .di-board-subtitle {
     color: var(--text-muted);
     font-size: var(--text-sm);
-    margin: var(--space-1) 0 0 0;
+    margin: 0;
 }
+
+/* Incoming button (header, next to "+ New project") + the overlay it
+   opens — a grid of cards rather than an inline strip, per Ezekiel (1 Sep
+   2026): "a button ... that opens an overlay where I can easily see them
+   as cards and promote or dismiss them". Cards are pre-rendered from the
+   same pending_intake_items the trigger's count badge uses — opening the
+   overlay is pure client-side show/hide, no fetch needed (same reasoning
+   as the new-feature-date input already being in the DOM before its
+   modal opens). */
+.di-incoming-badge {
+    background: var(--surface-hover);
+    border-radius: 999px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-xs);
+    margin-left: var(--space-1);
+}
+
+/* Plays once when a live SSE ping reports the Incoming count went up —
+   see _diUpdateIncomingBadge in digital_innovation_board.js. A quick
+   scale pop rather than a color change, so it reads as "something just
+   landed" without needing a second color in the module's palette. */
+.di-incoming-badge--pulse {
+    animation: di-incoming-pulse 0.6s ease-out;
+}
+
+@keyframes di-incoming-pulse {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+}
+
+.di-incoming-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+}
+
+.di-incoming-modal-close {
+    background: none;
+    border: none;
+    font-size: var(--text-xl);
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+}
+
+.di-incoming-modal-close:hover {
+    color: var(--text);
+}
+
+.di-incoming-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-3);
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.di-incoming-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.di-incoming-card-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.di-incoming-card-source {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-incoming-card-description {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.di-incoming-card-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding-top: var(--space-2);
+}
+
+.di-incoming-empty {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    grid-column: 1 / -1;
+}
+
+/* System-project link badge/trigger (in .di-board-heading, next to the
+   title) + the search-as-you-type picker it opens. See routes/projects.py
+   ::search_projects for why this is a search box rather than the plain
+   <select> the app uses for shorter lists elsewhere. */
+.di-linked-badge {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    background: var(--surface-hover);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+}
+
+.di-linked-badge--editable {
+    cursor: pointer;
+}
+
+.di-linked-badge--editable:hover {
+    color: var(--text);
+    background: var(--surface-active, var(--surface-hover));
+}
+
+.di-link-project-trigger {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+    cursor: pointer;
+}
+
+.di-link-project-trigger:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+}
+
+.di-link-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+}
+
+.di-link-modal-close {
+    background: none;
+    border: none;
+    font-size: var(--text-xl);
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+}
+
+.di-link-modal-close:hover {
+    color: var(--text);
+}
+
+.di-link-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: var(--space-3);
+}
+
+.di-link-results {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 40vh;
+    overflow-y: auto;
+    margin-bottom: var(--space-3);
+}
+
+.di-link-result {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.di-link-result:hover {
+    background: var(--surface-hover);
+}
+
+.di-link-result-name {
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.di-link-result-client {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-link-results-empty {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    margin: var(--space-2) 0;
+}
+
 
 .di-columns {
     display: flex;
@@ -187,9 +490,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 2px solid var(--border);
-    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 0 var(--space-1);
 }
 
 .di-column-count {
@@ -200,10 +501,36 @@
     font-size: var(--text-xs);
 }
 
-.di-column-header .di-column-count {
-    background: rgba(0, 0, 0, 0.12);
-    color: inherit;
-}
+/* Each column's count badge, tinted to match its header's colour (1 Sep
+   2026, per Ezekiel) — a light wash of the same colour behind the number,
+   not a solid fill, so it reads as "belongs to this header" without
+   competing with it. Literal rgba() tints, same recipe as shared.css's
+   dark-mode .status-pill--* rules (a CSS var can't be split into its R/G/B
+   components for rgba(), so this is the one place raw colour values are
+   unavoidable — same as those existing dark-mode rules). Sourced from the
+   readable colour each header text actually uses — the --di-*-text
+   overrides above for sky/canary/sage/salmon, the raw palette value for
+   the other 5 — never the original washed-out pastel, or the badge would
+   have the same illegibility problem the header text just got fixed for. */
+.di-column-count--sky { background: rgba(46, 109, 164, 0.14); color: var(--di-sky-text); }
+.di-column-count--coral { background: rgba(255, 133, 89, 0.16); color: var(--coral); }
+.di-column-count--canary { background: rgba(138, 109, 0, 0.14); color: var(--di-canary-text); }
+.di-column-count--sage { background: rgba(61, 122, 80, 0.14); color: var(--di-sage-text); }
+.di-column-count--lavender { background: rgba(179, 144, 255, 0.18); color: var(--lavender); }
+.di-column-count--clover { background: rgba(76, 175, 90, 0.16); color: var(--clover); }
+.di-column-count--oak { background: rgba(160, 124, 90, 0.18); color: var(--oak); }
+.di-column-count--poppy { background: rgba(255, 79, 79, 0.14); color: var(--poppy); }
+.di-column-count--salmon { background: rgba(192, 64, 61, 0.14); color: var(--di-salmon-text); }
+
+:root[data-theme="dark"] .di-column-count--coral { background: rgba(255, 133, 89, 0.16); color: #FF9A73; }
+:root[data-theme="dark"] .di-column-count--oak { background: rgba(160, 124, 90, 0.18); color: #C79E6B; }
+:root[data-theme="dark"] .di-column-count--clover { background: rgba(76, 175, 90, 0.18); color: #6FD07E; }
+:root[data-theme="dark"] .di-column-count--poppy { background: rgba(255, 194, 77, 0.16); color: #FFC24D; }
+:root[data-theme="dark"] .di-column-count--salmon { background: rgba(255, 79, 79, 0.14); color: #FF7A7A; }
+:root[data-theme="dark"] .di-column-count--sky { background: rgba(185, 222, 254, 0.16); color: #C8E5FE; }
+:root[data-theme="dark"] .di-column-count--sage { background: rgba(158, 212, 165, 0.16); color: #B3DDB9; }
+:root[data-theme="dark"] .di-column-count--canary { background: rgba(229, 210, 89, 0.16); color: #EBDC7E; }
+:root[data-theme="dark"] .di-column-count--lavender { background: rgba(179, 144, 255, 0.16); color: #C4A8FF; }
 
 .di-column-cards {
     display: flex;
@@ -241,7 +568,7 @@
    that already exists" approach as .di-card-step--<colour> reusing the
    column header's palette. */
 .di-card-progress {
-    height: 4px;
+    height: 6px;
     border-radius: 999px;
     background: var(--surface-hover);
     overflow: hidden;
@@ -284,9 +611,9 @@
 }
 
 /* "+ Add feature" — only ever rendered at the bottom of the first
-   (Researching) column, since every feature starts there. Same recipe as
-   .di-new-project-btn in the sidebar, just without that class's margin
-   since it needs to sit flush after the last card. */
+   (Researching) column, since every feature starts there. Same plain
+   text-button recipe the sidebar's "+ New project" used to use before it
+   moved into the board header as a .btn-primary. */
 .di-add-feature-btn {
     background: none;
     border: none;
@@ -378,33 +705,41 @@
 }
 
 /* ── The 9 reusable stage/project colours ──────────────────────────────
-   Light mode: the raw palette var directly (already tuned for a light
-   background). Dark mode: the exact tinted text colours shared.css's
-   .status-pill--* dark rules already use for the same 9 names — reused
-   verbatim, not reinvented, per theming.md. */
+   Light mode: the raw palette var directly — EXCEPT sky/canary/sage/
+   salmon, which are pastels tuned to sit behind black text (a dot, the
+   old solid-chip column header), not to BE text on the page's cream
+   background — at that job they're nearly illegible (flagged by Ezekiel,
+   1 Sep 2026). --di-*-text below are darker/more saturated versions of
+   those same 4 hues, only for that "colour as text" job; the dot fill
+   and the progress bar's highlight keep using the real raw colour
+   further down, unaffected. The other 5 (coral/lavender/clover/oak/
+   poppy) are already dark/saturated enough to read fine as text.
+   Dark mode: the exact tinted text colours shared.css's .status-pill--*
+   dark rules already use for the same 9 names — reused verbatim, not
+   reinvented, per theming.md. */
 
-.di-dot--sky, .di-card-step--sky { color: var(--sky); }
-.di-dot--coral, .di-card-step--coral { color: var(--coral); }
-.di-dot--canary, .di-card-step--canary { color: var(--canary); }
-.di-dot--sage, .di-card-step--sage { color: var(--sage); }
-.di-dot--lavender, .di-card-step--lavender { color: var(--lavender); }
-.di-dot--clover, .di-card-step--clover { color: var(--clover); }
-.di-dot--oak, .di-card-step--oak { color: var(--oak); }
-.di-dot--poppy, .di-card-step--poppy { color: var(--poppy); }
-.di-dot--salmon, .di-card-step--salmon { color: var(--salmon); }
+:root {
+    --di-sky-text: #2E6DA4;
+    --di-canary-text: #8A6D00;
+    --di-sage-text: #3D7A50;
+    --di-salmon-text: #C0403D;
+}
 
-/* Column headers: solid-fill chip + black text, same recipe as
-   shared.css's light-mode .status-pill--* (readable against every one of
-   these pastel colours, unlike plain coloured text on the page bg). */
-.di-column-header--sky { background: var(--sky); color: var(--black); }
-.di-column-header--coral { background: var(--coral); color: var(--black); }
-.di-column-header--canary { background: var(--canary); color: var(--black); }
-.di-column-header--sage { background: var(--sage); color: var(--black); }
-.di-column-header--lavender { background: var(--lavender); color: var(--black); }
-.di-column-header--clover { background: var(--clover); color: var(--black); }
-.di-column-header--oak { background: var(--oak); color: var(--black); }
-.di-column-header--poppy { background: var(--poppy); color: var(--black); }
-.di-column-header--salmon { background: var(--salmon); color: var(--black); }
+.di-dot--sky, .di-card-step--sky, .di-column-header--sky { color: var(--di-sky-text); }
+.di-dot--coral, .di-card-step--coral, .di-column-header--coral { color: var(--coral); }
+.di-dot--canary, .di-card-step--canary, .di-column-header--canary { color: var(--di-canary-text); }
+.di-dot--sage, .di-card-step--sage, .di-column-header--sage { color: var(--di-sage-text); }
+.di-dot--lavender, .di-card-step--lavender, .di-column-header--lavender { color: var(--lavender); }
+.di-dot--clover, .di-card-step--clover, .di-column-header--clover { color: var(--clover); }
+.di-dot--oak, .di-card-step--oak, .di-column-header--oak { color: var(--oak); }
+.di-dot--poppy, .di-card-step--poppy, .di-column-header--poppy { color: var(--poppy); }
+.di-dot--salmon, .di-card-step--salmon, .di-column-header--salmon { color: var(--di-salmon-text); }
+
+/* Column headers: plain coloured text, no background chip — "clean
+   headers" per the wireframe (used to be a solid-fill chip like
+   shared.css's .status-pill--*; dropped in favour of just reusing the
+   text-colour rule above, one extra selector each, no new colour
+   treatment). */
 
 /* .di-dot is a solid fill, not text, so it needs `background` too — same
    colour, just the other property. */
@@ -418,25 +753,15 @@
 .di-dot--poppy { background: var(--poppy); }
 .di-dot--salmon { background: var(--salmon); }
 
-:root[data-theme="dark"] .di-card-step--coral { color: #FF9A73; }
-:root[data-theme="dark"] .di-card-step--oak { color: #C79E6B; }
-:root[data-theme="dark"] .di-card-step--clover { color: #6FD07E; }
-:root[data-theme="dark"] .di-card-step--poppy { color: #FFC24D; }
-:root[data-theme="dark"] .di-card-step--salmon { color: #FF7A7A; }
-:root[data-theme="dark"] .di-card-step--sky { color: #C8E5FE; }
-:root[data-theme="dark"] .di-card-step--sage { color: #B3DDB9; }
-:root[data-theme="dark"] .di-card-step--canary { color: #EBDC7E; }
-:root[data-theme="dark"] .di-card-step--lavender { color: #C4A8FF; }
-
-:root[data-theme="dark"] .di-column-header--coral { background: rgba(255, 133, 89, 0.16); color: #FF9A73; }
-:root[data-theme="dark"] .di-column-header--oak { background: rgba(160, 124, 90, 0.18); color: #C79E6B; }
-:root[data-theme="dark"] .di-column-header--clover { background: rgba(76, 175, 90, 0.18); color: #6FD07E; }
-:root[data-theme="dark"] .di-column-header--poppy { background: rgba(255, 194, 77, 0.16); color: #FFC24D; }
-:root[data-theme="dark"] .di-column-header--salmon { background: rgba(255, 79, 79, 0.14); color: #FF7A7A; }
-:root[data-theme="dark"] .di-column-header--sky { background: rgba(185, 222, 254, 0.16); color: #C8E5FE; }
-:root[data-theme="dark"] .di-column-header--sage { background: rgba(158, 212, 165, 0.16); color: #B3DDB9; }
-:root[data-theme="dark"] .di-column-header--canary { background: rgba(229, 210, 89, 0.16); color: #EBDC7E; }
-:root[data-theme="dark"] .di-column-header--lavender { background: rgba(179, 144, 255, 0.16); color: #C4A8FF; }
+:root[data-theme="dark"] .di-card-step--coral, :root[data-theme="dark"] .di-column-header--coral { color: #FF9A73; }
+:root[data-theme="dark"] .di-card-step--oak, :root[data-theme="dark"] .di-column-header--oak { color: #C79E6B; }
+:root[data-theme="dark"] .di-card-step--clover, :root[data-theme="dark"] .di-column-header--clover { color: #6FD07E; }
+:root[data-theme="dark"] .di-card-step--poppy, :root[data-theme="dark"] .di-column-header--poppy { color: #FFC24D; }
+:root[data-theme="dark"] .di-card-step--salmon, :root[data-theme="dark"] .di-column-header--salmon { color: #FF7A7A; }
+:root[data-theme="dark"] .di-card-step--sky, :root[data-theme="dark"] .di-column-header--sky { color: #C8E5FE; }
+:root[data-theme="dark"] .di-card-step--sage, :root[data-theme="dark"] .di-column-header--sage { color: #B3DDB9; }
+:root[data-theme="dark"] .di-card-step--canary, :root[data-theme="dark"] .di-column-header--canary { color: #EBDC7E; }
+:root[data-theme="dark"] .di-card-step--lavender, :root[data-theme="dark"] .di-column-header--lavender { color: #C4A8FF; }
 
 /* Dots stay solid in dark mode too (a translucent pill-style fill would
    make an 8px dot nearly invisible) — same reused hex values, as a solid
@@ -623,6 +948,13 @@
     border-color: transparent;
 }
 
+/* Read-only viewers (can_edit_board is False) get no tick/delete/add/
+   advance controls at all — the row itself shouldn't look clickable
+   either, so this overrides .di-step's base cursor: pointer. */
+.di-step--readonly {
+    cursor: default;
+}
+
 .di-step-badge {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
@@ -765,4 +1097,375 @@
     font-size: var(--text-sm);
     padding: var(--space-4) 0;
     text-align: center;
+}
+
+/* ── Edit Templates screen ─────────────────────────────────────────────
+   Reuses .di-column-header--<colour> for each stage's section header
+   (same solid-fill/black-text recipe as the board's own column headers)
+   and .di-step-label/.di-step-details for a row's title+details text —
+   only the row shell, move buttons and edit/delete affordances below are
+   new, since template rows have no done/active/pending state to style. */
+.di-template-stage {
+    margin-bottom: var(--space-6);
+}
+
+.di-template-stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: var(--space-2);
+}
+
+.di-template-add-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.di-template-step-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-template-step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.di-template-step-move {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.di-template-move-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    width: 20px;
+    height: 16px;
+    font-size: var(--text-xs);
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.di-template-move-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.di-template-edit-btn {
+    flex-shrink: 0;
+}
+
+/* ── Cost breakdown modal (Phase 3, 1 Sep 2026) ──────────────────────────
+   Content is a server-rendered fragment (_cost_breakdown.html) dropped
+   into #di-cost-body by openDiCostBreakdown() in the board JS — same
+   "fetch a fragment" pattern as the feature detail modal, so most of the
+   chrome reuses .di-feature-detail-header/-close/-title and
+   .di-detail-divider (both defined above) rather than duplicating them. */
+
+.di-cost-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.di-cost-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+/* Wider than the shared .modal-box--wide's 620px cap (also used by the
+   Decision Flag modal, which we don't want to affect — hence scoping
+   here instead of touching that shared rule). 960px is wide enough that
+   the 7-field add-row and the 5-card stat grid both sit on one line at
+   typical desktop widths instead of wrapping. This only raises the
+   ceiling: .di-cost-add-row keeps flex-wrap and .di-cost-stats keeps its
+   auto-fit grid, so both still wrap normally on a viewport too narrow to
+   give the modal the full 960px. */
+.di-cost-modal-box {
+    max-width: 960px;
+}
+
+.di-cost-export-btn {
+    text-decoration: none;
+}
+
+.di-cost-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.di-cost-stat-card {
+    background: var(--surface-hover);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-cost-stat-card--total {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+}
+
+.di-cost-stat-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+
+.di-cost-stat-value {
+    font-size: var(--text-1g);
+    font-weight: 700;
+    color: var(--text);
+}
+
+.di-cost-stat-sub {
+    font-size: var(--text-xs);
+    color: var(--text-faint, var(--text-muted));
+}
+
+.di-cost-add-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.di-cost-add-row input,
+.di-cost-add-row select {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+}
+
+.di-cost-add-date { flex: 0 0 140px; }
+.di-cost-add-type { flex: 0 0 130px; }
+.di-cost-add-feature { flex: 1 1 160px; min-width: 140px; }
+
+.di-cost-add-hours,
+.di-cost-add-amount {
+    flex: 0 0 100px;
+}
+
+.di-cost-add-description {
+    flex: 2 1 200px;
+    min-width: 160px;
+}
+
+.di-cost-ledger-wrapper {
+    margin-bottom: var(--space-4);
+    max-height: 40vh;
+}
+
+.di-cost-type-pill {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.di-cost-hours-note {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+}
+
+.di-cost-ledger-empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--space-4);
+}
+
+.di-cost-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+}
+
+.di-cost-footer strong {
+    color: var(--text);
+    margin-left: var(--space-1);
+}
+
+
+.di-perf-tabs {
+    display: flex;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.di-perf-tab {
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.di-perf-tab--active {
+    background: var(--surface-raised);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+}
+
+.di-perf-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.di-perf-nav-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.di-perf-nav-arrow:hover {
+    background: var(--surface-raised);
+}
+
+.di-perf-period-label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* --pine is the app's established positive/success text colour, used as
+   plain `color:` throughout main.css with no dark-mode override needed
+   (it's muted enough to read fine in both modes) — reused here rather
+   than inventing a new "profit green". */
+.di-perf-profit {
+    color: var(--pine);
+}
+
+.di-perf-projected-tag {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* .di-cost-stat-card (shared with the Cost Breakdown modal) is a flat
+   --surface-hover fill with no border/shadow of its own — fine inside
+   Cost Breakdown's white .modal-box, but Performance's copy sits
+   straight on the bare page background, where --surface-hover is only
+   a few RGB units off the page colour in light mode (it happens to read
+   fine in dark, where that same token step is much more perceptible —
+   Ezekiel, 2 Sep 2026). A scoped border here — not on the shared class,
+   so the modal's cards are untouched — gives the cards a real edge to
+   read against the page in both modes. */
+.di-perf-stats .di-cost-stat-card {
+    border: 1px solid var(--border);
+}
+
+.di-perf-table-wrapper {
+    margin-bottom: var(--space-4);
+}
+
+.di-perf-project-cell {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.di-perf-project-name {
+    font-weight: 600;
+}
+
+.di-perf-feature-count {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.di-perf-expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    padding: 0;
+}
+
+.di-perf-feature-subrow td {
+    background: var(--surface-hover);
+    padding: 0;
+}
+
+.di-perf-feature-subtable {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.di-perf-feature-subtable td {
+    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    border: none;
+}
+
+.di-perf-feature-subtable th {
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-6);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    text-align: left;
+    font-weight: 600;
+    border: none;
+    border-bottom: 1px solid var(--border);
+}
+
+.di-perf-feature-name {
+    color: var(--text);
 }

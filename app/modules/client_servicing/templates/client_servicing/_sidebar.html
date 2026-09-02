@@ -1,0 +1,15 @@
+{# Client Servicing's own internal sidebar — Table / Invoicing / Calendar
+   sections, all gated by the same can_access_client_servicing check (no
+   per-section permission split today). Included by index.html,
+   invoicing.html and calendar.html so all three screens share identical
+   nav markup without duplicating it — same "_sidebar.html + active_nav"
+   pattern as the Digital Innovation module
+   (digital_innovation/_sidebar.html). `active_nav` picks which nav item
+   renders as active: 'table' | 'invoicing' | 'calendar'. #}
+<aside class="cs-sidebar">
+    <nav class="cs-sidebar-nav">
+        <a href="{{ url_for('client_servicing.index') }}" class="cs-nav-item{% if active_nav == 'table' %} cs-nav-item--active{% endif %}">Table</a>
+        <a href="{{ url_for('client_servicing.invoicing') }}" class="cs-nav-item{% if active_nav == 'invoicing' %} cs-nav-item--active{% endif %}">Invoicing</a>
+        <a href="{{ url_for('client_servicing.calendar') }}" class="cs-nav-item{% if active_nav == 'calendar' %} cs-nav-item--active{% endif %}">Calendar</a>
+    </nav>
+</aside>

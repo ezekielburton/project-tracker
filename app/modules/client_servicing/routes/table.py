@@ -6,7 +6,7 @@ edit.py, on the same blueprint.
 from datetime import date
 
 from flask import render_template, abort
-from flask_login import login_required, current_user
+from flask_login import login_required
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.modules.core.shared.models import Project, ProjectDesigner, Contact, UserTableLayout
@@ -15,12 +15,12 @@ from app.modules.core.shared.lib.status_vocabulary import derive_project_status
 from app.modules.core.shared.services.status_tracking import bulk_project_client_approved_at
 
 from app.modules.client_servicing.models import ClientServicing, ClientServicingScope
-from app.modules.client_servicing.lib.access import can_access_client_servicing
+from app.modules.client_servicing.lib.access import can_access_client_servicing, _effective_user
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 
 
 def _require_access():
-    if not can_access_client_servicing(current_user):
+    if not can_access_client_servicing(_effective_user()):
         abort(403)
 
 
@@ -56,19 +56,23 @@ COLUMNS = [
 
 # One row per (user, TABLE_KEY) in the shared UserTableLayout model — same
 # table_key convention the Projects page already uses for its own tables
-# ('project_list:my', etc.), just this module's own key. Column widths
-# today (Chunk 7 piece 2); the same array's order becomes the column
-# order once reorder (a later piece) starts writing into it too.
+# ('project_list:my', etc.), just this module's own key. Stores column
+# widths; the array order also drives column order once reorder writes to it.
 TABLE_KEY = 'client_servicing:table'
 
 
 def _saved_layout():
-    """The current user's raw saved layout array for this table — a list
-    of {'key': ..., 'width': ...} dicts in display order — or [] if
+    """The effective user's raw saved layout array for this table — a
+    list of {'key': ..., 'width': ...} dicts in display order — or [] if
     they've never resized/reordered anything. Fetched once per request
     and shared by _ordered_columns() and _column_widths() below so a
-    page load only queries UserTableLayout a single time."""
-    row = UserTableLayout.query.filter_by(user_id=current_user.id, table_key=TABLE_KEY).first()
+    page load only queries UserTableLayout a single time.
+
+    Keyed on _effective_user(), not current_user — an admin previewing
+    the page while emulating someone else should see (and, via
+    layout.py's save_layout, persist) THAT person's own saved column
+    layout, same as project_list.py does for its own tables."""
+    row = UserTableLayout.query.filter_by(user_id=_effective_user().id, table_key=TABLE_KEY).first()
     if not row or not row.layout:
         return []
     return [entry for entry in row.layout if isinstance(entry, dict) and entry.get('key')]
@@ -135,13 +139,18 @@ def _serialize_row(p, contacts_by_id, client_approved_at):
     cs = p.client_servicing
     contact = contacts_by_id.get(p.contact_id) if p.contact_id else None
     status_label, status_class = derive_project_status(p)
+    designers = [_serialize_person(pd.designer) for pd in p.assigned_designers]
     return {
         'id': p.id,
         'client_id': p.client_id,
         'client': p.client_brand.name if p.client_brand else None,
         'name': p.name,
         'briefing_date': p.briefing_date,
-        'designers': [_serialize_person(pd.designer) for pd in p.assigned_designers],
+        'designers': designers,
+        # Comma-joined names: click-to-sort needs one flat sortable string
+        # per column, and designers is the only list-valued column.
+        # Computed here so the sort value and the chips can't drift.
+        'designers_sort': ', '.join(d['name'] for d in designers if d),
         'client_approved_at': client_approved_at.get(p.id),
         'status_label': status_label,
         'status_class': status_class,

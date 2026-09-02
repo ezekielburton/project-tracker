@@ -31,6 +31,34 @@ def test_index_forbidden_for_disallowed_role(app, client, db_session):
     assert resp.status_code == 403
 
 
+def test_index_allowed_for_project_owner(app, client, db_session):
+    """Project Owners are in the allowed-role set alongside
+    admin/management/cs — they can view/use the CS sheet."""
+    user = _user(db_session, 'a2', role='project_owner')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('client_servicing.index')
+    resp = client.get(url)
+    assert resp.status_code == 200
+
+
+def test_index_forbidden_for_finance_role_not_added_yet(app, client, db_session):
+    """Finance is meant to be added to the allowed-role set too, but the
+    role doesn't exist in the User model yet — access.py has it commented
+    out for Ezekiel to uncomment once it does. This test just locks in
+    that "not yet" state; it should be updated (or simply deleted, since
+    test_index_allowed_for_project_owner's pattern covers it once
+    uncommented) the same day that comment gets removed."""
+    user = _user(db_session, 'a3', role='finance')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('client_servicing.index')
+    resp = client.get(url)
+    assert resp.status_code == 403
+
+
 def test_index_shows_project_and_cs_fields(app, client, db_session):
     user = _user(db_session, 'b', role='cs')
     project = Project(name='Storefront Refresh', cs_lead_id=user.id, created_by_id=user.id, job_number='JOB-1')
@@ -67,7 +95,7 @@ def test_table_rows_endpoint_returns_fragment(app, client, db_session):
 
 
 def test_deactivated_scope_drops_out_of_options_but_still_shows_on_its_row(app, client, db_session):
-    """A deactivated scope (Chunk 6's admin toggle) shouldn't be offered
+    """A deactivated scope shouldn't be offered
     for new picks, but a row that already has it should keep showing its
     name — deactivating isn't deleting."""
     user = _user(db_session, 'd', role='cs')

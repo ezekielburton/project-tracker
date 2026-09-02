@@ -15,32 +15,28 @@
 // only its innerHTML), so it survives every live-refresh swap without
 // needing to be rebound.
 //
-// Scope and Client SPOC (Chunk 6) can also be created inline: their
+// Scope and Client SPOC can also be created inline: their
 // select gets a trailing "+ Add new..." option; picking it swaps the
 // select for a tiny name field + Add/Cancel, still inside the same td.
 // On Add it posts to the field's own quick-add endpoint, then saves the
 // new record's id through the normal saveField() path — same PATCH,
 // same error handling, nothing duplicated.
+//
+// Click-to-sort: click a header to sort by that
+// column, click again to reverse, a third click clears back to the
+// server's default order (Project name, A-Z). Deliberately lighter than
+// the Projects page's Sort popout — no query params, no multi-field
+// sort, nothing saved to the server — just a live re-order of the rows
+// already on screen, entirely in this module-scope `currentSort`
+// variable. That also means it resets on every page load/SPA
+// navigation for free (this whole file re-executes fresh each time, per
+// the top-of-file note), matching what Ezekiel asked for; it does
+// survive a live SSE refresh, since applySort() re-runs after every
+// helixRefreshClientServicingTable() swap so a background edit from
+// someone else doesn't silently undo the sort you're mid-review of.
 (function () {
     var body = document.getElementById('client-servicing-table-body');
     if (!body) return;
-
-    // Sticky horizontal scrollbar (Chunk 7) — pinned to the bottom of the
-    // viewport instead of the (possibly very tall) table, so scrolling
-    // sideways never requires scrolling all the way down first. These
-    // three elements live outside #client-servicing-table-body, so a
-    // live refresh never destroys them — only their sync (widths can
-    // change: a refresh can add/remove rows... not columns, but a resize
-    // does) needs redoing, not the listeners themselves.
-    var scrollContainer = document.getElementById('cs-table-scroll');
-    var stickyScrollbar = document.getElementById('cs-sticky-scrollbar');
-    var stickyScrollbarInner = document.getElementById('cs-sticky-scrollbar-inner');
-
-    function syncStickyScrollbar() {
-        if (!scrollContainer || !stickyScrollbar || !stickyScrollbarInner) return;
-        stickyScrollbarInner.style.width = scrollContainer.scrollWidth + 'px';
-        stickyScrollbar.hidden = scrollContainer.scrollWidth <= scrollContainer.clientWidth;
-    }
 
     // Sticky Project-name column, mirroring the Projects page's pinned
     // Expand+Name pair: "Open in Projects" and Project both stay put as
@@ -58,14 +54,96 @@
         table.style.setProperty('--cs-sticky-project-left', openHeaderCell.getBoundingClientRect().width + 'px');
     }
 
+    // Measures the table-box height live and sets it as a CSS custom
+    // property the box's `height` reads; the CSS calc(100vh - 180px) is
+    // only the pre-JS fallback.
+    function syncTableScrollHeight() {
+        var box = document.getElementById('cs-table-scroll');
+        var footer = document.querySelector('.footer');
+        if (!box || !footer) return;
+        // Height that makes the box's bottom edge meet the footer's top.
+        // box.top and the footer height are independent of the box's own
+        // height, so this solves it directly rather than nudging a delta.
+        var boxRect = box.getBoundingClientRect();
+        var footerRect = footer.getBoundingClientRect();
+        var target = window.innerHeight - boxRect.top - footerRect.height;
+        if (target > 100) { // guard against a mid-layout-thrash reading
+            box.style.setProperty('--cs-table-scroll-height', target + 'px');
+        }
+    }
+
+    // ── Click-to-sort ─────────────────────────────────────────────
+    // Columns whose data-sort-value is a plain number, not text/an ISO
+    // date string — everything else sorts lexicographically, which
+    // already works correctly for ISO dates (YYYY-MM-DD sorts
+    // chronologically as a string) and for names/labels.
+    var NUMERIC_SORT_COLUMNS = { value: true, cost_to_client: true, inward_cost: true, margin_percent: true };
+    var currentSort = null; // { key: 'value', dir: 'asc' } | null (null = default server order)
+
+    function applySort() {
+        var table = document.getElementById('cs-table');
+        var tbody = table && table.querySelector('tbody');
+        if (!tbody) return;
+        var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-project-id]'));
+        if (!rows.length) return;
+
+        if (!currentSort) {
+            // Back to the server's own order — every row carries the
+            // position it was rendered in (table.py sorts by Project
+            // name), so this needs no re-fetch to restore.
+            rows.sort(function (a, b) { return Number(a.dataset.rowOrder) - Number(b.dataset.rowOrder); });
+        } else {
+            var key = currentSort.key;
+            var dir = currentSort.dir === 'desc' ? -1 : 1;
+            var numeric = !!NUMERIC_SORT_COLUMNS[key];
+            rows.sort(function (a, b) {
+                var aTd = a.querySelector('td[data-col-key="' + key + '"]');
+                var bTd = b.querySelector('td[data-col-key="' + key + '"]');
+                var aVal = aTd ? aTd.dataset.sortValue || '' : '';
+                var bVal = bTd ? bTd.dataset.sortValue || '' : '';
+                // Blank cells sort to the bottom no matter the direction —
+                // an ascending sort on Due Date shouldn't put "no date
+                // set" rows before every real date.
+                if (aVal === '' && bVal === '') return 0;
+                if (aVal === '') return 1;
+                if (bVal === '') return -1;
+                if (numeric) return (parseFloat(aVal) - parseFloat(bVal)) * dir;
+                return aVal.localeCompare(bVal, undefined, { sensitivity: 'base', numeric: true }) * dir;
+            });
+        }
+        rows.forEach(function (tr) { tbody.appendChild(tr); }); // appendChild on an existing node moves it
+    }
+
+    function updateSortIndicators() {
+        var table = document.getElementById('cs-table');
+        if (!table) return;
+        Array.prototype.forEach.call(table.querySelectorAll('thead th[data-col-key]'), function (th) {
+            th.classList.remove('cs-th-sorted-asc', 'cs-th-sorted-desc');
+            if (currentSort && th.dataset.colKey === currentSort.key) {
+                th.classList.add(currentSort.dir === 'desc' ? 'cs-th-sorted-desc' : 'cs-th-sorted-asc');
+            }
+        });
+    }
+
+    function toggleSort(key) {
+        if (currentSort && currentSort.key === key) {
+            currentSort = currentSort.dir === 'asc' ? { key: key, dir: 'desc' } : null;
+        } else {
+            currentSort = { key: key, dir: 'asc' };
+        }
+        applySort();
+        updateSortIndicators();
+    }
+
     window.helixRefreshClientServicingTable = function () {
         fetch('/client-servicing/table-rows')
             .then(function (response) { return response.ok ? response.text() : null; })
             .then(function (html) {
                 if (html === null) return;
                 body.innerHTML = html;
-                syncStickyScrollbar();
                 syncStickyProjectOffset();
+                applySort(); // keep whatever sort was active through the swap
+                updateSortIndicators();
             })
             .catch(function () {
                 // Network blip — silently skip, same as every other poll/stream
@@ -190,8 +268,7 @@
 
     // Builds the same .person-chip markup the server's person_chip()
     // Jinja macro renders, so a CS Lead/Project Owner edit shows the real
-    // avatar right away instead of plain text until the next refresh
-    // (Chunk 7 — this was a known gap since Chunk 4).
+    // avatar immediately instead of plain text until the next refresh.
     function renderPersonChip(person) {
         var chip = document.createElement('span');
         chip.className = 'person-chip';
@@ -406,7 +483,7 @@
         startEdit(td);
     });
 
-    // ── Column resize (Chunk 7, piece 2) ────────────────────────────
+    // ── Column resize ─────────────────────────────────────────────
     // Delegated on `body`, not the <table> itself — the whole table gets
     // replaced wholesale on every live refresh (same reasoning as the
     // click-to-edit handler above), so a listener bound to individual
@@ -456,13 +533,12 @@
             document.removeEventListener('mouseup', onUp);
             handle.classList.remove('cs-resize-handle--active');
             scheduleLayoutSave(table);
-            syncStickyScrollbar(); // the table's total width may have changed
         }
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
     });
 
-    // ── Column reorder (Chunk 7, piece 3) ───────────────────────────
+    // ── Column reorder ────────────────────────────────────────────
     // Same delegation reasoning as resize above: bound on `body`, not the
     // <table>, so it survives every live-refresh swap. Guards against the
     // resize handle's own mousedown — the handle sits inside its <th>, so
@@ -476,6 +552,13 @@
     // order via table.py's _ordered_columns() — these DOM moves just keep
     // the current view honest until that happens.
     var DRAG_THRESHOLD = 4; // px of movement before a mousedown becomes a drag, not a stray click
+
+    // A plain click on a header (no movement past DRAG_THRESHOLD) sorts
+    // instead of reordering — set right before the browser's own 'click'
+    // event fires for a drag that DID move, so that click handler below
+    // can tell "just dragged" apart from "just clicked" using the same
+    // mousedown/mouseup pair the reorder logic already tracked.
+    var suppressNextClick = false;
 
     function findColumnCells(table, key) {
         return {
@@ -539,35 +622,34 @@
             document.removeEventListener('mouseup', onUp);
             th.classList.remove('cs-th-dragging');
             if (dragging) {
+                suppressNextClick = true; // this mouseup's 'click' is the drag ending, not a sort request
                 scheduleLayoutSave(table);
-                syncStickyScrollbar(); // column order changing can't change total width, but cheap to re-check
             }
         }
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
     });
 
-    // ── Sticky scrollbar / sticky column wiring ──────────────────────
-    syncStickyScrollbar();
-    syncStickyProjectOffset();
-    window.addEventListener('resize', function () {
-        syncStickyScrollbar();
-        syncStickyProjectOffset();
+    // A click that wasn't a drag sorts by that column. Delegated the same
+    // way as every other handler here (survives live-refresh swaps);
+    // covers Project too, even though Project is excluded from the
+    // reorder-drag above — it's still sortable, just not draggable.
+    body.addEventListener('click', function (e) {
+        if (suppressNextClick) { suppressNextClick = false; return; }
+        if (e.target.closest('.cs-resize-handle')) return;
+        var th = e.target.closest('th[data-col-key]');
+        if (!th) return;
+        toggleSort(th.dataset.colKey);
     });
 
-    if (scrollContainer && stickyScrollbar) {
-        var syncingScroll = false;
-        scrollContainer.addEventListener('scroll', function () {
-            if (syncingScroll) return;
-            syncingScroll = true;
-            stickyScrollbar.scrollLeft = scrollContainer.scrollLeft;
-            syncingScroll = false;
-        });
-        stickyScrollbar.addEventListener('scroll', function () {
-            if (syncingScroll) return;
-            syncingScroll = true;
-            scrollContainer.scrollLeft = stickyScrollbar.scrollLeft;
-            syncingScroll = false;
-        });
-    }
+    // ── Sticky column wiring ──────────────────────────────────────────
+    syncStickyProjectOffset();
+    window.addEventListener('resize', syncStickyProjectOffset);
+
+    // Runs after syncStickyProjectOffset (harmless either order, kept
+    // together since both are "measure real chrome, don't guess"
+    // fixes) — see the function's own comment above for why this
+    // exists instead of a fixed CSS value.
+    syncTableScrollHeight();
+    window.addEventListener('resize', syncTableScrollHeight);
 })();

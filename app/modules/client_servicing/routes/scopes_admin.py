@@ -1,5 +1,5 @@
 """
-Admin management of the CS Scope option list (Chunk 6). Separate from the
+Admin management of the CS Scope option list. Separate from the
 per-row field edit endpoint in edit.py — this is reference-data CRUD for
 the Scope dropdown itself, not editing a project's row.
 
@@ -21,13 +21,13 @@ a scope from the table that then fails to save (edit.py's _parse_scope_id
 only accepts active scopes) — a confusing dead end for no reason.
 """
 from flask import request, jsonify, abort
-from flask_login import login_required, current_user
+from flask_login import login_required
 
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.decorators import role_required
 
 from app.modules.client_servicing.models import ClientServicingScope
-from app.modules.client_servicing.lib.access import can_access_client_servicing
+from app.modules.client_servicing.lib.access import can_access_client_servicing, _effective_user
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 
 
@@ -88,7 +88,11 @@ def update_scope(scope_id):
 @client_servicing_bp.route('/scopes/quick-add', methods=['POST'])
 @login_required
 def quick_add_scope():
-    if not can_access_client_servicing(current_user):
+    # Same cs/management/admin/project_owner gate as the rest of this
+    # module (not the admin-only CRUD above) — emulation-aware to match,
+    # so an admin previewing as e.g. a CS user sees the same "can I add a
+    # scope from here" behavior that user would actually get.
+    if not can_access_client_servicing(_effective_user()):
         abort(403)
 
     data = request.get_json(silent=True) or {}

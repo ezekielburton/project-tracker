@@ -6,7 +6,13 @@
    mutating action below (tick/add/delete a step, advance, close) POSTs
    and swaps this same fragment back in, so the modal always reflects the
    feature's true current state. "Edit template" is still the next
-   chunk — no link to it yet. #}
+   chunk — no link to it yet.
+
+   can_edit_board (lib/access.py's can_edit_di_board) gates every
+   interactive control below — a step's clickability and delete button,
+   the add-step form, and the advance/close banner's button. Anyone it's
+   False for gets a genuinely read-only view: the controls aren't
+   rendered at all, not just disabled. #}
 <div class="di-feature-detail-header">
     <div>
         <span class="di-feature-badge">{{ project.name }} · Feature</span>
@@ -47,20 +53,21 @@
 
 <ul class="di-step-list">
     {% for row in step_rows %}
-    <li class="di-step di-step--{{ row.state }}{% if row.state == 'active' %} di-column-header--{{ current_stage_colour }}{% endif %}" data-step-id="{{ row.step.id }}" data-step-done="{{ 'true' if row.step.is_done else 'false' }}">
+    <li class="di-step di-step--{{ row.state }}{% if row.state == 'active' %} di-column-header--{{ current_stage_colour }}{% endif %}{% if not can_edit_board %} di-step--readonly{% endif %}"{% if can_edit_board %} data-step-id="{{ row.step.id }}" data-step-done="{{ 'true' if row.step.is_done else 'false' }}"{% endif %}>
         <span class="di-step-check">{% if row.state == 'done' %}&#10003;{% endif %}</span>
         <span class="di-step-label">
             {{ row.step.title }}
             {% if row.step.details %}<span class="di-step-details">{{ row.step.details }}</span>{% endif %}
         </span>
         {% if row.state == 'active' %}<span class="di-step-badge">Active</span>{% endif %}
-        <button type="button" class="btn-danger-sm di-step-delete" aria-label="Delete step">&times;</button>
+        {% if can_edit_board %}<button type="button" class="btn-danger-sm di-step-delete" aria-label="Delete step">&times;</button>{% endif %}
     </li>
     {% else %}
     <li class="di-step-empty">No steps configured for this stage yet.</li>
     {% endfor %}
 </ul>
 
+{% if can_edit_board %}
 <div class="di-step-add">
     <div class="di-step-add-row">
         <input type="text" class="di-step-add-input" id="di-step-add-title" placeholder="Add a step…">
@@ -85,6 +92,7 @@
 <div class="di-advance-banner di-advance-banner--muted">
     <p>Finish all steps, then advance to <strong>{{ next_stage_label }}</strong> — it loads {{ next_stage_label }}'s step template automatically.</p>
 </div>
+{% endif %}
 {% endif %}
 {% endif %}
 

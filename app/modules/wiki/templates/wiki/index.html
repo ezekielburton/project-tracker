@@ -7,7 +7,7 @@
     <aside class="wiki-nav-panel" id="wiki-nav-panel">
         <div class="wiki-nav-header">
             <span class="wiki-nav-title">Knowledge Base</span>
-            {% if current_user.role == 'admin' %}
+            {% if effective_user.role == 'admin' %}
             <a href="{{ url_for('wiki.editor_dashboard') }}" class="btn-secondary btn-sm">Edit</a>
             {% endif %}
         </div>
@@ -29,7 +29,7 @@
             </div>
 
             {% for article in section.articles %}
-            {% if article.is_published or current_user.role == 'admin' %}
+            {% if article.is_published or effective_user.role == 'admin' %}
             <a class="wiki-nav-article" data-article-id="{{ article.id }}" href="#article-{{ article.id }}">
                 {{ article.title }}
                 {% if not article.is_published %}

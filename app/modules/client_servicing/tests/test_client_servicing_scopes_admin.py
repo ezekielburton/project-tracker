@@ -1,4 +1,4 @@
-"""Coverage for Chunk 6's Scope reference-data endpoints
+"""Coverage for the Scope reference-data endpoints
 (app/modules/client_servicing/routes/scopes_admin.py): full CRUD is
 admin-only (list/create/rename/deactivate), quick-add is open to the same
 cs/management/admin set as the rest of the module."""

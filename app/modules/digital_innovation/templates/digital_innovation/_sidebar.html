@@ -1,0 +1,50 @@
+{# Shared DI sidebar — project switcher + top nav. Included by board.html,
+   templates.html and archive.html so every screen stays visually
+   identical without duplicating this markup (extracted out of board.html
+   when templates.html was added). `active_nav` picks which nav item
+   renders as the active link vs a plain link vs the disabled
+   placeholder: 'board' | 'templates' | 'archive'. `can_edit_board` hides
+   each project's Close button for anyone who's view-only (lib/access.py's
+   can_edit_di_board) — the Archive link itself stays visible to
+   everyone, same as Board, since viewing never needs the gate. "+ New
+   project" lives in board.html's header now, not here — see board.html.
+   `project` marks the current project in the
+   list and builds the Board link — on templates.html/archive.html (not
+   project-scoped) it's just the default project, so "Board" always has
+   somewhere sensible to go back to. #}
+<aside class="di-sidebar">
+    <nav class="di-sidebar-nav">
+        <a href="{{ url_for('digital_innovation.project_board', di_project_id=project.id) }}" class="di-nav-item{% if active_nav == 'board' %} di-nav-item--active{% endif %}">Board</a>
+        {% if can_view_performance %}
+        <a href="{{ url_for('digital_innovation.performance_screen') }}" class="di-nav-item{% if active_nav == 'performance' %} di-nav-item--active{% endif %}">Performance</a>
+        {% endif %}
+        {% if can_edit_templates %}
+        <a href="{{ url_for('digital_innovation.templates_screen') }}" class="di-nav-item{% if active_nav == 'templates' %} di-nav-item--active{% endif %}">Edit Templates</a>
+        {% endif %}
+    </nav>
+
+    <div class="di-sidebar-section">
+        <span class="di-sidebar-section-label">Projects</span>
+        <ul class="di-project-list">
+            {% for p in sidebar_projects %}
+            <li class="di-project-row">
+                <a href="{{ url_for('digital_innovation.project_board', di_project_id=p.id) }}"
+                   class="di-project-item{% if p.id == project.id and active_nav == 'board' %} di-project-item--active{% endif %}">
+                    <span class="di-dot di-dot--{{ p.colour or 'oak' }}"></span>
+                    {{ p.name }}
+                </a>
+                {% if can_edit_board and not p.is_permanent %}
+                {# Closes this project (active -> closed) — it then moves to
+                   the Archive screen, reopenable from there. Never rendered
+                   for the permanent OVP board (lib/access.py's guard isn't
+                   what hides this — is_permanent is an object rule, not a
+                   role one — routes/projects.py's close_project refuses it
+                   too, so this is belt-and-suspenders, not the only guard). #}
+                <button type="button" class="di-project-close-btn" data-di-project-id="{{ p.id }}" aria-label="Close project" title="Close project">&times;</button>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <a href="{{ url_for('digital_innovation.archive_screen') }}" class="di-nav-item di-archive-link{% if active_nav == 'archive' %} di-nav-item--active{% endif %}">Archive</a>
+    </div>
+</aside>

@@ -1,8 +1,8 @@
-"""Coverage for the writeback fields (Chunk 4): CS Lead, Project Owner,
+"""Coverage for the writeback fields: CS Lead, Project Owner,
 Job No, Client SPOC, Installation Date, Project Value, Due Date — all
 routed through app/modules/projects/services/mutations.py.
 
-Also covers Chunk 5: the notify-on-change behaviour for Due Date, Job No
+Also covers the notify-on-change behaviour for Due Date, Job No
 and Client SPOC (designers + secondary CS + Project Owner, excluding the
 actor and de-duplicated)."""
 import json
@@ -209,7 +209,7 @@ def test_secondary_cs_who_is_also_owner_only_notified_once(app, client, db_sessi
 
 
 def test_cs_lead_reassign_response_includes_avatar_chip_data(app, client, db_session):
-    """Chunk 7: the save response carries the new lead's person info so
+    """The save response carries the new lead's person info so
     the cell can show the real avatar chip immediately, not plain text
     until the next refresh."""
     lead = _user(db_session, 'lead13')

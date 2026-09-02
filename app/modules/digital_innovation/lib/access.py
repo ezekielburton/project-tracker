@@ -48,3 +48,40 @@ def can_view_di_performance(user):
     this from ever raising)."""
     effective = _effective_role_user(user)
     return getattr(effective, 'role', None) in _DI_PERFORMANCE_ROLES
+
+
+# Deliberately its own set, not reused from _DI_PERFORMANCE_ROLES, even
+# though today it's a subset (admin only, not management) — per Ezekiel,
+# so the two can be widened or narrowed independently later without one
+# change accidentally affecting the other.
+_DI_TEMPLATE_EDIT_ROLES = {'admin'}
+
+
+def can_edit_di_templates(user):
+    """True if `user` may view/edit the department-wide step templates
+    screen (Edit Templates — routes/templates.py). Same emulation-aware
+    resolution as can_view_di_performance: if a real admin is emulating
+    someone else, the emulated person's role is what counts."""
+    effective = _effective_role_user(user)
+    return getattr(effective, 'role', None) in _DI_TEMPLATE_EDIT_ROLES
+
+
+# The board itself (viewing a project, opening a feature) stays open to
+# every logged-in user — only actually CHANGING something is gated: new
+# projects/features, ticking/adding/deleting a step, advancing, closing.
+# "Me and my future team" per Ezekiel (28 Aug 2026) — starts admin-only,
+# same as _DI_TEMPLATE_EDIT_ROLES and deliberately its own set rather than
+# reused from it, so as his team grows, adding their role(s) here is the
+# one change needed, independent of who can edit templates.
+_DI_BOARD_WRITE_ROLES = {'admin'}
+
+
+def can_edit_di_board(user):
+    """True if `user` may create a project/feature, or tick, add, delete,
+    advance or close a feature's steps — every DI action that changes
+    data rather than just viewing it. Same emulation-aware resolution as
+    the other checks here: if a real admin is emulating someone else, the
+    emulated person's role is what counts — so emulating a designer
+    genuinely previews the read-only experience they get."""
+    effective = _effective_role_user(user)
+    return getattr(effective, 'role', None) in _DI_BOARD_WRITE_ROLES
