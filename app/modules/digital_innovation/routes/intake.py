@@ -165,4 +165,5 @@ def intake_cards_fragment(di_project_id):
     return render_template(
         'digital_innovation/_incoming_cards.html',
         pending_intake_items=pending_intake_items(project),
+        can_edit_board=can_edit_di_board(current_user),
     )

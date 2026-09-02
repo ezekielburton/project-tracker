@@ -17,10 +17,12 @@
     {% if card.description %}
     <p class="di-incoming-card-description">{{ card.description }}</p>
     {% endif %}
+    {% if can_edit_board %}
     <div class="di-incoming-card-actions">
         <button type="button" class="btn-secondary di-incoming-dismiss-btn">Dismiss</button>
         <button type="button" class="btn-primary di-incoming-promote-btn">Promote</button>
     </div>
+    {% endif %}
 </div>
 {% else %}
 <p class="di-incoming-empty">Nothing waiting.</p>

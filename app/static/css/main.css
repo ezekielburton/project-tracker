@@ -288,6 +288,17 @@
     --scrim: rgba(20, 17, 13, 0.85);
 
     --coral: #FF9A73;
+    /* Dark tinted label tones (status pills, tinted action buttons) */
+    --tone-coral: #FF9A73;
+    --tone-oak: #C79E6B;
+    --tone-clover: #6FD07E;
+    --tone-poppy: #FFC24D;
+    --tone-salmon: #FF7A7A;
+    --tone-sky: #C8E5FE;
+    --tone-sage: #B3DDB9;
+    --tone-canary: #EBDC7E;
+    --tone-lavender: #C4A8FF;
+    --tone-blue: #8FC4F0;
 
     /* --sandstone is also used as a plain panel/callout background (settings
        nav, admin panel header, wiki callouts) — needs a dark value or those
@@ -1500,18 +1511,18 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
    Light mode above is untouched; these only apply under data-theme="dark". */
 :root[data-theme="dark"] .btn-primary {
     background-color: rgba(143, 196, 240, 0.15);
-    color: #8FC4F0;
+    color: var(--tone-blue);
     border-color: rgba(143, 196, 240, 0.45);
 }
 :root[data-theme="dark"] .btn-primary:hover {
     background-color: rgba(143, 196, 240, 0.24);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 :root[data-theme="dark"] .btn-approve-customer,
 :root[data-theme="dark"] .btn-approve-direct {
     background-color: rgba(76, 175, 90, 0.18);
-    color: #6FD07E;
+    color: var(--tone-clover);
     border-color: rgba(111, 208, 126, 0.45);
 }
 :root[data-theme="dark"] .btn-approve-customer:hover,
@@ -1522,13 +1533,13 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
 :root[data-theme="dark"] .btn-danger,
 :root[data-theme="dark"] .btn-danger-sm {
     background-color: rgba(255, 79, 79, 0.14);
-    color: #FF7A7A;
+    color: var(--tone-salmon);
     border-color: rgba(255, 122, 122, 0.4);
 }
 :root[data-theme="dark"] .btn-danger:hover,
 :root[data-theme="dark"] .btn-danger-sm:hover {
     background-color: rgba(255, 79, 79, 0.22);
-    color: #FF7A7A;
+    color: var(--tone-salmon);
 }
 
 /* Button loading spinner */
