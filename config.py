@@ -19,6 +19,14 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = 'Lax'
 
+    # CSRF hardening — same-origin app with no state-changing GETs, so a Lax
+    # session cookie blocks cross-site writes. Secure is env-gated so localhost
+    # HTTP dev still works; set SESSION_COOKIE_SECURE=true in the prod .env.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    REMEMBER_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+
     # Email configuration — reads from .env so switching providers requires no code changes
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.resend.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 465))
@@ -68,3 +76,4 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL')
     MAIL_ENABLED = False
     SECRET_KEY = os.environ.get('SECRET_KEY', 'test-secret-key')
+
