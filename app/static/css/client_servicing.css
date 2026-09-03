@@ -439,3 +439,259 @@
    internally, so its own native scrollbar is always in the viewport;
    the synthetic one just duplicated it (Ezekiel caught two stacked
    scrollbars live). Matching removal in client_servicing.js/index.html. */
+
+/* ── Invoicing section — By Project tab (read-only). Role tokens only;
+   the coral finance tint is a color-mix toward transparent so it holds in
+   both light and dark without a separate override. Badges reuse the themed
+   .status-pill--* colours, resized. ── */
+
+/* Tab strip */
+.cs-inv-tabs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.cs-inv-tab {
+    padding: var(--space-2) var(--space-4) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.cs-inv-tab--active {
+    color: var(--text);
+    border-bottom-color: var(--coral);
+}
+
+.cs-inv-tabline {
+    height: 1px;
+    background: var(--border);
+    margin-bottom: var(--space-4);
+}
+
+/* Toolbar (visual only for now) */
+.cs-inv-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.cs-inv-search {
+    width: 300px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-faint);
+    font-size: var(--text-sm);
+}
+
+.cs-inv-pill,
+.cs-inv-ghost {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.cs-inv-pill-val {
+    color: var(--text-faint);
+}
+
+.cs-inv-ghost {
+    background: transparent;
+    font-weight: 600;
+}
+
+.cs-inv-toolbar-spacer {
+    flex-grow: 1;
+}
+
+/* Table shell — one scroll container, sticky two-row header */
+.cs-inv-tablewrap {
+    overflow: auto;
+    max-height: calc(100vh - 15rem);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-sunken);
+}
+
+.cs-inv-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: var(--text-sm);
+}
+
+.cs-inv-table thead th {
+    position: sticky;
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Two sticky header rows — the group row on top, the column row directly
+   under it. The 34px offset matches the group row's fixed height. */
+.cs-inv-table .cs-inv-grouprow th {
+    top: 0;
+    z-index: 2;
+    height: 34px;
+}
+
+.cs-inv-table .cs-inv-colrow th {
+    top: 34px;
+    z-index: 1;
+}
+
+.cs-inv-table thead th.cs-inv-fin {
+    color: var(--coral);
+    background: color-mix(in srgb, var(--coral) 12%, var(--surface));
+}
+
+.cs-inv-glab {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.cs-inv-glab--fin {
+    color: var(--coral);
+}
+
+/* Finance band tint on body cells */
+.cs-inv-fin {
+    background: color-mix(in srgb, var(--coral) 5%, transparent);
+}
+
+.cs-inv-table tbody td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.cs-inv-table tbody tr:hover td {
+    background: var(--surface-hover);
+}
+
+.cs-inv-table tbody tr:hover td.cs-inv-fin {
+    background: color-mix(in srgb, var(--coral) 12%, var(--surface-hover));
+}
+
+.cs-inv-proj {
+    font-weight: 600;
+}
+
+.cs-inv-num {
+    font-family: var(--font-mono);
+}
+
+.cs-inv-muted {
+    color: var(--text-muted);
+}
+
+.cs-inv-none {
+    color: var(--text-faint);
+}
+
+.cs-inv-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--space-5);
+}
+
+/* Badges — themed status-pill colours at a smaller size */
+.cs-inv-badge {
+    padding: 2px var(--space-3);
+    font-size: var(--text-xs);
+}
+
+.cs-inv-gr {
+    font-weight: 600;
+}
+
+.cs-inv-gr--on {
+    color: var(--clover);
+}
+
+.cs-inv-gr--off {
+    color: var(--text-faint);
+}
+
+:root[data-theme="dark"] .cs-inv-gr--on {
+    color: var(--tone-clover);
+}
+
+/* Project column — narrow, wrapping, and sticky to the left as the finance
+   columns scroll horizontally. Sticky cells need an opaque background so
+   scrolled content doesn't show through. */
+.cs-inv-name {
+    position: sticky;
+    left: 0;
+    width: 400px;
+    min-width: 400px;
+    max-width: 400px;
+    border-right: 1px solid var(--border);
+}
+
+.cs-inv-table tbody td.cs-inv-name {
+    z-index: 1;
+    white-space: normal;
+    overflow-wrap: break-word;
+    background: var(--surface-sunken);
+}
+
+.cs-inv-table thead th.cs-inv-name {
+    z-index: 3;
+    white-space: normal;
+    background: var(--surface);
+}
+
+.cs-inv-table tbody tr:hover td.cs-inv-name {
+    background: var(--surface-hover);
+}
+
+/* Day-thresholds button + modal fields */
+.cs-inv-ghost {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.cs-inv-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-bottom: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.cs-inv-error {
+    color: var(--salmon);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-3);
+}

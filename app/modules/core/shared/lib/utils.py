@@ -1,6 +1,13 @@
 import re as _re
 from html import unescape as _unescape
 
+def slugify(text):
+    """Convert a title to a URL-safe slug."""
+    text = text.lower().strip()
+    text = _re.sub(r'[^\w\s-]', '', text)
+    text = _re.sub(r'[\s_]+', '-', text)
+    return _re.sub(r'-+', '-', text).strip('-')
+
 def file_type_label(ext):
     """Return a human-readable label for a file extension.
 
@@ -52,22 +59,14 @@ def get_actor():
     return current_user
 
 def mark_project_activity_seen(project, user, kind):
-    """Advances one of a user's two Projects-table unread watermarks for
-    this project (26/27 Aug 2026, per Ezekiel — the table's per-row
-    "new updates"/"new chat" dots; see ProjectActivitySeen's docstring in
-    core/shared/models/projects.py for the full design).
+    """Advance one of a user's two per-project unread watermarks — the
+    Projects table's "new updates" and "new chat" dots (see
+    ProjectActivitySeen in core/shared/models/projects.py).
 
-    kind is 'update' or 'chat'. Callers: project_overlay.py's overlay()
-    route (kind='update', fires on opening the overlay at all) and
-    project_notes.py's overlay_chat() route (kind='chat', fires only on
-    opening the Chat drawer specifically) — kept as two independent calls
-    rather than one shared watermark, per Ezekiel's call that staff need
-    to clear those two dots separately.
-
-    Upserts rather than requiring a pre-existing row, and is deliberately
-    best-effort like log_activity above — a failure here should never
-    break the page it's called from, it just means the dot might not
-    clear until the next successful visit."""
+    kind is 'update' (set by the overlay() route on open) or 'chat' (set
+    by overlay_chat() when the Chat drawer opens); the two clear
+    independently. Upserts the row, and is best-effort — a failure never
+    breaks the caller, the dot just clears on the next successful visit."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectActivitySeen
     from datetime import datetime

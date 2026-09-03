@@ -200,7 +200,22 @@
                 ].join('');
 
             case 'video':
-                return '<input type="url" data-field="content" placeholder="YouTube or Vimeo URL…" value="' + esc(block.content || '') + '">';
+                var vMode = block.source === 'upload' ? 'upload' : 'embed';
+                return [
+                    '<select class="wiki-video-mode">',
+                    '  <option value="embed"' + (vMode === 'embed' ? ' selected' : '') + '>Embed URL</option>',
+                    '  <option value="upload"' + (vMode === 'upload' ? ' selected' : '') + '>Upload File</option>',
+                    '</select>',
+                    '<div class="wiki-video-embed-fields' + (vMode === 'upload' ? ' hidden' : '') + '">',
+                    '  <input type="url" data-field="content" placeholder="YouTube or Vimeo URL…" value="' + esc(block.content || '') + '">',
+                    '</div>',
+                    '<div class="wiki-video-upload-fields' + (vMode === 'embed' ? ' hidden' : '') + '">',
+                    '  <div class="wiki-video-preview">' + (block.url ? '<video src="' + esc(block.url) + '" style="max-height:120px;border-radius:4px;" controls></video>' : '') + '</div>',
+                    '  <input type="hidden" class="wiki-video-url" value="' + esc(block.url || '') + '">',
+                    '  <input type="file" class="wiki-video-file-input hidden" accept="video/mp4,video/webm">',
+                    '  <button type="button" class="btn-secondary btn-sm wiki-video-upload-btn">Upload Video</button>',
+                    '</div>'
+                ].join('');
 
             default:
                 return '<textarea rows="3" data-field="content">' + esc(block.content || '') + '</textarea>';
@@ -307,6 +322,51 @@
                         });
                 });
             }
+
+            // Video: mode toggle + upload
+            if (block.type === 'video') {
+                var modeSelect = card.querySelector('.wiki-video-mode');
+                var embedFields = card.querySelector('.wiki-video-embed-fields');
+                var uploadFields = card.querySelector('.wiki-video-upload-fields');
+
+                modeSelect.addEventListener('change', function () {
+                    block.source = this.value;
+                    embedFields.classList.toggle('hidden', this.value === 'upload');
+                    uploadFields.classList.toggle('hidden', this.value === 'embed');
+                });
+
+                var vUploadBtn = card.querySelector('.wiki-video-upload-btn');
+                var vFileInput = card.querySelector('.wiki-video-file-input');
+                var vPreview = card.querySelector('.wiki-video-preview');
+                var vUrlStore = card.querySelector('.wiki-video-url');
+
+                vUploadBtn.addEventListener('click', function () { vFileInput.click(); });
+                vFileInput.addEventListener('change', function () {
+                    var file = this.files[0];
+                    if (!file) return;
+                    vUploadBtn.textContent = 'Uploading…';
+                    vUploadBtn.disabled = true;
+                    var fd = new FormData();
+                    fd.append('file', file);
+                    fetch('/wiki/upload-video', { method: 'POST', body: fd })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (data.success) {
+                                vUrlStore.value = data.url;
+                                vPreview.innerHTML = '<video src="' + data.url + '" style="max-height:120px;border-radius:4px;" controls></video>';
+                            } else {
+                                showToast(data.error || 'Upload failed', 'error');
+                            }
+                            vUploadBtn.textContent = 'Upload Video';
+                            vUploadBtn.disabled = false;
+                        })
+                        .catch(function () {
+                            showToast('Upload failed', 'error');
+                            vUploadBtn.textContent = 'Upload Video';
+                            vUploadBtn.disabled = false;
+                        });
+                });
+            }
         });
     }
 
@@ -326,6 +386,12 @@
             } else if (block.type === 'image') {
                 block.url = card.querySelector('.wiki-image-url').value;
                 block.caption = card.querySelector('[data-field="caption"]').value;
+            } else if (block.type === 'video') {
+                var modeSelect = card.querySelector('.wiki-video-mode');
+                block.source = modeSelect ? modeSelect.value : 'embed';
+                var embedInput = card.querySelector('.wiki-video-embed-fields [data-field="content"]');
+                if (embedInput) block.content = embedInput.value;
+                block.url = card.querySelector('.wiki-video-url').value;
             } else {
                 var field = card.querySelector('[data-field="content"]');
                 if (field) block.content = field.value;

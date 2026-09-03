@@ -38,7 +38,8 @@ is purely organizational.
 
 ### lib/ (stateless helpers)
 - `decorators` — `role_required`
-- `utils` — `file_type_label`, `strip_html`, `get_actor`, `log_activity`
+- `utils` — `file_type_label`, `strip_html`, `get_actor`, `log_activity`,
+  `slugify` (title → URL-safe slug, shared by wiki + blog)
 - `users` — `active_users_query` / `active_users`: the base query for user
   pickers, filtered to active (non-deactivated) accounts
 - `zip_utils` — build and serve one-shot zip downloads
@@ -86,6 +87,10 @@ Jinja's search path by the `core` blueprint, so any module can
   through its blueprint; `core` serves the shared assets.
 - **Time-proof comments** — comments describe what the code does, never when it
   changed (no dates, milestone codes, or migration filenames).
+- **Background NAS work** — `_run_in_background(app, fn)` (services/nas) runs a
+  callback in a daemon thread with a fresh app context so NAS calls never block
+  the response. The callback must not push its own `app.app_context()`, or its
+  DB queries stop seeing the caller's transaction.
 - **Module shape** — every feature module is `routes/ models/ templates/
   static/` plus a `<module>.md` and a `tests/` folder.
 - **Account deactivation** — `User.is_active` is the single offboarding switch.

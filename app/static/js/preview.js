@@ -39,7 +39,8 @@
     // previewUrl:  the /preview route to fetch from
     // downloadUrl: the matching /download route — used as the fallback link
     // filename:    shown in the modal header
-    window.openFilePreview = function (previewUrl, downloadUrl, filename) {
+    // fileType:    the file's extension, used to decide video/audio vs pdf/image
+    window.openFilePreview = function (previewUrl, downloadUrl, filename, fileType) {
         titleEl.textContent = filename;
         showLoading();
         modal.classList.remove('hidden');
@@ -48,6 +49,34 @@
         // this, live polling could reload the page out from under someone
         // mid-preview.
         if (window.helixPolling) window.helixPolling.pause();
+
+        var MEDIA_KIND_BY_EXT = {
+            mp4: 'video', webm: 'video',
+            mp3: 'audio', wav: 'audio', m4a: 'audio', aac: 'audio', ogg: 'audio'
+        };
+
+        function showVideo(url) {
+            bodyEl.innerHTML = '<video src="' + url + '" controls></video>';
+        }
+
+        function showAudio(url) {
+            bodyEl.innerHTML = '<audio src="' + url + '" controls></audio>';
+        }
+
+        // Video/audio point straight at the route instead of pre-fetching —
+        // the browser drives its own range requests for seeking. A fetch()
+        // here would download the whole file before playback could start.
+        var mediaKind = MEDIA_KIND_BY_EXT[(fileType || '').toLowerCase()];
+        if (mediaKind) {
+            if (mediaKind === 'video') showVideo(previewUrl); else showAudio(previewUrl);
+            bodyEl.querySelector('video, audio').addEventListener('error', function () {
+                fetch(previewUrl)
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) { showFallback(data.error || 'Preview unavailable.', downloadUrl); })
+                    .catch(function () { showFallback('Something went wrong loading the preview.', downloadUrl); });
+            });
+            return;
+        }
 
         fetch(previewUrl)
             .then(function (res) {

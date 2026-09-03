@@ -1,21 +1,13 @@
-import json, re, uuid, os
+import json, uuid, os
 from datetime import datetime
 from flask import (Blueprint, render_template, request, jsonify, abort, redirect, url_for, current_app)
 from flask_login import login_required, current_user
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import WikiSection, WikiArticle
 from app.modules.core.shared.lib.decorators import role_required
+from app.modules.core.shared.lib.utils import slugify
 
 wiki_bp = Blueprint('wiki', __name__, template_folder='../templates')
-
-# ------ Helper ------
-
-def _slugify(text):
-    """Convert a title to a URL-safe slug."""
-    text = text.lower().strip()
-    text = re.sub(r'[^\w\s-]', '', text)
-    text = re.sub(r'[\s_]+', '-', text)
-    return re.sub(r'-+', '-', text).strip('-')
 
 def _effective_user():
     """Emulation-aware actor: the emulated user when an admin is emulating,
@@ -74,6 +66,52 @@ def upload_image():
     })
 
 
+#------ Video upload & serve ------
+
+_VIDEO_EXTENSIONS = {'mp4', 'webm'}
+_VIDEO_MAX_BYTES = 200 * 1024 * 1024
+
+@wiki_bp.route('/wiki/upload-video', methods=['POST'])
+@login_required
+@role_required('admin')
+def upload_video():
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in _VIDEO_EXTENSIONS:
+        return jsonify({'success': False, 'error': 'File type not allowed'}), 400
+
+    file_bytes = file.read()
+    if len(file_bytes) > _VIDEO_MAX_BYTES:
+        return jsonify({'success': False, 'error': f'Video is too large (max {_VIDEO_MAX_BYTES // (1024 * 1024)}MB).'}), 400
+
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    upload_dir = os.path.join(current_app.root_path, 'static', 'wiki-uploads', 'videos')
+    os.makedirs(upload_dir, exist_ok=True)
+    with open(os.path.join(upload_dir, filename), 'wb') as out:
+        out.write(file_bytes)
+
+    # Local file is already saved and servable — a NAS failure here must
+    # never fail the upload, so back it up on a background thread.
+    from app.modules.core.shared.services.nas import upload_app_file, _run_in_background
+    _app_obj = current_app._get_current_object()
+
+    def _backup_to_nas():
+        try:
+            upload_app_file(file_bytes, '/Admin/OVP/Wiki', filename)
+        except RuntimeError as e:
+            _app_obj.logger.error(f'Wiki video NAS backup failed for {filename}: {e}')
+
+    _run_in_background(_app_obj, _backup_to_nas)
+
+    return jsonify({
+        'success': True,
+        'filename': filename,
+        'url': url_for('static', filename=f'wiki-uploads/videos/{filename}')
+    })
+
 # ------ Editor Sections ------
 @wiki_bp.route('/wiki/editor')
 @login_required
@@ -104,7 +142,7 @@ def save_article():
     article_id    = request.form.get('article_id', '').strip()
     section_id    = request.form.get('section_id', '').strip()
     title         = request.form.get('title', '').strip()
-    slug          = request.form.get('slug', '').strip() or _slugify(title)
+    slug          = request.form.get('slug', '').strip() or slugify(title)
     sections_json = request.form.get('sections_json', '[]')
     sort_order    = int(request.form.get('sort_order', 0))
 
@@ -176,7 +214,7 @@ def edit_section(section_id):
 def save_section():
     section_id     = request.form.get('section_id', '').strip()
     title          = request.form.get('title', '').strip()
-    slug           = request.form.get('slug', '').strip() or _slugify(title)
+    slug           = request.form.get('slug', '').strip() or slugify(title)
     relevant_roles = ','.join(request.form.getlist('relevant_roles'))
     sort_order     = int(request.form.get('sort_order', 0))
 

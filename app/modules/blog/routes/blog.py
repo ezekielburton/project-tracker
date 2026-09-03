@@ -1,13 +1,81 @@
-from flask import Blueprint, render_template, jsonify, request, abort
+from flask import Blueprint, render_template, jsonify, request, abort, url_for, current_app
 from flask_login import login_required, current_user
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import BlogPost, BlogComment, User
-from app.modules.core.shared.lib.utils import get_actor
+from app.modules.core.shared.lib.utils import get_actor, slugify
 from app.modules.core.shared.services.achievements import check_achievements
 from datetime import datetime
-import json
+import json, uuid, os
 
 blog_bp = Blueprint('blog', __name__, template_folder='../templates')
+
+_MEDIA_EXTENSIONS = {
+    'png': 'image', 'jpg': 'image', 'jpeg': 'image', 'gif': 'image', 'webp': 'image',
+    'mp4': 'video', 'webm': 'video',
+}
+_MEDIA_MAX_BYTES = 500 * 1024 * 1024
+
+
+def _backup_post_media_to_nas(app, post_id):
+    """Copies every image/video a post references to its NAS backup folder.
+    Called via _run_in_background, which already provides the app context —
+    a NAS failure here is logged only, never raised, since local disk is the
+    source of truth for blog media."""
+    from app.modules.core.shared.services.nas import upload_app_file
+
+    post = BlogPost.query.get(post_id)
+    if not post:
+        return
+
+    folder = f'/Admin/OVP/blog/{post.id}-{slugify(post.title)}'
+    upload_dir = os.path.join(app.root_path, 'static', 'blog-uploads')
+
+    for section in json.loads(post.sections_json or '[]'):
+        for block in section.get('blocks', []):
+            if block.get('type') not in ('image', 'video'):
+                continue
+            filename = (block.get('url') or '').rsplit('/', 1)[-1]
+            local_path = os.path.join(upload_dir, filename)
+            if not filename or not os.path.isfile(local_path):
+                continue
+            try:
+                with open(local_path, 'rb') as f:
+                    upload_app_file(f.read(), folder, filename)
+            except RuntimeError as e:
+                app.logger.error(f'Blog media NAS backup failed for post {post.id}, file {filename}: {e}')
+
+
+@blog_bp.route('/blog/upload-media', methods=['POST'])
+@login_required
+def upload_media():
+    if current_user.role != 'admin':
+        abort(403)
+
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    kind = _MEDIA_EXTENSIONS.get(ext)
+    if not kind:
+        return jsonify({'success': False, 'error': 'File type not allowed'}), 400
+
+    file_bytes = file.read()
+    if len(file_bytes) > _MEDIA_MAX_BYTES:
+        return jsonify({'success': False, 'error': f'File is too large (max {_MEDIA_MAX_BYTES // (1024 * 1024)}MB).'}), 400
+
+    filename = f'{uuid.uuid4().hex}.{ext}'
+    upload_dir = os.path.join(current_app.root_path, 'static', 'blog-uploads')
+    os.makedirs(upload_dir, exist_ok=True)
+    with open(os.path.join(upload_dir, filename), 'wb') as out:
+        out.write(file_bytes)
+
+    return jsonify({
+        'success': True,
+        'filename': filename,
+        'url': url_for('static', filename=f'blog-uploads/{filename}'),
+        'kind': kind
+    })
 
 @blog_bp.route('/blog')
 @login_required
@@ -104,6 +172,10 @@ def create_post():
     db.session.add(post)
     db.session.commit()
 
+    from app.modules.core.shared.services.nas import _run_in_background
+    _app_obj = current_app._get_current_object()
+    _run_in_background(_app_obj, lambda: _backup_post_media_to_nas(_app_obj, post.id))
+
     return jsonify({'success': True, 'post_id': post.id})
 
 
@@ -119,6 +191,10 @@ def update_post(post_id):
     post.version_tag = data.get('version_tag', '')
     post.sections_json = json.dumps(data.get('sections', []))
     db.session.commit()
+
+    from app.modules.core.shared.services.nas import _run_in_background
+    _app_obj = current_app._get_current_object()
+    _run_in_background(_app_obj, lambda: _backup_post_media_to_nas(_app_obj, post.id))
 
     send_email = data.get('send_email', False)
     if send_email:

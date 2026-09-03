@@ -376,7 +376,7 @@
         }
     }
 
-    function openProjectOverlay(projectId, pushHistory = true) {
+    function openProjectOverlay(projectId, pushHistory = true, openChat = false) {
         fetch(`/projects/${projectId}/overlay`)
             .then((res) => res.text())
             .then((html) => {
@@ -422,6 +422,14 @@
                         loadChatDrawer(projectId);
                     }
                 );
+
+                // Deep link into chat (chat-mention notifications — see
+                // notify_of_chat_mention() / mark_read() on the backend,
+                // and autoOpenFromUrl() below) — open the drawer right
+                // away, same as clicking the chat button ourselves.
+                if (openChat && activeOverlay) {
+                    activeOverlay.openChat();
+                }
 
                 // Edit mode (M4) — header (name/Edit/Save/Cancel) is part of
                 // the outer shell rendered once here, not re-injected per
@@ -693,7 +701,8 @@
     (function autoOpenFromUrl() {
         const params = new URLSearchParams(window.location.search);
         const projectId = params.get('project');
-        if (projectId) openProjectOverlay(projectId, false);
+        const openChat = params.get('chat') === '1';
+        if (projectId) openProjectOverlay(projectId, false, openChat);
     })();
 
     // ---- Row expansion + row-click-to-open (existing table, unchanged structure) ----

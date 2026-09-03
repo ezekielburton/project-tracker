@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Client Servicing — Monthly Summary{% endblock %}
+
+{% block content %}
+<div class="cs-page">
+    <div class="cs-shell">
+        {% with active_nav = 'invoicing' %}
+        {% include "client_servicing/_sidebar.html" %}
+        {% endwith %}
+        <main class="cs-main">
+            <div class="client-servicing-page">
+                {% with active_tab = 'summary' %}
+                {% include "client_servicing/_invoicing_tabs.html" %}
+                {% endwith %}
+                <p class="cs-muted">Monthly Summary is coming in the next chunk.</p>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}

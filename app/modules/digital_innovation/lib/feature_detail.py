@@ -17,10 +17,9 @@ def build_feature_detail_context(feature):
     is_closed = feature.status == 'closed'
 
     if is_closed:
-        # The only path to 'closed' is the Implementation-stage modal (a
-        # later chunk), so a closed feature has necessarily passed every
-        # stage - the status row shows all 8 as done, and there's no
-        # "current stage" checklist to show.
+        # The only path to 'closed' is the Implementation-stage modal, so a
+        # closed feature has passed every stage - the status row shows all 8 as
+        # done, with no current-stage checklist.
         stage_rows = [
             {'stage': s, 'label': stage_label(s, track), 'colour': DI_STAGE_COLOURS[s], 'state': 'done'}
             for s in DI_STAGES
@@ -59,21 +58,17 @@ def build_feature_detail_context(feature):
         steps_total_count = len(current_steps)
         is_last_stage = (current_index == len(DI_STAGES) - 1)
 
-    # Move-to-stage picker options - every stage in DI_STAGES, track-aware
-    # label, offered regardless of the current stage's completion (see
-    # step_engine.move_to_stage: movement is unconstrained, forward or
-    # backward, per Ezekiel's confirmed free-movement model). Not shown
-    # at all once the feature is closed - there's nowhere to move it.
+    # Move-to-stage options - every stage, track-aware label, offered regardless
+    # of the current stage's completion (movement is unconstrained, forward or
+    # backward - see step_engine.move_to_stage). Hidden once the feature is
+    # closed.
     stage_options = [] if is_closed else [
         {'stage': s, 'label': stage_label(s, track)} for s in DI_STAGES
     ]
 
-    # Row state for the checklist display: done / active (the first
-    # unticked step - same "what's next" step board_data.py's
-    # _feature_progress already surfaces on the board card) / pending (any
-    # other unticked step after it). This is purely a display hint - every
-    # current-stage step stays individually tickable regardless of this,
-    # per Ezekiel's "edit steps at any time" rule (step_engine.py).
+    # Checklist display state: done / active (first unticked step) / pending.
+    # A display hint only - every current-stage step stays individually tickable
+    # regardless (see step_engine.py).
     step_rows = []
     active_found = False
     for step in current_steps:

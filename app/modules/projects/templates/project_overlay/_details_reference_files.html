@@ -20,6 +20,7 @@ as before — project_details_card.js needs no changes. #}
             {% elif f.file_type == 'docx' %}📝
             {% elif f.file_type == 'xlsx' %}📊
             {% elif f.file_type in ['mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v'] %}🎬
+            {% elif f.file_type in ['mp3', 'wav', 'm4a', 'aac', 'ogg'] %}🎵
             {% else %}📎
             {% endif %}
         </span>
@@ -28,7 +29,8 @@ as before — project_details_card.js needs no changes. #}
         <div class="overlay-reference-file-actions">
             <button type="button" class="overlay-file-action-btn overlay-reference-file-preview"
                 data-preview-url="{{ url_for('project_overlay.preview_project_file', file_id=f.id) }}"
-                data-download-url="{{ url_for('project_overlay.download_project_file', file_id=f.id) }}">Preview</button>
+                data-download-url="{{ url_for('project_overlay.download_project_file', file_id=f.id) }}"
+                data-file-type="{{ f.file_type }}">Preview</button>
             <a href="{{ url_for('project_overlay.download_project_file', file_id=f.id) }}"
                 class="overlay-file-action-btn">Download</a>
             {% if can_manage_reference_files %}
@@ -46,7 +48,7 @@ as before — project_details_card.js needs no changes. #}
 {% if can_manage_reference_files %}
 <div class="overlay-reference-file-upload">
     <input type="file" id="overlay-reference-file-input" class="hidden"
-        accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.pptx,.zip,.dwg,.mp4,.mov,.avi,.webm,.mkv,.wmv,.m4v">
+        accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.pptx,.zip,.dwg,.mp4,.mov,.avi,.webm,.mkv,.wmv,.m4v,.mp3,.wav,.m4a,.aac,.ogg">
     <button type="button" id="overlay-reference-file-btn" class="overlay-file-action-btn"
         data-project-id="{{ project.id }}">
         Drop a file or click to attach…

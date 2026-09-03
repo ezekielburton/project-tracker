@@ -44,6 +44,17 @@ class ClientServicing(db.Model):
         nullable=True,
     )
     priority = db.Column(db.String(120), nullable=True)
+
+    # Invoicing (finance-owned) fields.
+    lpo_date = db.Column(db.Date, nullable=True)
+    project_value = db.Column(db.Numeric(12, 2), nullable=True)
+    invoice_number = db.Column(db.String(120), nullable=True)
+    invoice_date = db.Column(db.Date, nullable=True)
+    invoice_amount = db.Column(db.Numeric(12, 2), nullable=True)
+    gr_received = db.Column(db.Boolean, nullable=False, default=False)
+    invoice_uploaded = db.Column(db.Boolean, nullable=False, default=False)
+    validation_status = db.Column(db.String(20), nullable=True)
+
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
 
     project = db.relationship('Project', backref=db.backref('client_servicing', uselist=False))
@@ -60,5 +71,35 @@ class ClientServicing(db.Model):
             return None
         return float((self.cost_to_client - self.inward_cost) / self.cost_to_client) * 100
 
+    @property
+    def days_pending(self):
+        """Days waiting: since invoice_date once invoiced, else since
+        removal_date (ready to invoice). None when neither is set."""
+        from datetime import date
+        anchor = self.invoice_date or self.removal_date
+        if anchor is None:
+            return None
+        return (date.today() - anchor).days
+
     def __repr__(self):
         return f'<ClientServicing project_id={self.project_id}>'
+
+
+class ClientServicingSetting(db.Model):
+    """Single-row module settings — currently the Days Pending colour
+    thresholds. Read via current(); admin/management edit it on the
+    Invoicing page."""
+    __tablename__ = 'client_servicing_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    days_green_max = db.Column(db.Integer, nullable=False, default=30)
+    days_red_max = db.Column(db.Integer, nullable=False, default=60)
+
+    @classmethod
+    def current(cls):
+        """The saved row, or a transient default instance if none exists —
+        read-only callers never trigger a write."""
+        return cls.query.first() or cls(days_green_max=30, days_red_max=60)
+
+    def __repr__(self):
+        return f'<ClientServicingSetting green={self.days_green_max} red={self.days_red_max}>'

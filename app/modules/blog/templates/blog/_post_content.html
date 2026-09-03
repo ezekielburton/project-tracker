@@ -62,6 +62,17 @@
             <li>{{ item }}</li>
             {% endfor %}
         </ul>
+
+        {% elif block.type == 'image' %}
+        <figure class="blog-image">
+            <img src="{{ block.url }}" alt="">
+            {% if block.text %}<figcaption>{{ block.text }}</figcaption>{% endif %}
+        </figure>
+
+        {% elif block.type == 'video' %}
+        <div class="blog-video">
+            <video src="{{ block.url }}" controls></video>
+        </div>
         {% endif %}
         {% endfor %}
     </section>

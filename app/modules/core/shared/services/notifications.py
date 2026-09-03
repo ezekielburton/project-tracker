@@ -310,8 +310,16 @@ def notify_flag_reply(flag, project, triggered_by):
 
 def notify_of_chat_mention(note, project, mentioned_users, triggered_by):
     """Notify each person @-mentioned in a chat message. mentioned_users is
-    already resolved/validated by the caller (create_note())."""
+    already resolved/validated by the caller (create_note()).
+
+    Sets an explicit link (rather than falling back to the plain project
+    link in mark_read()) so clicking the notification opens the project
+    AND the chat drawer — see autoOpenFromUrl()/openChat() in
+    project_list.js / project_overlay.js."""
+    from flask import url_for
+
     message = f'{triggered_by.name} mentioned you in "{project.name}".'
+    link = url_for('project_list.index', project=project.id, chat=1)
     for user in mentioned_users:
         create_notification(
             recipient=user,
@@ -320,6 +328,7 @@ def notify_of_chat_mention(note, project, mentioned_users, triggered_by):
             project=project,
             triggered_by=triggered_by,
             pref_key='chat_mention',
+            link=link,
         )
 
 

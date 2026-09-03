@@ -1,8 +1,7 @@
-# Digital Innovation — period math + the rollover overlap query (brain B,
-# see the build notes). Pure date arithmetic and the "which projects
-# belong in this window" query live here; lib/snapshots.py is the layer
-# above that turns a window into the actual rollup numbers (and freezes
-# month/quarter ones once they've ended).
+# Period math + the rollover overlap query. Pure date arithmetic and the "which
+# projects belong in this window" query live here; lib/snapshots.py turns a
+# window into the actual rollup numbers (and freezes month/quarter ones once
+# they've ended).
 #
 # A project "belongs" to a period if its active lifespan overlaps that
 # period's date range at all — lifespan = [created_at, closed_at] once
@@ -123,8 +122,8 @@ def period_has_ended(period_type, period_key, today=None):
 
 def projects_overlapping(period_start, period_end):
     """Every DiProject whose active lifespan touches [period_start,
-    period_end] at all — the rollover query itself (brain B). A still-
-    active project has no end to its lifespan, so it overlaps any period
+    period_end] at all — the rollover query itself. A still-active project has
+    no end to its lifespan, so it overlaps any period
     from its creation date onward; a closed/archived one's lifespan ends
     at closed_at, so it stops overlapping periods entirely after the one
     it closed in."""

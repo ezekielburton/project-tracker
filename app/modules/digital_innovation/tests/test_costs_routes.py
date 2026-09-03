@@ -1,6 +1,5 @@
 """Route-level coverage for the Digital Innovation Cost breakdown modal
-(routes/costs.py): auth, the can_view_di_performance gate (shared by
-view/add/delete per Ezekiel, 1 Sep 2026), validation turning into 400s,
+(routes/costs.py): auth, the can_view_di_performance gate (shared by view/add/delete), validation turning into 400s,
 and the Excel export. lib/costs.py (the business logic) already has full
 unit coverage in test_costs_lib.py — these tests are about the HTTP
 layer, the same split test_feature_steps_routes.py uses for step_engine."""

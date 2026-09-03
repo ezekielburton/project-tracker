@@ -1,33 +1,22 @@
-# Digital Innovation - "brain A": the step-template/stage-movement state
-# machine (per the build brief). Every rule Ezekiel confirmed lives here,
-# in one place, so the board route, the feature-detail route and the future
-# Incoming-tray promotion path all move features the same way instead of
-# each re-implementing the rules slightly differently.
+# "Brain A": the step-template / stage-movement state machine. All the rules
+# live here so the board route, the feature-detail route and the Incoming-tray
+# promotion path move features the same way.
 #
-# The rules, as confirmed:
-# - A feature's CURRENT stage's steps can be ticked/unticked/added/deleted
-#   at any time. Steps from stages already passed (or not yet reached) are
-#   left alone - only the current stage's steps are editable.
-# - A feature can be moved to ANY stage, forward or backward, at any time,
-#   via move_to_stage() below - there's no completion gate. This replaced
-#   an earlier single-gated-step "Advance" action once Ezekiel confirmed
-#   he wants free movement, including backwards, not a locked pipeline.
-# - Moving into a stage the feature has already visited before RESUMES
-#   that stage's existing steps (ticked or not, exactly as left) rather
-#   than reseeding them - a feature's steps are never deleted just for
-#   having moved away from their stage. Moving into a stage for the first
-#   time seeds it fresh from the department's current template, as before.
-# - Because movement is no longer gated on completion, deleting a step no
-#   longer auto-advances anything - it just deletes the step.
-# - A stage with zero steps is never "complete" - there's nothing to
-#   finish, so it just sits there (shown on the board as "No steps
-#   configured") until a step is added.
-# - Implementation is the last stage in DI_STAGES, but that no longer
-#   means anything special to move_to_stage() itself - a feature can be
-#   moved OUT of Implementation backward like any other stage. Closing a
-#   feature (leaving the stage list entirely) is a separate action -
-#   close_feature() below - still gated on being in the last stage with
-#   that stage complete (see routes/features.py's close route).
+# The rules:
+# - A feature's CURRENT stage's steps can be ticked/unticked/added/deleted at
+#   any time. Steps from other stages are left alone.
+# - A feature can be moved to ANY stage, forward or backward, at any time, via
+#   move_to_stage() - no completion gate.
+# - Moving into a stage the feature has visited before RESUMES its existing steps
+#   (exactly as left) rather than reseeding; a first visit seeds fresh from the
+#   department template. Steps are never deleted just for moving away from a stage.
+# - Deleting a step never auto-advances anything - it just deletes the step.
+# - A stage with zero steps is never "complete" - it sits as "No steps
+#   configured" until a step is added.
+# - Implementation is the last stage but isn't special to move_to_stage() - a
+#   feature can move out of it backward. Closing a feature is a separate action
+#   (close_feature()), gated on being in the last stage with it complete (see
+#   routes/features.py).
 
 from datetime import datetime
 
@@ -93,10 +82,9 @@ def tick_step(step, done=True):
 
 
 def delete_step(step):
-    """Deletes a step from the feature's current stage. Movement between
-    stages is unconstrained (see move_to_stage), so deleting a step never
-    triggers a stage change of its own anymore - it just deletes the
-    step."""
+    """Deletes a step from the feature's current stage. Movement between stages
+    is unconstrained (see move_to_stage), so deleting a step never triggers a
+    stage change - it just deletes the step."""
     _assert_current_stage_step(step)
     feature = step.feature
     # Removed through the relationship, same reasoning as add_step above -
@@ -108,10 +96,9 @@ def delete_step(step):
 
 
 def move_to_stage(feature, target_stage):
-    """Moves a feature directly to any stage, forward or backward, at any
-    time - no completion gate, per Ezekiel's confirmed free-movement
-    model. This is the sole way a feature's status changes (besides
-    creation and closing).
+    """Moves a feature directly to any stage, forward or backward, at any time -
+    no completion gate. The sole way a feature's status changes (besides creation
+    and closing).
 
     Resume-on-revisit: a feature's steps are stage-scoped but never
     deleted just because the feature moved to a different stage, so if
@@ -142,12 +129,10 @@ def close_feature(feature):
 
 
 def is_stage_complete(feature):
-    """True when the feature's current stage has at least one step and
-    every one of them is done. An unconfigured (zero-step) stage is
-    deliberately never "complete" - see the module docstring. No longer
-    gates stage movement (see move_to_stage), but still drives the
-    Implementation-stage "add step or close" choice and the close-feature
-    route's guard."""
+    """True when the current stage has at least one step and all are done. A
+    zero-step stage is never "complete" - see the module docstring. Doesn't gate
+    stage movement (see move_to_stage), but drives the Implementation-stage "add
+    step or close" choice and the close-feature guard."""
     steps = _current_stage_steps(feature)
     return bool(steps) and all(s.is_done for s in steps)
 

@@ -1,8 +1,6 @@
-# Digital Innovation — Cost breakdown view (restricted, see lib/access.py).
-# Per-project cost ledger CRUD + Excel export. Every route here gates on
-# can_view_di_performance — per Ezekiel (1 Sep 2026), add/delete access is
-# the same gate as view access, so there's no separate "can edit costs"
-# check anywhere in this file.
+# Cost breakdown view (restricted, see lib/access.py): per-project cost ledger
+# CRUD + Excel export. Every route gates on can_view_di_performance — add/delete
+# uses the same gate as view, so there's no separate "can edit costs" check.
 
 from datetime import datetime
 

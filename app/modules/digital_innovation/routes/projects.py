@@ -14,10 +14,9 @@ from app.modules.digital_innovation.routes.blueprint import digital_innovation_b
 from app.modules.digital_innovation.models import DiProject, DI_PROJECT_TRACKS
 from app.modules.digital_innovation.lib.access import can_edit_di_board
 
-# Rotation the board's colored project dots cycle through on creation —
-# same names as the app's existing .status-pill--<name> classes (see
-# DI_STAGE_COLOURS in models.py), so no new colour-picker UI is needed for
-# this phase and every dot is already dark-mode-tinted for free.
+# Rotation the board's project dots cycle through on creation — names match the
+# app's .status-pill--<name> classes (DI_STAGE_COLOURS in models.py), so every
+# dot is dark-mode-tinted for free.
 _COLOUR_ROTATION = ['sky', 'clover', 'coral', 'lavender', 'canary', 'sage', 'oak', 'poppy', 'salmon']
 
 

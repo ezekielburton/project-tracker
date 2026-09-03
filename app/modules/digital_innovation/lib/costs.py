@@ -1,21 +1,14 @@
-# Digital Innovation — "brain" for the cost ledger (Phase 3). Every rule
-# about what a cost entry is allowed to look like and how the summary
-# numbers are computed lives here, in one place — routes/costs.py is just
-# the HTTP layer on top of it, mirroring step_engine.py's split (brain A)
-# for this brain.
+# Cost-ledger brain for Digital Innovation: the rules for what a cost entry may
+# look like and how summary numbers are computed. routes/costs.py is the HTTP
+# layer on top, mirroring step_engine.py's split.
 #
-# DiCostEntry.amount for type='dev_time' is computed here from
-# DiSetting.dev_hourly_rate at the moment the entry is SAVED — there's no
-# historical rate table, so a backdated `date` does NOT retroactively look
-# up what the rate was on that day; it's always priced at today's rate.
-# A later rate change never rewrites a past entry's amount (per the
-# model's own docstring), but an entry logged today for hours worked last
-# month is still priced at today's rate, not last month's.
+# dev_time amount is computed from DiSetting.dev_hourly_rate at save time —
+# there's no historical rate table, so an entry is always priced at the current
+# rate, and a later rate change never rewrites past entries.
 #
-# Entries are deletable but never editable once saved (Ezekiel, 1 Sep
-# 2026) — if a line is wrong, delete it and add a corrected one, so the
-# ledger never silently rewrites history. There is deliberately no
-# update_cost_entry() here.
+# Entries are deletable but never editable: fix a wrong line by deleting and
+# re-adding, so the ledger never silently rewrites itself. There is no
+# update_cost_entry().
 
 from app.modules.core.shared.extensions import db
 from app.modules.digital_innovation.models import DiCostEntry, DiSetting, DI_COST_TYPES
@@ -30,10 +23,8 @@ DI_COST_TYPE_LABELS = {
 
 
 def get_settings():
-    """Fetch-or-create the singleton DiSetting row. Created lazily rather
-    than seeded by a migration, so a fresh/older database with no row yet
-    just gets one with the column defaults (rate 0, currency AED) instead
-    of erroring."""
+    """Fetch-or-create the singleton DiSetting row, lazily — a database with no
+    row yet gets one with column defaults (rate 0, currency AED)."""
     settings = DiSetting.query.first()
     if not settings:
         settings = DiSetting()
@@ -43,12 +34,9 @@ def get_settings():
 
 
 def cost_summary(di_project):
-    """Everything the Cost breakdown modal needs: the ledger itself
-    (newest first), per-type totals (amount/count/hours), the grand
-    total, and — when the project has a client_charge set — the
-    projected profit. projected_profit is None (not 0) when
-    client_charge is unset, so the template can show a dash instead of a
-    misleading number."""
+    """Everything the Cost breakdown modal needs: the ledger (newest first),
+    per-type totals (amount/count/hours), the grand total, and projected profit
+    when client_charge is set (None otherwise, so the template shows a dash)."""
     entries = (
         DiCostEntry.query
         .filter_by(di_project_id=di_project.id)
@@ -78,17 +66,11 @@ def cost_summary(di_project):
 
 
 def add_cost_entry(di_project, entry_date, cost_type, description=None, amount=None, hours=None, feature=None):
-    """Validates and stages a new ledger line (route commits, same
-    convention as step_engine.py). Raises ValueError on any invalid
-    input.
-
-    type='dev_time' entries are priced from the department's hourly rate
-    rather than a typed-in amount: hours is required (>0) and feature is
-    required (dev hours are tracked per-feature — see DiCostEntry's
-    docstring), and amount is computed here, not accepted from the
-    caller. The other three types are the reverse: amount is required
-    (>0), and hours/feature are forced to None since they're project-
-    level costs with no per-hour or per-feature meaning."""
+    """Validate and stage a new ledger line (the route commits). Raises
+    ValueError on invalid input. dev_time entries are priced from the department
+    hourly rate: hours (>0) and feature are required, amount is computed here.
+    The other types are the reverse: amount (>0) is required, hours/feature
+    forced to None."""
     if cost_type not in DI_COST_TYPES:
         raise ValueError(f"Unknown cost type '{cost_type}'.")
     if entry_date is None:
@@ -121,6 +103,6 @@ def add_cost_entry(di_project, entry_date, cost_type, description=None, amount=N
 
 
 def delete_cost_entry(entry):
-    """Deletes a ledger line (route commits). No update_cost_entry — see
-    module docstring."""
+    """Delete a ledger line (the route commits). No update_cost_entry — see
+    module note."""
     db.session.delete(entry)

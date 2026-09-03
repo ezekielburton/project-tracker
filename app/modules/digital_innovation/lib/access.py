@@ -1,36 +1,18 @@
-"""
-app/modules/digital_innovation/lib/access.py
+"""Single choke point for Digital Innovation access: who may view Performance
+and cost surfaces, who may view a given project, and who may edit boards or
+templates. Routes and templates gate through these functions instead of inline
+role checks, so widening a role set is a one-line change here.
 
-Single choke point for who can see Performance, Cost breakdown, and any
-other cost/charge/profit-adjacent surface (e.g. the feature detail
-modal's footer note) — every route and template showing that kind of
-information gates through this one function, never an inline role check.
-Boards stay open to everyone (no gate needed there). When the Digital
-Innovation department gets its own role, or a surface needs a different
-role set than the others, adding/splitting it here is the only change
-needed anywhere.
-
-Emulation-aware: when a real admin is emulating another user (session[
-'emulating_user_id'], set by admin/routes/admin.py), every check here
-goes by the emulated person's role, not the admin's own — the same
-pattern used throughout the app (core/shared/lib/utils.py's get_actor(),
-core/shared/routes/api.py's _effective_user(), app/__init__.py's
-inject_effective_user() context processor, etc.). That resolution lives
-in _effective_role_user() below, called once from inside
-can_view_di_performance() — callers just pass current_user and always
-get the right answer, whether or not an admin is currently emulating
-someone, with nothing to remember at the call site.
-"""
+All checks are emulation-aware — when an admin emulates another user, the
+emulated person's role governs, resolved once in _effective_role_user()."""
 
 _DI_PERFORMANCE_ROLES = {'admin', 'management'}
 
 
 def _effective_role_user(user):
-    """The user whose role actually governs DI visibility — the person a
-    real admin is currently emulating, if any, otherwise `user` itself.
-    Only ever swaps in the emulated user when `user` is genuinely an
-    admin (emulation is admin-only elsewhere in the app too), so this is
-    safe to call with a logged-out AnonymousUserMixin as well."""
+    """The user whose role governs DI access — the emulated user when an admin
+    is emulating, else `user`. Only swaps when `user` is genuinely an admin;
+    safe for a logged-out AnonymousUserMixin."""
     from flask import session
     from app.modules.core.shared.models import User
 
@@ -41,47 +23,53 @@ def _effective_role_user(user):
 
 
 def can_view_di_performance(user):
-    """True if `user` may view Performance / Cost breakdown / the feature
-    detail footer's cost note. `user` is whatever current_user resolves
-    to (a real User, or Flask-Login's AnonymousUserMixin when logged
-    out — .role doesn't exist on that, so getattr with a default keeps
-    this from ever raising)."""
+    """True if `user` may view Performance / Cost breakdown / the feature-detail
+    cost note. Safe when logged out (getattr guards the missing .role)."""
     effective = _effective_role_user(user)
     return getattr(effective, 'role', None) in _DI_PERFORMANCE_ROLES
 
 
-# Deliberately its own set, not reused from _DI_PERFORMANCE_ROLES, even
-# though today it's a subset (admin only, not management) — per Ezekiel,
-# so the two can be widened or narrowed independently later without one
-# change accidentally affecting the other.
+# Own set (not reused from _DI_PERFORMANCE_ROLES) so project visibility can be
+# widened or narrowed independently of who can see Performance/Cost.
+_DI_PROJECT_VISIBILITY_ROLES = {'admin', 'digital_innovation', 'management'}
+
+
+def can_view_di_project(user, project):
+    """True if `user` may view `project` — its board, features, archive entry.
+    Every DiProject is restricted to _DI_PROJECT_VISIBILITY_ROLES; everyone else
+    sees only the permanent OVP board (project.is_permanent). Emulation-aware."""
+    if project is not None and getattr(project, 'is_permanent', False):
+        return True
+    effective = _effective_role_user(user)
+    return getattr(effective, 'role', None) in _DI_PROJECT_VISIBILITY_ROLES
+
+
+def visible_di_projects(user, projects):
+    """Filter DiProject rows to those `user` may see, preserving order. Use for
+    any sidebar/list surface instead of a per-template role check."""
+    return [p for p in projects if can_view_di_project(user, p)]
+
+
+# Own set so template-edit access can change independently of the others.
 _DI_TEMPLATE_EDIT_ROLES = {'admin'}
 
 
 def can_edit_di_templates(user):
-    """True if `user` may view/edit the department-wide step templates
-    screen (Edit Templates — routes/templates.py). Same emulation-aware
-    resolution as can_view_di_performance: if a real admin is emulating
-    someone else, the emulated person's role is what counts."""
+    """True if `user` may view/edit the department step-templates screen.
+    Emulation-aware."""
     effective = _effective_role_user(user)
     return getattr(effective, 'role', None) in _DI_TEMPLATE_EDIT_ROLES
 
 
-# The board itself (viewing a project, opening a feature) stays open to
-# every logged-in user — only actually CHANGING something is gated: new
-# projects/features, ticking/adding/deleting a step, advancing, closing.
-# "Me and my future team" per Ezekiel (28 Aug 2026) — starts admin-only,
-# same as _DI_TEMPLATE_EDIT_ROLES and deliberately its own set rather than
-# reused from it, so as his team grows, adding their role(s) here is the
-# one change needed, independent of who can edit templates.
+# Viewing a board/feature stays open to every logged-in user; only data
+# changes are gated. Own set so the team's role(s) can be added here later,
+# independently of who can edit templates.
 _DI_BOARD_WRITE_ROLES = {'admin'}
 
 
 def can_edit_di_board(user):
-    """True if `user` may create a project/feature, or tick, add, delete,
-    advance or close a feature's steps — every DI action that changes
-    data rather than just viewing it. Same emulation-aware resolution as
-    the other checks here: if a real admin is emulating someone else, the
-    emulated person's role is what counts — so emulating a designer
-    genuinely previews the read-only experience they get."""
+    """True if `user` may change DI data — create a project/feature, or tick,
+    add, delete, advance or close a feature's steps. Viewing stays open to all;
+    only writes are gated. Emulation-aware."""
     effective = _effective_role_user(user)
     return getattr(effective, 'role', None) in _DI_BOARD_WRITE_ROLES

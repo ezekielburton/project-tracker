@@ -1,7 +1,5 @@
-# Board page data assembly — kept separate from routes/board.py so a future
-# JSON refresh endpoint (Phase 2f, driven by the di_changes SSE ping) can
-# reuse the exact same query/shape a full page load uses, rather than two
-# places independently deciding what a board "looks like".
+# Board-page data assembly, separate from routes/board.py so a JSON refresh
+# endpoint can reuse the same query/shape as a full page load.
 
 from collections import namedtuple
 
@@ -10,20 +8,16 @@ from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import FeatureRequest
 from app.modules.digital_innovation.models import DiProject, DiFeature, DiCostEntry, DiIntakeItem, DI_STAGES
 
-# One shape for both kinds of thing the Incoming tray can show — a native
-# DiIntakeItem (kind='intake_item', a future non-FeatureRequest source
-# like Slack) and a live FeatureRequest (kind='feature_request', the
-# app's existing submit-a-feature-request flow). `id` is the underlying
-# row's own id either way; routes/intake.py's promote/dismiss routes are
-# split by kind because the two need genuinely different handling — a
-# FeatureRequest is a shared, user-visible record DI doesn't own, a
-# DiIntakeItem is DI's own row. See pending_intake_items() below.
+# One shape for both Incoming-tray sources: a native DiIntakeItem
+# (kind='intake_item') and a live FeatureRequest (kind='feature_request').
+# `id` is the underlying row's id; promote/dismiss in routes/intake.py branch
+# by kind — a FeatureRequest is a shared record DI doesn't own, a DiIntakeItem
+# is DI's own row.
 
 
 def sidebar_projects():
-    """Active DiProjects for the module's own sidebar — the permanent OVP
-    board always leads the list, then whichever else exists by creation
-    order (no manual reordering yet)."""
+    """Active DiProjects for the module sidebar — permanent OVP board first,
+    then others by creation order."""
     return (
         DiProject.query
         .filter_by(lifecycle='active')
@@ -33,9 +27,8 @@ def sidebar_projects():
 
 
 def default_project():
-    """Landing project for a bare /digital-innovation visit — the
-    permanent board, since it's guaranteed to exist (seeded by the
-    migration and un-deletable)."""
+    """Landing project for a bare /digital-innovation visit — the permanent
+    board (guaranteed to exist, seeded and un-deletable)."""
     return (
         DiProject.query
         .filter_by(lifecycle='active')
@@ -45,9 +38,8 @@ def default_project():
 
 
 def closed_projects():
-    """Projects on the Archive screen's 'Closed' list — dropped off the
-    active sidebar, still viewable there, reopenable, or archivable one
-    step further."""
+    """Projects on the Archive 'Closed' list — off the active sidebar, still
+    viewable, reopenable, or archivable one step further."""
     return (
         DiProject.query
         .filter_by(lifecycle='closed')
@@ -57,9 +49,8 @@ def closed_projects():
 
 
 def archived_projects():
-    """Projects fully retired to the Archive screen's 'Archived' list —
-    one step past closed, still reopenable the same way a closed project
-    is."""
+    """Projects on the Archive 'Archived' list — one step past closed,
+    reopenable the same way."""
     return (
         DiProject.query
         .filter_by(lifecycle='archived')
@@ -69,15 +60,9 @@ def archived_projects():
 
 
 def permanent_project():
-    """The one un-deletable, seeded OVP board — the only project the
-    Incoming tray (routes/board.py, board.html) ever attaches pending
-    intake items to. Separate from default_project() even though they'd
-    return the same row today: default_project() is "whatever a bare
-    /digital-innovation visit should land on" and just happens to be the
-    permanent board because of the sidebar_projects() ordering, while
-    this one specifically means "the permanent board, because that's
-    where intake items live" — the two reasons shouldn't be tangled
-    together even though they resolve to the same query right now."""
+    """The un-deletable seeded OVP board — the only project the Incoming tray
+    attaches intake items to. Kept separate from default_project() (which means
+    "where a bare visit lands") even though both resolve to the same row."""
     return DiProject.query.filter_by(is_permanent=True).first()
 
 
@@ -85,36 +70,20 @@ IncomingCard = namedtuple('IncomingCard', ['kind', 'id', 'title', 'source_label'
 
 
 def pending_intake_items(di_project):
-    """Cards for di_project's Incoming tray, oldest first (a queue, not a
-    feed) — board.html shows this only when di_project.is_permanent, but
-    this function itself doesn't need to know that; it just answers
-    "what's pending for this project."
+    """Cards for di_project's Incoming tray, oldest first (a queue). Merges two
+    sources by arrival time:
 
-    Two sources, merged and sorted together by when each one arrived:
+    1. Native DiIntakeItem rows with status='pending' (filed by
+       services/intake.py::add_feedback_item() for non-FeatureRequest sources).
+    2. Live FeatureRequest rows with status='requested' — read straight off the
+       shared table so every existing and new submission shows up. DI never
+       mutates that shared row to hide a card: a dismissed request is tracked by
+       a marker DiIntakeItem (source_type='feature_request', status='dismissed')
+       excluded below, leaving the request itself untouched. Promoting sets the
+       FeatureRequest to 'in_progress', which removes it from this list directly.
 
-    1. Native DiIntakeItem rows still `status='pending'` — the seam
-       services/intake.py::add_feedback_item() files into, for whatever
-       non-FeatureRequest source shows up later (a Slack bot, say).
-    2. Live FeatureRequest rows still `status='requested'` (2 Sep 2026,
-       per Ezekiel: "it should show all pending feature requests...
-       already in the system... and all new ones that come in") — read
-       straight off the shared feature-requests table rather than
-       waiting for something to copy them into a DiIntakeItem first, so
-       every existing and future submission just shows up on its own.
-       DI never mutates that shared row just to hide a card here: a
-       dismissed FeatureRequest is tracked with a DiIntakeItem
-       (source_type='feature_request', source_ref=str(fr.id),
-       status='dismissed') that only ever exists to be excluded below —
-       the feature request itself stays exactly as it was, still visible
-       and upvotable on its own page. Promoting, by contrast, DOES touch
-       the FeatureRequest (routes/intake.py sets it to 'in_progress'),
-       which is what actually removes it from `status='requested'` and
-       therefore from this list — no dismissal record needed for that
-       path.
-
-    Only the permanent board ever surfaces FeatureRequest cards, since
-    that's the only board with an Incoming tray at all."""
-    entries = []  # list of (created_at, IncomingCard) — sorted once, together, at the end
+    Only the permanent board surfaces FeatureRequest cards."""
+    entries = []  # (created_at, IncomingCard) pairs, sorted together at the end
 
     native = DiIntakeItem.query.filter_by(di_project_id=di_project.id, status='pending').all()
     for item in native:
@@ -143,20 +112,11 @@ def pending_intake_items(di_project):
 
 
 def _feature_progress(feature):
-    """(done, total, active_step_label, current_step_number, progress_pct)
-    for a feature's CURRENT stage. feature.steps is already sorted by
-    sort_order (see the relationship's order_by in models.py), so
-    filtering it in Python keeps that order — no separate query needed.
-    An empty or fully-ticked list just reports what it sees; Phase 2b's
-    auto-advance logic is what keeps a feature from sitting on the board
-    in that state for long.
-
-    current_step_number is the same "Step N of total" position the board
-    card's text has always shown (N = done+1 while a step is still open,
-    or total once every step is done) — pulled out here, instead of
-    staying an inline Jinja ternary, so the progress bar's fill width can
-    share the exact same number the text uses rather than recomputing it
-    a second time in the template."""
+    """(done, total, active_step_label, current_step_number, progress_pct) for a
+    feature's current stage. feature.steps is pre-sorted by sort_order, so the
+    Python filter preserves order. current_step_number is done+1 while a step is
+    open, or total once all are done — computed here so the progress bar and the
+    "Step N of total" text share one number."""
     stage_steps = [s for s in feature.steps if s.stage == feature.status]
     done = sum(1 for s in stage_steps if s.is_done)
     total = len(stage_steps)
@@ -167,8 +127,7 @@ def _feature_progress(feature):
 
 
 def feature_logged_hours(feature_id):
-    # Public (not board.py-private) — lib/feature_detail.py reuses this
-    # exact query for the feature detail modal's "Nh logged" pill.
+    # Public — lib/feature_detail.py reuses this for the modal's "Nh logged" pill.
     total = (
         db.session.query(func.coalesce(func.sum(DiCostEntry.hours), 0))
         .filter(DiCostEntry.di_feature_id == feature_id, DiCostEntry.type == 'dev_time')
@@ -178,9 +137,8 @@ def feature_logged_hours(feature_id):
 
 
 def build_board_context(di_project):
-    """Everything board.html needs to render one project's board: open
-    features grouped into their 7 columns (each wrapped with its progress
-    info) plus the closed-features strip."""
+    """Everything board.html needs for one project: open features grouped into
+    their 7 columns (each with progress info) plus the closed-features strip."""
     open_features = (
         DiFeature.query
         .filter(DiFeature.di_project_id == di_project.id, DiFeature.status != 'closed')

@@ -39,6 +39,7 @@ class _BlogBlock:
         self.text  = d.get('text', '')
         self.color = d.get('color')
         self.items = d.get('items', [])
+        self.url   = d.get('url', '')
 
 
 class BlogComment(db.Model):

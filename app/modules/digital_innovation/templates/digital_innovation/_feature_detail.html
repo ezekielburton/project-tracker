@@ -5,8 +5,7 @@
    app, rather than hand-building this markup in JS from JSON. Every
    mutating action below (tick/add/delete a step, advance, close) POSTs
    and swaps this same fragment back in, so the modal always reflects the
-   feature's true current state. "Edit template" is still the next
-   chunk — no link to it yet.
+   feature's true current state.
 
    can_edit_board (lib/access.py's can_edit_di_board) gates every
    interactive control below — a step's clickability and delete button,
@@ -84,10 +83,8 @@
 {% endif %}
 
 {# Move-to-stage picker: any stage in DI_STAGES, forward or backward, at
-   any time — no completion gate (step_engine.move_to_stage, per
-   Ezekiel's confirmed free-movement model). Always shown alongside the
-   checklist rather than only once the current stage is done, since
-   movement is no longer tied to completion at all. #}
+   any time — no completion gate (step_engine.move_to_stage). Always shown alongside the
+   checklist, since movement isn't tied to completion. #}
 <div class="di-stage-picker">
     <label class="di-stage-picker-label" for="di-stage-picker-select">Move to stage</label>
     <div class="di-stage-picker-row">

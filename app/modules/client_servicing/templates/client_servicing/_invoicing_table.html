@@ -1,0 +1,54 @@
+{# By Project finance table — read-only. Fixed columns in wireframe order.
+   The finance columns form the "Invoicing — Master Control" band (.cs-inv-fin).
+   The Project column is sticky-left (.cs-inv-name) and wraps. #}
+<div class="cs-inv-tablewrap">
+    <table class="cs-inv-table">
+        <thead>
+            <tr class="cs-inv-grouprow">
+                <th class="cs-inv-name"><span class="cs-inv-glab">Project</span></th>
+                <th></th>
+                <th colspan="8" class="cs-inv-fin"><span class="cs-inv-glab cs-inv-glab--fin">◆ Invoicing — Master Control</span></th>
+                <th colspan="2" class="cs-inv-fin"><span class="cs-inv-glab cs-inv-glab--fin">◆ Status</span></th>
+            </tr>
+            <tr class="cs-inv-colrow">
+                <th class="cs-inv-name">Project</th>
+                <th>Client</th>
+                <th class="cs-inv-fin">LPO / PO Number</th>
+                <th class="cs-inv-fin">LPO Date</th>
+                <th class="cs-inv-fin">Project Value AED</th>
+                <th class="cs-inv-fin">Invoice No.</th>
+                <th class="cs-inv-fin">Invoice Date</th>
+                <th class="cs-inv-fin">Invoice Amt AED</th>
+                <th class="cs-inv-fin">Inv. Month</th>
+                <th class="cs-inv-fin">Margin %</th>
+                <th class="cs-inv-fin">Days Pending</th>
+                <th class="cs-inv-fin">GR · Validation</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td class="cs-inv-name cs-inv-proj">{{ row.project }}</td>
+                <td>{{ row.client or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-muted' if row.lpo else 'cs-inv-none' }}">{{ row.lpo or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-muted' if row.lpo_date else 'cs-inv-none' }}">{{ row.lpo_date or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-num' if row.project_value else 'cs-inv-none' }}">{{ row.project_value or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-num' if row.invoice_number else 'cs-inv-none' }}">{{ row.invoice_number or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-muted' if row.invoice_date else 'cs-inv-none' }}">{{ row.invoice_date or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-num' if row.invoice_amount else 'cs-inv-none' }}">{{ row.invoice_amount or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-muted' if row.invoice_month else 'cs-inv-none' }}">{{ row.invoice_month or '—' }}</td>
+                <td class="cs-inv-fin {{ 'cs-inv-num' if row.margin else 'cs-inv-none' }}">{{ row.margin or '—' }}</td>
+                <td class="cs-inv-fin">
+                    {% if row.days_label %}<span class="status-pill cs-inv-badge status-pill--{{ row.days_class }}">{{ row.days_label }}</span>{% else %}<span class="cs-inv-none">—</span>{% endif %}
+                </td>
+                <td class="cs-inv-fin">
+                    <span class="cs-inv-gr cs-inv-gr--{{ 'on' if row.gr_received else 'off' }}">GR {{ '✓' if row.gr_received else '—' }}</span>
+                    {% if row.validation %} · <span class="status-pill cs-inv-badge status-pill--{{ row.validation[1] }}">{{ row.validation[0] }}</span>{% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="12" class="cs-inv-empty">No projects to show.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

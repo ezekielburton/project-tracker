@@ -49,7 +49,8 @@ def upload_project_file(project_id):
 
     # Only allow safe file types
     allowed_extensions = {'jpg', 'jpeg', 'png', 'pdf', 'docx', 'xlsx', 'pptx', 'zip', 'dwg',
-                          'mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v'}
+                          'mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'm4v',
+                          'mp3', 'wav', 'm4a', 'aac', 'ogg'}
     original_filename = file.filename
     ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
 
@@ -168,15 +169,15 @@ def download_all_reference_files(project_id):
 @project_overlay_bp.route('/projects/files/<int:file_id>/preview')
 @login_required
 def preview_project_file(file_id):
-    """Serve a reference file for inline preview. Only browser-renderable types
-    (PDF, common images) are supported; anything else returns 'no preview'."""
+    """Serve a reference file for inline preview: PDF, common images, and
+    web-playable audio/video. Anything else returns 'no preview'. Video and
+    audio are cached to local disk on first fetch, so a browser's range-
+    request seeking re-reads this file instead of re-downloading from NAS."""
     from app.modules.core.shared.models import ProjectFile
     from app.modules.core.shared.services.nas import download_app_file, build_file_path
     from flask import send_file, jsonify, current_app
-    import io
+    import io, os
 
-    # Maps a stored file extension to the mimetype the browser needs to
-    # render it inline. Anything not in here just isn't previewable.
     PREVIEWABLE_TYPES = {
         'pdf': 'application/pdf',
         'jpg': 'image/jpeg',
@@ -184,20 +185,49 @@ def preview_project_file(file_id):
         'png': 'image/png',
         'gif': 'image/gif',
         'webp': 'image/webp',
+        'mp4': 'video/mp4',
+        'webm': 'video/webm',
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+        'm4a': 'audio/mp4',
+        'aac': 'audio/aac',
+        'ogg': 'audio/ogg',
     }
 
     project_file = ProjectFile.query.get_or_404(file_id)
-
-    mimetype = PREVIEWABLE_TYPES.get((project_file.file_type or '').lower())
+    ext = (project_file.file_type or '').lower()
+    mimetype = PREVIEWABLE_TYPES.get(ext)
     if not mimetype:
-        # Check the type before touching the NAS — no point fetching something
-        # we can't render.
         return jsonify({
             'success': False,
             'error': 'No preview available for this file type — download instead.'
-        }), 415 # Unsupported Media Type
+        }), 415  # Unsupported Media Type
 
     project = Project.query.get(project_file.project_id)
+
+    # Video/audio: cache locally so repeated range requests (seeking) don't
+    # each re-download the whole file from NAS.
+    if mimetype.startswith('video/') or mimetype.startswith('audio/'):
+        cache_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'preview-cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_path = os.path.join(cache_dir, f'{file_id}.{ext}')
+
+        if not os.path.isfile(cache_path):
+            nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
+            try:
+                file_bytes = download_app_file(nas_path)
+            except RuntimeError as e:
+                current_app.logger.error(f'Reference file preview failed (file_id={file_id}): {e}')
+                return jsonify({
+                    'success': False,
+                    'error': 'File could not be retrieved from storage. Try downloading it instead.'
+                }), 502
+            with open(cache_path, 'wb') as out:
+                out.write(file_bytes)
+
+        return send_file(cache_path, mimetype=mimetype, as_attachment=False,
+                          download_name=project_file.original_filename)
+
     nas_path = build_file_path(project, 'Reference Files', project_file.original_filename)
     try:
         file_bytes = download_app_file(nas_path)

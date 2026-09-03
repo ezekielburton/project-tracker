@@ -23,6 +23,8 @@ Reader (any signed-in user):
 Editor (admin only):
 - `GET /blog/editor` — new-post editor
 - `GET /blog/editor/<id>` — edit an existing post
+- `POST /blog/upload-media` — image/video upload for the editor's media blocks
+  (admin-only, 500MB cap)
 - `POST /blog/posts` — create a post
 - `PUT /blog/posts/<id>` — save a post (optionally email it to everyone)
 - `POST /blog/posts/<id>/publish` — toggle publish (notifies on publish)
@@ -37,6 +39,15 @@ Legacy:
 None of its own. Uses `BlogPost` and `BlogComment` from `core/shared/models`
 (a post stores its body as `sections_json`; comments self-reference via
 `parent_id` for threading).
+
+## Media
+Posts support Image (incl. gif) and Video blocks alongside text. Uploads go
+through `POST /blog/upload-media`, saved local-first flat to
+`static/blog-uploads/` (the block's `url` field holds the served path). On
+create/save a background thread copies every image/video a post references to
+`/Admin/OVP/blog/<id>-<slug>` on the NAS (`_backup_post_media_to_nas`).
+Renaming a post orphans its old NAS folder — an accepted tradeoff; local disk
+is the source of truth.
 
 ## Static
 `css/blog.css`, `js/blog.js` — still served from the global `/static` loader,

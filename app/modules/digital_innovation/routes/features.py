@@ -1,7 +1,7 @@
 # Digital Innovation - feature (card) management. Creation, the detail
 # view and every step interaction (tick/add/delete step, move stage,
 # close) live here. Every rule about how a feature actually moves lives
-# in lib/step_engine.py (brain A) - this file is just the HTTP layer on
+# in lib/step_engine.py - this file is just the HTTP layer on
 # top of it: pull the record(s), call the engine, commit or roll back on
 # a ValueError, and hand back the same rendered fragment the initial GET
 # uses so the modal always ends up showing the feature's true state.
@@ -16,7 +16,7 @@ from app.modules.digital_innovation.routes.blueprint import digital_innovation_b
 from app.modules.digital_innovation.models import DiFeature, DiFeatureStep, DiProject, DI_STAGES
 from app.modules.digital_innovation.lib import step_engine
 from app.modules.digital_innovation.lib.feature_detail import build_feature_detail_context
-from app.modules.digital_innovation.lib.access import can_view_di_performance, can_edit_di_board
+from app.modules.digital_innovation.lib.access import can_view_di_performance, can_edit_di_board, can_view_di_project
 
 
 def _render_feature_detail(feature):
@@ -94,6 +94,10 @@ def feature_detail(feature_id):
     fragment - digital_innovation_board.js drops it straight into the
     modal body."""
     feature = DiFeature.query.get_or_404(feature_id)
+    # Visibility gate (lib/access.py): a feature is only as visible as its
+    # project - the same rule project_board enforces, applied via feature.project.
+    if not can_view_di_project(current_user, feature.project):
+        abort(403)
     return _render_feature_detail(feature)
 
 
@@ -163,11 +167,9 @@ def delete_feature_step(step_id):
 @digital_innovation_bp.route('/features/<int:feature_id>/move', methods=['POST'])
 @login_required
 def move_feature_stage(feature_id):
-    """Moves a feature to any stage the picker was given - forward or
-    backward, no completion gate. Replaces the old single-next-stage
-    /advance route now that Ezekiel's confirmed free movement is the
-    model: the UI offers every stage in DI_STAGES, not just the next
-    one, and this route accepts any of them via step_engine.move_to_stage."""
+    """Moves a feature to any stage the picker was given - forward or backward,
+    no completion gate. The UI offers every stage in DI_STAGES and this route
+    accepts any of them via step_engine.move_to_stage."""
     _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 

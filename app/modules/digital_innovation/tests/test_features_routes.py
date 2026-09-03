@@ -16,8 +16,12 @@ def _user(db_session, tag, role='admin'):
     return user
 
 
-def _project(db_session, tag, lifecycle='active'):
-    project = DiProject(name=f'Test DI Project {tag}', lifecycle=lifecycle)
+def _project(db_session, tag, lifecycle='active', is_permanent=False):
+    # is_permanent: lets callers stand in for the OVP
+    # board, the only DiProject visible to every role regardless of
+    # lib/access.py's can_view_di_project — defaults to False so every
+    # existing caller in this file keeps its prior behaviour.
+    project = DiProject(name=f'Test DI Project {tag}', lifecycle=lifecycle, is_permanent=is_permanent)
     db_session.add(project)
     db_session.flush()
     return project
@@ -330,8 +334,12 @@ def test_feature_detail_shows_cost_footer_to_management(app, client, db_session)
 
 
 def test_feature_detail_hides_cost_footer_from_other_roles(app, client, db_session):
+    # is_permanent=True: this test is about the cost-
+    # footer gate, not the separate visibility gate (can_view_di_
+    # project) — stand in for OVP so a designer can reach the feature
+    # detail fragment at all.
     user = _user(db_session, 'n', role='designer')
-    project = _project(db_session, 'n')
+    project = _project(db_session, 'n', is_permanent=True)
     feature = engine.create_feature(project, 'New thing')
     db_session.flush()
     login_as(client, app, user, 'password123')
@@ -346,9 +354,13 @@ def test_feature_detail_hides_cost_footer_from_other_roles(app, client, db_sessi
 
 
 def test_feature_detail_footer_is_emulation_aware(app, client, db_session):
+    # is_permanent=True: while emulating a designer, the
+    # visibility gate (can_view_di_project) resolves by the emulated
+    # role too, same as the cost-footer gate below — stand in for OVP
+    # so this stays isolated to the footer's own emulation-awareness.
     admin = _user(db_session, 'o', role='admin')
     designer = _user(db_session, 'o2', role='designer')
-    project = _project(db_session, 'o')
+    project = _project(db_session, 'o', is_permanent=True)
     feature = engine.create_feature(project, 'New thing')
     db_session.flush()
     login_as(client, app, admin, 'password123')

@@ -1,12 +1,7 @@
-{# Digital Innovation — Archive's closed/archived project lists. Extracted
-   from archive.html (3 Sep 2026) into its own partial, wrapped in
-   #di-archive-lists, so a fragment route can re-render just this on a
-   DI-wide live SSE ping — same "one template, two callers" shape as
-   _board_columns.html/_templates_body.html — while archive.html itself
-   still renders it via a plain {% include %} on first load, same as
-   _performance_table.html. Needs `closed_projects`, `archived_projects`
-   and `can_edit_board` in context, same as archive_screen() already
-   passes. #}
+{# Archive's closed/archived project lists, as a partial wrapped in
+   #di-archive-lists so a fragment route can re-render just this on a DI-wide
+   live SSE ping, while archive.html includes it on first load. Needs
+   closed_projects, archived_projects and can_edit_board in context. #}
 <div id="di-archive-lists">
     <section class="di-archive-section">
         <h2 class="di-archive-section-title">Closed</h2>

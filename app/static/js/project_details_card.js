@@ -32,16 +32,9 @@ window.ProjectDetailsCard = (function () {
             }));
         });
 
-        // Project-level admin status override picker (back 24 Aug 2026, per
-        // Ezekiel — see _details_top_cards.html/project_overlay.py's
-        // override_project_status() for what this actually does: a bulk
-        // WRITE to every deliverable + C&CM channel on the project, not a
-        // stored override of this pill). Only renders at all for an admin
-        // (can_override_project_status). Same StatusPicker component and
-        // same fetch-on-select shape as project_deliverables_card.js's
-        // wireStatusOverridePickers() — just one picker here instead of
-        // one per row, and onChanged() re-fetches the whole Details tab on
-        // success same as every other mutation in this file.
+        // Admin-only project status picker. On select it bulk-writes the
+        // status to every deliverable + C&CM channel on the project (see
+        // override_project_status()); onChanged() then re-fetches the tab.
         var projectStatusPicker = rootEl.querySelector('#project-status-picker');
         if (projectStatusPicker && window.StatusPicker) {
             var projectStatusHandle = window.StatusPicker.init(projectStatusPicker, function (statusValue, el) {
@@ -123,7 +116,8 @@ window.ProjectDetailsCard = (function () {
             btn.addEventListener('click', function () {
                 var item = btn.closest('.overlay-reference-file-item');
                 var nameEl = item ? item.querySelector('.overlay-reference-file-name') : null;
-                window.openFilePreview(btn.dataset.previewUrl, btn.dataset.downloadUrl, nameEl ? nameEl.textContent : 'file');
+                window.openFilePreview(btn.dataset.previewUrl, btn.dataset.downloadUrl,
+                    nameEl ? nameEl.textContent : 'file', btn.dataset.fileType);
             });
         });
 
@@ -182,14 +176,8 @@ window.ProjectDetailsCard = (function () {
         // elements are in the fresh HTML.
         if (window.ProjectFlags) window.ProjectFlags.init(rootEl, projectId, onChanged);
 
-        // ── Add Customer (25 Aug 2026, per Ezekiel — the Customers card
-        // could Cancel/Reactivate but never add one; a C&CM campaign that
-        // expands to a new customer after submission had no path forward
-        // except cancelling and recreating the whole project). Same
-        // reveal-form shape as Cancel Customer below — a toggle button
-        // shows/hides a form with its own error box, rather than a
-        // confirm() gate, since picking the wrong customer from a select
-        // is low-stakes and easily corrected before hitting Add.
+        // ── Add Customer: adds a customer to a C&CM project. A toggle
+        // button reveals/hides an inline form with its own error box.
         var addCustomerToggleBtn = rootEl.querySelector('#overlay-customer-add-toggle-btn');
         var addCustomerForm = rootEl.querySelector('#overlay-customer-add-form');
         if (addCustomerToggleBtn && addCustomerForm) {
@@ -240,15 +228,9 @@ window.ProjectDetailsCard = (function () {
             });
         }
 
-        // ── Cancel Customer panel toggle (23 Aug 2026, per Ezekiel — "a
-        // cancel customer button next to flag history - blue. becomes
-        // cancel when pressed to go back") — swaps the whole Properties/
-        // Design Leads/Reference Files body for the Customers card in
-        // place, same "Edit -> Save/Cancel" label-swap vocabulary the
-        // overlay header's own Edit button already uses (see
-        // project_overlay_edit.js), just a single toggle button here
-        // instead of a three-button set since there's no draft state to
-        // save — flipping is-hidden on both views is instant either way.
+        // ── Cancel Customer panel toggle: swaps the Properties/Design
+        // Leads/Reference Files body for the Customers card in place,
+        // toggling is-hidden on both views and label-swapping the button.
         var cancelCustomerToggleBtn = rootEl.querySelector('#overlay-cancel-customer-toggle-btn');
         var detailsMainView = rootEl.querySelector('#overlay-details-main-view');
         var detailsCancelView = rootEl.querySelector('#overlay-details-cancel-view');
@@ -263,17 +245,9 @@ window.ProjectDetailsCard = (function () {
             });
         }
 
-        // ── Cancel/Reactivate Customer (23 Aug 2026, per Ezekiel) — C&CM
-        // only, one .overlay-customer-item per row in the Customers card
-        // (_details_ccm.html). Same reveal-form/confirm/cancel shape as
-        // Cancel Project in project_list.js's wireProjectLifecycleActions,
-        // just scoped per-row here instead of once for the whole sidebar —
-        // each row carries its own project-customer-id via the closest
-        // .overlay-customer-item, and each row's own cancel form/error box
-        // rather than one shared pair. Lives here (not project_list.js)
-        // since the Customers card is part of the Details sub-tab's own
-        // content, which reruns init() on every load same as everything
-        // else in this file.
+        // ── Cancel/Reactivate Customer: C&CM only, one row per
+        // .overlay-customer-item in the Customers card. Each row carries
+        // its own project-customer-id and its own reveal-form/error box.
         rootEl.querySelectorAll('.overlay-customer-cancel-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var item = btn.closest('.overlay-customer-item');
@@ -295,21 +269,9 @@ window.ProjectDetailsCard = (function () {
                 if (errorEl) errorEl.classList.add('hidden');
             });
         });
-        // A reason was already required to even get here (the inline form),
-        // but that's not the same as a confirmation — nothing stopped a
-        // stray click on "Confirm Cancel" from firing immediately. 24 Aug
-        // 2026 (per Ezekiel, "add redundancy to the cancel process"): gate
-        // the actual request behind window.showConfirm() same as every
-        // other destructive action in the app (Put on Hold, delete draft,
-        // etc.). When this is the project's last still-active customer,
-        // cancelling it is very likely the same moment the whole project
-        // should be cancelled too — so that specific case gets a bespoke,
-        // wider confirm (mirrors project_submissions_draft_card.js's
-        // showResolveStep/showEditReasonStep pattern: reuse the shared
-        // #confirm-modal shell via showConfirm(), then inject a second
-        // message plus an extra button directly) offering to do both in
-        // one step instead of a separate trip to the sidebar's Cancel
-        // Project afterward.
+        // Cancelling a customer requires a reason and a showConfirm() gate.
+        // When it's the project's last active customer, the confirm widens
+        // to offer cancelling the whole project in the same step.
         rootEl.querySelectorAll('.overlay-customer-cancel-confirm').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var item = btn.closest('.overlay-customer-item');

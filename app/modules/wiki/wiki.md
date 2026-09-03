@@ -2,7 +2,7 @@
 
 The internal wiki: browsing published sections and articles, and a full editor
 for authors to create, edit, publish, and delete sections and articles
-(including inline image upload).
+(including inline image and self-hosted video upload).
 
 ## Structure
 ```
@@ -18,6 +18,11 @@ app/modules/wiki/
 - `GET /wiki` — the reader view (published sections/articles)
 - `GET /wiki/article/<id>` — one article's content
 - `POST /wiki/upload-image` — inline image upload for the editor
+- `POST /wiki/upload-video` — self-hosted video upload for the Video block
+  (admin-only, mp4/webm, 200MB cap). Saves local-first to
+  `static/wiki-uploads/videos/` and backs up to `/Admin/OVP/Wiki` on a
+  background thread. The editor's Video block toggles between Embed URL and
+  Upload File (`block.source`).
 - `GET /wiki/editor` — the editor dashboard
 - section + article CRUD under `/wiki/editor/...` (new, edit, save,
   toggle-publish, delete)

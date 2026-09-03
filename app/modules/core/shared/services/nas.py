@@ -357,7 +357,10 @@ def upload_file_to_nas(project, subfolder, local_file_path, nas_filename):
 
 def _run_in_background(app, fn):
     """Run fn() in a daemon thread with a fresh Flask app context.
-    Use this for all NAS calls so they never block the HTTP response."""
+    Use this for all NAS calls so they never block the HTTP response.
+    The callback runs INSIDE that context — it must not push its own
+    app.app_context(), or DB queries inside it stop seeing the caller's
+    transaction."""
     import threading
 
     def _worker():

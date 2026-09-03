@@ -161,7 +161,7 @@ def test_export_performance_honours_the_view_and_period_querystring(app, client,
     assert 'di_performance_month_2026-09.xlsx' in resp.headers.get('Content-Disposition', '')
 
 
-# ── performance_table_fragment (3 Sep 2026, DI-wide live SSE refresh) ────
+# ── performance_table_fragment (DI-wide live SSE refresh) ────
 # Same shape as test_board_routes.py's board_columns_fragment coverage —
 # this route is a plain read, gated the same as performance_screen
 # itself, so it needs no dedicated designer-403 test beyond confirming

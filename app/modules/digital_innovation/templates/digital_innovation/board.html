@@ -13,11 +13,8 @@
            #main-content is already the page's one <main> landmark, and
            spa_strip_response's regex (app/__init__.py) extracts its
            content by matching up to the FIRST literal "</main>" it finds.
-           A nested <main>...</main> in here used to close that match
-           early on every SPA nav into this page, silently dropping
-           everything below it (all the DI modals) from the DOM until a
-           full refresh. Found + fixed 3 Sep 2026 — see
-           digital_innovation_module.md, "SPA + SSE readiness". #}
+           A nested <main>...</main> here would close that match early on an SPA
+           nav, dropping everything below it (the DI modals) until a full refresh. #}
         <div class="di-board" data-di-project-id="{{ project.id }}">
             <div class="di-board-header">
                 <div class="di-board-heading">
@@ -49,36 +46,21 @@
                     <p class="di-board-subtitle">Project board · {{ open_feature_count }} active feature{{ 's' if open_feature_count != 1 else '' }}</p>
                 </div>
                 {% if can_edit_board or can_view_performance %}
-                {# Every button here wrapped together so .di-board-header's
-                   justify-content:space-between pushes this whole group
-                   to the right as one unit, keeping Incoming and
-                   + New project next to each other — without the
-                   wrapper, space-between would spread all 3 header
-                   children apart instead (Ezekiel, 1 Sep 2026: "place it
-                   next to new project button"). All sized down with the
-                   shared .btn-sm modifier per the same feedback.
-
-                   The wrapper itself now renders for can_view_performance
-                   too (not just can_edit_board) so a management-role user
-                   — who can view/add/delete costs but not edit the board —
-                   still gets the Cost breakdown button; the other three
-                   buttons stay individually gated on can_edit_board /
-                   project.is_permanent below, unchanged. #}
+                {# All header buttons wrapped together so space-between pushes the group to
+                   the right as one unit, keeping Incoming and + New project adjacent.
+                   The wrapper renders for can_view_performance too (not just
+                   can_edit_board) so a management user still gets the Cost breakdown
+                   button; the other three stay gated on can_edit_board /
+                   project.is_permanent below. #}
                 <div class="di-board-header-actions">
                     {% if can_view_performance %}
-                    {# Every project, active/closed/archived alike, can carry cost
-                       history — gated on the same can_view_di_performance choke
-                       point as Performance itself, not can_edit_board, since
-                       viewing/adding/deleting entries all share that one gate
-                       (Ezekiel, 1 Sep 2026). #}
+                    {# Every project can carry cost history — gated on can_view_di_performance
+                       (viewing/adding/deleting all share that gate), not can_edit_board. #}
                     <button type="button" class="btn-secondary btn-sm di-cost-trigger" id="di-cost-trigger" data-di-project-id="{{ project.id }}">Cost breakdown</button>
                     {% endif %}
                     {% if can_edit_board and project.is_permanent %}
-                    {# Only the permanent OVP board ever has intake items —
-                       opens the Incoming overlay (see #di-incoming-modal
-                       below) rather than an inline tray, per Ezekiel (1 Sep
-                       2026): "a button next to new project that opens an
-                       overlay where I can easily see them as cards". #}
+                    {# Only the permanent OVP board has intake items — opens the Incoming
+                       overlay (#di-incoming-modal below) rather than an inline tray. #}
                     <button type="button" class="btn-secondary btn-sm di-incoming-trigger" id="di-incoming-trigger" data-di-project-id="{{ project.id }}">
                         Incoming
                         {% if pending_intake_items %}<span class="di-incoming-badge">{{ pending_intake_items | length }}</span>{% endif %}

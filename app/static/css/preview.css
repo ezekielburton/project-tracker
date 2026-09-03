@@ -62,6 +62,15 @@ reuses that class elsewhere in the app is affected. */
     object-fit: contain;
 }
 
+.file-preview-body video {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.file-preview-body audio {
+    width: 90%;
+}
+
 /* Shown while we're waiting on the preview or pptx conversion to finish */
 .file-preview-loading {
     color: var(--white);

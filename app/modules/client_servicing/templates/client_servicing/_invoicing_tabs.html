@@ -1,0 +1,8 @@
+{# In-page tab strip for the Invoicing section. `active_tab` =
+   'by_project' | 'summary'. Sits under the header, above the content;
+   touches neither sidebar. #}
+<div class="cs-inv-tabs">
+    <a href="{{ url_for('client_servicing.invoicing') }}" class="cs-inv-tab{% if active_tab == 'by_project' %} cs-inv-tab--active{% endif %}">By Project</a>
+    <a href="{{ url_for('client_servicing.invoicing_summary') }}" class="cs-inv-tab{% if active_tab == 'summary' %} cs-inv-tab--active{% endif %}">Monthly Summary</a>
+</div>
+<div class="cs-inv-tabline"></div>

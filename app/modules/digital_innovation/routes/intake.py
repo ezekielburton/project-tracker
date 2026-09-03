@@ -1,44 +1,23 @@
-# Digital Innovation — the Incoming overlay: promote a card into a real
-# feature, dismiss it outright, and (1 Sep 2026) refresh the overlay's
-# card list live. A card is one of two kinds (see board_data.py's
-# IncomingCard/pending_intake_items) — this file has a separate
-# promote/dismiss pair for each:
+# The Incoming overlay: promote a card into a real feature, dismiss it, and
+# refresh the card list live. A card is one of two kinds (see board_data.py's
+# IncomingCard/pending_intake_items), each with its own promote/dismiss pair:
 #
-# - /intake/<id>/... — a native DiIntakeItem, DI's own row (the seam for
-#   a future non-FeatureRequest source). Promote/dismiss just flips its
-#   status.
-# - /feature-requests/<id>/... — a live FeatureRequest, the shared,
-#   already-existing "someone submitted a feature idea" table (2 Sep
-#   2026, per Ezekiel: the tray should show those too, old and new, not
-#   just items explicitly filed through the DI-only seam). DI doesn't
-#   own that row, so promote/dismiss can't just flip an is-this-DI's-
-#   problem flag on it the way a DiIntakeItem's status can — see each
-#   route's own docstring for what each action does instead.
+# - /intake/<id>/... — a native DiIntakeItem, DI's own row. Promote/dismiss
+#   flips its status.
+# - /feature-requests/<id>/... — a live FeatureRequest, the shared feature-idea
+#   table DI doesn't own, so promote/dismiss can't just flip a flag on it — see
+#   each route's docstring for what it does instead.
 #
-# Both promote routes call step_engine.create_feature — the exact same
-# call the "+ Add feature" button makes, so a promoted card starts life
-# on the board identically to a hand-typed one. None of the four routes
-# hand back a fragment — all of them change more than the overlay itself
-# (a promote also adds a card to a column and shifts the header's
-# "X active features" count), so the JS side does a full reload rather
-# than patching pieces of the DOM.
+# Both promote routes call step_engine.create_feature, so a promoted card starts
+# on the board identically to a hand-typed one. None of the four hand back a
+# fragment — each changes more than the overlay (a promote also adds a card and
+# shifts the active-feature count), so the JS does a full reload.
 #
-# intake_cards_fragment below is different: it's what
-# digital_innovation_board.js re-fetches when the di_changes SSE channel
-# pings, so the Incoming button's badge and, if it's open, the overlay
-# itself stay live without a full page reload. Renders from the same
-# _incoming_cards.html partial board.html's own initial render includes —
-# one template, two callers, same shape as _feature_detail.html. Note:
-# di_changes only fires for DI's OWN watched models (live_events.py) —
-# a brand new FeatureRequest submission does NOT currently trigger this
-# ping, so the live badge picks up new DiIntakeItem arrivals immediately
-# but a newly-submitted feature request only appears on the next full
-# page load/reload. Flagged here rather than solved now — wiring
-# FeatureRequest into di_changes would mean giving live_events.py (which
-# deliberately avoids importing model classes, matching by class name
-# only) a way to resolve "which di_project's tray does this belong to"
-# for a model with no di_project_id at all, which is more than this
-# chunk asked for.
+# intake_cards_fragment is what digital_innovation_board.js re-fetches when the
+# di_changes SSE channel pings, keeping the Incoming badge and open overlay live
+# from the same _incoming_cards.html partial board.html's initial render uses.
+# Note: di_changes fires only for DI's own watched models, so a brand-new
+# FeatureRequest submission appears only on the next full page load, not live.
 
 from flask import jsonify, abort, render_template
 from flask_login import login_required, current_user
@@ -67,9 +46,7 @@ def promote_intake_item(item_id):
     if not item:
         abort(404)
 
-    # item.description is deliberately not carried over — DiFeature has
-    # no description field, and Ezekiel confirmed dropping it rather than
-    # adding one just for this (28 Aug 2026).
+    # item.description isn't carried over — DiFeature has no description field.
     feature = step_engine.create_feature(item.project, item.title)
     item.status = 'promoted'
     db.session.commit()
@@ -95,14 +72,10 @@ def dismiss_intake_item(item_id):
 @login_required
 def promote_feature_request(feature_request_id):
     """Promotes a live FeatureRequest card. Creates the DI feature exactly
-    like any other promote, AND sets the feature request itself to
-    'in_progress' — per Ezekiel (2 Sep 2026): that's what actually
-    removes it from pending_intake_items() (a FeatureRequest only shows
-    up there while status='requested'), and it reuses the exact
-    notification the app already sends for that status change (routes/
-    feedback.py's update_fr_status), so the submitter hears "now in
-    progress" the same way they would if an admin had changed it by hand
-    on the Feature Requests page."""
+    like any other promote, AND sets the feature request itself to 'in_progress'
+    — that's what removes it from pending_intake_items() (a FeatureRequest shows
+    up there only while status='requested'), reusing the same notification the
+    app sends for that status change (routes/feedback.py's update_fr_status)."""
     _require_board_write_access()
     fr = FeatureRequest.query.filter_by(id=feature_request_id, status='requested').first()
     if not fr:
@@ -133,13 +106,11 @@ def promote_feature_request(feature_request_id):
 @login_required
 def dismiss_feature_request(feature_request_id):
     """Dismisses a live FeatureRequest card — hides it from THIS tray
-    only. The feature request itself is untouched: still 'requested',
-    still visible/upvotable/commentable on the public Feature Requests
-    page, exactly as before (per Ezekiel, 2 Sep 2026 — dismissing here
-    is DI saying "not right now," not the app saying "no"). Recorded as
-    a DiIntakeItem(source_type='feature_request', status='dismissed')
-    purely so pending_intake_items() knows to skip this fr.id next
-    time — that row otherwise has no life of its own."""
+    only. The feature request itself is untouched — still 'requested', still
+    visible/upvotable/commentable on the public Feature Requests page (dismissing
+    here is DI saying "not right now," not the app saying "no"). Recorded as a
+    DiIntakeItem(source_type='feature_request', status='dismissed') purely so
+    pending_intake_items() knows to skip this fr.id next time."""
     _require_board_write_access()
     fr = FeatureRequest.query.get_or_404(feature_request_id)
 

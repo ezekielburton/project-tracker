@@ -1,4 +1,4 @@
-/* Digital Innovation module — board page (Phase 2a).
+/* Digital Innovation module — board page.
    Built entirely on role tokens (--surface, --text, --border, …) per
    theming.md, so light/dark just falls out of that — the only colour
    choices made directly are the 7 stage colours + project dots, which
@@ -23,24 +23,10 @@
     padding-bottom: 0;
 }
 
-/* .di-shell's height used to be a percentage chain (.di-page/.di-shell
-   both height:100%, relying on .main-content's flex:1 to give them
-   something definite to resolve against) — found 3 Sep 2026 this
-   doesn't actually work: .main-content is only a flex ITEM of body's
-   flex column, not itself a flex container with a definite resolved
-   height, and client_servicing.css already documented hitting and
-   confirming this exact failure (a headless Chromium repro: "no flex
-   container in the chain having a truly definite height, flex items
-   skip growth-clamping entirely and just size to their content").
-   Explains why the percentage-chain fix never visibly changed anything
-   across several rounds of live-testing. Switched to the same technique
-   client_servicing.js already proved out for its own scrolling table
-   (syncTableScrollHeight) — digital_innovation_shell.js measures the
-   real gap between .di-shell's top and the footer with
-   getBoundingClientRect() and sets --di-shell-height directly, once per
-   DI screen load. The calc(100vh - 200px) here is only the pre-JS
-   fallback (same "roughly clears the fixed chrome" convention as
-   wiki.css's identical calc). */
+/* .di-shell/.di-page can't use a percentage-height chain: .main-content is a
+   flex ITEM, not a flex container with a definite height, so percentage heights
+   have nothing to resolve against and flex items skip growth-clamping. Uses a
+   definite-height technique instead (same as client_servicing.css). */
 .di-shell {
     display: flex;
     align-items: stretch;
@@ -229,8 +215,7 @@
 
 /* Same recipe as .di-closed-strip further down — this module's existing
    "footer" bar at the bottom of the board — mirrored to sit at the top
-   instead (1 Sep 2026, per Ezekiel: "same style as the footer, slimmer,
-   next to the sidebar and below the global header"). Negative margins
+   instead. Negative margins
    cancel .di-board's own padding on 3 sides so the bar bleeds flush
    against the DI sidebar (left), the content's right edge, and up
    against the global .app-header (top) — no border-radius, since a
@@ -279,9 +264,7 @@
 }
 
 /* Incoming button (header, next to "+ New project") + the overlay it
-   opens — a grid of cards rather than an inline strip, per Ezekiel (1 Sep
-   2026): "a button ... that opens an overlay where I can easily see them
-   as cards and promote or dismiss them". Cards are pre-rendered from the
+   opens — a grid of cards rather than an inline strip. Cards are pre-rendered from the
    same pending_intake_items the trigger's count badge uses — opening the
    overlay is pure client-side show/hide, no fetch needed (same reasoning
    as the new-feature-date input already being in the DOM before its
@@ -500,20 +483,11 @@
 }
 
 
-/* #di-board-body (see _board_columns.html) is a plain <div> inserted
-   2 Sep 2026 as the live-refresh JS's swap target (diRefreshBoard) — it
-   sits between .di-board (flex column, see above) and .di-columns/
-   .di-closed-strip below, so without its own flex participation those
-   two lose the flex chain .di-board is set up to hand them: .di-columns'
-   own flex:1/overflow-y:auto (meant to grow and become the scrollable
-   region) and .di-closed-strip's flex-shrink:0 (meant to stay pinned at
-   natural height below it) both do nothing once their direct parent is
-   an ordinary block box instead of a flex container. This is what was
-   actually behind the "board/closed-features shrunk to a quarter of the
-   page" regression — not a caching issue (found 2 Sep 2026, confirmed
-   after Ezekiel ruled out stale CSS by restarting the server and still
-   seeing it). Re-establishes exactly the flex column .di-columns/
-   .di-closed-strip were designed to sit in directly. */
+/* #di-board-body (see _board_columns.html) is the live-refresh JS's swap
+   target, between .di-board (flex column) and .di-columns/.di-closed-strip. It
+   must be a flex column itself, or those children lose the flex chain —
+   .di-columns' flex:1/overflow (the scrollable region) and .di-closed-strip's
+   flex-shrink:0 (pinned below) stop working under an ordinary block parent. */
 #di-board-body {
     display: flex;
     flex-direction: column;
@@ -560,8 +534,7 @@
     font-size: var(--text-xs);
 }
 
-/* Each column's count badge, tinted to match its header's colour (1 Sep
-   2026, per Ezekiel) — a light wash of the same colour behind the number,
+/* Each column's count badge, tinted to match its header's colour — a light wash of the same colour behind the number,
    not a solid fill, so it reads as "belongs to this header" without
    competing with it. Literal rgba() tints, same recipe as shared.css's
    dark-mode .status-pill--* rules (a CSS var can't be split into its R/G/B
@@ -671,8 +644,7 @@
 
 /* "+ Add feature" — only ever rendered at the bottom of the first
    (Researching) column, since every feature starts there. Same plain
-   text-button recipe the sidebar's "+ New project" used to use before it
-   moved into the board header as a .btn-primary. */
+   text-button recipe the sidebar's text buttons use. */
 .di-add-feature-btn {
     background: none;
     border: none;
@@ -767,8 +739,7 @@
    Light mode: the raw palette var directly — EXCEPT sky/canary/sage/
    salmon, which are pastels tuned to sit behind black text (a dot, the
    old solid-chip column header), not to BE text on the page's cream
-   background — at that job they're nearly illegible (flagged by Ezekiel,
-   1 Sep 2026). --di-*-text below are darker/more saturated versions of
+   background — at that job they're nearly illegible. --di-*-text below are darker/more saturated versions of
    those same 4 hues, only for that "colour as text" job; the dot fill
    and the progress bar's highlight keep using the real raw colour
    further down, unaffected. The other 5 (coral/lavender/clover/oak/
@@ -794,11 +765,7 @@
 .di-dot--poppy, .di-card-step--poppy, .di-column-header--poppy { color: var(--poppy); }
 .di-dot--salmon, .di-card-step--salmon, .di-column-header--salmon { color: var(--di-salmon-text); }
 
-/* Column headers: plain coloured text, no background chip — "clean
-   headers" per the wireframe (used to be a solid-fill chip like
-   shared.css's .status-pill--*; dropped in favour of just reusing the
-   text-colour rule above, one extra selector each, no new colour
-   treatment). */
+/* Column headers: plain coloured text, no background chip, reusing the text-colour rule above. */
 
 /* .di-dot is a solid fill, not text, so it needs `background` too — same
    colour, just the other property. */
@@ -835,7 +802,7 @@
 :root[data-theme="dark"] .di-dot--canary { background: #EBDC7E; }
 :root[data-theme="dark"] .di-dot--lavender { background: #C4A8FF; }
 
-/* ── Feature detail modal (Phase 2b, chunk 3 — read-only) ──────────────
+/* ── Feature detail modal ──────────────
    Content is a server-rendered fragment (_feature_detail.html) dropped
    into #di-feature-detail-body by openDiFeatureDetail() in the board JS,
    so everything below targets that fragment's markup. */
@@ -1281,7 +1248,7 @@
     flex-shrink: 0;
 }
 
-/* ── Cost breakdown modal (Phase 3, 1 Sep 2026) ──────────────────────────
+/* ── Cost breakdown modal ──────────────────────────
    Content is a server-rendered fragment (_cost_breakdown.html) dropped
    into #di-cost-body by openDiCostBreakdown() in the board JS — same
    "fetch a fragment" pattern as the feature detail modal, so most of the
@@ -1498,7 +1465,7 @@
     color: var(--di-sky-text);
 }
 
-/* Two lines per Ezekiel's wireframe (2 Sep 2026) — "Week 36" bold, the
+/* Two lines — "Week 36" bold, the
    actual date range small and muted underneath. A month/quarter has no
    secondary line (lib/periods.py's format_period_label_parts() returns
    '' for those — the whole label already reads fine as one line), so
@@ -1528,7 +1495,7 @@
    system's existing blue text token, already dark-tuned) rather than a
    colour rule of its own here — "money already banked" vs "money still
    being estimated" read as visibly different colours without a third
-   colour system (Ezekiel's wireframe, 2 Sep 2026). */
+   colour system. */
 .di-perf-profit {
     color: var(--pine);
 }
@@ -1545,8 +1512,7 @@
    (first attempt) still barely read against the page — --surface-hover
    (#EDEAE4 light mode) is only ~8 RGB units off --background (#f5f1ed),
    and --border (#D4CCBE) is itself a light tan, so the "border" was
-   nearly invisible in a real screenshot (Ezekiel, 2 Sep 2026: "make the
-   cards white"). Switched to the same true-white recipe
+   nearly invisible in a real screenshot. Switched to the same true-white recipe
    .di-cost-stat-card--total already uses below (--surface-raised is
    literal #FFFFFF / --border-strong is a real grey, #AAAAAA) — scoped
    here, not on the shared class, so Cost Breakdown's own (unelevated,
@@ -1570,7 +1536,7 @@
 /* Same "true white, not just --white" fix as the stat cards above —
    .table-wrapper's own var(--white) (#fafafa light mode) is only ~5-13
    RGB units off the page background, so the table read as blending into
-   the page too (Ezekiel, 2 Sep 2026). Overrides just for Performance's
+   the page too. Overrides just for Performance's
    copy, same specificity so this rule (declared after .table-wrapper in
    the cascade) wins without touching the shared class other DI screens
    use. */
@@ -1641,7 +1607,7 @@
    closed/profitable project reads at a glance without hunting for the
    Status pill — same low-alpha-over-page-background technique
    .di-column-count--clover's fill already uses, which is why this needs
-   no separate dark-mode rule (Ezekiel's wireframe, 2 Sep 2026). */
+   no separate dark-mode rule. */
 .di-perf-project-row--closed {
     background: rgba(76, 175, 90, 0.06);
 }

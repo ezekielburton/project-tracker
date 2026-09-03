@@ -1,6 +1,6 @@
 """Route-level coverage for routes/board.py::board_columns_fragment — the
 _board_columns.html re-render used by the board-wide live SSE refresh
-(digital_innovation_board.js::diRefreshBoard, 2 Sep 2026). project_board
+(digital_innovation_board.js::diRefreshBoard). project_board
 and index themselves already get indirect coverage from every other test
 file that renders board.html (test_board_write_access.py, test_intake_
 routes.py, etc.), so this file is scoped to just the new fragment route."""
@@ -40,8 +40,11 @@ def test_board_columns_fragment_shows_open_features(app, client, db_session):
 
 def test_board_columns_fragment_works_for_a_read_only_viewer(app, client, db_session):
     # Viewing the board (fragment included) has no can_edit_board gate —
-    # only mutating actions do.
-    project = _lifecycle_project(db_session, 'bc')
+    # only mutating actions do. is_permanent=True stands in for OVP so a
+    # designer can reach the fragment at all under the separate
+    # can_view_di_project gate (lib/access.py) — that gate's
+    # own coverage lives in test_project_visibility.py, not here.
+    project = _lifecycle_project(db_session, 'bc', is_permanent=True)
     engine.create_feature(project, 'Viewer-visible feature')
     user = _user(db_session, 'bc', role='designer')
     login_as(client, app, user, 'password123')

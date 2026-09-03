@@ -1,8 +1,6 @@
-# Digital Innovation — Cost ledger Excel export (Phase 3). One function,
-# one job: turn a project's cost_summary() (lib/costs.py) into an .xlsx
-# workbook. Kept separate from routes/costs.py the same way board_data.py
-# is kept separate from routes/board.py — the route layer just streams
-# whatever this returns.
+# Cost-ledger Excel export: turn a project's cost_summary() (lib/costs.py) into
+# an .xlsx workbook. Kept separate from routes/costs.py, which just streams what
+# this returns.
 
 import io
 from datetime import datetime
@@ -17,11 +15,9 @@ _HEADER_FILL = PatternFill(start_color='4A4A4A', end_color='4A4A4A', fill_type='
 
 
 def build_cost_ledger_workbook(di_project, summary):
-    """Builds the workbook in memory and returns a BytesIO positioned at
-    the start, ready to hand straight to Flask's send_file. `summary` is
-    whatever lib.costs.cost_summary(di_project) returned — the route
-    already has it (it just rendered the modal from it), so this doesn't
-    re-query."""
+    """Build the workbook in memory and return a BytesIO at the start, ready for
+    send_file. `summary` is lib.costs.cost_summary(di_project)'s result, passed
+    in so this doesn't re-query."""
     wb = Workbook()
     ws = wb.active
     ws.title = 'Cost Ledger'
@@ -43,9 +39,8 @@ def build_cost_ledger_workbook(di_project, summary):
         cell.fill = _HEADER_FILL
 
     row = header_row + 1
-    # Ledger's own display order is newest-first (better for the on-screen
-    # table); the export reverses to oldest-first, which reads more
-    # naturally as a spreadsheet log.
+    # On-screen ledger is newest-first; the export reverses to oldest-first,
+    # which reads more naturally as a log.
     for entry in reversed(summary['entries']):
         ws.cell(row=row, column=1, value=entry.date)
         ws.cell(row=row, column=1).number_format = 'yyyy-mm-dd'
@@ -77,13 +72,10 @@ def build_cost_ledger_workbook(di_project, summary):
 
 
 def build_performance_workbook(rollup, currency):
-    """Performance page export (Ezekiel's wireframe, 2 Sep 2026) — one
-    row per project in the current period's rollup, same columns as the
-    on-screen table, plus the three summary figures up top. `rollup` is
-    whatever lib.snapshots.get_period_rollup() returned; the route
-    already has it (it just rendered the page from it), so this doesn't
-    re-query either, same choice build_cost_ledger_workbook() above
-    makes for the same reason."""
+    """Performance export — one row per project in the period's rollup, same
+    columns as the on-screen table, plus the three summary figures. `rollup` is
+    lib.snapshots.get_period_rollup()'s result, passed in so this doesn't
+    re-query."""
     wb = Workbook()
     ws = wb.active
     ws.title = 'Performance'

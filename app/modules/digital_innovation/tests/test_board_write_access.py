@@ -1,10 +1,15 @@
 """Coverage for the board write-access gate (can_edit_di_board,
-lib/access.py) — "read only to everyone except me and my future team"
-(Ezekiel, 28 Aug 2026). The board itself (viewing a project, opening a
-feature) stays open to every logged-in user; this file is entirely about
-the six actions that change data: create a feature, add/tick/delete a
-step, advance a stage, close a feature. Project creation's own gate has
-its dedicated coverage in test_project_routes.py.
+lib/access.py) — "read only to everyone except me and my future team". The board itself (viewing a project, opening a
+feature) stays open to every logged-in user for the permanent OVP
+board — a *separate* gate (can_view_di_project) hides
+every other project from everyone except admin/management/future
+digital_innovation, dedicated coverage in test_project_visibility.py.
+This file stays about the six actions that change data: create a
+feature, add/tick/delete a step, advance a stage, close a feature — so
+every project built here for a write-gate test is the permanent OVP
+stand-in (_feature_with_step, is_permanent=True) purely so a designer
+can reach the write gate at all; it isn't what's being tested. Project
+creation's own gate has its dedicated coverage in test_project_routes.py.
 
 Each mutating route already has full happy-path/validation/404 coverage
 elsewhere (test_features_routes.py, test_feature_steps_routes.py) using
@@ -21,7 +26,12 @@ from app.modules.digital_innovation.tests.test_feature_steps_routes import _proj
 
 
 def _feature_with_step(db_session, tag):
-    project = _project(db_session, tag)
+    # is_permanent=True: these tests are about the write
+    # gate (can_edit_di_board), not the separate visibility gate
+    # (can_view_di_project) - standing in for OVP keeps a designer able
+    # to reach feature_detail/project_board at all, same as before that
+    # second gate existed, so these assertions still isolate write-access.
+    project = _project(db_session, tag, is_permanent=True)
     feature = engine.create_feature(project, 'New thing')
     step = engine.add_step(feature, 'Only step')
     db_session.flush()
@@ -148,9 +158,9 @@ def test_delete_step_403s_for_an_admin_emulating_a_designer(app, client, db_sess
     assert DiFeatureStep.query.get(step_id) is not None
 
 
-# ── advance feature ─────────────────────────────────────────────────────
+# ── move feature stage ──────────────────────────────────────────────────
 
-def test_advance_feature_403s_for_a_designer(app, client, db_session):
+def test_move_feature_stage_403s_for_a_designer(app, client, db_session):
     _, feature, step = _feature_with_step(db_session, 'wi')
     engine.tick_step(step, done=True)
     starting_stage = feature.status
@@ -158,14 +168,14 @@ def test_advance_feature_403s_for_a_designer(app, client, db_session):
     login_as(client, app, user, 'password123')
 
     with app.test_request_context():
-        url = url_for('digital_innovation.advance_feature', feature_id=feature.id)
-    resp = client.post(url)
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={'stage': 'planning'})
 
     assert resp.status_code == 403
     assert feature.status == starting_stage
 
 
-def test_advance_feature_403s_for_an_admin_emulating_a_designer(app, client, db_session):
+def test_move_feature_stage_403s_for_an_admin_emulating_a_designer(app, client, db_session):
     _, feature, step = _feature_with_step(db_session, 'wj')
     engine.tick_step(step, done=True)
     admin = _user(db_session, 'wj', role='admin')
@@ -176,8 +186,8 @@ def test_advance_feature_403s_for_an_admin_emulating_a_designer(app, client, db_
         sess['emulating_user_id'] = designer.id
 
     with app.test_request_context():
-        url = url_for('digital_innovation.advance_feature', feature_id=feature.id)
-    resp = client.post(url)
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={'stage': 'planning'})
     assert resp.status_code == 403
 
 
@@ -284,7 +294,9 @@ def test_feature_detail_controls_are_emulation_aware(app, client, db_session):
 # ── board page rendering: "+ New project" / "+ Add feature" ─────────────
 
 def test_board_hides_new_project_and_add_feature_from_a_designer(app, client, db_session):
-    project = _project(db_session, 'wp')
+    # is_permanent=True: this test is about write controls, not the
+    # visibility gate - see _feature_with_step's comment above.
+    project = _project(db_session, 'wp', is_permanent=True)
     user = _user(db_session, 'wp', role='designer')
     login_as(client, app, user, 'password123')
 
@@ -313,10 +325,11 @@ def test_board_shows_new_project_and_add_feature_to_an_admin(app, client, db_ses
     assert 'di-add-feature-trigger' in body
 
 
-def test_board_is_still_viewable_by_a_designer(app, client, db_session):
-    # The core of the request: viewing stays open to everyone — only
-    # mutation is gated.
-    project = _project(db_session, 'wr')
+def test_board_is_still_viewable_by_a_designer_on_the_permanent_ovp_board(app, client, db_session):
+    # Viewing the permanent OVP board stays open to everyone — only
+    # mutation is gated there. Viewing is an OVP-board guarantee; see the 403
+    # test below for the rule on every other board.
+    project = _project(db_session, 'wr', is_permanent=True)
     engine.create_feature(project, 'Visible to everyone')
     db_session.flush()
     user = _user(db_session, 'wr', role='designer')
@@ -329,3 +342,19 @@ def test_board_is_still_viewable_by_a_designer(app, client, db_session):
 
     assert resp.status_code == 200
     assert 'Visible to everyone' in body
+
+
+def test_board_403s_for_a_designer_on_a_non_permanent_project(app, client, db_session):
+    # The visibility gate itself - a designer can't reach any board except the
+    # permanent OVP one. Fuller
+    # coverage of can_view_di_project lives in test_project_visibility.py;
+    # this is here specifically as the counterpart to the OVP test above.
+    project = _project(db_session, 'wr2')
+    user = _user(db_session, 'wr2', role='designer')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.project_board', di_project_id=project.id)
+    resp = client.get(url)
+
+    assert resp.status_code == 403

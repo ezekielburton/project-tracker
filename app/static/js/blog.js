@@ -379,13 +379,31 @@ function initPostContent(postId) {
     }
 
     function renderBlock(block, si, bi) {
-        var label = { body: 'Paragraph', callout: 'Callout', 'callout-pine': 'Callout (green)', h3: 'Sub-heading', list: 'List' }[block.type] || block.type;
+        var label = { body: 'Paragraph', callout: 'Callout', 'callout-pine': 'Callout (green)', h3: 'Sub-heading', list: 'List', image: 'Image', video: 'Video' }[block.type] || block.type;
         var inputHtml = '';
 
         if (block.type === 'list') {
             inputHtml = '<textarea rows="4" data-si="' + si + '" data-bi="' + bi + '" ' +
                 'class="block-input" placeholder="One item per line">' +
                 escText((block.items || []).join('\n')) + '</textarea>';
+        } else if (block.type === 'image' || block.type === 'video') {
+            var isVideo = block.type === 'video';
+            var previewHtml = block.url
+                ? (isVideo
+                    ? '<video src="' + escAttr(block.url) + '" controls></video>'
+                    : '<img src="' + escAttr(block.url) + '" alt="">')
+                : '';
+            inputHtml =
+                '<div class="blog-media-block" data-si="' + si + '" data-bi="' + bi + '">' +
+                '<div class="blog-media-preview">' + previewHtml + '</div>' +
+                '<input type="file" class="blog-media-file-input hidden" accept="' +
+                (isVideo ? '.mp4,.webm' : '.png,.jpg,.jpeg,.gif,.webp') + '">' +
+                '<button type="button" class="blog-block-btn blog-media-upload-btn">' +
+                (block.url ? 'Replace ' : 'Upload ') + label + '</button>' +
+                '<input type="text" data-si="' + si + '" data-bi="' + bi + '" ' +
+                'class="block-input blog-media-caption" placeholder="Caption (optional)" ' +
+                'value="' + escAttr(block.text || '') + '">' +
+                '</div>';
         } else {
             inputHtml = '<textarea rows="3" data-si="' + si + '" data-bi="' + bi + '" ' +
                 'class="block-input" placeholder="' + label + '...">' +
@@ -461,16 +479,61 @@ function initPostContent(postId) {
             var tmp = sections[si].blocks[bi]; sections[si].blocks[bi] = sections[si].blocks[bi + 1]; sections[si].blocks[bi + 1] = tmp;
             render(); return;
         }
+
+        var mediaUploadBtn = e.target.closest('.blog-media-upload-btn');
+        if (mediaUploadBtn) {
+            mediaUploadBtn.closest('.blog-media-block').querySelector('.blog-media-file-input').click();
+            return;
+        }
+    });
+
+    // ── Media upload (image/video blocks) ────────────
+    sectionsContainer.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('blog-media-file-input')) return;
+        var file = e.target.files[0];
+        if (!file) return;
+
+        var block = e.target.closest('.blog-media-block');
+        var si = parseInt(block.dataset.si), bi = parseInt(block.dataset.bi);
+        var btn = block.querySelector('.blog-media-upload-btn');
+        var originalLabel = btn.textContent;
+        btn.textContent = 'Uploading…';
+        btn.disabled = true;
+
+        var fd = new FormData();
+        fd.append('file', file);
+        fetch('/blog/upload-media', { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    sections[si].blocks[bi].url = data.url;
+                    render();
+                } else {
+                    showToast(data.error || 'Upload failed', 'error');
+                    btn.textContent = originalLabel;
+                    btn.disabled = false;
+                }
+            })
+            .catch(function () {
+                showToast('Upload failed', 'error');
+                btn.textContent = originalLabel;
+                btn.disabled = false;
+            });
     });
 
     menu.addEventListener('click', function (e) {
         var btn = e.target.closest('button');
         if (!btn || activeSi === null) return;
         var type = btn.dataset.type;
-        var block = type === 'list'
-            ? { type: 'list', items: [] }
-            : { type: type.replace('-pine', ''), text: '', color: type === 'callout-pine' ? 'pine' : undefined };
-        if (type === 'callout-pine') block.type = 'callout';
+        var block;
+        if (type === 'list') {
+            block = { type: 'list', items: [] };
+        } else if (type === 'image' || type === 'video') {
+            block = { type: type, url: '', text: '' };
+        } else {
+            block = { type: type.replace('-pine', ''), text: '', color: type === 'callout-pine' ? 'pine' : undefined };
+            if (type === 'callout-pine') block.type = 'callout';
+        }
         sections[activeSi].blocks.push(block);
         menu.style.display = 'none';
         activeSi = null;

@@ -10,12 +10,20 @@
         {% endwith %}
         <main class="cs-main">
             <div class="client-servicing-page">
-                <div class="cs-page-header">
-                    <h1>Invoicing</h1>
-                </div>
-                <p class="cs-muted">Nothing here yet — this section is coming in a future chunk.</p>
+                {% with active_tab = 'by_project' %}
+                {% include "client_servicing/_invoicing_tabs.html" %}
+                {% endwith %}
+                {% include "client_servicing/_invoicing_toolbar.html" %}
+                {% include "client_servicing/_invoicing_table.html" %}
             </div>
         </main>
     </div>
 </div>
+{% include "client_servicing/_invoicing_thresholds_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}
+{% if can_edit_thresholds %}
+<script src="{{ url_for('static', filename='js/client_servicing_invoicing.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endif %}
 {% endblock %}

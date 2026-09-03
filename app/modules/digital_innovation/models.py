@@ -146,8 +146,8 @@ class DiFeature(db.Model):
 
 class DiFeatureStep(db.Model):
     """One checklist item on a feature, for one stage. Copied from
-    DiStepTemplate when the feature enters that stage (see brain A in the
-    build brief) — editing a feature's steps here never touches the
+    DiStepTemplate when the feature enters that stage (see step_engine.py) —
+    editing a feature's steps here never touches the
     template, and template edits only affect features entering the stage
     from then on. Steps from past stages are kept (all is_done=True), so a
     feature's full history stays visible."""
@@ -221,7 +221,7 @@ class DiSetting(db.Model):
 
 
 class DiPeriodSnapshot(db.Model):
-    """A frozen month/quarter total (brain C). Once written, Performance
+    """A frozen month/quarter total. Once written, Performance
     reads a closed period from here instead of recomputing live, so
     editing an old cost entry can never rewrite history. period_key is
     e.g. '2026-09' for a month or '2026-Q3' for a quarter."""
@@ -241,7 +241,7 @@ class DiPeriodSnapshot(db.Model):
 
 class DiIntakeItem(db.Model):
     """One approved feedback item waiting to be placed on the (permanent)
-    OVP board. Created by the intake seam (services/intake.py, Phase 2) —
+    OVP board. Created by the intake seam (services/intake.py) —
     this module never imports the feedback module's models, it only
     receives plain values through that function. di_project_id will always
     be the OVP board's id in practice, but isn't hard-pinned to it here so

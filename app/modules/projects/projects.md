@@ -46,19 +46,13 @@ app/modules/projects/
   `project_list.js`, the same param `openProjectOverlay()` pushes onto the
   URL when a project is opened) — every inbound link to a specific project
   (dashboard cards, notifications, etc.) is expected to use this instead
-  of the old `/projects/<id>` detail page. `dashboard.js`'s client-rendered
-  rows still pointed at that old page until 27 Aug 2026, per Ezekiel ("wire
-  up the dashboard clicks on projects to redirect to the new project
-  overlay") — see dashboard.md. As of 28 Aug 2026 the whole toolbar (tabs,
-  filters, sort/group, search, show-cancelled, saved views) soft-navigates
-  instead of reloading the page: a `/projects-new/page-state` JSON endpoint
-  re-renders the tab strip, filter panel, sort panel, and table, and
-  `project_list.js`'s `softNavigate()`/`applyPageState()` swap those into
-  the stable containers so existing listeners survive. A block-scoping bug
-  in that same client code (`applyPageState()` referencing elements only
-  declared inside a nested `if`) threw on every call and silently fell back
-  to a full reload — fixed the same day by hoisting those declarations to
-  the outer scope.
+  of the old `/projects/<id>` detail page; `dashboard.js`'s client-rendered
+  rows also link through the overlay (see dashboard.md). The whole toolbar
+  (tabs, filters, sort/group, search, show-cancelled, saved views)
+  soft-navigates instead of reloading the page: a `/projects-new/page-state`
+  JSON endpoint re-renders the tab strip, filter panel, sort panel, and
+  table, and `project_list.js`'s `softNavigate()`/`applyPageState()` swap
+  those into the stable containers so existing listeners survive.
 - **project_overlay**: the project detail overlay — Details, Deliverables,
   Submissions, Flags, Chat, Notes, and Pre-Production surfaces, project creation
   (create overlay + resumable drafts), status overrides, add/cancel project
@@ -108,12 +102,23 @@ worthwhile future refactor, deliberately left for the planned overhaul of this
 feature rather than done during the relocation, to avoid changing behaviour on
 freshly-overhauled code.
 
+## Reference-file preview
+Reference files preview inline in the overlay. Allowed/previewable types cover
+PDF, common images, plus audio (mp3/wav/m4a/aac/ogg) and video (mp4/webm).
+`preview_project_file` caches audio/video to `uploads/preview-cache/<file_id>.<ext>`
+on first fetch, so `send_file` serves real HTTP range requests for seeking
+instead of re-downloading the whole file from NAS on every request; `preview.js`
+points `<video>`/`<audio src>` straight at the route so the browser drives its
+own range requests. The NAS stays the source of truth — the cache is disposable.
+`preview_cache_cleanup.py` (repo root) empties the cache; installing its daily
+systemd timer / cron job on the server is a manual step.
+
 ## Details edit mode
 The Details tab's Edit button (project_overlay_edit.js) swaps every
 `[data-field]` row from its `.overlay-edit-view` to its `.overlay-edit-input`
 and Saves a whitelisted field set to `overlay_details_save` (concurrent-edit
 guarded via `edit_snapshot_at`, diffed into ActivityLog). **Teams Required**
-(`design_teams_requested`) is editable here (2 Sep 2026): a checkbox group
+(`design_teams_requested`) is editable here: a checkbox group
 (shared partial `_details_teams_required.html`, in both brief templates). It
 rides the same edit flow via two generic, reusable hooks in the edit JS — a
 `data-edit-type="checkbox-group"` input collected as a comma-joined value,
@@ -126,7 +131,7 @@ scaffold its NAS folder (folders are created at project creation only).
 ## Performance
 The list page and row-expand are eager-loaded (no N+1 on the main table);
 see the query-count regression tests below. The **Deliverables sub-tab**
-had the same trap and was fixed the same way (2 Sep 2026): its read query
+had the same trap and is fixed the same way: its read query
 eager-loads each row's assignment tags + their designers and the
 deliverable type's team list — Standard in `overlay_deliverables`, C&CM in
 `_build_ccm_deliverable_sections` (`routes/project_overlay/_common.py`), so

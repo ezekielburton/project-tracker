@@ -59,7 +59,12 @@ def test_archive_screen_shows_actions_to_an_admin(app, client, db_session):
     assert 'di-archive-archive-btn' in body
 
 
-def test_archive_screen_hides_actions_from_a_designer(app, client, db_session):
+def test_archive_screen_hides_non_ovp_projects_and_actions_from_a_designer(app, client, db_session):
+    # The visibility gate
+    # (can_view_di_project, lib/access.py) means a designer no longer
+    # sees a button-less row for a non-OVP project — the row itself is
+    # gone, since closed_projects()/archived_projects() are filtered
+    # through visible_di_projects same as everything else.
     _project(db_session, 'af0')  # active — see the comment above
     _project(db_session, 'af', lifecycle='closed')
     _project(db_session, 'ag', lifecycle='archived')
@@ -72,8 +77,8 @@ def test_archive_screen_hides_actions_from_a_designer(app, client, db_session):
     body = resp.get_data(as_text=True)
 
     assert resp.status_code == 200
-    # The projects themselves are still visible — only the buttons are gated.
-    assert 'Test DI Project af' in body
+    assert 'Test DI Project af' not in body
+    assert 'Test DI Project ag' not in body
     assert 'di-archive-reopen-btn' not in body
     assert 'di-archive-archive-btn' not in body
 
@@ -113,7 +118,12 @@ def test_board_shows_close_button_for_editable_projects_to_an_admin(app, client,
     assert 'di-project-close-btn' in body
 
 
-def test_board_hides_close_button_from_a_designer(app, client, db_session):
+def test_project_board_403s_for_a_designer_instead_of_showing_close_button(app, client, db_session):
+    # A non-permanent
+    # board isn't reachable by a designer at all (can_view_di_
+    # project, lib/access.py), the close-button-hidden case is now
+    # unreachable for this project — the meaningful assertion left is
+    # that the route 403s outright.
     project = _project(db_session, 'aj')
     user = _user(db_session, 'aj', role='designer')
     login_as(client, app, user, 'password123')
@@ -121,10 +131,8 @@ def test_board_hides_close_button_from_a_designer(app, client, db_session):
     with app.test_request_context():
         url = url_for('digital_innovation.project_board', di_project_id=project.id)
     resp = client.get(url)
-    body = resp.get_data(as_text=True)
 
-    assert resp.status_code == 200
-    assert 'di-project-close-btn' not in body
+    assert resp.status_code == 403
 
 
 def test_board_never_shows_close_button_for_the_permanent_project(app, client, db_session):
@@ -144,7 +152,12 @@ def test_board_never_shows_close_button_for_the_permanent_project(app, client, d
 
 
 def test_board_sidebar_excludes_closed_and_archived_projects(app, client, db_session):
-    active_project = _project(db_session, 'al')
+    # is_permanent=True: this test is about lifecycle
+    # filtering (sidebar_projects() only ever returns lifecycle='active'
+    # rows, so the closed/archived ones here were never reachable via
+    # the sidebar regardless), not the separate visibility gate — stand
+    # in for OVP so a designer can view the board at all.
+    active_project = _project(db_session, 'al', is_permanent=True)
     _project(db_session, 'am', lifecycle='closed')
     _project(db_session, 'an', lifecycle='archived')
     user = _user(db_session, 'al', role='designer')
@@ -161,7 +174,7 @@ def test_board_sidebar_excludes_closed_and_archived_projects(app, client, db_ses
     assert 'Test DI Project an' not in body
 
 
-# ── archive_lists_fragment (3 Sep 2026, DI-wide live SSE refresh) ────────
+# ── archive_lists_fragment (DI-wide live SSE refresh) ────────
 
 def test_archive_lists_fragment_requires_auth(app, client, db_session):
     with app.test_request_context():
@@ -171,9 +184,14 @@ def test_archive_lists_fragment_requires_auth(app, client, db_session):
 
 
 def test_archive_lists_fragment_shows_closed_and_archived_projects(app, client, db_session):
+    # role='admin': a non-OVP project's closed/archived row
+    # is visibility-gated (can_view_di_project, lib/access.py), same
+    # as everywhere else — a designer would see neither of these at all,
+    # so this needs a role the gate actually allows to test the fragment
+    # itself rather than the gate.
     _project(db_session, 'ao', lifecycle='closed')
     _project(db_session, 'ap', lifecycle='archived')
-    user = _user(db_session, 'ao', role='designer')  # viewing has no can_edit gate
+    user = _user(db_session, 'ao', role='admin')
     login_as(client, app, user, 'password123')
 
     with app.test_request_context():

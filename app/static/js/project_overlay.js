@@ -199,7 +199,12 @@ window.ProjectOverlay = (function () {
                 document.removeEventListener('keydown', escHandler);
             },
             restoreView: restoreView,
-            isChatOpen: isChatOpen
+            isChatOpen: isChatOpen,
+            // Exposed so callers outside this module (project_list.js's
+            // openProjectOverlay, for a deep link that wants the chat
+            // drawer open on arrival — e.g. a chat-mention notification)
+            // can open the drawer without simulating a click on chatBtn.
+            openChat: openChat
         };
     }
 

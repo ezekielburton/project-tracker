@@ -12,7 +12,7 @@ _CLIENT_SERVICING_ROLES = {
     'management',
     'cs',
     'project_owner',
-    # 'finance',  # add once the finance role exists on the User model
+    'finance',
 }
 
 

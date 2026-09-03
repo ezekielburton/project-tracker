@@ -1,6 +1,6 @@
 """Route-level coverage for the feature detail modal's interactive
-actions (chunk 4): add/tick/delete a step, advance a stage, close a
-feature. step_engine.py (brain A) already has full unit coverage for the
+actions: add/tick/delete a step, advance a stage, close a
+feature. step_engine.py already has full unit coverage for the
 rules themselves — these tests are about the HTTP layer: auth, 404s,
 validation, and that a step_engine ValueError turns into a 400."""
 from flask import url_for
@@ -11,8 +11,13 @@ from app.modules.digital_innovation.lib import step_engine as engine
 from app.modules.digital_innovation.tests.test_features_routes import _user
 
 
-def _project(db_session, tag, lifecycle='active'):
-    project = DiProject(name=f'Test DI Project {tag}', lifecycle=lifecycle)
+def _project(db_session, tag, lifecycle='active', is_permanent=False):
+    # is_permanent: lets callers stand in for the OVP board,
+    # which is the only DiProject visible to every role regardless of
+    # lib/access.py's can_view_di_project - defaults to False so every
+    # existing caller (there are several across this module's test files)
+    # keeps behaving exactly as it did before that gate existed.
+    project = DiProject(name=f'Test DI Project {tag}', lifecycle=lifecycle, is_permanent=is_permanent)
     db_session.add(project)
     db_session.flush()
     return project
@@ -197,7 +202,7 @@ def test_delete_step_removes_it(app, client, db_session):
     assert DiFeatureStep.query.get(step_id) is None
 
 
-def test_delete_step_auto_advances_when_it_was_the_last_undone_step(app, client, db_session):
+def test_delete_step_does_not_change_stage(app, client, db_session):
     user = _user(db_session, 'k')
     project = _project(db_session, 'k')
     feature = engine.create_feature(project, 'New thing')
@@ -213,7 +218,7 @@ def test_delete_step_auto_advances_when_it_was_the_last_undone_step(app, client,
     resp = client.delete(url)
 
     assert resp.status_code == 200
-    assert feature.status != starting_stage
+    assert feature.status == starting_stage  # deleting a step never moves the stage
 
 
 def test_delete_step_404s_for_an_unknown_step(app, client, db_session):
@@ -225,64 +230,6 @@ def test_delete_step_404s_for_an_unknown_step(app, client, db_session):
     resp = client.delete(url)
     assert resp.status_code == 404
 
-
-# ── advance feature ─────────────────────────────────────────────────────
-
-def test_advance_feature_moves_to_the_next_stage(app, client, db_session):
-    user = _user(db_session, 'm')
-    project = _project(db_session, 'm')
-    feature = engine.create_feature(project, 'New thing')
-    step = engine.add_step(feature, 'Only step')
-    engine.tick_step(step, done=True)
-    db_session.flush()
-    starting_stage = feature.status
-    login_as(client, app, user, 'password123')
-
-    with app.test_request_context():
-        url = url_for('digital_innovation.advance_feature', feature_id=feature.id)
-    resp = client.post(url)
-
-    assert resp.status_code == 200
-    assert feature.status != starting_stage
-
-
-def test_advance_feature_rejects_when_steps_are_not_done(app, client, db_session):
-    user = _user(db_session, 'n')
-    project = _project(db_session, 'n')
-    feature = engine.create_feature(project, 'New thing')
-    engine.add_step(feature, 'Not done yet')
-    db_session.flush()
-    login_as(client, app, user, 'password123')
-
-    with app.test_request_context():
-        url = url_for('digital_innovation.advance_feature', feature_id=feature.id)
-    resp = client.post(url)
-    assert resp.status_code == 400
-
-
-def test_advance_feature_rejects_from_implementation(app, client, db_session):
-    user = _user(db_session, 'o')
-    project = _project(db_session, 'o')
-    feature = engine.create_feature(project, 'New thing')
-    feature.status = DI_STAGES[-1]
-    db_session.flush()
-    login_as(client, app, user, 'password123')
-
-    with app.test_request_context():
-        url = url_for('digital_innovation.advance_feature', feature_id=feature.id)
-    resp = client.post(url)
-    assert resp.status_code == 400
-
-
-def test_advance_feature_requires_auth(app, client, db_session):
-    project = _project(db_session, 'p')
-    feature = engine.create_feature(project, 'New thing')
-    db_session.flush()
-
-    with app.test_request_context():
-        url = url_for('digital_innovation.advance_feature', feature_id=feature.id)
-    resp = client.post(url)
-    assert resp.status_code in (302, 401)
 
 
 # ── close feature ───────────────────────────────────────────────────────

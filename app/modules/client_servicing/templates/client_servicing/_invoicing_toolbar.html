@@ -1,0 +1,12 @@
+{# Toolbar — search / filters / Export are visual only for now. The Day
+   thresholds button (admin/management) is live. #}
+<div class="cs-inv-toolbar">
+    <div class="cs-inv-search">Search projects…</div>
+    <div class="cs-inv-pill">Invoice month <span class="cs-inv-pill-val">· All</span></div>
+    <div class="cs-inv-pill">Validation <span class="cs-inv-pill-val">· All</span></div>
+    <div class="cs-inv-toolbar-spacer"></div>
+    {% if can_edit_thresholds %}
+    <button type="button" class="cs-inv-ghost" id="cs-inv-thresholds-btn">⚙ Day thresholds</button>
+    {% endif %}
+    <div class="cs-inv-ghost">Export</div>
+</div>

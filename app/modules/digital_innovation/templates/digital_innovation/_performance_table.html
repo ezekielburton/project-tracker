@@ -1,60 +1,30 @@
-{# Performance table — the 3 summary stat cards and the per-project
-   rollup table, sharing the "view" / "period_key" / "rollup" / "currency"
-   context routes/performance.py's performance_screen() computes once.
-   The Weekly/Monthly/Quarterly tabs and the prev/next period nav live in
-   performance.html now, not here — Ezekiel's wireframe (2 Sep 2026) puts
-   them on one row with the nav right-aligned, and that row also carries
-   the page's Export button, so it made more sense as part of the page
-   shell than this fragment. Switching tabs or periods is still just a
-   plain link + the app's existing SPA-nav page swap, not an AJAX fetch
-   — but this whole fragment IS now wrapped in #di-perf-table-body and
-   re-fetched wholesale (routes/performance.py::performance_table_
-   fragment) on every DI-wide live SSE ping (3 Sep 2026, see
-   digital_innovation_performance.js), same "one template, two callers"
-   shape as _board_columns.html — the tabs/period-label/nav-arrows in
-   performance.html stay untouched by a refresh since your own
-   navigation state hasn't changed, only the data underneath it has.
+{# Performance table — the 3 summary stat cards + the per-project rollup table,
+   sharing the view / period_key / rollup / currency context performance_screen()
+   computes. The Weekly/Monthly/Quarterly tabs and prev/next nav live in
+   performance.html (with the Export button); switching is a plain SPA-nav link.
+   This whole fragment is wrapped in #di-perf-table-body and re-fetched on every
+   DI-wide live SSE ping (performance_table_fragment).
 
-   Cost / Charge / Profit per project are LIFETIME totals — identical to
-   what that project's own Cost Breakdown shows, unchanged no matter
-   which period you're viewing. Only Dev Time (rolled up from THIS
-   period's dev-time entries) and which projects even appear change with
-   the selected period (confirmed with Ezekiel, 2 Sep 2026). The three
-   cards up top are the one place this page shows a period-scoped
-   figure: Total cost = ledger entries dated in this window (its caption
-   lists which cost types actually have entries — dev/Claude/hardware/
-   licensing — via rollup.cost_type_labels); Closed profit = the
-   lifetime profit of every project that closed during this exact
-   period (a closed project only ever overlaps the one period-instance
-   it closed in, at any granularity — see lib/periods.py — so "closed
-   this {{ view }}" is always accurate, not just true for the week
-   view); Projected profit = charge minus costs so far, across every
-   still-open project touching this period — a static caption, not a
-   period-scoped count, since it's describing the formula rather than
-   naming specific projects.
+   Cost / Charge / Profit per project are LIFETIME totals — identical to that
+   project's Cost Breakdown, unchanged by which period you view. Only Dev Time
+   (this period's dev-time entries) and which projects appear change with the
+   period. The three cards are the period-scoped figures: Total cost = ledger
+   entries dated in this window; Closed profit = lifetime profit of every project
+   that closed in this period (a closed project overlaps only the one period it
+   closed in — see lib/periods.py); Projected profit = charge minus costs so far
+   across still-open projects touching this period.
 
-   Closed profit reads in --pine (the app's existing green), Projected
-   profit in the DI stage system's existing blue text token
-   (di-column-header--sky) — a deliberate colour split so "money already
-   banked" and "money we're still estimating" don't look interchangeable
-   (Ezekiel's wireframe, 2 Sep 2026).
+   Closed profit reads in --pine (green), Projected profit in
+   di-column-header--sky (blue) — a deliberate split so "banked" and "still
+   estimated" money don't look interchangeable.
 
-   Every currency figure here is whole-number + thousands-separated
-   (Jinja's '{:,.0f}' format), with profit additionally getting an
-   explicit +/- sign (Python's '{:+,.0f}' format flag) — Cost Breakdown's
-   ledger keeps its existing 2-decimal style; this page's numbers are
-   always rollups/estimates, not ledger entries, so whole dollars read
-   better per the wireframe.
+   Currency figures are whole-number, thousands-separated ('{:,.0f}'); profit also
+   gets an explicit +/- sign ('{:+,.0f}'). Cost Breakdown keeps its 2-decimal
+   ledger style; these are rollups/estimates, so whole numbers read better.
 
-   Expanded features render as their own rows directly under the SAME
-   six columns as their parent project (name indented under Project, a
-   small coloured stage pill under Status, hours under Dev Time, Cost/
-   Charge/Profit blank) rather than a separate mini-table with its own
-   header — Ezekiel's wireframe drops the FEATURE/STAGE/TOTAL HOURS
-   subheader added earlier today in favour of this: putting the hours in
-   the literal same "Dev Time" column as every other row already makes
-   it unambiguous they're not somehow scoped to the stage shown next to
-   them, without needing a caption to say so. #}
+   Expanded features render as their own rows under the same six columns as the
+   parent (name indented under Project, a stage pill under Status, hours under
+   Dev Time, Cost/Charge/Profit blank). #}
 <div id="di-perf-table-body">
 <div class="di-cost-stats di-perf-stats">
     <div class="di-cost-stat-card">

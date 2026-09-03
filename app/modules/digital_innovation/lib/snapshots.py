@@ -1,22 +1,14 @@
-# Digital Innovation — Performance rollup builder + the month/quarter
-# freeze (brain C, see the build notes). get_period_rollup() is the one
-# entry point routes/performance.py calls: it always returns the same
-# shape whether the numbers just came out of a live query or a frozen
-# DiPeriodSnapshot row, so the route/template never need to care which.
+# Performance rollup builder + the month/quarter freeze. get_period_rollup() is
+# the one entry point routes/performance.py calls: it returns the same shape
+# whether the numbers came from a live query or a frozen DiPeriodSnapshot row.
 #
-# Weekly periods are always computed live — DiPeriodSnapshot.period_type
-# only ever holds 'month'/'quarter' (see the model's own docstring), so
-# there's nothing to freeze for a week even once it's past. A month or
-# quarter only freezes once it has fully ended (Ezekiel, 2 Sep 2026:
-# automatic on first view, no button, no background job) — until then
-# it's recomputed live every time, same as a week. Once a period IS
-# frozen, every field in it (including a project's name/colour, which
-# could change later) is locked to what it looked like at freeze time —
-# that's the point, not an oversight.
+# Weekly periods are always computed live — DiPeriodSnapshot only ever holds
+# 'month'/'quarter'. A month or quarter freezes automatically on first view once
+# it has fully ended; until then it's recomputed live. Once frozen, every field
+# (including a project's name/colour) is locked to freeze-time — that's the point.
 #
-# Every number here is JSON-serializable (plain floats/ints/strings/
-# lists/dicts) since the whole rollup gets written into
-# DiPeriodSnapshot.snapshot_data as-is once a period is frozen.
+# Every number here is JSON-serializable, since the whole rollup is written into
+# DiPeriodSnapshot.snapshot_data as-is when a period freezes.
 
 from sqlalchemy import func
 
@@ -26,11 +18,8 @@ from app.modules.digital_innovation.models import (
     DiCostEntry, DiPeriodSnapshot, DI_STAGE_COLOURS, DI_COST_TYPES, stage_label,
 )
 
-# Short, lower-case labels for the "Total cost" card's caption ("dev,
-# Claude, hardware, licensing") — deliberately its own small map rather
-# than reusing lib/costs.py's DI_COST_TYPE_LABELS, which is Title Case
-# for the Cost Breakdown ledger's type pills, a different display
-# context (Ezekiel's wireframe, 2 Sep 2026).
+# Lower-case labels for the "Total cost" card caption — its own map, separate
+# from costs.py's Title-Case DI_COST_TYPE_LABELS (a different display context).
 _COST_TYPE_CAPTION_LABELS = {
     'dev_time': 'dev',
     'claude': 'Claude',

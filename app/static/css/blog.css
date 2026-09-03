@@ -328,6 +328,32 @@
     opacity: 0.35;
 }
 
+.blog-image {
+    margin: 1.25rem 0;
+}
+
+.blog-image img {
+    max-width: 100%;
+    border-radius: 8px;
+    display: block;
+}
+
+.blog-image figcaption {
+    font-size: 0.8rem;
+    color: var(--grey-mid);
+    margin-top: 0.4rem;
+}
+
+.blog-video {
+    margin: 1.25rem 0;
+}
+
+.blog-video video {
+    max-width: 100%;
+    border-radius: 8px;
+    display: block;
+}
+
 /* ── Comments ────────────────────────────────────────────── */
 .blog-comments {
     margin-top: 3rem;
@@ -608,6 +634,18 @@
 
 .blog-block-btn--danger:hover {
     background: rgba(217, 162, 168, 0.1);
+}
+
+.blog-media-preview img,
+.blog-media-preview video {
+    max-height: 160px;
+    border-radius: 6px;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.blog-media-caption {
+    margin-top: 0.5rem;
 }
 
 .blog-section-actions {

@@ -46,9 +46,13 @@ https://player.vimeo.com/video/{{ url.split('vimeo.com/')[1].split('?')[0] }}
 
 {% elif block.type == 'video' %}
 <div class="wiki-block-video">
+    {% if block.source == 'upload' and block.url %}
+    <video src="{{ block.url }}" controls></video>
+    {% else %}
     <iframe src="{{ embed_url(block.content) }}" frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen></iframe>
+    {% endif %}
 </div>
 {% endif %}
 

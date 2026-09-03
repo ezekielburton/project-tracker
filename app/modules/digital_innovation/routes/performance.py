@@ -1,18 +1,9 @@
-# Digital Innovation — Performance view (restricted, see lib/access.py).
-# Weekly/monthly/quarterly rollups + summary cards. Thin HTTP layer only:
-# everything about what a period "is" and what it adds up to lives in
-# lib/periods.py (brain B, the rollover overlap query) and
-# lib/snapshots.py (brain C, the month/quarter freeze) — this file just
-# resolves the view/period query params, calls get_period_rollup(), and
-# renders. No fragment/AJAX route: the Weekly/Monthly/Quarterly tabs and
-# the prev/next arrows are plain links, handled by the app's existing
-# SPA-nav plumbing like any other Digital Innovation page (board.py's
-# board_columns_fragment exists because the board needed a live SSE-
-# driven refresh; Performance has no live-update requirement, so it
-# doesn't need that extra route). The Excel export below is the one other
-# route this page needs — same shape as costs.py's export_cost_ledger,
-# streaming whatever the current view/period's rollup already is rather
-# than re-querying (Ezekiel's wireframe, 2 Sep 2026).
+# Performance view (restricted, see lib/access.py): weekly/monthly/quarterly
+# rollups + summary cards. Thin HTTP layer — what a period "is" and what it adds
+# up to lives in lib/periods.py (the rollover overlap query) and lib/snapshots.py
+# (the month/quarter freeze); this file resolves the view/period params, calls
+# get_period_rollup(), and renders. The Excel export streams the current rollup
+# rather than re-querying, same shape as costs.py's export_cost_ledger.
 
 from flask import render_template, request, abort, send_file
 from flask_login import login_required, current_user
@@ -76,10 +67,9 @@ def performance_table_fragment():
     period — called on every DI-wide live SSE ping (see
     digital_innovation_performance.js) so Performance reflects other
     users' cost entries, feature moves and project lifecycle changes
-    without a manual reload or period-nav click. Same "no can_edit gate
-    beyond the view gate itself, this is purely a read" reasoning as
-    board.py's board_columns_fragment — can_view_di_performance is the
-    only access check Performance has ever needed."""
+    without a manual reload or period-nav click. No can_edit gate beyond the
+    view gate — this is a read; can_view_di_performance is the only access check
+    Performance needs."""
     if not can_view_di_performance(current_user):
         abort(403)
 

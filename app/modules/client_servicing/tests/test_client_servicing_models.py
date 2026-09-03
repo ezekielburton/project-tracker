@@ -74,3 +74,27 @@ def test_margin_percent_none_when_costs_missing_or_zero(db_session):
         project_id=project.id, cost_to_client=Decimal('0.00'), inward_cost=Decimal('0.00'),
     )
     assert cs_zero_cost.margin_percent is None
+
+
+def test_days_pending_from_invoice_date_when_invoiced(db_session):
+    from datetime import date, timedelta
+    project = _project(db_session, 'f')
+    cs = ClientServicing(
+        project_id=project.id,
+        removal_date=date.today() - timedelta(days=30),
+        invoice_date=date.today() - timedelta(days=4),
+    )
+    assert cs.days_pending == 4
+
+
+def test_days_pending_from_removal_date_when_not_invoiced(db_session):
+    from datetime import date, timedelta
+    project = _project(db_session, 'g')
+    cs = ClientServicing(project_id=project.id, removal_date=date.today() - timedelta(days=7))
+    assert cs.days_pending == 7
+
+
+def test_days_pending_none_when_no_dates(db_session):
+    project = _project(db_session, 'h')
+    cs = ClientServicing(project_id=project.id)
+    assert cs.days_pending is None

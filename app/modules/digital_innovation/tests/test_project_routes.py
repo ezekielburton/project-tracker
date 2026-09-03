@@ -1,9 +1,7 @@
 """Route-level coverage for Digital Innovation project creation
-(routes/projects.py). This had no dedicated test file before the board
-write-access gate (can_edit_di_board) landed — folding both in here:
-the plain happy-path/validation behaviour, and the admin-only gate. Also
-covers search_projects/link_project (the system-project link picker,
-2 Sep 2026) since they live in the same routes file."""
+(routes/projects.py). Covers the plain happy-path/validation behaviour and the admin-only
+write-access gate (can_edit_di_board). Also
+covers search_projects/link_project (the system-project link picker) since they live in the same routes file."""
 from flask import url_for
 
 from app.modules.core.shared.models import User, Project

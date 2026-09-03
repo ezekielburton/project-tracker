@@ -1,0 +1,21 @@
+{# Days Pending threshold editor — admin/management only. Standard app
+   modal (.modal-overlay/.modal-box), toggled via the .hidden class. #}
+{% if can_edit_thresholds %}
+<div class="modal-overlay hidden" id="cs-inv-thresholds-modal">
+    <div class="modal-box">
+        <div class="modal-title">Days Pending thresholds</div>
+        <p class="cs-muted">How long a row stays green, then amber, before it turns red.</p>
+        <label class="cs-inv-field">Green up to (days)
+            <input type="number" min="1" id="cs-inv-green" value="{{ settings.days_green_max }}">
+        </label>
+        <label class="cs-inv-field">Amber up to (days)
+            <input type="number" min="1" id="cs-inv-red" value="{{ settings.days_red_max }}">
+        </label>
+        <p class="cs-inv-error hidden" id="cs-inv-thresholds-error"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="cs-inv-thresholds-cancel">Cancel</button>
+            <button type="button" class="btn-primary" id="cs-inv-thresholds-save" data-url="{{ url_for('client_servicing.save_day_thresholds') }}">Save</button>
+        </div>
+    </div>
+</div>
+{% endif %}

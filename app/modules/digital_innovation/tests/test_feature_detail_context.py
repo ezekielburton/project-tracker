@@ -1,5 +1,5 @@
 """Coverage for lib/feature_detail.py's context assembly - the data behind
-the read-only feature detail modal (chunk 3), including the move-to-stage
+the read-only feature detail modal, including the move-to-stage
 picker's options (stage_options) added alongside the free-movement model
 (step_engine.move_to_stage) - next_stage_label doesn't exist any more,
 since movement is no longer "the next stage" but "any stage"."""
