@@ -1,0 +1,18 @@
+#!/bin/sh
+# Abort the push if the test suite fails. Bypass with: git push --no-verify
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+if [ -x ".venv/Scripts/python.exe" ]; then
+    PY=".venv/Scripts/python.exe"
+elif [ -x ".venv/bin/python" ]; then
+    PY=".venv/bin/python"
+else
+    PY="python"
+fi
+
+echo "pre-push: running test suite..."
+if ! "$PY" -m pytest; then
+    echo ""
+    echo "pre-push: tests failed — push aborted. Fix them, or bypass with 'git push --no-verify'."
+    exit 1
+fi

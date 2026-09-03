@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Digital Innovation{% endblock %}
+
+{% block content %}
+<div class="di-page">
+    <div class="di-shell">
+        {% with active_nav = 'board' %}
+        {% include "digital_innovation/_sidebar.html" %}
+        {% endwith %}
+
+        <main class="di-board" data-di-project-id="{{ project.id }}">
+            <div class="di-board-header">
+                <div class="di-board-heading">
+                    <h1 class="di-board-title">{{ project.name }}</h1>
+                    {% if not project.is_permanent %}
+                        {% if project.linked_project %}
+                        {# Read-only for viewers; editors get a click/Enter
+                           target that opens #di-link-project-modal to
+                           change or clear it — same modal either way, see
+                           digital_innovation_board.js. #}
+                        <span class="di-linked-badge{% if can_edit_board %} di-linked-badge--editable{% endif %}"
+                              {% if can_edit_board %}id="di-linked-badge" role="button" tabindex="0"{% endif %}>
+                            part of &rarr; {{ project.linked_project.name }}
+                        </span>
+                        {% elif can_edit_board %}
+                        <button type="button" class="di-link-project-trigger" id="di-link-project-trigger">+ Link to project</button>
+                        {% endif %}
+                    {% endif %}
+                    <p class="di-board-subtitle">Project board · {{ open_feature_count }} active feature{{ 's' if open_feature_count != 1 else '' }}</p>
+                </div>
+                {% if can_edit_board or can_view_performance %}
+                {# Every button here wrapped together so .di-board-header's
+                   justify-content:space-between pushes this whole group
+                   to the right as one unit, keeping Incoming and
+                   + New project next to each other — without the
+                   wrapper, space-between would spread all 3 header
+                   children apart instead (Ezekiel, 1 Sep 2026: "place it
+                   next to new project button"). All sized down with the
+                   shared .btn-sm modifier per the same feedback.
+
+                   The wrapper itself now renders for can_view_performance
+                   too (not just can_edit_board) so a management-role user
+                   — who can view/add/delete costs but not edit the board —
+                   still gets the Cost breakdown button; the other three
+                   buttons stay individually gated on can_edit_board /
+                   project.is_permanent below, unchanged. #}
+                <div class="di-board-header-actions">
+                    {% if can_view_performance %}
+                    {# Every project, active/closed/archived alike, can carry cost
+                       history — gated on the same can_view_di_performance choke
+                       point as Performance itself, not can_edit_board, since
+                       viewing/adding/deleting entries all share that one gate
+                       (Ezekiel, 1 Sep 2026). #}
+                    <button type="button" class="btn-secondary btn-sm di-cost-trigger" id="di-cost-trigger" data-di-project-id="{{ project.id }}">Cost breakdown</button>
+                    {% endif %}
+                    {% if can_edit_board and project.is_permanent %}
+                    {# Only the permanent OVP board ever has intake items —
+                       opens the Incoming overlay (see #di-incoming-modal
+                       below) rather than an inline tray, per Ezekiel (1 Sep
+                       2026): "a button next to new project that opens an
+                       overlay where I can easily see them as cards". #}
+                    <button type="button" class="btn-secondary btn-sm di-incoming-trigger" id="di-incoming-trigger" data-di-project-id="{{ project.id }}">
+                        Incoming
+                        {% if pending_intake_items %}<span class="di-incoming-badge">{{ pending_intake_items | length }}</span>{% endif %}
+                    </button>
+                    {% endif %}
+                    {% if can_edit_board %}
+                    {# Moved here from the sidebar (was next to "Archive") so the
+                       header matches the wireframe — same #di-new-project-trigger
+                       id, so digital_innovation_board.js's delegated click
+                       handler picks it up here without any JS change. #}
+                    <button type="button" class="btn-primary btn-sm" id="di-new-project-trigger">+ New project</button>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+{% include "digital_innovation/_board_columns.html" %}
+        </main>
+    </div>
+</div>
+
+<div id="di-new-project-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <h3 class="modal-title">New project</h3>
+        <div class="form-group">
+            <label for="di-new-project-name">Name</label>
+            <input type="text" id="di-new-project-name" placeholder="e.g. Client - Nexus">
+        </div>
+        <p class="di-form-error hidden" id="di-new-project-error"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="di-new-project-cancel">Cancel</button>
+            <button type="button" class="btn-primary" id="di-new-project-save">Create</button>
+        </div>
+    </div>
+</div>
+
+<div id="di-new-feature-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <h3 class="modal-title">New feature</h3>
+        <div class="form-group">
+            <label for="di-new-feature-name">Name</label>
+            <input type="text" id="di-new-feature-name" placeholder="e.g. Homepage redesign">
+        </div>
+        <div class="form-group">
+            <label for="di-new-feature-date">Projected date <span class="di-form-optional">(optional)</span></label>
+            <input type="date" id="di-new-feature-date">
+        </div>
+        <p class="di-form-error hidden" id="di-new-feature-error"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="di-new-feature-cancel">Cancel</button>
+            <button type="button" class="btn-primary" id="di-new-feature-save">Create</button>
+        </div>
+    </div>
+</div>
+
+{% if project.is_permanent %}
+<div id="di-incoming-modal" class="modal-overlay hidden">
+    <div class="modal-box modal-box--wide">
+        <div class="di-incoming-modal-header">
+            <h3 class="modal-title">Incoming</h3>
+            <button type="button" class="di-incoming-modal-close" id="di-incoming-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="di-incoming-cards">
+            {% include "digital_innovation/_incoming_cards.html" %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if can_edit_board and not project.is_permanent %}
+{# Search-as-you-type picker (see routes/projects.py::search_projects) —
+   the shared Project table can run into the hundreds, so a plain <select>
+   the way the app does it for short lists (e.g. Clients) isn't practical
+   here. Rendered for editors only, whether or not a link is currently
+   set, since the trigger that opens it (badge or "+ Link to project")
+   changes based on that same condition. #}
+<div id="di-link-project-modal" class="modal-overlay hidden" data-di-project-id="{{ project.id }}">
+    <div class="modal-box">
+        <div class="di-link-modal-header">
+            <h3 class="modal-title">Link to project</h3>
+            <button type="button" class="di-link-modal-close" id="di-link-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <input type="text" class="di-link-search-input" id="di-link-search-input" placeholder="Search by project name or client…" autocomplete="off">
+        <div class="di-link-results" id="di-link-results"></div>
+        {% if project.linked_project %}
+        <button type="button" class="btn-secondary di-link-clear-btn" id="di-link-clear-btn">Clear link</button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div id="di-feature-detail-modal" class="modal-overlay hidden">
+    <div class="modal-box modal-box--wide">
+        <p class="di-feature-detail-error hidden" id="di-feature-detail-error"></p>
+        <div id="di-feature-detail-body"></div>
+    </div>
+</div>
+
+{% if can_view_performance %}
+<div id="di-cost-modal" class="modal-overlay hidden">
+    <div class="modal-box modal-box--wide di-cost-modal-box">
+        <p class="di-cost-error hidden" id="di-cost-error"></p>
+        <div id="di-cost-body"></div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/digital_innovation_shell.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/digital_innovation_board.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

@@ -1,0 +1,441 @@
+/* Client Servicing page — read-only table for now (no cell editing yet).
+   All colours are role tokens, per theming.md — no hard-coded hex. */
+
+/* ── Module's own internal sidebar shell (Table / Invoicing / Calendar),
+   added 2 Sep 2026 — same pattern as the Digital Innovation module's
+   .di-page/.di-shell/.di-sidebar (digital_innovation.css), copied
+   deliberately rather than shared, per the modular-build convention:
+   each module owns its own CSS even when the pattern is identical.
+   .client-servicing-page (below) is left completely alone — it's now
+   nested inside .cs-main instead of sitting directly in .main-content,
+   but it still owns its own padding/content exactly as before, so
+   nothing about the table, its sticky header, or the JS-measured
+   height (client_servicing.js's syncTableScrollHeight — footer-relative,
+   doesn't care what's to its left) had to change. ── */
+
+.cs-page {
+    padding: 0;
+}
+
+/* Let the sidebar run flush against the global sidebar and flush to the
+   viewport's right edge — .main-content's blanket 2rem padding (meant
+   for ordinary pages) otherwise leaves a 32px gap on both sides.
+   .cs-sidebar and .client-servicing-page re-add their own inner
+   padding, so content still isn't jammed against the edges. */
+.main-content:has(.cs-page) {
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+}
+
+/* No min-height here (unlike Digital Innovation's .di-shell, which this
+   was otherwise copied from) — deliberately, found via testing 2 Sep
+   2026: a fixed min-height on this row acts as a floor that can pin the
+   row's rendered height above what .cs-table-scroll's own height
+   currently needs, which breaks syncTableScrollHeight()'s one-step delta
+   convergence (client_servicing.js) — it assumes growing the box grows
+   this row by the same amount, which isn't true once a floor is
+   dominating. The sidebar (align-self: stretch, below) still visually
+   matches whatever height the table box ends up at without a floor;
+   Digital Innovation doesn't have this problem because nothing on its
+   board screen depends on measuring the row's height back against the
+   viewport the way this table's height sync does. */
+.cs-shell {
+    display: flex;
+    align-items: stretch;
+}
+
+.cs-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: var(--space-5) var(--space-4);
+    position: sticky;
+    top: 0;
+    align-self: stretch;
+}
+
+.cs-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.cs-nav-item {
+    display: block;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.cs-nav-item--active {
+    background: var(--surface-hover);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.cs-main {
+    flex: 1;
+    min-width: 0;
+}
+
+/* No padding-bottom here (top/left/right keep var(--space-6)) —
+   removed 2 Sep 2026, Ezekiel: "fix the gap at the bottom thats above
+   the footer". Any bottom padding here is literal dead space between
+   the table box's bottom edge and the footer; syncTableScrollHeight()
+   (client_servicing.js) sizes the box to reach exactly where the
+   footer starts, so this padding was the whole gap, not a rounding
+   error. See client_servicing.js for the other half of this fix — the
+   height formula itself also had to change, not just this padding. */
+.client-servicing-page {
+    padding: var(--space-6);
+    padding-bottom: 0;
+}
+
+.cs-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-5);
+}
+
+.cs-page-header h1 {
+    font-size: var(--text-xl);
+    color: var(--text);
+}
+
+/* CORRECTED 1 Sep 2026 — the previous fix here (overflow-y: hidden,
+   "hands vertical scrolling back to the page") was wrong and never
+   actually worked; Ezekiel asked for the sticky header again and a
+   headless-browser reproduction of this exact markup/CSS confirmed why:
+   overflow-y: hidden is STILL a non-"visible" value, so it still makes
+   this element a scroll container in its own right (same as auto would)
+   — the only difference from the original bug is that this container
+   can no longer scroll even internally. Either way, "position: sticky;
+   top: 0" on .cs-table thead th (below) sticks to the top of THIS box,
+   not the page, and since this box has no capped height it just travels
+   up and off-screen as the real page scrolls past it. There is no
+   overflow-y value that both keeps overflow-x: auto working AND lets Y
+   overflow pass through to the page for a page-level sticky header —
+   CSS's own visible-to-auto coercion rule (a real value on one axis
+   forces the other off "visible" too) makes that combination impossible
+   on a single element.
+
+   The actual fix: give this element a capped height and let IT scroll
+   internally on both axes — the same technique main.css's own
+   .table-wrapper already uses elsewhere in this app (overflow-y: auto +
+   max-height: 65vh, "auto so the wrapper itself scrolls vertically —
+   required for position: sticky on thead th to work"). Once this box
+   itself has real, boundable scroll — not the page — "position: sticky;
+   top: 0" sticks correctly against IT, confirmed live in a headless
+   Chromium repro of this exact structure (marker header cell stays
+   inside the viewport after scrolling the wrapper).
+
+   UPDATED 1 Sep 2026 — max-height: 65vh replaced with a fixed height
+   (Ezekiel: "extend the container there's too much white space" — 65vh
+   left a large blank gap under the table on tall viewports since it
+   doesn't track the actual viewport minus this page's own chrome).
+
+   A pure flexbox alternative (.client-servicing-page as a flex column,
+   this box flex:1; min-height:0) was tried first and reverted — it
+   does NOT work with this app's shell: body only sets min-height:100vh,
+   not height:100vh, and .main-content isn't itself display:flex. With
+   no flex container in the chain having a truly definite height, flex
+   items skip growth-clamping entirely and just size to their content —
+   confirmed in a headless Chromium repro of this exact page structure,
+   this box grew to fit all 40 rows with scrollHeight === clientHeight
+   (no scroll boundary at all, sticky header had nothing to stick
+   against).
+
+   height: var(--cs-table-scroll-height, calc(100vh - 180px)) — the
+   custom property is set live by client_servicing.js's
+   syncTableScrollHeight(), which measures this box's actual top offset
+   and the real .footer height and computes exactly how much viewport
+   is left, the same "measure it, don't guess" approach already used
+   for --cs-sticky-project-left just above. The calc(100vh - 180px)
+   fallback (180px approximating the fixed chrome above/below this box,
+   same "roughly clears" convention as client_directory.css's own
+   calc(100vh - 180px) and wiki.css's calc(100vh - 200px)) only applies
+   before JS runs or if it's disabled — it shipped as the ONLY rule
+   first, then swapped for the JS-measured value 1 Sep 2026 after
+   Ezekiel reported the vertical scrollbar was still visible on
+   Chrome/Edge: the box's own scrollbar-hide rule below tested fine in
+   a repro (both normal and forced-classic/non-overlay scrollbar modes),
+   so a fixed 180px guess a few px off from Ezekiel's REAL header/
+   footer/padding sizes leaving the page itself with a sliver of
+   overflow — triggering the BROWSER's own outer page scrollbar, a
+   different scrollbar entirely from this box's, which this file has no
+   power to hide — was the more likely explanation. Measuring live
+   removes the guess entirely instead of re-guessing a more precise
+   constant.
+
+   Still a real overflow value on both axes, so position: sticky on
+   thead th below keeps working exactly as before — only how the box's
+   height is determined changed, not that it scrolls internally.
+
+   Vertical scrollbar hidden below (Ezekiel: "we also dont need a scroll
+   bar on the right side") — WebKit/Blink only, see comment there. */
+.cs-table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    height: var(--cs-table-scroll-height, calc(100vh - 180px));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+/* Hide only the vertical scrollbar, not the horizontal one — WebKit/
+   Blink/Safari support this per-axis :vertical/:horizontal pseudo-class
+   on ::-webkit-scrollbar; Firefox's scrollbar-width property has no
+   per-axis equivalent (it's all-or-nothing), so it's deliberately left
+   unset here rather than hiding both axes there — Firefox users keep
+   both scrollbars, a minor cross-browser inconsistency accepted in
+   favour of not breaking horizontal-scroll discoverability in Firefox.
+   The box still scrolls vertically via wheel/trackpad/keyboard; only the
+   visible bar is gone. */
+.cs-table-scroll::-webkit-scrollbar:vertical {
+    display: none;
+}
+
+.cs-table {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+}
+
+.cs-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface-raised);
+    color: var(--text-muted);
+    text-align: left;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
+}
+
+.cs-table tbody td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+    color: var(--text);
+    white-space: nowrap;
+}
+
+/* Project name — cut to a sane default width and let long names wrap
+   onto a second line, instead of the nowrap-everywhere default above
+   forcing the whole column (and the sticky-pinned space it eats) as
+   wide as the single longest project name on the page.
+
+   The <col> width is what actually governs this in an auto-layout
+   table: an inline width set on it (drag-resize already writes one —
+   see scheduleLayoutSave()/column_widths in table.py, same mechanism
+   every other column uses) always wins over this stylesheet default,
+   so dragging the column wider still works exactly like it does for
+   every other column — this default only applies until someone does. */
+.cs-table col[data-col-key="project"] {
+    width: 220px;
+}
+
+.cs-table td[data-col-key="project"] {
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+.cs-table tbody tr:hover {
+    background: var(--surface-hover);
+}
+
+.cs-muted {
+    color: var(--text-faint);
+}
+
+.cs-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--space-6) !important;
+    white-space: normal !important;
+}
+
+.cs-col-open {
+    width: 1%;
+}
+
+/* Chunk 7 — sticky Project-name column, mirroring the Projects page's
+   pinned Expand+Name pair: "Open in Projects" and Project both stay on
+   screen as the table scrolls right, so which row you're on is never
+   lost. Project is pinned right after Open — table.py's
+   _ordered_columns() always puts it first, and client_servicing.js
+   excludes it from the reorder-drag — so its position never changes.
+   Scoped to th/td specifically (not the bare [data-col-key="project"]
+   attribute) so this doesn't also catch the resize handle <span> that
+   carries the same data-col-key inside the header cell. */
+.cs-table th.cs-col-open,
+.cs-table td.cs-col-open,
+.cs-table th[data-col-key="project"],
+.cs-table td[data-col-key="project"] {
+    position: sticky;
+    z-index: 2;
+    background: var(--surface);
+}
+
+/* The header row is already sticky to the top (thead th, below) — these
+   two columns are ALSO sticky to the left, making their header cells a
+   pinned corner that needs to outrank both the plain sticky header row
+   and the plain sticky body columns to stay on top while scrolling in
+   either direction. */
+.cs-table thead th.cs-col-open,
+.cs-table thead th[data-col-key="project"] {
+    z-index: 3;
+    background: var(--surface-raised);
+}
+
+.cs-table th.cs-col-open,
+.cs-table td.cs-col-open {
+    left: 0;
+}
+
+.cs-table th[data-col-key="project"],
+.cs-table td[data-col-key="project"] {
+    /* Set by client_servicing.js's syncStickyProjectOffset() to the Open
+       column's actual rendered width — unlike the Projects page's
+       fixed-size icon-only Expand column, "Open in Projects" is a text
+       button with no fixed, known width to hard-code here. */
+    left: var(--cs-sticky-project-left, 0px);
+}
+
+.cs-open-btn {
+    padding: 0.35rem 0.75rem;
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.cs-table .person-chip {
+    margin-right: var(--space-1);
+}
+
+.cs-editable {
+    cursor: pointer;
+}
+
+.cs-editable:hover {
+    background: var(--surface-hover);
+}
+
+.cs-cell-editing {
+    padding: var(--space-1) var(--space-2) !important;
+}
+
+.cs-table .cs-cell-editing input,
+.cs-table .cs-cell-editing select {
+    width: 100%;
+    min-width: 7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-sm);
+}
+
+.cs-cell-error {
+    outline: 2px solid var(--coral);
+    outline-offset: -2px;
+}
+
+/* Chunk 6 — inline "+ Add new..." mini-form (Scope / Client SPOC cells).
+   Same td, no overlay: a name input + Add/Cancel, replacing the select
+   for the moment it takes to create the record. Colour comes from the
+   shared .btn-primary/.btn-secondary classes (already theme-safe,
+   including their dark-mode overrides in main.css) — this only shrinks
+   them to fit inside a table cell. */
+.cs-quick-add {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.cs-quick-add-input {
+    width: 100%;
+    min-width: 7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-sm);
+}
+
+.cs-quick-add-actions {
+    display: flex;
+    gap: var(--space-1);
+}
+
+.cs-quick-add-actions .cs-quick-add-btn {
+    padding: 0.2rem 0.6rem;
+    font-size: var(--text-xs);
+}
+
+/* Chunk 7 (piece 2) — column resize. Drag a header's right edge; width
+   is saved per user via colgroup <col> widths (see _table_rows.html). */
+.cs-table th {
+    position: relative;
+}
+
+.cs-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    user-select: none;
+}
+
+.cs-resize-handle:hover,
+.cs-resize-handle--active {
+    background: var(--border-strong);
+}
+
+/* Chunk 7 (piece 3) — column reorder. Draggable headers get a grab
+   cursor; the resize handle above sits inside the same <th> and keeps
+   its own col-resize cursor since a child's explicit cursor wins over
+   its parent's when the mouse is directly over it. */
+.cs-table th[data-col-key] {
+    cursor: grab;
+}
+
+.cs-th-dragging {
+    opacity: 0.4;
+}
+
+/* Chunk 7 (piece 10) — click-to-sort. A small arrow after the label
+   shows which column (if any) the table is currently sorted by and in
+   which direction; client_servicing.js toggles these two classes on the
+   sorted <th>, removing them from every other header first. Not
+   persisted (see client_servicing.js's own note) — purely a same-page
+   visual state. */
+.cs-th-sorted-asc::after,
+.cs-th-sorted-desc::after {
+    margin-left: var(--space-1);
+    font-size: 0.65em;
+}
+
+.cs-th-sorted-asc::after {
+    content: '\25B2'; /* ▲ */
+}
+
+.cs-th-sorted-desc::after {
+    content: '\25BC'; /* ▼ */
+}
+
+/* .cs-sticky-scrollbar (a thin bar pinned to the viewport bottom, built
+   for a table with no height cap where the real scrollbar could be
+   pushed far below the fold) removed 1 Sep 2026 — .cs-table-scroll is
+   now height-capped (Chunk 7's corrected sticky-header fix) and scrolls
+   internally, so its own native scrollbar is always in the viewport;
+   the synthetic one just duplicated it (Ezekiel caught two stacked
+   scrollbars live). Matching removal in client_servicing.js/index.html. */

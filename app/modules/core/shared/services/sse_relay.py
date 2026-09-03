@@ -29,11 +29,12 @@ import psycopg2.extensions
 from gevent import spawn
 from gevent.queue import Queue
 
-from app.modules.core.shared.services.live_events import PROJECT_CHANGES_CHANNEL, USER_NOTIFICATIONS_CHANNEL
+from app.modules.core.shared.services.live_events import PROJECT_CHANGES_CHANNEL, USER_NOTIFICATIONS_CHANNEL, DI_CHANGES_CHANNEL
 
 _project_subscribers = {}      # project_id (int) -> set of Queue
 _dashboard_subscribers = set()  # set of Queue
 _user_subscribers = {}         # user_id (int) -> set of Queue
+_di_project_subscribers = {}   # di_project_id (int) -> set of Queue
 
 
 def subscribe_project(project_id):
@@ -74,6 +75,20 @@ def unsubscribe_user(user_id, q):
             _user_subscribers.pop(user_id, None)
 
 
+def subscribe_di_project(di_project_id):
+    q = Queue()
+    _di_project_subscribers.setdefault(di_project_id, set()).add(q)
+    return q
+
+
+def unsubscribe_di_project(di_project_id, q):
+    subs = _di_project_subscribers.get(di_project_id)
+    if subs:
+        subs.discard(q)
+        if not subs:
+            _di_project_subscribers.pop(di_project_id, None)
+
+
 def _dispatch_project_change(payload):
     try:
         project_id = int(payload)
@@ -93,6 +108,15 @@ def _dispatch_user_notification(payload):
         q.put(user_id)
 
 
+def _dispatch_di_change(payload):
+    try:
+        di_project_id = int(payload)
+    except (TypeError, ValueError):
+        return
+    for q in list(_di_project_subscribers.get(di_project_id, ())):
+        q.put(di_project_id)
+
+
 def _listen_loop(app):
     """Runs forever in a background greenlet, one per worker process.
     Reconnects automatically (after a short pause) if the DB connection
@@ -106,6 +130,7 @@ def _listen_loop(app):
             cur = conn.cursor()
             cur.execute(f'LISTEN {PROJECT_CHANGES_CHANNEL};')
             cur.execute(f'LISTEN {USER_NOTIFICATIONS_CHANNEL};')
+            cur.execute(f'LISTEN {DI_CHANGES_CHANNEL};')
             # .warning() rather than .info() deliberately — Flask's app.logger
             # defaults to WARNING level outside debug mode, so an .info() call
             # here would be silently dropped in production even though the
@@ -129,6 +154,8 @@ def _listen_loop(app):
                         _dispatch_project_change(notify.payload)
                     elif notify.channel == USER_NOTIFICATIONS_CHANNEL:
                         _dispatch_user_notification(notify.payload)
+                    elif notify.channel == DI_CHANGES_CHANNEL:
+                        _dispatch_di_change(notify.payload)
         except Exception as e:
             app.logger.warning(f'SSE relay: LISTEN connection dropped ({e}), reconnecting in 3s.')
             time.sleep(3)

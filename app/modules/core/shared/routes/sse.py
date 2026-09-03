@@ -21,6 +21,7 @@ from app.modules.core.shared.services.sse_relay import (
     subscribe_project, unsubscribe_project,
     subscribe_dashboard, unsubscribe_dashboard,
     subscribe_user, unsubscribe_user,
+    subscribe_di_project, unsubscribe_di_project,
 )
 
 sse_bp = Blueprint('sse', __name__, url_prefix='/sse')
@@ -72,6 +73,13 @@ def dashboard_stream():
 def project_stream(project_id):
     q = subscribe_project(project_id)
     return _sse_response(_event_stream(q, lambda: unsubscribe_project(project_id, q)))
+
+
+@sse_bp.route('/digital-innovation/<int:di_project_id>')
+@login_required
+def di_project_stream(di_project_id):
+    q = subscribe_di_project(di_project_id)
+    return _sse_response(_event_stream(q, lambda: unsubscribe_di_project(di_project_id, q)))
 
 
 @sse_bp.route('/notifications')

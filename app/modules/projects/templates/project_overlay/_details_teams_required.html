@@ -1,0 +1,36 @@
+{# Teams Required — the project's design_teams_requested set (2D/3D/Technical).
+Set at brief creation; editable here in Details edit mode. View shows tags;
+edit shows a checkbox group. A team that currently has a Design Lead carries
+a data-confirm-uncheck message so unticking it warns before Save clears that
+lead (handled generically in project_overlay_edit.js). #}
+{% from '_shared_macros.html' import tag %}
+{% set requested_teams = (project.design_teams_requested or '').split(',') %}
+{# Which of the three teams currently has a Design Lead, and who — sourced from
+   designer_rows (the same list the Design Leads card renders). #}
+{% set leads_by_team = {} %}
+{% for row in designer_rows %}
+{% if row.designer %}{% set _ = leads_by_team.update({row.team: row.designer.name}) %}{% endif %}
+{% endfor %}
+<div class="overlay-property-row"{% if can_edit_project %} data-field="design_teams_requested"{% endif %}>
+    <span class="overlay-property-label">Teams Required</span>
+    <span class="overlay-property-value">
+        <span class="overlay-edit-view">
+            {% set shown = [] %}
+            {% for t in ['2D', '3D', 'Technical'] if t in requested_teams %}
+            {{ tag(t, t|lower) }}{% set _ = shown.append(t) %}
+            {% endfor %}
+            {% if not shown %}<span class="overlay-field-empty">—</span>{% endif %}
+        </span>
+        {% if can_edit_project %}
+        <span class="overlay-edit-input overlay-teams-edit is-hidden" data-edit-type="checkbox-group">
+            {% for t in ['2D', '3D', 'Technical'] %}
+            <label class="overlay-create-checkbox-inline">
+                <input type="checkbox" value="{{ t }}" {% if t in requested_teams %}checked{% endif %}
+                    {% if leads_by_team.get(t) %}data-confirm-uncheck="Removing {{ t }} will also unassign its Design Lead, {{ leads_by_team[t] }}."{% endif %}>
+                {{ t }}
+            </label>
+            {% endfor %}
+        </span>
+        {% endif %}
+    </span>
+</div>

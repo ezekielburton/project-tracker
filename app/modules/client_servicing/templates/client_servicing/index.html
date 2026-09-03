@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Client Servicing{% endblock %}
+
+{% block content %}
+{# The module's own internal sidebar shell (Table / Invoicing / Calendar) —
+   see _sidebar.html. .cs-page/.cs-shell/.cs-sidebar/.cs-main are the shell;
+   the table under .cs-main keeps its own sticky-header/height-sync JS
+   (client_servicing.js) — see client_servicing.css. #}
+<div class="cs-page">
+    <div class="cs-shell">
+        {% with active_nav = 'table' %}
+        {% include "client_servicing/_sidebar.html" %}
+        {% endwith %}
+        <main class="cs-main">
+            <div class="client-servicing-page">
+                {# .cs-table-scroll is height-capped and scrolls internally on
+                   both axes — see client_servicing.css. #}
+                <div class="cs-table-scroll" id="cs-table-scroll">
+                    <div id="client-servicing-table-body">
+                        {% include 'client_servicing/_table_rows.html' %}
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.__csScopeOptions = {{ scope_options | tojson }};
+    window.__csLeadOptions = {{ cs_lead_options | tojson }};
+    window.__csProjectOwnerOptions = {{ project_owner_options | tojson }};
+    window.__csContactsByClient = {{ contacts_by_client | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/client_servicing.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

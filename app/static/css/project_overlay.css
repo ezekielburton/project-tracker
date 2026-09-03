@@ -364,25 +364,25 @@ moves read as the same color). */
    hex, so neither picked up a dark value on its own. Same Option A tinted
    treatment as the other blue/danger buttons elsewhere. */
 :root[data-theme="dark"] .project-overlay-sidebar-action-btn--action {
-    color: #8FC4F0;
+    color: var(--tone-blue);
     background: rgba(143, 196, 240, 0.15);
     border-color: rgba(143, 196, 240, 0.45);
 }
 
 :root[data-theme="dark"] .project-overlay-sidebar-action-btn--action:hover {
-    color: #8FC4F0;
+    color: var(--tone-blue);
     background: rgba(143, 196, 240, 0.24);
     filter: none;
 }
 
 :root[data-theme="dark"] .project-overlay-sidebar-action-btn--danger {
-    color: #FF7A7A;
+    color: var(--tone-salmon);
     background: rgba(255, 79, 79, 0.14);
     border-color: rgba(255, 122, 122, 0.4);
 }
 
 :root[data-theme="dark"] .project-overlay-sidebar-action-btn--danger:hover {
-    color: #FF7A7A;
+    color: var(--tone-salmon);
     background: rgba(255, 79, 79, 0.22);
 }
 
@@ -667,7 +667,7 @@ moves read as the same color). */
 :root[data-theme="dark"] .overlay-chat-message--own .overlay-chat-bubble {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .overlay-chat-bubble-text {
@@ -1231,7 +1231,7 @@ button.overlay-chat-reaction-chip:hover {
 
 :root[data-theme="dark"] .overlay-chat-send-btn {
     background: rgba(143, 196, 240, 0.18);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .overlay-chat-send-btn:hover {
@@ -1860,36 +1860,36 @@ button.overlay-chat-reaction-chip:hover {
    Solid --sky/--clover/--tangerine fills read as pale, low-contrast blocks
    against a dark page, so these get the same rgba tint + brighter text. */
 :root[data-theme="dark"] .overlay-file-action-btn--action {
-    color: #8FC4F0;
+    color: var(--tone-blue);
     background: rgba(143, 196, 240, 0.15);
     border-color: rgba(143, 196, 240, 0.45);
 }
 :root[data-theme="dark"] .overlay-file-action-btn--action:hover {
-    color: #8FC4F0;
+    color: var(--tone-blue);
     background: rgba(143, 196, 240, 0.24);
     border-color: rgba(143, 196, 240, 0.45);
     filter: none;
 }
 
 :root[data-theme="dark"] .overlay-file-action-btn--primary {
-    color: #6FD07E;
+    color: var(--tone-clover);
     background: rgba(76, 175, 90, 0.18);
     border-color: rgba(111, 208, 126, 0.45);
 }
 :root[data-theme="dark"] .overlay-file-action-btn--primary:hover {
-    color: #6FD07E;
+    color: var(--tone-clover);
     background: rgba(76, 175, 90, 0.27);
     border-color: rgba(111, 208, 126, 0.45);
     filter: none;
 }
 
 :root[data-theme="dark"] .overlay-file-action-btn--tangerine {
-    color: #FF9A73;
+    color: var(--tone-coral);
     background: rgba(255, 133, 89, 0.16);
     border-color: rgba(255, 133, 89, 0.45);
 }
 :root[data-theme="dark"] .overlay-file-action-btn--tangerine:hover {
-    color: #FF9A73;
+    color: var(--tone-coral);
     background: rgba(255, 133, 89, 0.24);
     border-color: rgba(255, 133, 89, 0.45);
     filter: none;
@@ -1992,7 +1992,7 @@ button.overlay-chat-reaction-chip:hover {
 :root[data-theme="dark"] .overlay-draft-view-toggle-btn.active {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .overlay-history-event-type {
@@ -2084,11 +2084,11 @@ button.overlay-chat-reaction-chip:hover {
 :root[data-theme="dark"] .overlay-draft-main-deck-btn--active {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 :root[data-theme="dark"] .overlay-draft-main-deck-btn--active:hover {
-    color: #8FC4F0;
+    color: var(--tone-blue);
     border-color: rgba(143, 196, 240, 0.45);
 }
 
@@ -2248,7 +2248,7 @@ button.overlay-chat-reaction-chip:hover {
 
 :root[data-theme="dark"] .deliverable-picker-option.is-selected {
     background: rgba(143, 196, 240, 0.18);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .deliverable-picker-empty {
@@ -2485,7 +2485,7 @@ button.overlay-chat-reaction-chip:hover {
 :root[data-theme="dark"] .overlay-focus-toggle-btn.active {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .overlay-deliverables-body.is-focused .overlay-deliverables-row[data-assigned-to-me="false"] {
@@ -2681,7 +2681,7 @@ button.overlay-chat-reaction-chip:hover {
 :root[data-theme="dark"] .overlay-deliverables-edit-toggle.is-active {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .overlay-deliverables-edit-delete {
@@ -2760,7 +2760,7 @@ button.overlay-chat-reaction-chip:hover {
 :root[data-theme="dark"] .overlay-apply-multiple-customer-tag.is-selected {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .overlay-apply-multiple-customer-tag.is-hidden {
@@ -3099,7 +3099,7 @@ button.overlay-chat-reaction-chip:hover {
 :root[data-theme="dark"] .overlay-submissions-view-toggle-btn.active {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 /* Shared "controls row" — left cluster (view/filter toggle) + right-pinned
@@ -4057,7 +4057,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
 
 :root[data-theme="dark"] .project-overlay-create-step.active .project-overlay-create-step-num {
     background: rgba(143, 196, 240, 0.24);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 .project-overlay-create-footer {
@@ -4113,7 +4113,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
 :root[data-theme="dark"] .overlay-create-brieftype-btn.active {
     background: rgba(143, 196, 240, 0.18);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
 }
 
 /* Every field in create mode is permanently "live" (no view/edit toggle to
@@ -4148,6 +4148,22 @@ margin here, so an empty panel (just the History button) stays tiny. */
     font-size: var(--text-sm);
     color: var(--black);
     cursor: pointer;
+}
+
+/* Teams Required edit-mode checkbox group (Details tab). Layout only; the
+   labels reuse .overlay-create-checkbox-inline above. The .is-hidden pair
+   is the same specificity trick documented for .overlay-edit-input higher
+   up — a two-class selector so is-hidden wins over this rule regardless of
+   source order, keeping the group hidden outside edit mode. */
+.overlay-teams-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.overlay-teams-edit.is-hidden {
+    display: none;
 }
 
 .overlay-create-subfields {
@@ -4420,7 +4436,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
 }
 
 :root[data-theme="dark"] #overlay-visit-designer-picker .avatar-picker-action-label {
-    color: #8FC4F0;
+    color: var(--tone-blue);
     background: rgba(143, 196, 240, 0.15);
     border-color: rgba(143, 196, 240, 0.45);
 }
@@ -4428,7 +4444,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
 :root[data-theme="dark"] #overlay-visit-designer-picker .avatar-picker-trigger:hover .avatar-picker-action-label {
     background: rgba(143, 196, 240, 0.24);
     border-color: rgba(143, 196, 240, 0.45);
-    color: #8FC4F0;
+    color: var(--tone-blue);
     filter: none;
 }
 

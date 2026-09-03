@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Digital Innovation — Edit Templates{% endblock %}
+
+{% block content %}
+<div class="di-page">
+    <div class="di-shell">
+        {% with active_nav = 'templates' %}
+        {% include "digital_innovation/_sidebar.html" %}
+        {% endwith %}
+
+        <main class="di-board">
+            <div class="di-board-header">
+                <div>
+                    <h1 class="di-board-title">Edit Templates</h1>
+                    <p class="di-board-subtitle">Department-wide default steps for each stage — editing here never changes steps already on an existing feature.</p>
+                </div>
+            </div>
+
+            <div id="di-templates-body">
+                {% include "digital_innovation/_templates_body.html" %}
+            </div>
+        </main>
+    </div>
+</div>
+
+<div id="di-template-step-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+        <h3 class="modal-title" id="di-template-step-modal-title">Add step</h3>
+        <div class="form-group">
+            <label for="di-template-step-title">Title</label>
+            <input type="text" id="di-template-step-title" placeholder="e.g. Data model">
+        </div>
+        <div class="form-group">
+            <label for="di-template-step-details">Details <span class="di-form-optional">(optional)</span></label>
+            <input type="text" id="di-template-step-details" placeholder="Longer description">
+        </div>
+        <p class="di-form-error hidden" id="di-template-step-error"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="di-template-step-cancel">Cancel</button>
+            <button type="button" class="btn-primary" id="di-template-step-save">Save</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/digital_innovation_shell.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/digital_innovation_templates.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

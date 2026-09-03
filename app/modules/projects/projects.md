@@ -108,6 +108,35 @@ worthwhile future refactor, deliberately left for the planned overhaul of this
 feature rather than done during the relocation, to avoid changing behaviour on
 freshly-overhauled code.
 
+## Details edit mode
+The Details tab's Edit button (project_overlay_edit.js) swaps every
+`[data-field]` row from its `.overlay-edit-view` to its `.overlay-edit-input`
+and Saves a whitelisted field set to `overlay_details_save` (concurrent-edit
+guarded via `edit_snapshot_at`, diffed into ActivityLog). **Teams Required**
+(`design_teams_requested`) is editable here (2 Sep 2026): a checkbox group
+(shared partial `_details_teams_required.html`, in both brief templates). It
+rides the same edit flow via two generic, reusable hooks in the edit JS — a
+`data-edit-type="checkbox-group"` input collected as a comma-joined value,
+and a `data-confirm-uncheck` gate that confirms before Save when a
+checked-on-load box is unticked. Dropping a team also deletes that team's
+Design Lead (its ProjectDesigner row) server-side and logs `lead_removed`;
+per-deliverable team tags are untouched. Note: adding a team does not
+scaffold its NAS folder (folders are created at project creation only).
+
+## Performance
+The list page and row-expand are eager-loaded (no N+1 on the main table);
+see the query-count regression tests below. The **Deliverables sub-tab**
+had the same trap and was fixed the same way (2 Sep 2026): its read query
+eager-loads each row's assignment tags + their designers and the
+deliverable type's team list — Standard in `overlay_deliverables`, C&CM in
+`_build_ccm_deliverable_sections` (`routes/project_overlay/_common.py`), so
+the query count no longer grows with the number of deliverables. This was
+the cause of the slow/hanging Deliverables tab on large C&CM projects.
+
+Still open: on a live update the projects list rebuilds its whole serialized
+view (the deferred "targeted single-row refresh + render cap" work) — a
+separate, larger job, not this fix.
+
 ## Not here
 The first-login account **wizard** was reassigned to the **profile** module — it
 sets the user's own account fields (name, password, birthday), which is profile
@@ -117,3 +146,7 @@ territory, not projects.
 `tests/test_projects_smoke.py` — per-blueprint auth checks, template resolution
 for the list and overlay, the two `lib/` helpers importable, and the overlay on
 the shared achievements service. Uses the shared fixtures from `core/shared`.
+`tests/test_overlay_deliverables_perf.py` — Deliverables-tab query count
+doesn't scale with deliverable count (Standard + C&CM) + rows still render.
+`tests/test_project_list_expand_perf.py`, `tests/test_overlay_history_perf.py`
+— the earlier eager-loading regression guards.

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Digital Innovation — Archive{% endblock %}
+
+{% block content %}
+<div class="di-page">
+    <div class="di-shell">
+        {% with active_nav = 'archive' %}
+        {% include "digital_innovation/_sidebar.html" %}
+        {% endwith %}
+
+        <main class="di-board">
+            <div class="di-board-header">
+                <div>
+                    <h1 class="di-board-title">Archive</h1>
+                    <p class="di-board-subtitle">Closed and archived projects — reopen any of them any time.</p>
+                </div>
+            </div>
+
+            <section class="di-archive-section">
+                <h2 class="di-archive-section-title">Closed</h2>
+                <ul class="di-archive-list">
+                    {% for p in closed_projects %}
+                    <li class="di-archive-row" data-di-project-id="{{ p.id }}">
+                        <span class="di-dot di-dot--{{ p.colour or 'oak' }}"></span>
+                        <span class="di-archive-name">{{ p.name }}</span>
+                        <span class="di-archive-date">Closed {{ p.closed_at.strftime('%d %b %Y') if p.closed_at else '' }}</span>
+                        {% if can_edit_board %}
+                        <div class="di-archive-actions">
+                            <button type="button" class="btn-secondary di-archive-reopen-btn">Reopen</button>
+                            <button type="button" class="btn-danger-sm di-archive-archive-btn">Archive</button>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="di-archive-empty">No closed projects.</li>
+                    {% endfor %}
+                </ul>
+            </section>
+
+            <section class="di-archive-section">
+                <h2 class="di-archive-section-title">Archived</h2>
+                <ul class="di-archive-list">
+                    {% for p in archived_projects %}
+                    <li class="di-archive-row" data-di-project-id="{{ p.id }}">
+                        <span class="di-dot di-dot--{{ p.colour or 'oak' }}"></span>
+                        <span class="di-archive-name">{{ p.name }}</span>
+                        <span class="di-archive-date">Closed {{ p.closed_at.strftime('%d %b %Y') if p.closed_at else '' }}</span>
+                        {% if can_edit_board %}
+                        <div class="di-archive-actions">
+                            <button type="button" class="btn-secondary di-archive-reopen-btn">Reopen</button>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="di-archive-empty">No archived projects.</li>
+                    {% endfor %}
+                </ul>
+            </section>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/digital_innovation_shell.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/digital_innovation_archive.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{# Digital Innovation — the Incoming overlay's card list. Its own partial
+   (rather than inlined in board.html) so board.html's initial render and
+   routes/intake.py's GET .../intake/cards fragment route render from the
+   exact same source — the fragment is what digital_innovation_board.js
+   swaps into #di-incoming-modal .di-incoming-cards when a live SSE ping
+   says something in this project changed, same "one template, two
+   callers" shape as _feature_detail.html. Needs pending_intake_items in
+   context either way — a list of board_data.py's IncomingCard, which
+   already normalizes native DiIntakeItem rows and live FeatureRequest
+   rows into one shape (kind/id/title/source_label/description).
+   data-di-kind is what tells digital_innovation_board.js's Promote/
+   Dismiss handlers which pair of routes to call. #}
+{% for card in pending_intake_items %}
+<div class="di-incoming-card" data-di-kind="{{ card.kind }}" data-di-intake-id="{{ card.id }}">
+    <div class="di-incoming-card-title">{{ card.title }}</div>
+    <div class="di-incoming-card-source">{{ card.source_label }}</div>
+    {% if card.description %}
+    <p class="di-incoming-card-description">{{ card.description }}</p>
+    {% endif %}
+    {% if can_edit_board %}
+    <div class="di-incoming-card-actions">
+        <button type="button" class="btn-secondary di-incoming-dismiss-btn">Dismiss</button>
+        <button type="button" class="btn-primary di-incoming-promote-btn">Promote</button>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<p class="di-incoming-empty">Nothing waiting.</p>
+{% endfor %}

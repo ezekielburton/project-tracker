@@ -60,7 +60,8 @@ def _build_ccm_deliverable_sections(project, with_catalog=False):
     per customer). with_catalog=True also loads each customer's DeliverableType
     catalog in one query — only the Edit Deliverables view needs it.
     """
-    from app.modules.core.shared.models import Deliverable, DeliverableType
+    from app.modules.core.shared.models import Deliverable, DeliverableType, DeliverableAssignment
+    from sqlalchemy.orm import selectinload, joinedload
 
     active_pcs = [pc for pc in project.project_customers if not pc.cancelled]
 
@@ -70,6 +71,15 @@ def _build_ccm_deliverable_sections(project, with_catalog=False):
         all_deliverables = (
             Deliverable.query
             .filter(Deliverable.project_id == project.id, Deliverable.project_customer_id.in_(pc_ids))
+            # Eager-load what the Deliverables tab reads per row (assignment
+            # tags + their designers, the type's own team list) so it's a
+            # few bulk queries, not one-per-deliverable — see the Deliverables
+            # focus-context builder. Harmless for Edit Deliverables, which
+            # shares this query.
+            .options(
+                selectinload(Deliverable.disciplines).joinedload(DeliverableAssignment.designer),
+                selectinload(Deliverable.deliverable_type).selectinload(DeliverableType.disciplines),
+            )
             .order_by(Deliverable.id)
             .all()
         )

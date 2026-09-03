@@ -160,6 +160,15 @@
                             {{ pref_row('Pre-Production stream ready for review', 'preprod_stream_uploaded') }}
                         {% endif %}
 
+                        {# Client Servicing table writeback notifications (Chunk 5) #}
+                        {% if current_user.role in ['designer', 'team_lead', 'cs', 'admin', 'management', 'project_owner'] %}
+                            {{ pref_row('Due date changed', 'due_date_changed') }}
+                        {% endif %}
+                        {% if current_user.role in ['cs', 'admin', 'management', 'project_owner'] %}
+                            {{ pref_row('Job number changed', 'job_number_changed') }}
+                            {{ pref_row('Client SPOC changed', 'client_spoc_changed') }}
+                        {% endif %}
+
                         {# All roles #}
                         {{ pref_row('Someone replied to my flag', 'flag_reply') }}
                         {{ pref_row('My flag was resolved', 'flag_resolved') }}

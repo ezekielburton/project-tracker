@@ -1,0 +1,83 @@
+{# Digital Innovation — the board's Kanban columns + the closed-features
+   strip below them. Its own partial (rather than inlined in board.html)
+   so board.html's initial render and routes/board.py's GET
+   .../board/columns fragment route render from the exact same source —
+   same "one template, two callers" shape as _incoming_cards.html and
+   _feature_detail.html. Needs columns/closed_features/stages/
+   stage_colours/stage_labels/can_edit_board/project in context either
+   way. Wrapped in #di-board-body so the live-refresh JS (see
+   digital_innovation_board.js::diRefreshBoard) has one element to swap
+   rather than two siblings. #}
+<div id="di-board-body">
+<div class="di-columns">
+    {% for stage in stages %}
+    <div class="di-column">
+        <div class="di-column-header di-column-header--{{ stage_colours[stage] }}">
+            <span>{{ stage_labels[stage] }}</span>
+            <span class="di-column-count di-column-count--{{ stage_colours[stage] }}">{{ columns[stage] | length }}</span>
+        </div>
+        <div class="di-column-cards">
+            {% for entry in columns[stage] %}
+            <div class="di-card" data-feature-id="{{ entry.feature.id }}">
+                <div class="di-card-title">{{ entry.feature.name }}</div>
+                {% if entry.total > 0 %}
+                <div class="di-card-progress">
+                    <div class="di-card-progress-fill di-dot--{{ stage_colours[stage] }}" style="width: {{ entry.progress_pct }}%;"></div>
+                </div>
+                <div class="di-card-step di-card-step--{{ stage_colours[stage] }}">
+                    Step {{ entry.current_step_number }} of {{ entry.total }}{% if entry.active_step_label %} · {{ entry.active_step_label }}{% endif %}
+                </div>
+                {% else %}
+                <div class="di-card-step di-card-step--empty">No steps configured</div>
+                {% endif %}
+                {% if entry.feature.projected_date or entry.logged_hours %}
+                <div class="di-card-meta">
+                    {% if entry.feature.projected_date %}
+                    <span class="di-card-date">
+                        <svg class="di-card-date-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        {{ entry.feature.projected_date.strftime('%d %b') }}
+                    </span>
+                    {% endif %}
+                    {% if entry.logged_hours %}
+                    <span class="di-card-hours">{{ entry.logged_hours | round(1) }}h logged</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% if loop.first and can_edit_board %}
+            {# New features always start in the first stage, so
+               this is the only column that gets an add control —
+               not repeated on the other 6. View-only users
+               (lib/access.py's can_edit_di_board) don't get it
+               at all. #}
+            <button type="button" class="di-add-feature-btn" id="di-add-feature-trigger" data-di-project-id="{{ project.id }}">+ Add feature</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<details class="di-closed-strip">
+    <summary class="di-closed-strip-toggle">
+        Closed features
+        <span class="di-closed-strip-count">{{ closed_features | length }}</span>
+        <span class="di-closed-strip-hint">completed on this project — expand for full history</span>
+    </summary>
+    <div class="di-closed-strip-list">
+        {% for feature in closed_features %}
+        <div class="di-closed-feature-row" data-feature-id="{{ feature.id }}">
+            <span>{{ feature.name }}</span>
+            <span class="di-card-date">Closed {{ feature.closed_at.strftime('%d %b %Y') if feature.closed_at else '' }}</span>
+        </div>
+        {% else %}
+        <p class="di-closed-strip-empty">No closed features yet.</p>
+        {% endfor %}
+    </div>
+</details>
+</div>

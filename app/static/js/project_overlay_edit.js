@@ -26,7 +26,11 @@ window.ProjectOverlayEdit = (function () {
         contentEl.addEventListener('change', markDirtyIfEditing);
 
         function markDirtyIfEditing(e) {
-            if (isEditingNow && e.target.classList.contains('overlay-edit-input')) isDirty = true;
+            // closest() (not classList.contains) so a control INSIDE an
+            // .overlay-edit-input container — e.g. a checkbox in a
+            // checkbox-group field — also marks the form dirty, not just a
+            // bare input that is itself the .overlay-edit-input.
+            if (isEditingNow && e.target.closest && e.target.closest('.overlay-edit-input')) isDirty = true;
         }
 
         function enterEditMode() {
@@ -70,18 +74,33 @@ window.ProjectOverlayEdit = (function () {
         editBtn.addEventListener('click', enterEditMode);
         cancelBtn.addEventListener('click', exitEditMode);
 
-        saveBtn.addEventListener('click', function () {
+        function collectFields() {
             var fields = {};
             contentEl.querySelectorAll('[data-field]').forEach(function (row) {
                 var input = row.querySelector('.overlay-edit-input');
-                if (input) fields[row.dataset.field] = input.value;
+                if (!input) return;
+                if (input.dataset.editType === 'checkbox-group') {
+                    // Comma-joined checked values — the shape the server
+                    // stores for design_teams_requested (and any future
+                    // multi-select field that opts in the same way).
+                    var picked = [];
+                    input.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+                        if (cb.checked) picked.push(cb.value);
+                    });
+                    fields[row.dataset.field] = picked.join(',');
+                } else {
+                    fields[row.dataset.field] = input.value;
+                }
             });
+            return fields;
+        }
 
+        function postSave() {
             saveBtn.disabled = true;
             fetch(`/projects/${projectId}/overlay/details/save`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: fields, edit_snapshot_at: editSnapshotAt }),
+                body: JSON.stringify({ fields: collectFields(), edit_snapshot_at: editSnapshotAt }),
             })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
@@ -101,6 +120,25 @@ window.ProjectOverlayEdit = (function () {
                     saveBtn.disabled = false;
                     alert('Could not reach the server. Try again.');
                 });
+        }
+
+        saveBtn.addEventListener('click', function () {
+            // Any checkbox-group option that was checked on load and is now
+            // unchecked, and declares data-confirm-uncheck, gates Save behind
+            // a confirm — e.g. dropping a design team that still has a Design
+            // Lead. Generic (data-driven), not teams-specific. defaultChecked
+            // reflects the server's freshly-rendered original state; checked
+            // reflects the current toggle.
+            var warnings = [];
+            contentEl.querySelectorAll('.overlay-edit-input input[type="checkbox"][data-confirm-uncheck]').forEach(function (cb) {
+                if (cb.defaultChecked && !cb.checked) warnings.push(cb.dataset.confirmUncheck);
+            });
+
+            if (warnings.length && window.showConfirm) {
+                window.showConfirm(warnings.join(' ') + ' Continue?', postSave, 'Confirm changes');
+            } else {
+                postSave();
+            }
         });
 
         return {

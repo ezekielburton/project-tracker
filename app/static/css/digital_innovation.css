@@ -1,0 +1,1619 @@
+/* Digital Innovation module — board page (Phase 2a).
+   Built entirely on role tokens (--surface, --text, --border, …) per
+   theming.md, so light/dark just falls out of that — the only colour
+   choices made directly are the 7 stage colours + project dots, which
+   reuse the app's existing named palette (--sky/--coral/--canary/--sage/
+   --lavender/--clover/--oak/--poppy/--salmon) and their already-tuned
+   dark-mode values from shared.css's .status-pill--* rules, rather than
+   inventing anything new. See models.py's DI_STAGE_COLOURS for the
+   stage -> colour-name mapping this file's class names match. */
+
+.di-page {
+    padding: 0;
+}
+
+/* Let the board run flush against the global sidebar and flush to the
+   viewport's right edge — .main-content's blanket 2rem padding (meant for
+   ordinary pages) otherwise leaves a 32px gap on both sides. .di-board and
+   .di-sidebar re-add their own inner padding, so content still isn't
+   jammed against the edges — only the DI page itself bleeds full-width. */
+.main-content:has(.di-page) {
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+}
+
+/* .di-shell's height used to be a percentage chain (.di-page/.di-shell
+   both height:100%, relying on .main-content's flex:1 to give them
+   something definite to resolve against) — found 3 Sep 2026 this
+   doesn't actually work: .main-content is only a flex ITEM of body's
+   flex column, not itself a flex container with a definite resolved
+   height, and client_servicing.css already documented hitting and
+   confirming this exact failure (a headless Chromium repro: "no flex
+   container in the chain having a truly definite height, flex items
+   skip growth-clamping entirely and just size to their content").
+   Explains why the percentage-chain fix never visibly changed anything
+   across several rounds of live-testing. Switched to the same technique
+   client_servicing.js already proved out for its own scrolling table
+   (syncTableScrollHeight) — digital_innovation_shell.js measures the
+   real gap between .di-shell's top and the footer with
+   getBoundingClientRect() and sets --di-shell-height directly, once per
+   DI screen load. The calc(100vh - 200px) here is only the pre-JS
+   fallback (same "roughly clears the fixed chrome" convention as
+   wiki.css's identical calc). */
+.di-shell {
+    display: flex;
+    align-items: stretch;
+    height: var(--di-shell-height, calc(100vh - 200px));
+}
+
+/* ── Module's own secondary sidebar ── */
+
+.di-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: var(--space-5) var(--space-4);
+    position: sticky;
+    top: 0;
+    align-self: stretch;
+}
+
+.di-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-bottom: var(--space-6);
+}
+
+.di-nav-item {
+    display: block;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.di-nav-item--active {
+    background: var(--surface-hover);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.di-nav-item--disabled {
+    color: var(--text-faint, var(--text-muted));
+    cursor: default;
+    opacity: 0.6;
+}
+
+.di-sidebar-section-label {
+    display: block;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+}
+
+.di-project-list {
+    list-style: none;
+    margin: 0 0 var(--space-3) 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-project-row {
+    display: flex;
+    align-items: center;
+}
+
+.di-project-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text);
+    text-decoration: none;
+    flex: 1;
+    min-width: 0;
+}
+
+.di-project-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    line-height: 1;
+    padding: var(--space-1) var(--space-2);
+    margin-right: var(--space-1);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.di-project-close-btn:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+
+.di-project-item:hover {
+    background: var(--surface-hover);
+}
+
+.di-project-item--active {
+    background: var(--surface-hover);
+    font-weight: 600;
+}
+
+.di-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.di-archive-link {
+    margin-top: var(--space-1);
+}
+
+/* ── Archive screen ── */
+
+.di-archive-section {
+    margin-bottom: var(--space-6);
+}
+
+.di-archive-section-title {
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 0 0 var(--space-3) 0;
+}
+
+.di-archive-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-archive-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.di-archive-name {
+    flex: 1;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.di-archive-date {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-archive-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.di-archive-empty {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    padding: var(--space-2) 0;
+}
+
+/* ── Board area ── */
+
+.di-board {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-5) var(--space-6) 0 var(--space-6);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Same recipe as .di-closed-strip further down — this module's existing
+   "footer" bar at the bottom of the board — mirrored to sit at the top
+   instead (1 Sep 2026, per Ezekiel: "same style as the footer, slimmer,
+   next to the sidebar and below the global header"). Negative margins
+   cancel .di-board's own padding on 3 sides so the bar bleeds flush
+   against the DI sidebar (left), the content's right edge, and up
+   against the global .app-header (top) — no border-radius, since a
+   flush bar shouldn't read as a floating card. border-left is skipped
+   because .di-sidebar already draws its own border-right there. */
+.di-board-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-top: calc(-1 * var(--space-5));
+    margin-left: calc(-1 * var(--space-6));
+    margin-right: calc(-1 * var(--space-6));
+    margin-bottom: var(--space-4);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: var(--space-4) var(--space-6);
+    flex-shrink: 0;
+}
+
+.di-board-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.di-board-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.di-board-title {
+    font-family: var(--font-headline);
+    font-size: var(--text-xl);
+    margin: 0;
+}
+
+.di-board-subtitle {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    margin: 0;
+}
+
+/* Incoming button (header, next to "+ New project") + the overlay it
+   opens — a grid of cards rather than an inline strip, per Ezekiel (1 Sep
+   2026): "a button ... that opens an overlay where I can easily see them
+   as cards and promote or dismiss them". Cards are pre-rendered from the
+   same pending_intake_items the trigger's count badge uses — opening the
+   overlay is pure client-side show/hide, no fetch needed (same reasoning
+   as the new-feature-date input already being in the DOM before its
+   modal opens). */
+.di-incoming-badge {
+    background: var(--surface-hover);
+    border-radius: 999px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-xs);
+    margin-left: var(--space-1);
+}
+
+/* Plays once when a live SSE ping reports the Incoming count went up —
+   see _diUpdateIncomingBadge in digital_innovation_board.js. A quick
+   scale pop rather than a color change, so it reads as "something just
+   landed" without needing a second color in the module's palette. */
+.di-incoming-badge--pulse {
+    animation: di-incoming-pulse 0.6s ease-out;
+}
+
+@keyframes di-incoming-pulse {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+}
+
+.di-incoming-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+}
+
+.di-incoming-modal-close {
+    background: none;
+    border: none;
+    font-size: var(--text-xl);
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+}
+
+.di-incoming-modal-close:hover {
+    color: var(--text);
+}
+
+.di-incoming-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-3);
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.di-incoming-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.di-incoming-card-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.di-incoming-card-source {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-incoming-card-description {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.di-incoming-card-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding-top: var(--space-2);
+}
+
+.di-incoming-empty {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    grid-column: 1 / -1;
+}
+
+/* System-project link badge/trigger (in .di-board-heading, next to the
+   title) + the search-as-you-type picker it opens. See routes/projects.py
+   ::search_projects for why this is a search box rather than the plain
+   <select> the app uses for shorter lists elsewhere. */
+.di-linked-badge {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    background: var(--surface-hover);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+}
+
+.di-linked-badge--editable {
+    cursor: pointer;
+}
+
+.di-linked-badge--editable:hover {
+    color: var(--text);
+    background: var(--surface-active, var(--surface-hover));
+}
+
+.di-link-project-trigger {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+    cursor: pointer;
+}
+
+.di-link-project-trigger:hover {
+    color: var(--text);
+    border-color: var(--text-muted);
+}
+
+.di-link-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+}
+
+.di-link-modal-close {
+    background: none;
+    border: none;
+    font-size: var(--text-xl);
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+}
+
+.di-link-modal-close:hover {
+    color: var(--text);
+}
+
+.di-link-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: var(--space-3);
+}
+
+.di-link-results {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 40vh;
+    overflow-y: auto;
+    margin-bottom: var(--space-3);
+}
+
+.di-link-result {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.di-link-result:hover {
+    background: var(--surface-hover);
+}
+
+.di-link-result-name {
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.di-link-result-client {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-link-results-empty {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    margin: var(--space-2) 0;
+}
+
+
+/* #di-board-body (see _board_columns.html) is a plain <div> inserted
+   2 Sep 2026 as the live-refresh JS's swap target (diRefreshBoard) — it
+   sits between .di-board (flex column, see above) and .di-columns/
+   .di-closed-strip below, so without its own flex participation those
+   two lose the flex chain .di-board is set up to hand them: .di-columns'
+   own flex:1/overflow-y:auto (meant to grow and become the scrollable
+   region) and .di-closed-strip's flex-shrink:0 (meant to stay pinned at
+   natural height below it) both do nothing once their direct parent is
+   an ordinary block box instead of a flex container. This is what was
+   actually behind the "board/closed-features shrunk to a quarter of the
+   page" regression — not a caching issue (found 2 Sep 2026, confirmed
+   after Ezekiel ruled out stale CSS by restarting the server and still
+   seeing it). Re-establishes exactly the flex column .di-columns/
+   .di-closed-strip were designed to sit in directly. */
+#di-board-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.di-columns {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: var(--space-4);
+    padding-bottom: var(--space-3);
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.di-column {
+    width: 240px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.di-column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0 var(--space-1);
+}
+
+.di-column-count {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-xs);
+}
+
+/* Each column's count badge, tinted to match its header's colour (1 Sep
+   2026, per Ezekiel) — a light wash of the same colour behind the number,
+   not a solid fill, so it reads as "belongs to this header" without
+   competing with it. Literal rgba() tints, same recipe as shared.css's
+   dark-mode .status-pill--* rules (a CSS var can't be split into its R/G/B
+   components for rgba(), so this is the one place raw colour values are
+   unavoidable — same as those existing dark-mode rules). Sourced from the
+   readable colour each header text actually uses — the --di-*-text
+   overrides above for sky/canary/sage/salmon, the raw palette value for
+   the other 5 — never the original washed-out pastel, or the badge would
+   have the same illegibility problem the header text just got fixed for. */
+.di-column-count--sky { background: rgba(46, 109, 164, 0.14); color: var(--di-sky-text); }
+.di-column-count--coral { background: rgba(255, 133, 89, 0.16); color: var(--coral); }
+.di-column-count--canary { background: rgba(138, 109, 0, 0.14); color: var(--di-canary-text); }
+.di-column-count--sage { background: rgba(61, 122, 80, 0.14); color: var(--di-sage-text); }
+.di-column-count--lavender { background: rgba(179, 144, 255, 0.18); color: var(--lavender); }
+.di-column-count--clover { background: rgba(76, 175, 90, 0.16); color: var(--clover); }
+.di-column-count--oak { background: rgba(160, 124, 90, 0.18); color: var(--oak); }
+.di-column-count--poppy { background: rgba(255, 79, 79, 0.14); color: var(--poppy); }
+.di-column-count--salmon { background: rgba(192, 64, 61, 0.14); color: var(--di-salmon-text); }
+
+:root[data-theme="dark"] .di-column-count--coral { background: rgba(255, 133, 89, 0.16); color: #FF9A73; }
+:root[data-theme="dark"] .di-column-count--oak { background: rgba(160, 124, 90, 0.18); color: #C79E6B; }
+:root[data-theme="dark"] .di-column-count--clover { background: rgba(76, 175, 90, 0.18); color: #6FD07E; }
+:root[data-theme="dark"] .di-column-count--poppy { background: rgba(255, 194, 77, 0.16); color: #FFC24D; }
+:root[data-theme="dark"] .di-column-count--salmon { background: rgba(255, 79, 79, 0.14); color: #FF7A7A; }
+:root[data-theme="dark"] .di-column-count--sky { background: rgba(185, 222, 254, 0.16); color: #C8E5FE; }
+:root[data-theme="dark"] .di-column-count--sage { background: rgba(158, 212, 165, 0.16); color: #B3DDB9; }
+:root[data-theme="dark"] .di-column-count--canary { background: rgba(229, 210, 89, 0.16); color: #EBDC7E; }
+:root[data-theme="dark"] .di-column-count--lavender { background: rgba(179, 144, 255, 0.16); color: #C4A8FF; }
+
+.di-column-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-height: 40px;
+}
+
+.di-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--space-3);
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.di-card:hover {
+    border-color: var(--text-muted);
+}
+
+.di-card-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--space-2);
+}
+
+/* Thin track + fill, sized by the same current_step_number board_data.py
+   already computes for the "Step N of total" text below it — so the bar
+   and the text can never disagree about how far along a feature is. The
+   fill reuses .di-dot--<colour> (background: var(--<colour>)) rather
+   than a new set of colour rules, same "don't invent a colour treatment
+   that already exists" approach as .di-card-step--<colour> reusing the
+   column header's palette. */
+.di-card-progress {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--surface-hover);
+    overflow: hidden;
+    margin-bottom: var(--space-2);
+}
+
+.di-card-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+}
+
+.di-card-step {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    margin-bottom: var(--space-2);
+}
+
+.di-card-step--empty {
+    color: var(--text-faint, var(--text-muted));
+    font-weight: 400;
+    text-transform: none;
+}
+
+.di-card-meta {
+    display: flex;
+    gap: var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-card-date {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.di-card-date-icon {
+    flex-shrink: 0;
+}
+
+/* "+ Add feature" — only ever rendered at the bottom of the first
+   (Researching) column, since every feature starts there. Same plain
+   text-button recipe the sidebar's "+ New project" used to use before it
+   moved into the board header as a .btn-primary. */
+.di-add-feature-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+}
+
+.di-add-feature-btn:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+
+.di-form-optional {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* ── Closed features (native <details>/<summary> — no JS needed) ── */
+
+.di-closed-strip {
+    margin-top: var(--space-4);
+    margin-left: calc(-1 * var(--space-6));
+    margin-right: calc(-1 * var(--space-6));
+    background: var(--surface-raised);
+    border-top: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: var(--space-4) var(--space-6);
+    flex-shrink: 0;
+}
+
+.di-closed-strip-toggle {
+    cursor: pointer;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.di-closed-strip-toggle::marker {
+    color: var(--text-muted);
+}
+
+.di-closed-strip-count {
+    background: var(--surface-hover);
+    border-radius: 999px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-xs);
+}
+
+.di-closed-strip-hint {
+    color: var(--text-faint, var(--text-muted));
+}
+
+.di-closed-strip-list {
+    margin-top: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.di-closed-feature-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-sm);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+}
+
+.di-closed-strip-empty {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+}
+
+/* ── New-project modal error text ── */
+
+.di-form-error {
+    color: var(--poppy);
+    font-size: var(--text-sm);
+    margin: var(--space-2) 0 0 0;
+}
+
+/* ── The 9 reusable stage/project colours ──────────────────────────────
+   Light mode: the raw palette var directly — EXCEPT sky/canary/sage/
+   salmon, which are pastels tuned to sit behind black text (a dot, the
+   old solid-chip column header), not to BE text on the page's cream
+   background — at that job they're nearly illegible (flagged by Ezekiel,
+   1 Sep 2026). --di-*-text below are darker/more saturated versions of
+   those same 4 hues, only for that "colour as text" job; the dot fill
+   and the progress bar's highlight keep using the real raw colour
+   further down, unaffected. The other 5 (coral/lavender/clover/oak/
+   poppy) are already dark/saturated enough to read fine as text.
+   Dark mode: the exact tinted text colours shared.css's .status-pill--*
+   dark rules already use for the same 9 names — reused verbatim, not
+   reinvented, per theming.md. */
+
+:root {
+    --di-sky-text: #2E6DA4;
+    --di-canary-text: #8A6D00;
+    --di-sage-text: #3D7A50;
+    --di-salmon-text: #C0403D;
+}
+
+.di-dot--sky, .di-card-step--sky, .di-column-header--sky { color: var(--di-sky-text); }
+.di-dot--coral, .di-card-step--coral, .di-column-header--coral { color: var(--coral); }
+.di-dot--canary, .di-card-step--canary, .di-column-header--canary { color: var(--di-canary-text); }
+.di-dot--sage, .di-card-step--sage, .di-column-header--sage { color: var(--di-sage-text); }
+.di-dot--lavender, .di-card-step--lavender, .di-column-header--lavender { color: var(--lavender); }
+.di-dot--clover, .di-card-step--clover, .di-column-header--clover { color: var(--clover); }
+.di-dot--oak, .di-card-step--oak, .di-column-header--oak { color: var(--oak); }
+.di-dot--poppy, .di-card-step--poppy, .di-column-header--poppy { color: var(--poppy); }
+.di-dot--salmon, .di-card-step--salmon, .di-column-header--salmon { color: var(--di-salmon-text); }
+
+/* Column headers: plain coloured text, no background chip — "clean
+   headers" per the wireframe (used to be a solid-fill chip like
+   shared.css's .status-pill--*; dropped in favour of just reusing the
+   text-colour rule above, one extra selector each, no new colour
+   treatment). */
+
+/* .di-dot is a solid fill, not text, so it needs `background` too — same
+   colour, just the other property. */
+.di-dot--sky { background: var(--sky); }
+.di-dot--coral { background: var(--coral); }
+.di-dot--canary { background: var(--canary); }
+.di-dot--sage { background: var(--sage); }
+.di-dot--lavender { background: var(--lavender); }
+.di-dot--clover { background: var(--clover); }
+.di-dot--oak { background: var(--oak); }
+.di-dot--poppy { background: var(--poppy); }
+.di-dot--salmon { background: var(--salmon); }
+
+:root[data-theme="dark"] .di-card-step--coral, :root[data-theme="dark"] .di-column-header--coral { color: #FF9A73; }
+:root[data-theme="dark"] .di-card-step--oak, :root[data-theme="dark"] .di-column-header--oak { color: #C79E6B; }
+:root[data-theme="dark"] .di-card-step--clover, :root[data-theme="dark"] .di-column-header--clover { color: #6FD07E; }
+:root[data-theme="dark"] .di-card-step--poppy, :root[data-theme="dark"] .di-column-header--poppy { color: #FFC24D; }
+:root[data-theme="dark"] .di-card-step--salmon, :root[data-theme="dark"] .di-column-header--salmon { color: #FF7A7A; }
+:root[data-theme="dark"] .di-card-step--sky, :root[data-theme="dark"] .di-column-header--sky { color: #C8E5FE; }
+:root[data-theme="dark"] .di-card-step--sage, :root[data-theme="dark"] .di-column-header--sage { color: #B3DDB9; }
+:root[data-theme="dark"] .di-card-step--canary, :root[data-theme="dark"] .di-column-header--canary { color: #EBDC7E; }
+:root[data-theme="dark"] .di-card-step--lavender, :root[data-theme="dark"] .di-column-header--lavender { color: #C4A8FF; }
+
+/* Dots stay solid in dark mode too (a translucent pill-style fill would
+   make an 8px dot nearly invisible) — same reused hex values, as a solid
+   background instead of a tinted one. */
+:root[data-theme="dark"] .di-dot--coral { background: #FF9A73; }
+:root[data-theme="dark"] .di-dot--oak { background: #C79E6B; }
+:root[data-theme="dark"] .di-dot--clover { background: #6FD07E; }
+:root[data-theme="dark"] .di-dot--poppy { background: #FFC24D; }
+:root[data-theme="dark"] .di-dot--salmon { background: #FF7A7A; }
+:root[data-theme="dark"] .di-dot--sky { background: #C8E5FE; }
+:root[data-theme="dark"] .di-dot--sage { background: #B3DDB9; }
+:root[data-theme="dark"] .di-dot--canary { background: #EBDC7E; }
+:root[data-theme="dark"] .di-dot--lavender { background: #C4A8FF; }
+
+/* ── Feature detail modal (Phase 2b, chunk 3 — read-only) ──────────────
+   Content is a server-rendered fragment (_feature_detail.html) dropped
+   into #di-feature-detail-body by openDiFeatureDetail() in the board JS,
+   so everything below targets that fragment's markup. */
+
+.di-feature-detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.di-feature-badge {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    margin-bottom: var(--space-1);
+}
+
+.di-feature-detail-title {
+    font-family: var(--font-headline);
+    font-size: var(--text-xl);
+    margin: 0;
+    color: var(--text);
+}
+
+.di-feature-detail-close {
+    background: none;
+    border: none;
+    font-size: var(--text-xl);
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 var(--space-1);
+    flex-shrink: 0;
+}
+
+.di-feature-detail-close:hover {
+    color: var(--text);
+}
+
+.di-feature-detail-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.di-detail-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: var(--space-4) 0;
+}
+
+.di-status-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+}
+
+.di-feature-pill {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+}
+
+.di-feature-closed-note {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+}
+
+/* Status row — 7 stage pills. "current" reuses the exact same
+   .di-column-header--<colour> classes the board's own column headers use
+   (solid fill, black text, dark-mode tint already handled there — no new
+   colour rules needed). "done"/"future" both stay neutral; the checkmark
+   is what actually signals "done", not a separate colour treatment. */
+.di-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.di-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+}
+
+.di-status-pill--current {
+    border-color: transparent;
+}
+
+.di-status-pill--done {
+    color: var(--text);
+}
+
+.di-status-check {
+    color: var(--clover);
+}
+
+:root[data-theme="dark"] .di-status-check {
+    color: #6FD07E;
+}
+
+.di-feature-steps-header {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--space-2);
+}
+
+.di-step-list {
+    list-style: none;
+    margin: 0 0 var(--space-4) 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-size: var(--text-sm);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.di-step-label {
+    flex: 1;
+}
+
+.di-step-details {
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.di-step--done,
+.di-step--pending {
+    background: var(--surface-hover);
+}
+
+.di-step--active {
+    border-color: transparent;
+}
+
+/* Read-only viewers (can_edit_board is False) get no tick/delete/add/
+   advance controls at all — the row itself shouldn't look clickable
+   either, so this overrides .di-step's base cursor: pointer. */
+.di-step--readonly {
+    cursor: default;
+}
+
+.di-step-badge {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    padding: 0 var(--space-2);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.12);
+    color: inherit;
+    flex-shrink: 0;
+}
+
+.di-step-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    font-size: var(--text-xs);
+    flex-shrink: 0;
+}
+
+.di-step--done {
+    color: var(--text-muted);
+}
+
+.di-step--done .di-step-label {
+    text-decoration: line-through;
+}
+
+.di-step--done .di-step-check {
+    background: var(--clover);
+    border-color: var(--clover);
+    color: var(--black);
+}
+
+:root[data-theme="dark"] .di-step--done .di-step-check {
+    background: #6FD07E;
+    border-color: #6FD07E;
+}
+
+.di-step-empty {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    list-style: none;
+}
+
+.di-advance-banner {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text);
+    margin-bottom: var(--space-4);
+}
+
+.di-advance-banner p {
+    margin: 0;
+}
+
+.di-advance-banner button {
+    margin-top: var(--space-3);
+}
+
+.di-advance-banner--muted {
+    color: var(--text-muted);
+}
+
+/* Per-step delete — small inline danger button, right-aligned by
+   .di-step-label's flex:1 pushing everything after it to the edge. */
+.di-step-delete {
+    flex-shrink: 0;
+}
+
+/* Inline "add a step" row, sits below the checklist for every open
+   stage (including an empty/unconfigured one — there's no special
+   "skip" UI, so this is how a stage with zero template steps gets its
+   first one). */
+.di-step-add {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.di-step-add-row {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.di-step-add-input,
+.di-step-add-details-input {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text);
+    background: var(--surface);
+}
+
+.di-step-add-input {
+    flex: 1;
+}
+
+.di-step-add-details-input {
+    width: 100%;
+}
+
+.di-step-add-input:focus,
+.di-step-add-details-input:focus {
+    outline: none;
+    border-color: var(--text-muted);
+}
+
+.di-step-add-btn {
+    flex-shrink: 0;
+}
+
+/* Persistent error slot in the modal shell (board.html), a sibling of
+   #di-feature-detail-body so it survives that element's innerHTML being
+   swapped out on every successful tick/add/delete/advance/close. Same
+   colour treatment as .di-form-error elsewhere in this file. */
+.di-feature-detail-error {
+    color: var(--poppy);
+    font-size: var(--text-sm);
+    margin: 0 0 var(--space-3) 0;
+}
+
+.di-feature-footer-note {
+    font-size: var(--text-xs);
+    color: var(--text-faint, var(--text-muted));
+    margin: 0;
+}
+
+.di-feature-detail-loading {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    padding: var(--space-4) 0;
+    text-align: center;
+}
+
+/* ── Edit Templates screen ─────────────────────────────────────────────
+   Reuses .di-column-header--<colour> for each stage's section header
+   (same solid-fill/black-text recipe as the board's own column headers)
+   and .di-step-label/.di-step-details for a row's title+details text —
+   only the row shell, move buttons and edit/delete affordances below are
+   new, since template rows have no done/active/pending state to style. */
+.di-template-stage {
+    margin-bottom: var(--space-6);
+}
+
+.di-template-stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: var(--space-2);
+}
+
+.di-template-add-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.di-template-step-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-template-step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.di-template-step-move {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.di-template-move-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    width: 20px;
+    height: 16px;
+    font-size: var(--text-xs);
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.di-template-move-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.di-template-edit-btn {
+    flex-shrink: 0;
+}
+
+/* ── Cost breakdown modal (Phase 3, 1 Sep 2026) ──────────────────────────
+   Content is a server-rendered fragment (_cost_breakdown.html) dropped
+   into #di-cost-body by openDiCostBreakdown() in the board JS — same
+   "fetch a fragment" pattern as the feature detail modal, so most of the
+   chrome reuses .di-feature-detail-header/-close/-title and
+   .di-detail-divider (both defined above) rather than duplicating them. */
+
+.di-cost-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.di-cost-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+/* Wider than the shared .modal-box--wide's 620px cap (also used by the
+   Decision Flag modal, which we don't want to affect — hence scoping
+   here instead of touching that shared rule). 960px is wide enough that
+   the 7-field add-row and the 5-card stat grid both sit on one line at
+   typical desktop widths instead of wrapping. This only raises the
+   ceiling: .di-cost-add-row keeps flex-wrap and .di-cost-stats keeps its
+   auto-fit grid, so both still wrap normally on a viewport too narrow to
+   give the modal the full 960px. */
+.di-cost-modal-box {
+    max-width: 960px;
+}
+
+.di-cost-export-btn {
+    text-decoration: none;
+}
+
+.di-cost-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.di-cost-stat-card {
+    background: var(--surface-hover);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.di-cost-stat-card--total {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+}
+
+.di-cost-stat-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+
+.di-cost-stat-value {
+    font-size: var(--text-1g);
+    font-weight: 700;
+    color: var(--text);
+}
+
+.di-cost-stat-sub {
+    font-size: var(--text-xs);
+    color: var(--text-faint, var(--text-muted));
+}
+
+.di-cost-add-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.di-cost-add-row input,
+.di-cost-add-row select {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+}
+
+.di-cost-add-date { flex: 0 0 140px; }
+.di-cost-add-type { flex: 0 0 130px; }
+.di-cost-add-feature { flex: 1 1 160px; min-width: 140px; }
+
+.di-cost-add-hours,
+.di-cost-add-amount {
+    flex: 0 0 100px;
+}
+
+.di-cost-add-description {
+    flex: 2 1 200px;
+    min-width: 160px;
+}
+
+.di-cost-ledger-wrapper {
+    margin-bottom: var(--space-4);
+    max-height: 40vh;
+}
+
+.di-cost-type-pill {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.di-cost-hours-note {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+}
+
+.di-cost-ledger-empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: var(--space-4);
+}
+
+.di-cost-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+}
+
+.di-cost-footer strong {
+    color: var(--text);
+    margin-left: var(--space-1);
+}
+
+
+.di-perf-tabs-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.di-perf-tabs {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.di-perf-tab {
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-sm);
+    background: rgba(46, 109, 164, 0.14);
+    color: var(--di-sky-text);
+    text-decoration: none;
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+:root[data-theme="dark"] .di-perf-tab {
+    background: rgba(185, 222, 254, 0.16);
+    color: #C8E5FE;
+}
+
+.di-perf-tab--active {
+    background: var(--sky);
+    color: var(--di-sky-text);
+    border: 1px solid var(--di-sky-text);
+}
+
+.di-perf-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.di-perf-nav-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: rgba(46, 109, 164, 0.14);
+    color: var(--di-sky-text);
+    text-decoration: none;
+}
+
+:root[data-theme="dark"] .di-perf-nav-arrow {
+    background: rgba(185, 222, 254, 0.16);
+    color: #C8E5FE;
+}
+
+.di-perf-nav-arrow:hover {
+    background: var(--sky);
+    color: var(--di-sky-text);
+}
+
+:root[data-theme="dark"] .di-perf-nav-arrow:hover {
+    background: var(--sky);
+    color: var(--di-sky-text);
+}
+
+/* Two lines per Ezekiel's wireframe (2 Sep 2026) — "Week 36" bold, the
+   actual date range small and muted underneath. A month/quarter has no
+   secondary line (lib/periods.py's format_period_label_parts() returns
+   '' for those — the whole label already reads fine as one line), so
+   this still needs to look right with only the primary child present. */
+.di-perf-period-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.25;
+}
+
+.di-perf-period-primary {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.di-perf-period-secondary {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* --pine is the app's established positive/success text colour, used as
+   plain `color:` throughout main.css with no dark-mode override needed
+   (it's muted enough to read fine in both modes) — reused here rather
+   than inventing a new "profit green". Projected profit instead reuses
+   .di-column-header--sky directly in the template (the DI stage
+   system's existing blue text token, already dark-tuned) rather than a
+   colour rule of its own here — "money already banked" vs "money still
+   being estimated" read as visibly different colours without a third
+   colour system (Ezekiel's wireframe, 2 Sep 2026). */
+.di-perf-profit {
+    color: var(--pine);
+}
+
+.di-perf-projected-tag {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* .di-cost-stat-card (shared with the Cost Breakdown modal) is a flat
+   --surface-hover fill with no border/shadow of its own — fine inside
+   Cost Breakdown's white .modal-box, but Performance's copy sits
+   straight on the bare page background. A 1px --border edge alone
+   (first attempt) still barely read against the page — --surface-hover
+   (#EDEAE4 light mode) is only ~8 RGB units off --background (#f5f1ed),
+   and --border (#D4CCBE) is itself a light tan, so the "border" was
+   nearly invisible in a real screenshot (Ezekiel, 2 Sep 2026: "make the
+   cards white"). Switched to the same true-white recipe
+   .di-cost-stat-card--total already uses below (--surface-raised is
+   literal #FFFFFF / --border-strong is a real grey, #AAAAAA) — scoped
+   here, not on the shared class, so Cost Breakdown's own (unelevated,
+   inside-a-white-modal) cards are untouched. */
+.di-perf-stats .di-cost-stat-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+}
+
+.di-perf-stat-caption {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+}
+
+.di-perf-export-btn {
+    gap: var(--space-2);
+}
+
+/* Same "true white, not just --white" fix as the stat cards above —
+   .table-wrapper's own var(--white) (#fafafa light mode) is only ~5-13
+   RGB units off the page background, so the table read as blending into
+   the page too (Ezekiel, 2 Sep 2026). Overrides just for Performance's
+   copy, same specificity so this rule (declared after .table-wrapper in
+   the cascade) wins without touching the shared class other DI screens
+   use. */
+.di-perf-table-wrapper {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    margin-bottom: var(--space-4);
+}
+
+.di-perf-table thead,
+.di-perf-table thead th,
+.di-perf-table thead th:first-child {
+    background-color: var(--surface-raised);
+}
+
+.di-perf-table th:first-child,
+.di-perf-table td:first-child {
+    position: static;
+    box-shadow: none;
+}
+
+.di-perf-table tbody td:first-child {
+    background-color: inherit;
+}
+
+.di-perf-project-cell {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.di-perf-project-name {
+    font-weight: 600;
+}
+
+.di-perf-project-client-label {
+    margin-left: var(--space-2);
+    font-weight: 400;
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+.di-perf-feature-count {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.di-perf-expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: var(--text-med);
+    line-height: 1;
+    padding: 0;
+    transition: transform 0.15s ease;
+}
+
+/* Rotating the same "›" glyph 90° reads as a down-chevron when expanded
+   — one glyph, no JS innerHTML-swapping needed (digital_innovation_
+   performance.js just toggles the aria-expanded attribute). */
+.di-perf-expand-btn[aria-expanded="true"] {
+    transform: rotate(90deg);
+}
+
+/* Closed row: a faint permanent green wash (not a hover state) so a
+   closed/profitable project reads at a glance without hunting for the
+   Status pill — same low-alpha-over-page-background technique
+   .di-column-count--clover's fill already uses, which is why this needs
+   no separate dark-mode rule (Ezekiel's wireframe, 2 Sep 2026). */
+.di-perf-project-row--closed {
+    background: rgba(76, 175, 90, 0.06);
+}
+
+.di-perf-project-row--closed:hover {
+    background: rgba(76, 175, 90, 0.1);
+}
+
+/* Feature rows reuse the SAME six columns as their parent project row
+   (see _performance_table.html's comment) instead of a separate
+   mini-table — this just indents/mutes the one cell that needs it. */
+.di-perf-feature-row {
+    background: var(--surface-hover);
+}
+
+.di-perf-feature-cell {
+    padding-left: var(--space-6);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+}
+
+/* Small filled pill for a project's or feature's status. Reuses
+   .di-column-count--<colour>'s existing tinted-fill recipe (already
+   dark-tuned per colour) for the fill; this just adds the padding a
+   short text label needs that a numeric count badge didn't. */
+.di-perf-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}

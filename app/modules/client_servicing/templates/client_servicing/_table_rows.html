@@ -1,0 +1,65 @@
+{# Drop-in replacement for #client-servicing-table-body's innerHTML — the
+   whole table (header + rows), same "re-render byte-identical markup on a
+   live refresh" approach as project_list/_table_rows.html.
+
+   Columns are data-driven: `columns` (from table.py's COLUMNS)
+   says which columns appear and in what order; each column's actual <td>
+   markup lives in one macro in _columns.html. The "Open in Projects"
+   column is pinned — not in `columns`, always first, never resizable or
+   reorderable, same as the Projects page's own Expand column.
+
+   The <colgroup> carries each column's saved width
+   (column_widths, keyed by column key) so a returning user's resize
+   choices apply on first paint, no flash of the wrong width. Resizing
+   itself — dragging a header's .cs-resize-handle — is client_servicing.js,
+   delegated on the table's container since this whole <table> gets
+   replaced wholesale on every live refresh. #}
+{% from 'client_servicing/_columns.html' import
+    cell_client, cell_project, cell_brief_date, cell_designers, cell_client_approval, cell_status,
+    cell_job_number, cell_cs_lead, cell_project_owner, cell_client_spoc, cell_installation_date,
+    cell_value, cell_due_date, cell_scope, cell_lpo, cell_store_location, cell_removal_date,
+    cell_invoice_month, cell_cost_to_client, cell_inward_cost, cell_margin_percent, cell_priority %}
+{% set CELL_RENDERERS = {
+    'client': cell_client, 'project': cell_project, 'brief_date': cell_brief_date,
+    'designers': cell_designers, 'client_approval': cell_client_approval, 'status': cell_status,
+    'job_number': cell_job_number, 'cs_lead': cell_cs_lead, 'project_owner': cell_project_owner,
+    'client_spoc': cell_client_spoc, 'installation_date': cell_installation_date, 'value': cell_value,
+    'due_date': cell_due_date, 'scope': cell_scope, 'lpo': cell_lpo, 'store_location': cell_store_location,
+    'removal_date': cell_removal_date, 'invoice_month': cell_invoice_month, 'cost_to_client': cell_cost_to_client,
+    'inward_cost': cell_inward_cost, 'margin_percent': cell_margin_percent, 'priority': cell_priority,
+} %}
+<table class="cs-table" id="cs-table" data-table-key="{{ table_key }}" data-save-layout-url="{{ url_for('client_servicing.save_layout') }}">
+    <colgroup>
+        <col class="cs-col-open">
+        {% for col in columns %}
+        <col data-col-key="{{ col.key }}"{% if column_widths.get(col.key) %} style="width: {{ column_widths[col.key] }}px;"{% endif %}>
+        {% endfor %}
+    </colgroup>
+    <thead>
+        <tr>
+            <th class="cs-col-open"></th>
+            {% for col in columns %}
+            <th data-col-key="{{ col.key }}">{{ col.label }}<span class="cs-resize-handle" data-col-key="{{ col.key }}"></span></th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        {# data-row-order: this row's position in the server's default
+           order (Project.name.asc(), from table.py's _page_context()) —
+           click-to-sort is entirely client-side, so
+           clearing a sort has to restore rows to this order without a
+           round trip; loop.index is that order, captured once at render. #}
+        <tr data-project-id="{{ row.id }}" data-row-order="{{ loop.index }}">
+            <td class="cs-col-open">
+                <a class="btn-secondary cs-open-btn" href="{{ url_for('project_list.index', project=row.id) }}">Open in Projects</a>
+            </td>
+            {% for col in columns %}
+            {{ CELL_RENDERERS[col.key](row) }}
+            {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ columns|length + 1 }}" class="cs-empty">No projects to show.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>

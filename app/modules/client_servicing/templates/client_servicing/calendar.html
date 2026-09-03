@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Client Servicing — Calendar{% endblock %}
+
+{% block content %}
+<div class="cs-page">
+    <div class="cs-shell">
+        {% with active_nav = 'calendar' %}
+        {% include "client_servicing/_sidebar.html" %}
+        {% endwith %}
+        <main class="cs-main">
+            <div class="client-servicing-page">
+                <div class="cs-page-header">
+                    <h1>Calendar</h1>
+                </div>
+                <p class="cs-muted">Nothing here yet — this section is coming in a future chunk.</p>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}

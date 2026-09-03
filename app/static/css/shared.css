@@ -280,39 +280,39 @@
    the same tinted treatment for visual consistency, brightened the same way. */
 :root[data-theme="dark"] .status-pill--coral {   /* In Design */
     background: rgba(255, 133, 89, 0.16);
-    color: #FF9A73;
+    color: var(--tone-coral);
 }
 :root[data-theme="dark"] .status-pill--oak {     /* Pre-Production */
     background: rgba(160, 124, 90, 0.18);
-    color: #C79E6B;
+    color: var(--tone-oak);
 }
 :root[data-theme="dark"] .status-pill--clover {  /* Handed to Production */
     background: rgba(76, 175, 90, 0.18);
-    color: #6FD07E;
+    color: var(--tone-clover);
 }
 :root[data-theme="dark"] .status-pill--poppy {   /* On Hold */
     background: rgba(255, 194, 77, 0.16);
-    color: #FFC24D;
+    color: var(--tone-poppy);
 }
 :root[data-theme="dark"] .status-pill--salmon {  /* Cancelled */
     background: rgba(255, 79, 79, 0.14);
-    color: #FF7A7A;
+    color: var(--tone-salmon);
 }
 :root[data-theme="dark"] .status-pill--sky {     /* Briefed */
     background: rgba(185, 222, 254, 0.16);
-    color: #C8E5FE;
+    color: var(--tone-sky);
 }
 :root[data-theme="dark"] .status-pill--sage {    /* Submitted to Client */
     background: rgba(158, 212, 165, 0.16);
-    color: #B3DDB9;
+    color: var(--tone-sage);
 }
 :root[data-theme="dark"] .status-pill--canary {
     background: rgba(229, 210, 89, 0.16);
-    color: #EBDC7E;
+    color: var(--tone-canary);
 }
 :root[data-theme="dark"] .status-pill--lavender {
     background: rgba(179, 144, 255, 0.16);
-    color: #C4A8FF;
+    color: var(--tone-lavender);
 }
 
 /*  ---- Tab Strip

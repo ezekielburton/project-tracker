@@ -1,0 +1,105 @@
+{# Cost breakdown — rendered server-side and dropped into #di-cost-body by
+   digital_innovation_board.js's openDiCostBreakdown(), the same "fetch an
+   HTML fragment" pattern _feature_detail.html and _incoming_cards.html
+   use. Every mutating action (add/delete an entry) POSTs/DELETEs and
+   swaps this same fragment back in via routes/costs.py's
+   _render_cost_breakdown() choke point, so the modal always reflects the
+   project's true current ledger state.
+
+   No read-only vs. edit split within this template — add/delete share
+   the same can_view_di_performance gate as viewing (Ezekiel, 1 Sep
+   2026), so if you can see this fragment at all, the add row and every
+   delete button are live. Deliberately no lifecycle filter either (see
+   routes/costs.py) — this renders the same way for an active, closed or
+   archived project. #}
+<div class="di-cost-header">
+    <div>
+        <span class="di-feature-badge">{{ project.name }} · Cost breakdown</span>
+        <h3 class="di-feature-detail-title">Cost breakdown</h3>
+    </div>
+    <div class="di-cost-header-actions">
+        <a class="btn-secondary di-cost-export-btn" href="{{ url_for('digital_innovation.export_cost_ledger', project_id=project.id) }}">Export to Excel</a>
+        <button type="button" class="di-feature-detail-close" id="di-cost-close" aria-label="Close">&times;</button>
+    </div>
+</div>
+
+<div class="di-cost-stats">
+    {% for t in cost_types %}
+    <div class="di-cost-stat-card">
+        <span class="di-cost-stat-label">{{ type_labels[t] }}</span>
+        <span class="di-cost-stat-value">{{ settings.currency }} {{ '%.2f' | format(summary.by_type[t].total) }}</span>
+        <span class="di-cost-stat-sub">
+            {% if t == 'dev_time' %}
+                {{ summary.by_type[t].hours | round(1) }}h &times; {{ settings.currency }} {{ '%.2f' | format(settings.dev_hourly_rate or 0) }}
+            {% else %}
+                {{ summary.by_type[t].count }} entr{{ 'y' if summary.by_type[t].count == 1 else 'ies' }}
+            {% endif %}
+        </span>
+    </div>
+    {% endfor %}
+    <div class="di-cost-stat-card di-cost-stat-card--total">
+        <span class="di-cost-stat-label">Total cost</span>
+        <span class="di-cost-stat-value">{{ settings.currency }} {{ '%.2f' | format(summary.total_cost) }}</span>
+        <span class="di-cost-stat-sub">&nbsp;</span>
+    </div>
+</div>
+
+<hr class="di-detail-divider">
+
+{# type=dev_time shows the feature picker + hours input and hides amount;
+   every other type is the reverse — toggled by the change handler on
+   #di-cost-add-type in digital_innovation_board.js. Starts on dev_time's
+   shape since that's the first <option>. #}
+<div class="di-cost-add-row">
+    <input type="date" class="di-cost-add-date" id="di-cost-add-date" value="{{ today }}">
+    <select class="di-cost-add-type" id="di-cost-add-type">
+        {% for t in cost_types %}
+        <option value="{{ t }}">{{ type_labels[t] }}</option>
+        {% endfor %}
+    </select>
+    <select class="di-cost-add-feature" id="di-cost-add-feature">
+        <option value="">Select feature…</option>
+        {% for feature in features %}
+        <option value="{{ feature.id }}">{{ feature.name }}</option>
+        {% endfor %}
+    </select>
+    <input type="number" step="0.25" min="0" class="di-cost-add-hours" id="di-cost-add-hours" placeholder="Hours">
+    <input type="number" step="0.01" min="0" class="di-cost-add-amount hidden" id="di-cost-add-amount" placeholder="Amount">
+    <input type="text" class="di-cost-add-description" id="di-cost-add-description" placeholder="Description (optional)">
+    <button type="button" class="btn-primary di-cost-add-btn" id="di-cost-add-btn">+ Add</button>
+</div>
+
+<div class="table-wrapper di-cost-ledger-wrapper">
+    <table class="data-table di-cost-ledger-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Feature</th>
+                <th>Description</th>
+                <th>Amount</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in summary.entries %}
+            <tr data-entry-id="{{ entry.id }}">
+                <td>{{ entry.date.strftime('%d %b %Y') }}</td>
+                <td><span class="di-cost-type-pill">{{ type_labels[entry.type] }}</span></td>
+                <td>{{ entry.feature.name if entry.feature else '—' }}</td>
+                <td>{{ entry.description or '—' }}</td>
+                <td>{{ settings.currency }} {{ '%.2f' | format(entry.amount) }}{% if entry.hours %}<span class="di-cost-hours-note"> ({{ entry.hours | round(1) }}h)</span>{% endif %}</td>
+                <td><button type="button" class="btn-danger-sm di-cost-delete-btn" aria-label="Delete entry">&times;</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="di-cost-ledger-empty">No cost entries yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="di-cost-footer">
+    <span>Total cost <strong>{{ settings.currency }} {{ '%.2f' | format(summary.total_cost) }}</strong></span>
+    <span>Client charge <strong>{% if summary.client_charge is not none %}{{ settings.currency }} {{ '%.2f' | format(summary.client_charge) }}{% else %}—{% endif %}</strong></span>
+    <span>Projected profit <strong>{% if summary.projected_profit is not none %}{{ settings.currency }} {{ '%.2f' | format(summary.projected_profit) }}{% else %}—{% endif %}</strong></span>
+</div>

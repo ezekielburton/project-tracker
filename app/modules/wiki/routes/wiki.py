@@ -17,12 +17,23 @@ def _slugify(text):
     text = re.sub(r'[\s_]+', '-', text)
     return re.sub(r'-+', '-', text).strip('-')
 
+def _effective_user():
+    """Emulation-aware actor: the emulated user when an admin is emulating,
+    otherwise the logged-in user. Mirrors the app-wide effective_user."""
+    from flask import session
+    from app.modules.core.shared.models import User
+    emulating_id = session.get('emulating_user_id')
+    if emulating_id and current_user.role == 'admin':
+        return User.query.get(emulating_id) or current_user
+    return current_user
+
+
 # ------ Viewer ------
 
 @wiki_bp.route('/wiki')
 @login_required
 def index():
-    if current_user.role == 'admin':
+    if _effective_user().role == 'admin':
         sections = WikiSection.query.order_by(WikiSection.sort_order).all()
     else:
         sections = (WikiSection.query.filter_by(is_published=True).order_by(WikiSection.sort_order).all())
@@ -32,7 +43,7 @@ def index():
 @login_required
 def get_article(article_id):
     article = WikiArticle.query.get_or_404(article_id)
-    if not article.is_published and current_user.role != 'admin':
+    if not article.is_published and _effective_user().role != 'admin':
         abort(403)
     blocks = json.loads(article.sections_json or '[]')
     return render_template('wiki/_article_content.html', article=article, blocks=blocks)

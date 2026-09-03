@@ -19,6 +19,14 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = 'Lax'
 
+    # CSRF hardening — same-origin app with no state-changing GETs, so a Lax
+    # session cookie blocks cross-site writes. Secure is env-gated so localhost
+    # HTTP dev still works; set SESSION_COOKIE_SECURE=true in the prod .env.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+    REMEMBER_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+
     # Email configuration — reads from .env so switching providers requires no code changes
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.resend.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 465))
@@ -43,15 +51,7 @@ class Config:
     NAS_WEB_URL = os.environ.get('NAS_WEB_URL')
 
     # Off-LAN fallback for the NAS API itself (not browse links — that's
-    # NAS_WEB_URL above). Used only when NAS_HOST is unreachable, e.g. a
-    # local dev instance running away from the office network. Points at
-    # a Cloudflare Tunnel hostname reverse-proxying straight to the NAS
-    # (same tunnel as app.vitamin-e.work / ssh.vitamin-e.work — see
-    # SERVER_ACCESS.md), gated by a Cloudflare Access Service Token since
-    # this is machine-to-machine, not an interactive login. All three must
-    # be set together for the fallback to work — added 20 Aug 2026 after
-    # QuickConnect (NAS_WEB_URL's original purpose) turned out to only
-    # serve a browser-oriented relay page to plain API clients.
+    # NAS_WEB_URL above).
     NAS_TUNNEL_HOST = os.environ.get('NAS_TUNNEL_HOST')
     CF_ACCESS_CLIENT_ID = os.environ.get('CF_ACCESS_CLIENT_ID')
     CF_ACCESS_CLIENT_SECRET = os.environ.get('CF_ACCESS_CLIENT_SECRET')
@@ -68,3 +68,4 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL')
     MAIL_ENABLED = False
     SECRET_KEY = os.environ.get('SECRET_KEY', 'test-secret-key')
+
