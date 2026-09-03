@@ -229,3 +229,37 @@ def test_move_template_step_404s_for_an_unknown_step(app, client, db_session):
         url = url_for('digital_innovation.move_template_step', template_id=999999)
     resp = client.post(url, json={'direction': 'up'})
     assert resp.status_code == 404
+
+
+# ── templates_body_fragment (3 Sep 2026, DI-wide live SSE refresh) ───────
+
+def test_templates_body_fragment_requires_auth(app, client, db_session):
+    with app.test_request_context():
+        url = url_for('digital_innovation.templates_body_fragment')
+    resp = client.get(url)
+    assert resp.status_code in (302, 401)
+
+
+def test_templates_body_fragment_403s_for_a_designer(app, client, db_session):
+    user = _user(db_session, 'tq', role='designer')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.templates_body_fragment')
+    resp = client.get(url)
+    assert resp.status_code == 403
+
+
+def test_templates_body_fragment_matches_a_fresh_page_load(app, client, db_session):
+    user = _user(db_session, 'tr', role='admin')
+    _template(db_session, DI_STAGES[0], 'Write the brief')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.templates_body_fragment')
+    resp = client.get(url)
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert 'Write the brief' in body
+    assert '<html' not in body

@@ -2,7 +2,14 @@
 // admin-only Edit Templates screen. Same "fetch an HTML fragment and
 // swap it in" pattern as digital_innovation_board.js's feature detail
 // modal: every add/edit/delete/move POSTs or DELETEs, then swaps the
-// returned fragment into #di-templates-body.
+// returned fragment into #di-templates-body. As of 3 Sep 2026 that
+// swap also happens on a DI-wide live SSE ping (another admin's own
+// add/edit/delete/move) — safe to always auto-apply (Ezekiel's explicit
+// choice) because the add/edit modal (#di-template-step-modal) lives
+// OUTSIDE #di-templates-body entirely, so refreshing the list behind it
+// never touches whatever's currently typed into an open modal. See
+// digital_innovation_live.js for the shared connection-watching helper
+// this calls into.
 
 if (!window._diTemplatesDispatcherWired) {
     window._diTemplatesDispatcherWired = true;
@@ -154,3 +161,29 @@ function _diApplyTemplatesBodyAction(fetchPromise) {
             window.location.reload();
         });
 }
+
+
+// Re-fetches _templates_body.html fresh and swaps it into
+// #di-templates-body — same innerHTML-swap _diApplyTemplatesBodyAction
+// already uses for every mutating action above, not a whole-node
+// replaceWith, since (unlike _board_columns.html/_archive_lists.html)
+// this fragment was never self-wrapping to begin with — #di-templates-
+// body is templates.html's own wrapper, not part of the fragment.
+function diRefreshTemplatesBody() {
+    var body = document.getElementById('di-templates-body');
+    if (!body) return;
+
+    fetch('/digital-innovation/templates/body')
+        .then(function (res) {
+            if (!res.ok) throw new Error('failed to refresh templates body');
+            return res.text();
+        })
+        .then(function (html) { body.innerHTML = html; })
+        .catch(function () {
+            // A failed live refresh isn't worth surfacing to the user —
+            // the page just stays showing what it last successfully
+            // loaded, same as if the ping had never arrived.
+        });
+}
+
+diWatchDashboardStream('templates', '#di-templates-body', diRefreshTemplatesBody);

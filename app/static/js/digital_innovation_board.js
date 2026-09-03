@@ -1,7 +1,7 @@
 // digital_innovation_board.js — Digital Innovation module, board page.
 // Phase 2a: the "+ New project" modal. Phase 2b: chunk 2 added "+ New
 // feature"; chunk 3 added the read-only feature detail modal; chunk 4
-// makes it interactive (tick/add/delete steps, advance, close). The
+// makes it interactive (tick/add/delete steps, move stage, close). The
 // Incoming overlay (button + card modal) was added 1 Sep 2026, followed
 // same-day by a live indicator on its badge — a small, scoped piece of
 // the still-pending "frontend SSE wiring" chunk, built just for this
@@ -46,8 +46,8 @@ if (!window._diDispatcherWired) {
             diAddStep();
             return;
         }
-        if (e.target.closest('.di-advance-feature-btn')) {
-            diAdvanceFeature();
+        if (e.target.closest('.di-move-stage-btn')) {
+            diMoveFeatureStage();
             return;
         }
         if (e.target.closest('.di-close-feature-btn')) {
@@ -72,6 +72,11 @@ if (!window._diDispatcherWired) {
         if (dismissBtn) {
             var dismissCard = dismissBtn.closest('.di-incoming-card[data-di-intake-id]');
             if (dismissCard) diDismissIntakeItem(dismissCard.getAttribute('data-di-intake-id'), dismissCard.getAttribute('data-di-kind'));
+            return;
+        }
+        var trackBadge = e.target.closest('#di-track-badge');
+        if (trackBadge) {
+            diToggleProjectTrack(trackBadge.getAttribute('data-project-id'), trackBadge.getAttribute('data-track'));
             return;
         }
         if (e.target.closest('#di-linked-badge') || e.target.closest('#di-link-project-trigger')) {
@@ -154,6 +159,15 @@ if (!window._diDispatcherWired) {
         }
         if (document.activeElement && document.activeElement.id === 'di-linked-badge') {
             openDiLinkProjectModal();
+        }
+        if (document.activeElement && document.activeElement.id === 'di-track-badge') {
+            diToggleProjectTrack(document.activeElement.getAttribute('data-project-id'), document.activeElement.getAttribute('data-track'));
+        }
+        if (document.activeElement && document.activeElement.id === 'di-new-project-track') {
+            submitDiNewProject();
+        }
+        if (document.activeElement && document.activeElement.id === 'di-new-feature-stage') {
+            submitDiNewFeature();
         }
         if (document.activeElement && (
             document.activeElement.id === 'di-cost-add-hours' ||
@@ -483,6 +497,23 @@ function _diApplyIncomingAction(fetchPromise) {
 // action, simpler to re-render server-side" reasoning as
 // _diApplyIncomingAction above — it also naturally closes the modal.
 
+// Click-to-toggle for the board header's Internal/External badge (see
+// #di-track-badge, board.html). A full reload is the simplest correct
+// way to reflect the new track everywhere it's shown (column headers,
+// New Feature's starting-stage picker, the badge itself) - same
+// reasoning closeDiFeatureDetail() uses for a dirty modal.
+function diToggleProjectTrack(projectId, currentTrack) {
+    if (!projectId) return;
+    var nextTrack = currentTrack === 'external' ? 'internal' : 'external';
+    fetch('/digital-innovation/projects/' + projectId + '/track', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track: nextTrack }),
+    }).then(function (res) {
+        if (res.ok) window.location.reload();
+    });
+}
+
 function openDiLinkProjectModal() {
     var modal = document.getElementById('di-link-project-modal');
     if (!modal) return;
@@ -587,6 +618,8 @@ function openDiNewProjectModal() {
     modal.classList.remove('hidden');
     var input = document.getElementById('di-new-project-name');
     if (input) { input.value = ''; input.focus(); }
+    var track = document.getElementById('di-new-project-track');
+    if (track) track.value = 'internal';
     var error = document.getElementById('di-new-project-error');
     if (error) error.classList.add('hidden');
 }
@@ -598,8 +631,10 @@ function closeDiNewProjectModal() {
 
 function submitDiNewProject() {
     var input = document.getElementById('di-new-project-name');
+    var trackSelect = document.getElementById('di-new-project-track');
     var error = document.getElementById('di-new-project-error');
     var name = input ? input.value.trim() : '';
+    var track = trackSelect ? trackSelect.value : 'internal';
 
     if (!name) {
         if (error) { error.textContent = 'Name is required.'; error.classList.remove('hidden'); }
@@ -609,7 +644,7 @@ function submitDiNewProject() {
     fetch('/digital-innovation/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name }),
+        body: JSON.stringify({ name: name, track: track }),
     })
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
         .then(function (result) {
@@ -636,6 +671,8 @@ function openDiNewFeatureModal(trigger) {
     modal.classList.remove('hidden');
     var input = document.getElementById('di-new-feature-name');
     if (input) { input.value = ''; input.focus(); }
+    var stage = document.getElementById('di-new-feature-stage');
+    if (stage) stage.selectedIndex = 0;
     var date = document.getElementById('di-new-feature-date');
     if (date) date.value = '';
     var error = document.getElementById('di-new-feature-error');
@@ -649,6 +686,7 @@ function closeDiNewFeatureModal() {
 
 function submitDiNewFeature() {
     var input = document.getElementById('di-new-feature-name');
+    var stageSelect = document.getElementById('di-new-feature-stage');
     var dateInput = document.getElementById('di-new-feature-date');
     var error = document.getElementById('di-new-feature-error');
     var name = input ? input.value.trim() : '';
@@ -662,7 +700,11 @@ function submitDiNewFeature() {
     fetch('/digital-innovation/' + _diNewFeatureProjectId + '/features', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, projected_date: dateInput ? dateInput.value : '' }),
+        body: JSON.stringify({
+            name: name,
+            projected_date: dateInput ? dateInput.value : '',
+            starting_stage: stageSelect ? stageSelect.value : '',
+        }),
     })
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
         .then(function (result) {
@@ -767,10 +809,18 @@ function diAddStep() {
     }));
 }
 
-function diAdvanceFeature() {
+function diMoveFeatureStage() {
     if (!_diCurrentFeatureId) return;
-    _diApplyFeatureDetailAction(fetch('/digital-innovation/features/' + _diCurrentFeatureId + '/advance', {
+    var select = document.getElementById('di-stage-picker-select');
+    var stage = select ? select.value : '';
+    if (!stage) return;
+    // Any stage, forward or backward, no completion gate - the server
+    // (step_engine.move_to_stage) is the single source of truth for what's
+    // a valid target; this just forwards whatever the picker has selected.
+    _diApplyFeatureDetailAction(fetch('/digital-innovation/features/' + _diCurrentFeatureId + '/move', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: stage }),
     }));
 }
 

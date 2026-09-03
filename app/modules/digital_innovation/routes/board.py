@@ -7,7 +7,7 @@
 from flask import render_template, abort
 from flask_login import login_required, current_user
 from app.modules.digital_innovation.routes.blueprint import digital_innovation_bp
-from app.modules.digital_innovation.models import DiProject, DI_STAGES, DI_STAGE_LABELS, DI_STAGE_COLOURS
+from app.modules.digital_innovation.models import DiProject, DI_STAGES, DI_STAGE_COLOURS, stage_label
 from app.modules.digital_innovation.lib.board_data import sidebar_projects, default_project, build_board_context, pending_intake_items
 from app.modules.digital_innovation.lib.access import can_view_di_performance, can_edit_di_templates, can_edit_di_board
 
@@ -39,7 +39,11 @@ def _render_board(project):
         can_edit_templates=can_edit_di_templates(current_user),
         can_edit_board=can_edit_di_board(current_user),
         stages=DI_STAGES,
-        stage_labels=DI_STAGE_LABELS,
+        # Track-aware (models.py's stage_label) so a column header reads
+        # 'Client Review' rather than 'Management Review' on an external
+        # board - computed once per render, same shape DI_STAGE_LABELS
+        # used to be, so board.html needs no template change.
+        stage_labels={s: stage_label(s, project.track) for s in DI_STAGES},
         stage_colours=DI_STAGE_COLOURS,
         # Only the permanent OVP board ever has intake items attached
         # (services/intake.py always files against it), so this is an
@@ -69,7 +73,7 @@ def board_columns_fragment(project_id):
         project=project,
         stages=DI_STAGES,
         stage_colours=DI_STAGE_COLOURS,
-        stage_labels=DI_STAGE_LABELS,
+        stage_labels={s: stage_label(s, project.track) for s in DI_STAGES},
         can_edit_board=can_edit_di_board(current_user),
         **build_board_context(project),
     )

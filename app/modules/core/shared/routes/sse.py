@@ -22,6 +22,7 @@ from app.modules.core.shared.services.sse_relay import (
     subscribe_dashboard, unsubscribe_dashboard,
     subscribe_user, unsubscribe_user,
     subscribe_di_project, unsubscribe_di_project,
+    subscribe_di_dashboard, unsubscribe_di_dashboard,
 )
 
 sse_bp = Blueprint('sse', __name__, url_prefix='/sse')
@@ -30,7 +31,7 @@ sse_bp = Blueprint('sse', __name__, url_prefix='/sse')
 # comment lines (start with ':') are invisible to EventSource's onmessage
 # but keep the connection alive through Cloudflare Tunnel or any
 # intermediate proxy that would otherwise time out an idle socket.
-_HEARTBEAT_SECONDS = 20
+_HEARTBEAT_SECONDS = 5
 
 
 def _event_stream(queue, unsubscribe):
@@ -80,6 +81,19 @@ def project_stream(project_id):
 def di_project_stream(di_project_id):
     q = subscribe_di_project(di_project_id)
     return _sse_response(_event_stream(q, lambda: unsubscribe_di_project(di_project_id, q)))
+
+
+@sse_bp.route('/digital-innovation')
+@login_required
+def di_dashboard_stream():
+    # For screens that aren't scoped to one project — Performance and
+    # Archive both show data spanning every DiProject, and Edit Templates
+    # isn't tied to a project at all (see live_events.py's DiStepTemplate
+    # sentinel) — so none of them can subscribe to a single di_project_id
+    # the way Board does above. Mirrors /dashboard's relationship to
+    # /projects/<id> just above it.
+    q = subscribe_di_dashboard()
+    return _sse_response(_event_stream(q, lambda: unsubscribe_di_dashboard(q)))
 
 
 @sse_bp.route('/notifications')

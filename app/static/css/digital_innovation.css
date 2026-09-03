@@ -381,6 +381,26 @@
    title) + the search-as-you-type picker it opens. See routes/projects.py
    ::search_projects for why this is a search box rather than the plain
    <select> the app uses for shorter lists elsewhere. */
+/* Internal/External track badge, board.html - same read-only-vs-
+   editable shape as .di-linked-badge just below, so the two board-
+   header pills read as one family. */
+.di-track-badge {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    background: var(--surface-hover);
+    border-radius: 999px;
+    padding: var(--space-1) var(--space-3);
+}
+
+.di-track-badge--editable {
+    cursor: pointer;
+}
+
+.di-track-badge--editable:hover {
+    color: var(--text);
+    background: var(--surface-active, var(--surface-hover));
+}
+
 .di-linked-badge {
     font-size: var(--text-sm);
     color: var(--text-muted);
@@ -1112,6 +1132,45 @@
 }
 
 .di-step-add-btn {
+    flex-shrink: 0;
+}
+
+/* Move-to-stage picker (_feature_detail.html) - a plain select + button,
+   same input/button shape as .di-step-add-row just above so the two
+   controls read as one family rather than two different form styles. */
+.di-stage-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.di-stage-picker-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.di-stage-picker-row {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.di-stage-picker-select {
+    flex: 1;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text);
+    background: var(--surface);
+}
+
+.di-stage-picker-select:focus {
+    outline: none;
+    border-color: var(--text-muted);
+}
+
+.di-move-stage-btn {
     flex-shrink: 0;
 }
 

@@ -159,3 +159,41 @@ def test_board_sidebar_excludes_closed_and_archived_projects(app, client, db_ses
     assert 'Test DI Project al' in body
     assert 'Test DI Project am' not in body
     assert 'Test DI Project an' not in body
+
+
+# ── archive_lists_fragment (3 Sep 2026, DI-wide live SSE refresh) ────────
+
+def test_archive_lists_fragment_requires_auth(app, client, db_session):
+    with app.test_request_context():
+        url = url_for('digital_innovation.archive_lists_fragment')
+    resp = client.get(url)
+    assert resp.status_code in (302, 401)
+
+
+def test_archive_lists_fragment_shows_closed_and_archived_projects(app, client, db_session):
+    _project(db_session, 'ao', lifecycle='closed')
+    _project(db_session, 'ap', lifecycle='archived')
+    user = _user(db_session, 'ao', role='designer')  # viewing has no can_edit gate
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.archive_lists_fragment')
+    resp = client.get(url)
+    body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 200
+    assert 'di-archive-lists' in body
+    assert '<span class="di-archive-name">Test DI Project ao</span>' in body
+    assert '<span class="di-archive-name">Test DI Project ap</span>' in body
+    assert '<html' not in body
+
+
+def test_archive_lists_fragment_shows_actions_to_an_admin_only(app, client, db_session):
+    _project(db_session, 'aq', lifecycle='closed')
+    admin = _user(db_session, 'aq', role='admin')
+    login_as(client, app, admin, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.archive_lists_fragment')
+    resp = client.get(url)
+    assert 'di-archive-reopen-btn' in resp.get_data(as_text=True)

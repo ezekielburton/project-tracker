@@ -11,7 +11,7 @@ from flask_login import login_required, current_user
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Project
 from app.modules.digital_innovation.routes.blueprint import digital_innovation_bp
-from app.modules.digital_innovation.models import DiProject
+from app.modules.digital_innovation.models import DiProject, DI_PROJECT_TRACKS
 from app.modules.digital_innovation.lib.access import can_edit_di_board
 
 # Rotation the board's colored project dots cycle through on creation —
@@ -42,20 +42,52 @@ def _permanent_guard(project):
 def create_project():
     _require_board_write_access()
 
-    name = (request.get_json(silent=True) or {}).get('name', '').strip()
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
     if not name:
         return jsonify({'error': 'Name is required.'}), 400
+
+    # 'internal' unless the New Project modal's internal/external
+    # picker sent something else - see DI_PROJECT_TRACKS (models.py).
+    track = (data.get('track') or '').strip() or 'internal'
+    if track not in DI_PROJECT_TRACKS:
+        return jsonify({'error': f"Track must be one of: {', '.join(DI_PROJECT_TRACKS)}."}), 400
 
     existing_count = DiProject.query.filter_by(lifecycle='active').count()
     project = DiProject(
         name=name,
         lifecycle='active',
+        track=track,
         colour=_COLOUR_ROTATION[existing_count % len(_COLOUR_ROTATION)],
     )
     db.session.add(project)
     db.session.commit()
 
-    return jsonify({'id': project.id, 'name': project.name, 'colour': project.colour}), 201
+    return jsonify({
+        'id': project.id, 'name': project.name, 'colour': project.colour, 'track': project.track,
+    }), 201
+
+
+@digital_innovation_bp.route('/projects/<int:project_id>/track', methods=['PATCH'])
+@login_required
+def update_project_track(project_id):
+    """Sets a board's internal/external track after creation - the header
+    badge's editor. Track is board-level (DiProject.track, models.py),
+    not per-feature, so this is the only place it changes once a board
+    exists; changing it re-labels every card's management_review stage
+    (via stage_label(), models.py) without touching any feature's actual
+    status or steps - a relabel, not a move."""
+    _require_board_write_access()
+    project = DiProject.query.get_or_404(project_id)
+
+    track = (request.get_json(silent=True) or {}).get('track', '').strip()
+    if track not in DI_PROJECT_TRACKS:
+        return jsonify({'error': f"Track must be one of: {', '.join(DI_PROJECT_TRACKS)}."}), 400
+
+    project.track = track
+    db.session.commit()
+
+    return jsonify({'id': project.id, 'track': project.track})
 
 
 @digital_innovation_bp.route('/projects/<int:project_id>/close', methods=['POST'])

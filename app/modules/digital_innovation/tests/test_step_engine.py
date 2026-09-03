@@ -1,7 +1,14 @@
 """Coverage for the Digital Innovation step-advancement state machine
-(lib/step_engine.py, "brain A"). No routes/HTTP here — this exercises the
+(lib/step_engine.py, "brain A"). No routes/HTTP here - this exercises the
 rules directly against the database, the same way
-client_servicing/tests/test_client_servicing_models.py covers its models."""
+client_servicing/tests/test_client_servicing_models.py covers its models.
+
+move_to_stage() replaced advance_stage() once Ezekiel confirmed he wants
+free movement to any stage, forward or backward, with no completion gate
+- see step_engine.py's module docstring. Tests below reflect that: there
+is no more "refuses when a step is still open" or "auto-advances on
+delete" behaviour to cover, and instead there is resume-on-revisit,
+seed-on-first-visit, and unconstrained direction to cover."""
 import pytest
 
 from app.modules.digital_innovation.models import DiProject, DiStepTemplate, DI_STAGES
@@ -53,6 +60,23 @@ def test_editing_a_later_template_does_not_touch_existing_features(db_session):
     assert [s.title for s in feature.steps] == ['Original step']
 
 
+def test_create_feature_accepts_a_starting_stage(db_session):
+    project = _project(db_session, 'b1')
+    _template(db_session, DI_STAGES[3], 'Testing step')
+
+    feature = engine.create_feature(project, 'New thing', starting_stage=DI_STAGES[3])
+
+    assert feature.status == DI_STAGES[3]
+    assert [s.title for s in feature.steps] == ['Testing step']
+
+
+def test_create_feature_refuses_an_invalid_starting_stage(db_session):
+    project = _project(db_session, 'b2')
+
+    with pytest.raises(ValueError):
+        engine.create_feature(project, 'New thing', starting_stage='not-a-real-stage')
+
+
 def test_ticking_every_step_does_not_auto_advance(db_session):
     project = _project(db_session, 'd')
     _template(db_session, DI_STAGES[0], 'Only step')
@@ -72,117 +96,137 @@ def test_tick_step_rejects_a_step_from_a_stage_the_feature_has_left(db_session):
     old_step = feature.steps[0]
 
     engine.tick_step(old_step, done=True)
-    engine.advance_stage(feature)  # feature is now in DI_STAGES[1]
+    engine.move_to_stage(feature, DI_STAGES[1])
 
     with pytest.raises(ValueError):
         engine.tick_step(old_step, done=False)
 
 
-def test_advance_stage_refuses_when_a_step_is_still_open(db_session):
-    project = _project(db_session, 'f')
-    _template(db_session, DI_STAGES[0], 'Step one')
-    _template(db_session, DI_STAGES[0], 'Step two')
-    feature = engine.create_feature(project, 'New thing')
-    engine.tick_step(feature.steps[0], done=True)
-    # feature.steps[1] left unticked
-
-    with pytest.raises(ValueError):
-        engine.advance_stage(feature)
-    assert feature.status == DI_STAGES[0]
-
-
-def test_advance_stage_refuses_an_empty_untouched_stage(db_session):
-    project = _project(db_session, 'g')
-    feature = engine.create_feature(project, 'New thing')  # no template -> no steps
-
-    with pytest.raises(ValueError):
-        engine.advance_stage(feature)
-    assert feature.status == DI_STAGES[0]
-
-
-def test_advance_stage_moves_forward_and_seeds_the_next_templates(db_session):
+def test_move_to_stage_moves_forward_and_seeds_a_new_stage(db_session):
     project = _project(db_session, 'h')
     _template(db_session, DI_STAGES[0], 'Step one')
     _template(db_session, DI_STAGES[1], 'Planning step')
     feature = engine.create_feature(project, 'New thing')
-    engine.tick_step(feature.steps[0], done=True)
+    # deliberately left unticked - movement is no longer gated on this
 
-    engine.advance_stage(feature)
+    engine.move_to_stage(feature, DI_STAGES[1])
 
     assert feature.status == DI_STAGES[1]
     assert [s.title for s in feature.steps if s.stage == DI_STAGES[1]] == ['Planning step']
-    # the old stage's step is kept, still marked done, for history
-    assert any(s.stage == DI_STAGES[0] and s.is_done for s in feature.steps)
+    # the old stage's step is kept, still there, for history
+    assert any(s.stage == DI_STAGES[0] for s in feature.steps)
 
 
-def test_advance_stage_refuses_from_implementation(db_session):
+def test_move_to_stage_does_not_gate_on_completion(db_session):
+    project = _project(db_session, 'h2')
+    _template(db_session, DI_STAGES[0], 'Step one')
+    _template(db_session, DI_STAGES[0], 'Step two')
+    feature = engine.create_feature(project, 'New thing')
+    engine.tick_step(feature.steps[0], done=True)
+    # feature.steps[1] left unticked, is_stage_complete() is False
+
+    engine.move_to_stage(feature, DI_STAGES[1])  # must not raise
+
+    assert feature.status == DI_STAGES[1]
+
+
+def test_move_to_stage_allows_moving_backward(db_session):
     project = _project(db_session, 'i')
     feature = engine.create_feature(project, 'New thing')
     feature.status = DI_STAGES[-1]
 
-    with pytest.raises(ValueError):
-        engine.advance_stage(feature)
+    engine.move_to_stage(feature, DI_STAGES[0])
 
-
-def test_delete_step_auto_advances_when_the_rest_are_done(db_session):
-    project = _project(db_session, 'j')
-    _template(db_session, DI_STAGES[0], 'Keep me', sort_order=0)
-    _template(db_session, DI_STAGES[0], 'Delete me', sort_order=1)
-    _template(db_session, DI_STAGES[1], 'Next stage step')
-    feature = engine.create_feature(project, 'New thing')
-    keep, remove = feature.steps
-    engine.tick_step(keep, done=True)
-    # `remove` is left unticked
-
-    advanced = engine.delete_step(remove)
-
-    assert advanced is True
-    assert feature.status == DI_STAGES[1]
-
-
-def test_delete_step_does_not_advance_if_something_else_is_still_open(db_session):
-    project = _project(db_session, 'k')
-    _template(db_session, DI_STAGES[0], 'Keep me, unticked', sort_order=0)
-    _template(db_session, DI_STAGES[0], 'Delete me', sort_order=1)
-    feature = engine.create_feature(project, 'New thing')
-    keep, remove = feature.steps
-    # neither ticked
-
-    advanced = engine.delete_step(remove)
-
-    assert advanced is False
     assert feature.status == DI_STAGES[0]
 
 
-def test_deleting_the_last_step_leaves_an_empty_stage_rather_than_advancing(db_session):
+def test_move_to_stage_is_a_noop_when_target_equals_current(db_session):
+    project = _project(db_session, 'i2')
+    _template(db_session, DI_STAGES[0], 'Only step')
+    feature = engine.create_feature(project, 'New thing')
+    step_id_before = feature.steps[0].id
+
+    engine.move_to_stage(feature, DI_STAGES[0])
+
+    assert feature.status == DI_STAGES[0]
+    # not reseeded - same single step, not a second copy
+    assert [s.id for s in feature.steps] == [step_id_before]
+
+
+def test_move_to_stage_refuses_an_invalid_stage(db_session):
+    project = _project(db_session, 'i3')
+    feature = engine.create_feature(project, 'New thing')
+
+    with pytest.raises(ValueError):
+        engine.move_to_stage(feature, 'not-a-real-stage')
+    assert feature.status == DI_STAGES[0]
+
+
+def test_move_to_stage_refuses_on_a_closed_feature(db_session):
+    project = _project(db_session, 'i4')
+    feature = engine.create_feature(project, 'New thing')
+    engine.close_feature(feature)
+
+    with pytest.raises(ValueError):
+        engine.move_to_stage(feature, DI_STAGES[0])
+
+
+def test_move_to_stage_resumes_existing_steps_on_revisit(db_session):
+    project = _project(db_session, 'i5')
+    _template(db_session, DI_STAGES[0], 'Researching step')
+    feature = engine.create_feature(project, 'New thing')
+    engine.tick_step(feature.steps[0], done=True)
+
+    engine.move_to_stage(feature, DI_STAGES[1])  # leave researching
+    # add a template that would seed differently if reseeded
+    _template(db_session, DI_STAGES[0], 'Would-be second step')
+    engine.move_to_stage(feature, DI_STAGES[0])  # come back
+
+    researching_steps = [s for s in feature.steps if s.stage == DI_STAGES[0]]
+    assert len(researching_steps) == 1
+    assert researching_steps[0].title == 'Researching step'
+    assert researching_steps[0].is_done is True  # exactly as left, not reset
+
+
+def test_move_to_stage_seeds_fresh_steps_for_a_never_visited_stage(db_session):
+    project = _project(db_session, 'i6')
+    _template(db_session, DI_STAGES[2], 'Coding step')
+    feature = engine.create_feature(project, 'New thing')
+
+    engine.move_to_stage(feature, DI_STAGES[2])
+
+    coding_steps = [s for s in feature.steps if s.stage == DI_STAGES[2]]
+    assert [s.title for s in coding_steps] == ['Coding step']
+    assert coding_steps[0].is_done is False
+
+
+def test_delete_step_never_advances_the_feature(db_session):
+    project = _project(db_session, 'j')
+    _template(db_session, DI_STAGES[0], 'Keep me', sort_order=0)
+    _template(db_session, DI_STAGES[0], 'Delete me', sort_order=1)
+    feature = engine.create_feature(project, 'New thing')
+    keep, remove = feature.steps
+    engine.tick_step(keep, done=True)
+    # `remove` is left unticked, then deleted - completing the stage
+
+    engine.delete_step(remove)
+
+    # no more auto-advance-on-completion - stage movement is always an
+    # explicit move_to_stage() call now
+    assert feature.status == DI_STAGES[0]
+    assert [s.title for s in feature.steps] == ['Keep me']
+
+
+def test_deleting_the_last_step_leaves_an_empty_stage(db_session):
     project = _project(db_session, 'l')
     _template(db_session, DI_STAGES[0], 'Only step')
     feature = engine.create_feature(project, 'New thing')
     only_step = feature.steps[0]
 
-    advanced = engine.delete_step(only_step)
+    engine.delete_step(only_step)
 
-    assert advanced is False
     assert feature.status == DI_STAGES[0]
     assert feature.steps == []
-
-
-def test_delete_step_completing_implementation_does_not_auto_close(db_session):
-    project = _project(db_session, 'm')
-    feature = engine.create_feature(project, 'New thing')
-    feature.status = DI_STAGES[-1]
-    keep = engine.add_step(feature, 'Keep me')
-    remove = engine.add_step(feature, 'Delete me')
-    engine.tick_step(keep, done=True)
-
-    advanced = engine.delete_step(remove)
-
-    assert advanced is False
-    assert feature.status == DI_STAGES[-1]
-    assert feature.closed_at is None
-    # this is exactly the state the route layer checks to show the
-    # add-another-step-or-close-this-feature modal
-    assert engine.is_stage_complete(feature) is True
 
 
 def test_add_step_appends_after_existing_steps_in_the_current_stage(db_session):

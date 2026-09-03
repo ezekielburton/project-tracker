@@ -69,6 +69,35 @@ def performance_screen():
     )
 
 
+@digital_innovation_bp.route('/performance/table', methods=['GET'])
+@login_required
+def performance_table_fragment():
+    """Re-renders _performance_table.html fresh for the current view/
+    period — called on every DI-wide live SSE ping (see
+    digital_innovation_performance.js) so Performance reflects other
+    users' cost entries, feature moves and project lifecycle changes
+    without a manual reload or period-nav click. Same "no can_edit gate
+    beyond the view gate itself, this is purely a read" reasoning as
+    board.py's board_columns_fragment — can_view_di_performance is the
+    only access check Performance has ever needed."""
+    if not can_view_di_performance(current_user):
+        abort(403)
+
+    view, period_key = _resolve_view_and_period()
+    rollup = snapshots.get_period_rollup(view, period_key)
+
+    return render_template(
+        'digital_innovation/_performance_table.html',
+        view=view,
+        view_labels=periods.PERIOD_VIEW_LABELS,
+        period_key=period_key,
+        rollup=rollup,
+        currency=costs.get_settings().currency,
+        prev_period=periods.shift_period(view, period_key, -1),
+        next_period=periods.shift_period(view, period_key, 1),
+    )
+
+
 @digital_innovation_bp.route('/performance/export')
 @login_required
 def export_performance():

@@ -185,6 +185,28 @@ def test_get_period_rollup_only_lists_active_features_when_expanded(db_session):
     assert row['features'][0]['status'] == 'researching'  # DI_STAGES[0], create_feature()'s starting stage
 
 
+def test_get_period_rollup_status_label_is_track_aware(db_session):
+    # Track is board-level (DiProject.track, models.py) - an external
+    # project's active feature sitting in management_review should
+    # report the Client Review label here too (stage_label()), the
+    # same relabeling the board and feature detail view get.
+    project = DiProject(
+        name='Test DI Project track', lifecycle='active',
+        created_at=datetime.datetime(2026, 1, 1), track='external',
+    )
+    db_session.add(project)
+    db_session.flush()
+    feature = engine.create_feature(project, 'Client facing thing')
+    feature.status = 'management_review'
+    db_session.commit()
+
+    rollup = snapshots.get_period_rollup('week', '2026-W34')
+
+    row = rollup['projects'][0]
+    assert row['features'][0]['status'] == 'management_review'
+    assert row['features'][0]['status_label'] == 'Client Review'
+
+
 def test_get_period_rollup_current_month_is_never_snapshotted(db_session):
     # The month containing "today" has, by definition, not ended yet —
     # computed live every call, exactly like a week.

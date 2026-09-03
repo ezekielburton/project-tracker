@@ -5,10 +5,15 @@
    performance.html now, not here — Ezekiel's wireframe (2 Sep 2026) puts
    them on one row with the nav right-aligned, and that row also carries
    the page's Export button, so it made more sense as part of the page
-   shell than this fragment. No separate fragment route for this file
-   (unlike _board_columns.html / _cost_breakdown.html) — Performance has
-   no live-refresh requirement, so switching tabs or periods is just a
-   plain link + the app's existing SPA-nav page swap, not an AJAX fetch.
+   shell than this fragment. Switching tabs or periods is still just a
+   plain link + the app's existing SPA-nav page swap, not an AJAX fetch
+   — but this whole fragment IS now wrapped in #di-perf-table-body and
+   re-fetched wholesale (routes/performance.py::performance_table_
+   fragment) on every DI-wide live SSE ping (3 Sep 2026, see
+   digital_innovation_performance.js), same "one template, two callers"
+   shape as _board_columns.html — the tabs/period-label/nav-arrows in
+   performance.html stay untouched by a refresh since your own
+   navigation state hasn't changed, only the data underneath it has.
 
    Cost / Charge / Profit per project are LIFETIME totals — identical to
    what that project's own Cost Breakdown shows, unchanged no matter
@@ -50,6 +55,7 @@
    the literal same "Dev Time" column as every other row already makes
    it unambiguous they're not somehow scoped to the stage shown next to
    them, without needing a caption to say so. #}
+<div id="di-perf-table-body">
 <div class="di-cost-stats di-perf-stats">
     <div class="di-cost-stat-card">
         <span class="di-cost-stat-label">Total {{ view }}ly cost</span>
@@ -122,4 +128,5 @@
             {% endfor %}
         </tbody>
     </table>
+</div>
 </div>

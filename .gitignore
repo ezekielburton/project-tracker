@@ -10,3 +10,5 @@ SERVER_ACCESS.md
 Vitamin_Helix_Feature_Roadmap.pdf
 ROADMAP.MD
 routes/projects_old.py
+app/static/wiki-uploads/
+app/static/blog-uploads/

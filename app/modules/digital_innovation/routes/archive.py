@@ -25,3 +25,21 @@ def archive_screen():
         closed_projects=closed_projects(),
         archived_projects=archived_projects(),
     )
+
+
+@digital_innovation_bp.route('/archive/lists', methods=['GET'])
+@login_required
+def archive_lists_fragment():
+    """Re-renders _archive_lists.html fresh — called on every DI-wide
+    live SSE ping (see digital_innovation_archive.js) so a project
+    someone else just closed, archived or reopened shows up here without
+    a manual reload. No extra access gate: viewing Archive has never been
+    restricted (same as Board), and this is purely a read — the actual
+    close/archive/reopen actions stay gated by can_edit_di_board over in
+    routes/projects.py, unchanged."""
+    return render_template(
+        'digital_innovation/_archive_lists.html',
+        can_edit_board=can_edit_di_board(current_user),
+        closed_projects=closed_projects(),
+        archived_projects=archived_projects(),
+    )

@@ -1509,14 +1509,38 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
 
 /* ── Dark-mode action buttons (2.4.1) — Option A: tinted, not solid-fill.
    Light mode above is untouched; these only apply under data-theme="dark". */
+/* .btn-primary is solid tangerine in light mode (line ~1400 above), so
+   its dark tint uses tangerine too rather than the blue used for other
+   dark accents on this page — this is the one place 'primary action'
+   button colour is decided app-wide, so every module's Save/Create/
+   Submit-type button picks this up for free (Ezekiel, 31 Aug 2026:
+   "all tangerine buttons need to be this same tinted tangerine in dark
+   mode"). --tangerine itself is untouched between light/dark (see the
+   dark-theme block above), so it doubles as its own dark label colour
+   here — no separate --tone-tangerine token needed. */
 :root[data-theme="dark"] .btn-primary {
-    background-color: rgba(143, 196, 240, 0.15);
-    color: var(--tone-blue);
-    border-color: rgba(143, 196, 240, 0.45);
+    background-color: rgba(242, 127, 85, 0.15);
+    color: var(--tangerine);
+    border-color: rgba(242, 127, 85, 0.45);
 }
 :root[data-theme="dark"] .btn-primary:hover {
-    background-color: rgba(143, 196, 240, 0.24);
-    color: var(--tone-blue);
+    background-color: rgba(242, 127, 85, 0.24);
+    color: var(--tangerine);
+}
+
+/* .btn--tangerine (used by a handful of older screens) had no dark
+   override at all before this — solid tangerine fill with white text
+   reads fine in both modes on its own, but line it up with the same
+   tinted treatment .btn-primary just got, for one consistent "tangerine
+   button" look in dark mode. */
+:root[data-theme="dark"] .btn--tangerine {
+    background: rgba(242, 127, 85, 0.15);
+    color: var(--tangerine);
+    border: 1px solid rgba(242, 127, 85, 0.45);
+}
+:root[data-theme="dark"] .btn--tangerine:hover {
+    background: rgba(242, 127, 85, 0.24);
+    opacity: 1;
 }
 
 :root[data-theme="dark"] .btn-approve-customer,

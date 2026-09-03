@@ -1,12 +1,15 @@
-"""Coverage for lib/feature_detail.py's context assembly — the data behind
-the read-only feature detail modal (chunk 3)."""
+"""Coverage for lib/feature_detail.py's context assembly - the data behind
+the read-only feature detail modal (chunk 3), including the move-to-stage
+picker's options (stage_options) added alongside the free-movement model
+(step_engine.move_to_stage) - next_stage_label doesn't exist any more,
+since movement is no longer "the next stage" but "any stage"."""
 from app.modules.digital_innovation.models import DiProject, DiCostEntry, DI_STAGES
 from app.modules.digital_innovation.lib import step_engine as engine
 from app.modules.digital_innovation.lib.feature_detail import build_feature_detail_context
 
 
-def _project(db_session, tag):
-    project = DiProject(name=f'Test DI Project {tag}')
+def _project(db_session, tag, track='internal'):
+    project = DiProject(name=f'Test DI Project {tag}', track=track)
     db_session.add(project)
     db_session.flush()
     return project
@@ -84,18 +87,23 @@ def test_steps_done_count_matches_ticked_steps(db_session):
     assert ctx['steps_total_count'] == 2
 
 
-def test_next_stage_label_points_at_the_following_stage(db_session):
+def test_stage_options_lists_every_stage_regardless_of_current_stage(db_session):
     project = _project(db_session, 'd')
     feature = engine.create_feature(project, 'New thing')
     feature.status = DI_STAGES[0]
 
     ctx = build_feature_detail_context(feature)
 
+    assert [opt['stage'] for opt in ctx['stage_options']] == list(DI_STAGES)
     assert ctx['is_last_stage'] is False
-    assert ctx['next_stage_label'] is not None
 
 
-def test_implementation_is_flagged_as_the_last_stage_with_no_next(db_session):
+def test_stage_options_are_offered_even_on_the_last_stage(db_session):
+    # Free movement (step_engine.move_to_stage) has no completion gate, so
+    # the picker still offers every stage - including backward moves -
+    # even once the feature is on the last one. is_last_stage still
+    # flags this (it drives the Implementation "add step or close" banner
+    # in the template), but it no longer implies "no more options".
     project = _project(db_session, 'e')
     feature = engine.create_feature(project, 'New thing')
     feature.status = DI_STAGES[-1]
@@ -103,7 +111,17 @@ def test_implementation_is_flagged_as_the_last_stage_with_no_next(db_session):
     ctx = build_feature_detail_context(feature)
 
     assert ctx['is_last_stage'] is True
-    assert ctx['next_stage_label'] is None
+    assert [opt['stage'] for opt in ctx['stage_options']] == list(DI_STAGES)
+
+
+def test_stage_options_use_client_review_label_on_an_external_track_project(db_session):
+    project = _project(db_session, 'd2', track='external')
+    feature = engine.create_feature(project, 'New thing')
+
+    ctx = build_feature_detail_context(feature)
+
+    labels = {opt['stage']: opt['label'] for opt in ctx['stage_options']}
+    assert labels['management_review'] == 'Client Review'
 
 
 def test_closed_feature_shows_every_stage_done_and_no_current_steps(db_session):
@@ -118,6 +136,8 @@ def test_closed_feature_shows_every_stage_done_and_no_current_steps(db_session):
     assert all(row['state'] == 'done' for row in ctx['stage_rows'])
     assert ctx['step_rows'] == []
     assert ctx['current_stage_label'] is None
+    # Nowhere left to move a closed feature to.
+    assert ctx['stage_options'] == []
 
 
 def test_logged_hours_sums_dev_time_cost_entries_for_this_feature(db_session):

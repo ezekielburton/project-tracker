@@ -100,6 +100,17 @@ _DI_PROJECT_ID_GETTERS = {
     'DiFeatureStep': lambda obj: obj.feature.di_project_id,
     'DiCostEntry':   lambda obj: obj.di_project_id,
     'DiIntakeItem':  lambda obj: obj.di_project_id,
+    # DiStepTemplate is department-wide, not scoped to any DiProject — there
+    # is no real id to key it on. -1 is a sentinel (deliberately NOT 0 —
+    # _collect_ids below does `if value: seen.add(value)`, and 0 is falsy in
+    # Python, so a 0 sentinel would silently never get collected at all).
+    # sse_relay.py's _dispatch_di_change never has a real di_project_id of
+    # -1 to confuse it with (real DiProject ids are positive autoincrement
+    # keys), so this only ever reaches the DI-wide dashboard broadcast
+    # subscribers (Performance/Templates/Archive), never a specific
+    # project's Board subscriber — which is exactly right, since a template
+    # edit has nothing to do with any one board.
+    'DiStepTemplate': lambda obj: -1,
 }
 
 

@@ -76,23 +76,29 @@
     <input type="text" class="di-step-add-details-input" id="di-step-add-details" placeholder="Details (optional)">
 </div>
 
-{% if steps_total_count > 0 and steps_done_count == steps_total_count %}
-    {% if is_last_stage %}
-    <div class="di-advance-banner">
-        <p>All Implementation steps are done — add another step above, or close this feature.</p>
-        <button type="button" class="btn-primary di-close-feature-btn">Close this feature</button>
-    </div>
-    {% else %}
-    <div class="di-advance-banner">
-        <p>All steps are done — advance to <strong>{{ next_stage_label }}</strong>. It loads {{ next_stage_label }}'s step template automatically.</p>
-        <button type="button" class="btn-primary di-advance-feature-btn">Advance to {{ next_stage_label }}</button>
-    </div>
-    {% endif %}
-{% elif not is_last_stage and steps_total_count > 0 %}
-<div class="di-advance-banner di-advance-banner--muted">
-    <p>Finish all steps, then advance to <strong>{{ next_stage_label }}</strong> — it loads {{ next_stage_label }}'s step template automatically.</p>
+{% if steps_total_count > 0 and steps_done_count == steps_total_count and is_last_stage %}
+<div class="di-advance-banner">
+    <p>All Implementation steps are done — add another step above, or close this feature.</p>
+    <button type="button" class="btn-primary di-close-feature-btn">Close this feature</button>
 </div>
 {% endif %}
+
+{# Move-to-stage picker: any stage in DI_STAGES, forward or backward, at
+   any time — no completion gate (step_engine.move_to_stage, per
+   Ezekiel's confirmed free-movement model). Always shown alongside the
+   checklist rather than only once the current stage is done, since
+   movement is no longer tied to completion at all. #}
+<div class="di-stage-picker">
+    <label class="di-stage-picker-label" for="di-stage-picker-select">Move to stage</label>
+    <div class="di-stage-picker-row">
+        <select class="di-stage-picker-select" id="di-stage-picker-select">
+            {% for opt in stage_options %}
+            <option value="{{ opt.stage }}"{% if opt.stage == feature.status %} selected{% endif %}>{{ opt.label }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn-secondary di-move-stage-btn">Move</button>
+    </div>
+</div>
 {% endif %}
 {% endif %}
 

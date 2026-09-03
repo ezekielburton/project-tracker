@@ -1,9 +1,9 @@
-# Digital Innovation — feature (card) management. Creation, the detail
-# view and every step interaction (tick/add/delete step, advance, close)
-# live here. Every rule about how a feature actually moves lives in
-# lib/step_engine.py (brain A) — this file is just the HTTP layer on top
-# of it: pull the record(s), call the engine, commit or roll back on a
-# ValueError, and hand back the same rendered fragment the initial GET
+# Digital Innovation - feature (card) management. Creation, the detail
+# view and every step interaction (tick/add/delete step, move stage,
+# close) live here. Every rule about how a feature actually moves lives
+# in lib/step_engine.py (brain A) - this file is just the HTTP layer on
+# top of it: pull the record(s), call the engine, commit or roll back on
+# a ValueError, and hand back the same rendered fragment the initial GET
 # uses so the modal always ends up showing the feature's true state.
 
 from datetime import datetime
@@ -20,19 +20,19 @@ from app.modules.digital_innovation.lib.access import can_view_di_performance, c
 
 
 def _render_feature_detail(feature):
-    """The one place that turns a feature into the modal's HTML fragment —
+    """The one place that turns a feature into the modal's HTML fragment -
     used by the initial GET and by every mutating route below, so a tick,
-    an add, a delete, an advance or a close all leave the modal showing
+    an add, a delete, a stage move or a close all leave the modal showing
     exactly what the GET route would show for that same feature.
 
-    can_view_costs gates the footer's cost/charge/profit note — reuses the
+    can_view_costs gates the footer's cost/charge/profit note - reuses the
     same admin/management choke point Performance and Cost breakdown
     already gate through (lib/access.py), so adding a role to any of the
     three is the one change in that one file. can_edit_board gates every
     interactive control (tick a step, delete it, the add-step form, the
-    advance/close buttons) — the board is view-only for anyone it's False
-    for, so the template renders those controls at all only when it's
-    True, rather than rendering-then-disabling them."""
+    stage picker, the close button) - the board is view-only for anyone
+    it's False for, so the template renders those controls at all only
+    when it's True, rather than rendering-then-disabling them."""
     context = build_feature_detail_context(feature)
     return render_template(
         'digital_innovation/_feature_detail.html',
@@ -71,8 +71,18 @@ def create_feature(di_project_id):
         except ValueError:
             return jsonify({'error': 'Projected date must be a valid date (YYYY-MM-DD).'}), 400
 
-    feature = step_engine.create_feature(project, name, projected_date=projected_date)
-    db.session.commit()
+    starting_stage = (data.get('starting_stage') or '').strip() or None
+    if starting_stage and starting_stage not in DI_STAGES:
+        return jsonify({'error': f"'{starting_stage}' isn't a valid starting stage."}), 400
+
+    try:
+        feature = step_engine.create_feature(
+            project, name, projected_date=projected_date, starting_stage=starting_stage,
+        )
+        db.session.commit()
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
 
     return jsonify({'id': feature.id, 'name': feature.name, 'status': feature.status}), 201
 
@@ -81,7 +91,7 @@ def create_feature(di_project_id):
 @login_required
 def feature_detail(feature_id):
     """Returns the feature-detail modal's content as a rendered HTML
-    fragment — digital_innovation_board.js drops it straight into the
+    fragment - digital_innovation_board.js drops it straight into the
     modal body."""
     feature = DiFeature.query.get_or_404(feature_id)
     return _render_feature_detail(feature)
@@ -90,7 +100,7 @@ def feature_detail(feature_id):
 @digital_innovation_bp.route('/features/<int:feature_id>/steps', methods=['POST'])
 @login_required
 def add_feature_step(feature_id):
-    """Adds a step to the feature's current stage — the checklist's
+    """Adds a step to the feature's current stage - the checklist's
     "add a step" input, and also how the Implementation-stage "add
     another step" choice is handled (same action, step_engine.add_step
     doesn't distinguish the two)."""
@@ -150,14 +160,24 @@ def delete_feature_step(step_id):
     return _render_feature_detail(feature)
 
 
-@digital_innovation_bp.route('/features/<int:feature_id>/advance', methods=['POST'])
+@digital_innovation_bp.route('/features/<int:feature_id>/move', methods=['POST'])
 @login_required
-def advance_feature(feature_id):
+def move_feature_stage(feature_id):
+    """Moves a feature to any stage the picker was given - forward or
+    backward, no completion gate. Replaces the old single-next-stage
+    /advance route now that Ezekiel's confirmed free movement is the
+    model: the UI offers every stage in DI_STAGES, not just the next
+    one, and this route accepts any of them via step_engine.move_to_stage."""
     _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 
+    data = request.get_json(silent=True) or {}
+    target_stage = (data.get('stage') or '').strip()
+    if not target_stage:
+        return jsonify({'error': 'Target stage is required.'}), 400
+
     try:
-        step_engine.advance_stage(feature)
+        step_engine.move_to_stage(feature, target_stage)
         db.session.commit()
     except ValueError as e:
         db.session.rollback()
@@ -169,7 +189,7 @@ def advance_feature(feature_id):
 @digital_innovation_bp.route('/features/<int:feature_id>/close', methods=['POST'])
 @login_required
 def close_feature_route(feature_id):
-    """Closes an Implementation-stage feature once every step is done —
+    """Closes an Implementation-stage feature once every step is done -
     the "close this feature" choice offered alongside "add another step".
     step_engine.close_feature() itself doesn't gate on stage/completeness
     (it's a plain state-set used e.g. by tests), so that check belongs
