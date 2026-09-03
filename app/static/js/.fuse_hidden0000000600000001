@@ -364,7 +364,7 @@
 
     function init() {
         // Always tear down before reinitialising — prevents duplicate
-        // streams/intervals when the user navigates via the sidebar
+www        // streams/intervals when the user navigates via the sidebar
         teardown();
         
         // Redeploy check, debounced. The stamp only changes when the server

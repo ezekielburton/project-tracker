@@ -35,6 +35,15 @@ _project_subscribers = {}      # project_id (int) -> set of Queue
 _dashboard_subscribers = set()  # set of Queue
 _user_subscribers = {}         # user_id (int) -> set of Queue
 _di_project_subscribers = {}   # di_project_id (int) -> set of Queue
+_di_dashboard_subscribers = set()  # set of Queue — Performance/Templates/
+                                    # Archive aren't tied to one project (a
+                                    # rollup spans every project, templates
+                                    # aren't project-scoped at all), so they
+                                    # subscribe here instead of to a specific
+                                    # di_project_id — same "every change in
+                                    # this whole area matters" reasoning as
+                                    # _dashboard_subscribers above, just for
+                                    # DI instead of the main Projects module.
 
 
 def subscribe_project(project_id):
@@ -89,6 +98,16 @@ def unsubscribe_di_project(di_project_id, q):
             _di_project_subscribers.pop(di_project_id, None)
 
 
+def subscribe_di_dashboard():
+    q = Queue()
+    _di_dashboard_subscribers.add(q)
+    return q
+
+
+def unsubscribe_di_dashboard(q):
+    _di_dashboard_subscribers.discard(q)
+
+
 def _dispatch_project_change(payload):
     try:
         project_id = int(payload)
@@ -113,7 +132,17 @@ def _dispatch_di_change(payload):
         di_project_id = int(payload)
     except (TypeError, ValueError):
         return
-    for q in list(_di_project_subscribers.get(di_project_id, ())):
+    # Mirrors _dispatch_project_change's dual dispatch: a per-project
+    # subscriber (Board, watching one specific project) AND every
+    # dashboard-style subscriber (Performance/Templates/Archive, which
+    # need to hear about a change regardless of which project — or, for
+    # DiStepTemplate edits, no real project at all — it belongs to).
+    # di_project_id -1 is the sentinel live_events.py's DiStepTemplate
+    # getter uses (templates have no project of their own) — it never
+    # matches a real _di_project_subscribers key, so it only ever reaches
+    # the dashboard set below, which is exactly what should happen.
+    targets = list(_di_project_subscribers.get(di_project_id, ())) + list(_di_dashboard_subscribers)
+    for q in targets:
         q.put(di_project_id)
 
 

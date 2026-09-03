@@ -113,6 +113,133 @@ def test_create_feature_404s_for_an_archived_project(app, client, db_session):
     assert resp.status_code == 404
 
 
+def test_create_feature_accepts_a_starting_stage(app, client, db_session):
+    user = _user(db_session, 'q')
+    project = _project(db_session, 'q')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.create_feature', di_project_id=project.id)
+    resp = client.post(url, json={'name': 'New thing', 'starting_stage': DI_STAGES[3]})
+
+    assert resp.status_code == 201
+    assert resp.get_json()['status'] == DI_STAGES[3]
+
+
+def test_create_feature_rejects_an_invalid_starting_stage(app, client, db_session):
+    user = _user(db_session, 'r')
+    project = _project(db_session, 'r')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.create_feature', di_project_id=project.id)
+    resp = client.post(url, json={'name': 'New thing', 'starting_stage': 'not-a-real-stage'})
+
+    assert resp.status_code == 400
+    assert DiFeature.query.filter_by(di_project_id=project.id).count() == 0
+
+
+def test_create_feature_defaults_to_the_first_stage_when_starting_stage_omitted(app, client, db_session):
+    user = _user(db_session, 's')
+    project = _project(db_session, 's')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.create_feature', di_project_id=project.id)
+    resp = client.post(url, json={'name': 'New thing'})
+
+    assert resp.status_code == 201
+    assert resp.get_json()['status'] == DI_STAGES[0]
+
+
+def test_move_feature_stage_requires_auth(app, client, db_session):
+    project = _project(db_session, 't')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={'stage': DI_STAGES[1]})
+    assert resp.status_code in (302, 401)
+
+
+def test_move_feature_stage_moves_forward(app, client, db_session):
+    user = _user(db_session, 'u')
+    project = _project(db_session, 'u')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={'stage': DI_STAGES[2]})
+
+    assert resp.status_code == 200
+    assert feature.status == DI_STAGES[2]
+
+
+def test_move_feature_stage_allows_moving_backward(app, client, db_session):
+    # No completion gate - the whole point of the free-movement model
+    # (step_engine.move_to_stage) is that this is allowed at any time.
+    user = _user(db_session, 'v')
+    project = _project(db_session, 'v')
+    feature = engine.create_feature(project, 'New thing')
+    feature.status = DI_STAGES[-1]
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={'stage': DI_STAGES[0]})
+
+    assert resp.status_code == 200
+    assert feature.status == DI_STAGES[0]
+
+
+def test_move_feature_stage_rejects_a_missing_stage(app, client, db_session):
+    user = _user(db_session, 'w')
+    project = _project(db_session, 'w')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={})
+
+    assert resp.status_code == 400
+
+
+def test_move_feature_stage_rejects_an_invalid_stage(app, client, db_session):
+    user = _user(db_session, 'x')
+    project = _project(db_session, 'x')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={'stage': 'not-a-real-stage'})
+
+    assert resp.status_code == 400
+    assert feature.status == DI_STAGES[0]
+
+
+def test_move_feature_stage_403s_for_a_designer(app, client, db_session):
+    user = _user(db_session, 'y', role='designer')
+    project = _project(db_session, 'y')
+    feature = engine.create_feature(project, 'New thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.move_feature_stage', feature_id=feature.id)
+    resp = client.post(url, json={'stage': DI_STAGES[1]})
+
+    assert resp.status_code == 403
+    assert feature.status == DI_STAGES[0]
+
+
 def test_feature_detail_requires_auth(app, client, db_session):
     project = _project(db_session, 'h')
     feature = engine.create_feature(project, 'New thing')

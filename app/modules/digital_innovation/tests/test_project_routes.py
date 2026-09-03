@@ -120,7 +120,106 @@ def test_create_project_works_for_an_admin_emulating_another_admin(app, client, 
     assert DiProject.query.filter_by(name='Still allowed').first() is not None
 
 
-# ── close / archive / reopen ─────────────────────────────────────────────
+def test_create_project_defaults_to_internal_track(app, client, db_session):
+    user = _user(db_session, 'pg', role='admin')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.create_project')
+    resp = client.post(url, json={'name': 'No track given'})
+
+    assert resp.status_code == 201
+    body = resp.get_json()
+    assert body['track'] == 'internal'
+    project = DiProject.query.filter_by(name='No track given').first()
+    assert project.track == 'internal'
+
+
+def test_create_project_accepts_an_external_track(app, client, db_session):
+    user = _user(db_session, 'ph', role='admin')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.create_project')
+    resp = client.post(url, json={'name': 'External board', 'track': 'external'})
+
+    assert resp.status_code == 201
+    assert resp.get_json()['track'] == 'external'
+
+
+def test_create_project_rejects_an_invalid_track(app, client, db_session):
+    user = _user(db_session, 'pi', role='admin')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.create_project')
+    resp = client.post(url, json={'name': 'Bad track', 'track': 'not-a-real-track'})
+
+    assert resp.status_code == 400
+    assert DiProject.query.filter_by(name='Bad track').first() is None
+
+
+# ── track ─────────────────────────────────────────────────────────────
+
+
+def test_update_project_track_requires_auth(app, client, db_session):
+    project = DiProject(name='Track test project')
+    db_session.add(project)
+    db_session.flush()
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.update_project_track', project_id=project.id)
+    resp = client.patch(url, json={'track': 'external'})
+    assert resp.status_code in (302, 401)
+
+
+def test_update_project_track_happy_path(app, client, db_session):
+    user = _user(db_session, 'pj', role='admin')
+    project = DiProject(name='Track test project 2')
+    db_session.add(project)
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.update_project_track', project_id=project.id)
+    resp = client.patch(url, json={'track': 'external'})
+
+    assert resp.status_code == 200
+    assert resp.get_json()['track'] == 'external'
+    assert project.track == 'external'
+
+
+def test_update_project_track_rejects_an_invalid_track(app, client, db_session):
+    user = _user(db_session, 'pk', role='admin')
+    project = DiProject(name='Track test project 3', track='internal')
+    db_session.add(project)
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.update_project_track', project_id=project.id)
+    resp = client.patch(url, json={'track': 'not-a-real-track'})
+
+    assert resp.status_code == 400
+    assert project.track == 'internal'
+
+
+def test_update_project_track_403s_for_a_designer(app, client, db_session):
+    user = _user(db_session, 'pl', role='designer')
+    project = DiProject(name='Track test project 4', track='internal')
+    db_session.add(project)
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.update_project_track', project_id=project.id)
+    resp = client.patch(url, json={'track': 'external'})
+
+    assert resp.status_code == 403
+    assert project.track == 'internal'
+
+
+# ── close / archive / reopen ────────────────────────────────────────────
 from app.modules.digital_innovation.tests.test_feature_steps_routes import _project as _lifecycle_project
 
 

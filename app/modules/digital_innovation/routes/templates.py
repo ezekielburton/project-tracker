@@ -54,6 +54,20 @@ def _render_templates_body():
     )
 
 
+@digital_innovation_bp.route('/templates/body', methods=['GET'])
+@login_required
+def templates_body_fragment():
+    """Re-renders _templates_body.html fresh — called on every DI-wide
+    live SSE ping (see digital_innovation_templates.js) so a step another
+    admin just added/edited/deleted/reordered shows up here without a
+    manual reload. Gated the same as the page itself (this is a distinct
+    admin screen, not a read visible to management like Performance is)
+    — every mutating route below already enforces this, this is just the
+    first GET-only one."""
+    _require_template_access()
+    return _render_templates_body()
+
+
 @digital_innovation_bp.route('/templates/<stage>/steps', methods=['POST'])
 @login_required
 def add_template_step(stage):

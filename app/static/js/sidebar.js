@@ -209,11 +209,30 @@
             old.parentNode.replaceChild(fresh, old);
         });
     }
+    /* Navigation control: Fixed the hanging on the browser 6 open connection limit.
+       Closes any old navigation requests */
+    var _navToken = 0;
+    var _navAbort = null;
+    var _navSafetyTimer = null;
 
     function navigateTo(url, push) {
+        var myToken = ++_navToken;
+
+        // Cancel the previous navigation's fetch so quick clicks don't stack.
+        if (_navAbort) { _navAbort.abort(); }
+        _navAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+
         startLoadingBar();
+
+        // Backstop: never let the bar hang forever, whatever goes wrong.
+        if (_navSafetyTimer) { clearTimeout(_navSafetyTimer); }
+        _navSafetyTimer = setTimeout(function () {
+            if (myToken === _navToken) { finishLoadingBar(); }
+        }, 8000);
+
         fetch(url, {
-            headers: { 'X-Nav-Request': '1' }
+            headers: { 'X-Nav-Request': '1' },
+            signal: _navAbort ? _navAbort.signal : undefined
         })
             .then(function (r) {
                 if (!r.ok) throw new Error('nav-failed');
@@ -223,8 +242,12 @@
                 });
             })
             .then(function (result) {
+                // A newer navigation started while we were fetching — drop this one.
+                if (myToken !== _navToken) return;
                 mainContent.style.opacity = '0';
                 setTimeout(function () {
+                    // Re-check: a newer nav may have started during the fade.
+                    if (myToken !== _navToken) return;
                     mainContent.innerHTML = result.html;
                     execScripts(mainContent);
                     if (result.title) {
@@ -237,10 +260,17 @@
                     document.dispatchEvent(new CustomEvent('helix:navigated'));
                     mainContent.style.opacity = '1';
                     setActiveItem(url);
+                    if (_navSafetyTimer) { clearTimeout(_navSafetyTimer); }
                     finishLoadingBar();
                 }, 150);
             })
-            .catch(function () {
+            .catch(function (err) {
+                // Intentional abort (superseded by a newer nav) or simply no
+                // longer current: stay silent — the current nav owns the bar
+                // and the page. Only a genuine failure of the CURRENT nav
+                // falls back to a full reload.
+                if ((err && err.name === 'AbortError') || myToken !== _navToken) return;
+                if (_navSafetyTimer) { clearTimeout(_navSafetyTimer); }
                 finishLoadingBar();
                 window.location.href = url; // graceful fallback
             });

@@ -85,14 +85,29 @@ This is **not** a drive-by fix — `main.js` is big, and converting its one-shot
 
 **Rule for new work:** if the logic needs to re-run per page, put it in the page's own script tag inside `{% block content %}`. Don't add to `main.js`.
 
+## Trap 4 — navigations abort their predecessor (don't fight it)
+
+`navigateTo()` runs one navigation at a time. Each call takes a token and an `AbortController`; starting a new navigation **aborts the previous one's fetch**, and only the navigation whose token is still current may swap `#main-content`, push history, or touch the loading bar. A superseded navigation returns silently.
+
+This is what stops fast sidebar clicks from stacking requests past the browser's 6-connections-per-origin limit — the cause of the old "loading bar stuck at 80%" hang (see History). Consequences to know before you touch this file:
+
+- **Cancelled requests in the Network tab are normal.** Click B while A is still loading and A shows as `canceled`/red. That's the abort working, not an error.
+- **A superseded navigation must stay silent.** It must NOT run the `window.location.href = url` fallback — that full reload is exactly the jank being avoided. Only a *genuine* failure of the *current* navigation falls back to a reload. In practice: if the fetch rejects with `AbortError`, or the nav's token is no longer current, return and do nothing.
+- **The loading bar is tied to the token, plus an 8s backstop.** Don't add a path that finishes the bar from a non-current navigation, and don't remove the backstop — it's the guarantee the bar can never hang permanently.
+
+If you add anything that starts its own navigation or its own long fetch from here, respect the same token so it can't overwrite a newer page.
+
 ## Checklist when adding a new page or page-specific JS
 
 Before considering it done, check both:
 
 1. **Init not gated behind `DOMContentLoaded`?** If the page can be reached via a sidebar link (any internal `<a class="sidebar-item--nav">`-style link), the file must be an IIFE that calls init directly, per Trap 1. Copy the pattern from `achievements.js` or `client_directory.js`.
 2. **No `const`/`let` at inline-script top level for embedded data?** All `{{ ... | tojson }}` values assigned at top level must use `var`, per Trap 2.
+3. **Superseded navigation stays silent?** If you touched `navigateTo()` or added a path that navigates, make sure a superseded/aborted navigation returns without swapping content, finishing the loading bar, or hitting the reload fallback, per Trap 4.
 
 ## History
 
 - **9 Jul 2026** — Both traps discovered while wiring the Client Directory page into the sidebar. Fixed same day: `app/templates/projects/create.html`'s six top-level consts (`CUSTOMERS_BY_REGION`, `EDIT_MODE`, `EDIT_PROJECT_ID`, `EXISTING_CUSTOMERS`, `EXISTING_DELIVERABLES`, `EXISTING_STANDARD_DELIVERABLES`) switched to `var`.
 - **Trap 3 (`main.js`)** — identified, not fixed. Left as a known limitation until the brief form needs work.
+
+- **3 Sep 2026** — Trap 4 added. Fast sidebar navigation could stack un-aborted fetches (each also firing `/api/version` + `/sidebar/track`) past the browser's 6-connection cap, queuing the newest page fetch and freezing the loading bar at 80%. Fixed with a per-call token + `AbortController` in `navigateTo()` (abort predecessor; only the current token swaps/finishes; superseded navs stay silent), an 8s loading-bar backstop, a debounced `/api/version` check in `polling.js`, and a shorter SSE heartbeat (`_HEARTBEAT_SECONDS` 20 -> 5) in `sse.py`.

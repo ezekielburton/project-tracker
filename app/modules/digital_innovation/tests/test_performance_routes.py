@@ -159,3 +159,57 @@ def test_export_performance_honours_the_view_and_period_querystring(app, client,
 
     assert resp.status_code == 200
     assert 'di_performance_month_2026-09.xlsx' in resp.headers.get('Content-Disposition', '')
+
+
+# ── performance_table_fragment (3 Sep 2026, DI-wide live SSE refresh) ────
+# Same shape as test_board_routes.py's board_columns_fragment coverage —
+# this route is a plain read, gated the same as performance_screen
+# itself, so it needs no dedicated designer-403 test beyond confirming
+# the gate is actually applied here too (not just on the full page).
+
+def test_performance_table_fragment_requires_auth(app, client, db_session):
+    with app.test_request_context():
+        url = url_for('digital_innovation.performance_table_fragment')
+    resp = client.get(url)
+    assert resp.status_code in (302, 401)
+
+
+def test_performance_table_fragment_403s_for_a_designer(app, client, db_session):
+    user = _user(db_session, 'k', role='designer')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.performance_table_fragment')
+    resp = client.get(url)
+    assert resp.status_code == 403
+
+
+def test_performance_table_fragment_matches_a_fresh_page_load(app, client, db_session):
+    _permanent_project(db_session)
+    user = _user(db_session, 'l', role='admin')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        page_url = url_for('digital_innovation.performance_screen')
+        fragment_url = url_for('digital_innovation.performance_table_fragment')
+
+    page_body = client.get(page_url).get_data(as_text=True)
+    fragment_body = client.get(fragment_url).get_data(as_text=True)
+
+    assert 'di-perf-table-body' in page_body
+    assert 'di-perf-table-body' in fragment_body
+    # The fragment is the same wrapper the full page renders, just without
+    # the surrounding tabs/period-nav/sidebar chrome around it.
+    assert 'di-perf-stats' in fragment_body
+    assert '<html' not in fragment_body
+
+
+def test_performance_table_fragment_honours_the_view_and_period_querystring(app, client, db_session):
+    _permanent_project(db_session)
+    user = _user(db_session, 'm', role='admin')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.performance_table_fragment', view='month', period='2026-09')
+    resp = client.get(url)
+    assert resp.status_code == 200

@@ -9,12 +9,15 @@ from app.modules.core.shared.extensions import db
 from datetime import datetime
 
 
-# The 7 fixed pipeline stages a feature moves through, in order. Kept as a
+# The 8 fixed pipeline stages a feature moves through, in order. Kept as a
 # plain tuple (not a DB enum) to match how the rest of the app stores
 # status values — see feedback.py's FeatureRequest.status for the same
 # plain-string convention. A closed feature's status is the literal string
 # 'closed', which is deliberately NOT in this tuple (closing is a
-# transition out of the stage list, not an 8th stage).
+# transition out of the stage list, not a 9th stage). 'revision' sits
+# between 'management_review' and 'implementation' — see stage_label()
+# below for how 'management_review' is displayed as 'Client Review' for
+# external-track boards.
 DI_STAGES = (
     'researching',
     'planning',
@@ -22,6 +25,7 @@ DI_STAGES = (
     'testing',
     'optimizing',
     'management_review',
+    'revision',
     'implementation',
 )
 
@@ -34,6 +38,7 @@ DI_STAGE_LABELS = {
     'testing': 'Testing',
     'optimizing': 'Optimizing',
     'management_review': 'Management Review',
+    'revision': 'Revision',
     'implementation': 'Implementation',
 }
 
@@ -48,11 +53,32 @@ DI_STAGE_COLOURS = {
     'testing': 'salmon',
     'optimizing': 'sage',
     'management_review': 'canary',
+    'revision': 'poppy',
     'implementation': 'clover',
 }
 
 # Cost ledger entry types (DiCostEntry.type).
 DI_COST_TYPES = ('dev_time', 'claude', 'hardware', 'licensing')
+
+# A board's track decides whether its 'management_review' stage reads as
+# 'Management Review' (internal work) or 'Client Review' (external/client
+# work) everywhere a stage label is shown. Set once per board (DiProject.
+# track), not per feature — see stage_label() below.
+DI_PROJECT_TRACKS = ('internal', 'external')
+
+
+def stage_label(stage, track='internal'):
+    """Resolve the display label for a stage, honouring the board's
+    track. Only 'management_review' varies — every other stage falls
+    back to the plain DI_STAGE_LABELS entry. Any code that renders a
+    stage name to a user — every call site with a real DiProject in
+    hand should use this instead of indexing DI_STAGE_LABELS directly,
+    so a card never shows 'Management Review' on an external board or
+    vice versa.
+    """
+    if stage == 'management_review' and track == 'external':
+        return 'Client Review'
+    return DI_STAGE_LABELS.get(stage, stage)
 
 
 class DiProject(db.Model):
@@ -69,6 +95,10 @@ class DiProject(db.Model):
     colour            = db.Column(db.String(20), nullable=True)
     client_charge     = db.Column(db.Float, nullable=True)
     lifecycle         = db.Column(db.String(20), nullable=False, default='active')
+    # 'internal' or 'external' — see DI_PROJECT_TRACKS / stage_label()
+    # above. Board-level, not per-feature: every card on a board shares
+    # its track.
+    track             = db.Column(db.String(10), nullable=False, default='internal')
     closed_at         = db.Column(db.DateTime, nullable=True)
     is_permanent      = db.Column(db.Boolean, nullable=False, default=False)
     # ON DELETE SET NULL: if the linked system project is ever deleted, this

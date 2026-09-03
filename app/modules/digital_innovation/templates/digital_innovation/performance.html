@@ -9,7 +9,16 @@
         {% include "digital_innovation/_sidebar.html" %}
         {% endwith %}
 
-        <main class="di-board">
+        {# di-board is deliberately a <div>, not a <main> — base.html's
+           #main-content is already the page's one <main> landmark, and
+           spa_strip_response's regex (app/__init__.py) extracts its
+           content by matching up to the FIRST literal "</main>" it finds.
+           A nested <main>...</main> in here used to close that match
+           early on every SPA nav into this page, silently dropping
+           everything below it (all the DI modals) from the DOM until a
+           full refresh. Found + fixed 3 Sep 2026 — see
+           digital_innovation_module.md, "SPA + SSE readiness". #}
+        <div class="di-board">
             <div class="di-board-header">
                 <div>
                     <h1 class="di-board-title">Performance</h1>
@@ -47,12 +56,14 @@
             </div>
 
             {% include "digital_innovation/_performance_table.html" %}
-        </main>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/digital_innovation_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/digital_innovation_shell.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/digital_innovation_live.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('static', filename='js/digital_innovation_performance.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

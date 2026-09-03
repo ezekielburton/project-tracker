@@ -1,0 +1,51 @@
+{# Digital Innovation — Archive's closed/archived project lists. Extracted
+   from archive.html (3 Sep 2026) into its own partial, wrapped in
+   #di-archive-lists, so a fragment route can re-render just this on a
+   DI-wide live SSE ping — same "one template, two callers" shape as
+   _board_columns.html/_templates_body.html — while archive.html itself
+   still renders it via a plain {% include %} on first load, same as
+   _performance_table.html. Needs `closed_projects`, `archived_projects`
+   and `can_edit_board` in context, same as archive_screen() already
+   passes. #}
+<div id="di-archive-lists">
+    <section class="di-archive-section">
+        <h2 class="di-archive-section-title">Closed</h2>
+        <ul class="di-archive-list">
+            {% for p in closed_projects %}
+            <li class="di-archive-row" data-di-project-id="{{ p.id }}">
+                <span class="di-dot di-dot--{{ p.colour or 'oak' }}"></span>
+                <span class="di-archive-name">{{ p.name }}</span>
+                <span class="di-archive-date">Closed {{ p.closed_at.strftime('%d %b %Y') if p.closed_at else '' }}</span>
+                {% if can_edit_board %}
+                <div class="di-archive-actions">
+                    <button type="button" class="btn-secondary di-archive-reopen-btn">Reopen</button>
+                    <button type="button" class="btn-danger-sm di-archive-archive-btn">Archive</button>
+                </div>
+                {% endif %}
+            </li>
+            {% else %}
+            <li class="di-archive-empty">No closed projects.</li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <section class="di-archive-section">
+        <h2 class="di-archive-section-title">Archived</h2>
+        <ul class="di-archive-list">
+            {% for p in archived_projects %}
+            <li class="di-archive-row" data-di-project-id="{{ p.id }}">
+                <span class="di-dot di-dot--{{ p.colour or 'oak' }}"></span>
+                <span class="di-archive-name">{{ p.name }}</span>
+                <span class="di-archive-date">Closed {{ p.closed_at.strftime('%d %b %Y') if p.closed_at else '' }}</span>
+                {% if can_edit_board %}
+                <div class="di-archive-actions">
+                    <button type="button" class="btn-secondary di-archive-reopen-btn">Reopen</button>
+                </div>
+                {% endif %}
+            </li>
+            {% else %}
+            <li class="di-archive-empty">No archived projects.</li>
+            {% endfor %}
+        </ul>
+    </section>
+</div>

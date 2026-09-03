@@ -1,9 +1,14 @@
 // digital_innovation_archive.js — Digital Innovation module, the Archive
 // screen: closed and archived projects, each reopenable, closed ones
-// also archivable one step further. Same "reload after a mutating
-// action" approach digital_innovation_board.js uses for new project/
-// feature creation — these actions are rare, and there's no fragment
-// worth swapping for a list this short.
+// also archivable one step further. Reopen/Archive themselves still do a
+// full reload — these actions are rare, at most a handful of rows, and
+// the acting user already sees the result immediately either way, so
+// re-rendering the whole screen server-side stays simpler than
+// hand-patching the DOM for THAT case. What's new (3 Sep 2026) is a live
+// refresh for the OTHER case — someone ELSE closing/archiving/reopening
+// a project while this screen is just sitting open — via a DI-wide SSE
+// ping; see digital_innovation_live.js for the shared connection-
+// watching helper this calls into.
 
 if (!window._diArchiveDispatcherWired) {
     window._diArchiveDispatcherWired = true;
@@ -46,3 +51,32 @@ function _diApplyArchiveAction(fetchPromise) {
             window.location.reload();
         });
 }
+
+
+// Re-fetches _archive_lists.html fresh and swaps #di-archive-lists
+// wholesale — same "replace the whole wrapper node" reasoning
+// digital_innovation_board.js's diRefreshBoard and this module's own
+// diRefreshPerformanceTable use.
+function diRefreshArchiveLists() {
+    var container = document.getElementById('di-archive-lists');
+    if (!container) return;
+
+    fetch('/digital-innovation/archive/lists')
+        .then(function (res) {
+            if (!res.ok) throw new Error('failed to refresh archive lists');
+            return res.text();
+        })
+        .then(function (html) {
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = html;
+            var fresh = wrapper.firstElementChild;
+            if (fresh) container.replaceWith(fresh);
+        })
+        .catch(function () {
+            // A failed live refresh isn't worth surfacing to the user —
+            // the page just stays showing what it last successfully
+            // loaded, same as if the ping had never arrived.
+        });
+}
+
+diWatchDashboardStream('archive', '#di-archive-lists', diRefreshArchiveLists);

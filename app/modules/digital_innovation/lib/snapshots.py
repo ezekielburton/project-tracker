@@ -23,7 +23,7 @@ from sqlalchemy import func
 from app.modules.core.shared.extensions import db
 from app.modules.digital_innovation.lib import periods, costs
 from app.modules.digital_innovation.models import (
-    DiCostEntry, DiPeriodSnapshot, DI_STAGE_LABELS, DI_STAGE_COLOURS, DI_COST_TYPES,
+    DiCostEntry, DiPeriodSnapshot, DI_STAGE_COLOURS, DI_COST_TYPES, stage_label,
 )
 
 # Short, lower-case labels for the "Total cost" card's caption ("dev,
@@ -102,7 +102,7 @@ def _compute_rollup(period_type, period_key):
                     'name': f.name,
                     'status': f.status,
                     'status_colour': DI_STAGE_COLOURS.get(f.status, 'oak'),
-                    'status_label': DI_STAGE_LABELS.get(f.status, f.status),
+                    'status_label': stage_label(f.status, project.track),
                     'dev_hours': round(dev_hours_by_feature.get(f.id, 0.0), 2),
                 }
                 for f in active_features
