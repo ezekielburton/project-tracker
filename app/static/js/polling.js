@@ -60,6 +60,8 @@
     // Client Servicing table (its own page, same generic /sse/dashboard
     // doorbell) — same convention as _projectTableStream above.
     var _clientServicingTableStream = null;
+    // Client Servicing Installation Calendar — same doorbell, its own hook.
+    var _clientServicingCalendarStream = null;
 
     // How often the fallback interval polls, when SSE isn't available or
     // has dropped — matches the cadence the old setInterval-only design used.
@@ -342,6 +344,10 @@
             _clientServicingTableStream.close();
             _clientServicingTableStream = null;
         }
+        if (_clientServicingCalendarStream !== null) {
+            _clientServicingCalendarStream.close();
+            _clientServicingCalendarStream = null;
+        }
     }
 
     function stopOverlayStream() {
@@ -450,9 +456,17 @@
 
         // Client Servicing table — same doorbell, refresh owned by
         // window.helixRefreshClientServicingTable() (see client_servicing.js).
-        if (document.querySelector('.client-servicing-page')) {
+        if (document.getElementById('client-servicing-table-body')) {
             _clientServicingTableStream = _connectLiveStream('/sse/dashboard', function () {
                 if (window.helixRefreshClientServicingTable) window.helixRefreshClientServicingTable();
+            }, _FALLBACK_INTERVAL_MS);
+        }
+
+        // Client Servicing Installation Calendar — same doorbell, refresh
+        // owned by window.helixRefreshClientServicingCalendar().
+        if (document.querySelector('.cs-cal-page')) {
+            _clientServicingCalendarStream = _connectLiveStream('/sse/dashboard', function () {
+                if (window.helixRefreshClientServicingCalendar) window.helixRefreshClientServicingCalendar();
             }, _FALLBACK_INTERVAL_MS);
         }
     }

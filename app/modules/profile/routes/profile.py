@@ -3,40 +3,16 @@ Profile blueprint — viewing (own and other users') and editing profile data.
 Covers the profile page and its achievement display; auth and account
 settings live in the auth module.
 """
-import os
-import uuid
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, url_for
 from flask_login import login_required, current_user
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import User
+from app.modules.core.shared.lib.profilepic import (
+    save_profile_pic, delete_profile_pic, AVATAR_FOLDER, BANNER_FOLDER,
+)
 
 profile_bp = Blueprint('profile', __name__, template_folder='../templates')
-
-
-AVATAR_UPLOAD_FOLDER = os.path.join('app', 'static', 'avatars')
-BANNER_UPLOAD_FOLDER = os.path.join('app', 'static', 'banners')
-ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
-
-
-def _save_profile_image(file, upload_folder):
-    """
-    Shared save logic for avatar/banner uploads. The browser always sends a
-    JPEG blob it already cropped and compressed via Cropper.js, but we still
-    validate server-side — never trust what the client claims to have sent.
-    Returns the stored filename, or None if the file was rejected.
-    """
-    if not file or file.filename == '':
-        return None
-
-    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        return None
-
-    stored_filename = f'{uuid.uuid4().hex[:8]}.{ext}'
-    os.makedirs(upload_folder, exist_ok=True)
-    file.save(os.path.join(upload_folder, stored_filename))
-    return stored_filename
 
 
 def _format_earned_date(earned_at):
@@ -271,17 +247,12 @@ def upload_avatar():
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
 
-    stored_filename = _save_profile_image(request.files['file'], AVATAR_UPLOAD_FOLDER)
+    stored_filename = save_profile_pic(request.files['file'], AVATAR_FOLDER)
     if not stored_filename:
         return jsonify({'success': False, 'error': 'Invalid file'}), 400
 
-    # Delete the old avatar file from disk so replacing a photo doesn't
-    # silently pile up orphaned files over time.
-    old_filename = current_user.avatar_filename
-    if old_filename:
-        old_path = os.path.join(AVATAR_UPLOAD_FOLDER, old_filename)
-        if os.path.exists(old_path):
-            os.remove(old_path)
+    # Replacing a photo removes the old file so they don't pile up.
+    delete_profile_pic(AVATAR_FOLDER, current_user.avatar_filename)
 
     current_user.avatar_filename = stored_filename
     db.session.commit()
@@ -294,15 +265,11 @@ def upload_banner():
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
 
-    stored_filename = _save_profile_image(request.files['file'], BANNER_UPLOAD_FOLDER)
+    stored_filename = save_profile_pic(request.files['file'], BANNER_FOLDER)
     if not stored_filename:
         return jsonify({'success': False, 'error': 'Invalid file'}), 400
 
-    old_filename = current_user.banner_filename
-    if old_filename:
-        old_path = os.path.join(BANNER_UPLOAD_FOLDER, old_filename)
-        if os.path.exists(old_path):
-            os.remove(old_path)
+    delete_profile_pic(BANNER_FOLDER, current_user.banner_filename)
 
     current_user.banner_filename = stored_filename
     db.session.commit()

@@ -18,7 +18,7 @@
    which client_servicing.js's sort always pushes to the bottom
    regardless of direction, so unset dates/values don't scatter through
    the middle of a sorted column. #}
-{% from '_shared_macros.html' import person_chip, status_pill %}
+{% from '_shared_macros.html' import person_chip, status_pill, tag %}
 
 {% macro cell_client(row) %}<td data-col-key="client" data-sort-value="{{ row.client or '' }}">{{ row.client or '—' }}</td>{% endmacro %}
 
@@ -38,7 +38,13 @@
 
 {% macro cell_client_approval(row) %}<td data-col-key="client_approval" data-sort-value="{{ row.client_approved_at.isoformat() if row.client_approved_at else '' }}">{{ row.client_approved_at.strftime('%d %b %Y') if row.client_approved_at else '—' }}</td>{% endmacro %}
 
-{% macro cell_status(row) %}<td data-col-key="status" data-sort-value="{{ row.status_label or '' }}">{{ status_pill(row.status_label, row.status_class) }}</td>{% endmacro %}
+{% macro cell_status(row) %}
+<td data-col-key="status" class="cs-editable" data-field="cs_status" data-value="{{ row.cs_status or '' }}" data-sort-value="{{ row.status_label or '' }}">
+    {{ status_pill(row.status_label, row.status_class) }}
+    {% for chip in row.status_indicators %}{{ tag(chip, {'2D': '2d', '3D': '3d', 'Technical': 'technical'}.get(chip, 'muted')) }}{% endfor %}
+    {% if row.status_is_auto %}<small class="cs-muted">auto</small>{% endif %}
+</td>
+{% endmacro %}
 
 {% macro cell_job_number(row) %}<td data-col-key="job_number" class="cs-editable" data-field="job_number" data-value="{{ row.job_number or '' }}" data-sort-value="{{ row.job_number or '' }}">{{ row.job_number or '—' }}</td>{% endmacro %}
 

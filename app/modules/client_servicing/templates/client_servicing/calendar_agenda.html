@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from 'client_servicing/_calendar_macros.html' import cal_header, job_card %}
+{% block title %}Client Servicing — Calendar{% endblock %}
+
+{% block content %}
+<div class="cs-page">
+    <div class="cs-shell">
+        {% with active_nav = 'calendar' %}
+        {% include "client_servicing/_sidebar.html" %}
+        {% endwith %}
+        <main class="cs-main">
+            <div class="client-servicing-page cs-cal-page">
+                {{ cal_header('agenda', kpis) }}
+
+                <div class="cs-cal-toolbar">
+                    <input type="search" class="cs-cal-search" id="cs-cal-search" placeholder="Search installs…" autocomplete="off">
+                    <button type="button" class="cs-cal-filter" data-filter="risk" data-value="">Risk <span class="cs-muted">· All</span></button>
+                    <span class="cs-cal-spacer"></span>
+                    <span class="cs-cal-range cs-muted">Next 30 days</span>
+                </div>
+
+                <div class="cs-cal-agenda" id="cs-cal-agenda">
+                    {% if groups %}
+                    {% for g in groups %}
+                    <div class="cs-cal-daygroup">
+                        <div class="cs-cal-day-h">
+                            <span class="cs-cal-day-lab">{% if g.date == today %}Today{% elif (g.date - today).days == 1 %}Tomorrow{% else %}{{ g.date.strftime('%A') }}{% endif %}</span>
+                            <span class="cs-cal-day-dt">{{ g.date.day }} {{ g.date.strftime('%b') }}</span>
+                            <span class="cs-cal-day-n">{{ g.count }} install{{ 's' if g.count != 1 else '' }}{% if g.atrisk %} · {{ g.atrisk }} at risk{% endif %}</span>
+                        </div>
+                        {% for it in g.installs %}
+                        <div class="cs-cal-arow cs-cal-arow--{{ it.risk_class }}" data-search="{{ (it.client ~ ' ' ~ (it.scope or '') ~ ' ' ~ (it.cs_lead or '') ~ ' ' ~ (it.action_owner or '')) | lower }}" data-risk="{{ it.risk_class }}">
+                            {{ job_card(it) }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="cs-cal-dr-empty cs-muted">No upcoming installs in the next 30 days.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    var __csRiskOptions = {{ risk_options | tojson }};
+    var __csStatusOptions = {{ status_options | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/client_servicing_calendar.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

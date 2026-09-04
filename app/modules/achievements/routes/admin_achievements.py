@@ -51,7 +51,7 @@ VALID_TRIGGER_EVENTS = [
 
 
 def _save_badge_image(file):
-    """Same shape as profile.py's _save_profile_image — validates server-side, returns stored filename or None."""
+    """Same shape as the shared profilepic.save_profile_pic — validates server-side, returns stored filename or None."""
     if not file or file.filename == '':
         return None
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''

@@ -156,6 +156,7 @@
     // row's client, resolved from the td's data-client-id at build time.
     var SELECT_FIELDS = {
         scope_id: function () { return window.__csScopeOptions || []; },
+        cs_status: function () { return window.__csStatusOptions || []; },
         cs_lead_id: function () { return window.__csLeadOptions || []; },
         project_owner_id: function () { return window.__csProjectOwnerOptions || []; },
         contact_id: function (td) {
@@ -266,6 +267,33 @@
         return input;
     }
 
+    // Rebuilds the status cell (pill + indicator chips + auto hint) from
+    // the effective status the edit endpoint returns, so a cs_status edit
+    // shows manual-vs-auto and the right chips immediately.
+    var STATUS_CHIP_VARIANT = { '2D': '2d', '3D': '3d', 'Technical': 'technical' };
+    function renderStatusCell(td, status) {
+        td.innerHTML = '';
+        td.dataset.sortValue = status.label || '';
+        var pill = document.createElement('span');
+        pill.className = 'status-pill status-pill--' + status.modifier;
+        pill.textContent = status.label;
+        td.appendChild(pill);
+        (status.indicators || []).forEach(function (chip) {
+            td.appendChild(document.createTextNode(' '));
+            var t = document.createElement('span');
+            t.className = 'tag tag--' + (STATUS_CHIP_VARIANT[chip] || 'muted');
+            t.textContent = chip;
+            td.appendChild(t);
+        });
+        if (status.is_auto) {
+            td.appendChild(document.createTextNode(' '));
+            var auto = document.createElement('small');
+            auto.className = 'cs-muted';
+            auto.textContent = 'auto';
+            td.appendChild(auto);
+        }
+    }
+
     // Builds the same .person-chip markup the server's person_chip()
     // Jinja macro renders, so a CS Lead/Project Owner edit shows the real
     // avatar immediately instead of plain text until the next refresh.
@@ -328,7 +356,9 @@
                 }
                 td.removeAttribute('title');
                 td.dataset.value = rawInputValue;
-                if (result.data.person) {
+                if (result.data.status) {
+                    renderStatusCell(td, result.data.status);
+                } else if (result.data.person) {
                     td.innerHTML = '';
                     td.appendChild(renderPersonChip(result.data.person));
                 } else {

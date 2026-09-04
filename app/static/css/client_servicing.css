@@ -809,3 +809,121 @@
     color: var(--text);
     margin: var(--space-5) 0 var(--space-3);
 }
+
+/* ── Installation Calendar (Month + Agenda) ─────────────────────────────
+   Role tokens only; risk colours reuse the shared palette tokens
+   (--clover/--canary/--poppy, grey via --text-faint) so they flip in dark
+   for free. Tints mix toward transparent (theme-safe). Status pills reuse
+   the shared .status-pill--* set. See theming.md. */
+.cs-cal-page { display: flex; flex-direction: column; min-height: 0; }
+
+/* KPI row */
+.cs-cal-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding: 14px 0 6px; }
+.cs-cal-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 15px; position: relative; }
+.cs-cal-kpi--accent { border-color: color-mix(in srgb, var(--coral) 45%, var(--border)); }
+.cs-cal-kpi-lab { font-size: var(--text-xs); letter-spacing: .04rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.cs-cal-kpi-val { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1; }
+.cs-cal-kpi-dot { position: absolute; top: 13px; right: 13px; width: 9px; height: 9px; border-radius: 50%; }
+.cs-cal-kpi--ontrack .cs-cal-kpi-dot { background: var(--clover); }
+.cs-cal-kpi--attention .cs-cal-kpi-dot { background: var(--canary); }
+.cs-cal-kpi--atrisk .cs-cal-kpi-dot { background: var(--poppy); }
+
+/* Toolbar */
+.cs-cal-toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.cs-cal-monthnav { display: flex; align-items: center; gap: 10px; }
+.cs-cal-m { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+.cs-cal-navbtn { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); text-decoration: none; font-size: 1.1rem; }
+.cs-cal-navbtn:hover { background: var(--surface-hover); color: var(--text); }
+.cs-cal-today-btn { height: 30px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text); font-size: var(--text-sm); font-weight: 600; display: flex; align-items: center; text-decoration: none; }
+.cs-cal-today-btn:hover { background: var(--surface-hover); }
+.cs-cal-spacer { flex: 1; }
+.cs-cal-legend { display: flex; align-items: center; gap: 14px; font-size: var(--text-xs); color: var(--text-muted); }
+.cs-cal-lg { display: flex; align-items: center; gap: 6px; }
+.cs-cal-sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.cs-cal-sw--ontrack { background: var(--clover); }
+.cs-cal-sw--attention { background: var(--canary); }
+.cs-cal-sw--atrisk { background: var(--poppy); }
+.cs-cal-sw--done { background: var(--text-faint); }
+.cs-cal-search { width: 240px; height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: var(--text-sm); }
+.cs-cal-filter { height: 34px; padding: 0 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.cs-cal-filter--active { border-color: var(--coral); }
+
+/* Month split: calendar + drawer */
+.cs-cal-split { display: flex; gap: 16px; height: calc(100vh - 300px); min-height: 360px; }
+.cs-cal-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.cs-cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--surface-sunken); border-bottom: 1px solid var(--border); }
+.cs-cal-dow div { padding: 8px 10px; font-size: var(--text-xs); letter-spacing: .04rem; text-transform: uppercase; color: var(--text-muted); }
+.cs-cal-grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; overflow: auto; }
+.cs-cal-cell { border-right: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); padding: 6px 7px; min-height: 0; overflow: hidden; position: relative; }
+.cs-cal-cell--has { cursor: pointer; }
+.cs-cal-cell--has:hover { background: var(--surface-hover); }
+.cs-cal-cell--out .cs-cal-num { color: var(--text-faint); }
+.cs-cal-cell--today { box-shadow: inset 0 0 0 2px var(--coral); }
+.cs-cal-cell--sel { background: color-mix(in srgb, var(--coral) 10%, transparent); }
+.cs-cal-dn { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-size: var(--text-xs); color: var(--text-muted); }
+.cs-cal-cnt { background: var(--surface-active, var(--surface-hover)); color: var(--text); font-size: 10px; padding: 1px 6px; border-radius: 10px; }
+.cs-cal-chip { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text); padding: 3px 6px; border-radius: 5px; margin-bottom: 3px; background: var(--surface-sunken); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-cal-chip--ontrack { border-left: 2px solid var(--clover); }
+.cs-cal-chip--attention { border-left: 2px solid var(--canary); }
+.cs-cal-chip--atrisk { border-left: 2px solid var(--poppy); }
+.cs-cal-chip--done { border-left: 2px solid var(--text-faint); }
+.cs-cal-rd { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.cs-cal-rd--ontrack { background: var(--clover); }
+.cs-cal-rd--attention { background: var(--canary); }
+.cs-cal-rd--atrisk { background: var(--poppy); }
+.cs-cal-rd--done { background: var(--text-faint); }
+.cs-cal-more { font-size: 10px; color: var(--text-muted); padding: 1px 6px; }
+
+/* Day drawer */
+.cs-cal-drawer { width: 320px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
+.cs-cal-dr-head { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.cs-cal-dr-d { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+.cs-cal-dr-s { font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
+.cs-cal-dr-body { flex: 1; overflow: auto; padding: 10px; }
+.cs-cal-dr-empty { padding: 24px 16px; }
+
+/* Job card (drawer + agenda) — risk is the card's left-border frame;
+   status is one inline pill; the risk chip is a light bordered chip with
+   the RAG colour on its dot/border and "auto" folded in. */
+.cs-cal-job { border: 1px solid var(--border); border-left-width: 3px; border-left-color: var(--border); border-radius: 9px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+.cs-cal-job--ontrack { border-left-color: var(--clover); }
+.cs-cal-job--attention { border-left-color: var(--canary); }
+.cs-cal-job--atrisk { border-left-color: var(--poppy); }
+.cs-cal-job--done { border-left-color: var(--text-faint); }
+.cs-cal-job-top { display: flex; align-items: flex-start; gap: 10px; }
+.cs-cal-job-cl { flex: 1; min-width: 0; font-weight: 700; font-size: var(--text-sm); color: var(--text); line-height: 1.3; }
+.cs-cal-q { font-size: var(--text-xs); color: var(--text-muted); font-weight: 500; }
+.cs-cal-goto { flex-shrink: 0; margin-top: 2px; color: var(--coral); text-decoration: none; display: inline-flex; }
+.cs-cal-job-sc { font-size: var(--text-xs); color: var(--text-muted); margin-top: 3px; }
+.cs-cal-qty { cursor: pointer; }
+/* Empty install qty — a dashed slot that reads as 'needs filling'. */
+.cs-cal-qty--empty { color: var(--text-muted); border: 1px dashed color-mix(in srgb, var(--canary) 55%, var(--border)); border-radius: 6px; padding: 0 6px; }
+.cs-cal-job-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 11px; }
+.cs-cal-status { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.cs-cal-people { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: var(--text-xs); color: var(--text); }
+.cs-cal-k { font-size: 9.5px; letter-spacing: .04rem; text-transform: uppercase; color: var(--text-faint); margin-right: 5px; }
+.cs-cal-na { display: flex; gap: 7px; align-items: baseline; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--border-subtle); font-size: var(--text-xs); color: var(--text-muted); }
+.cs-cal-na--flag { color: var(--canary); }
+.cs-cal-flag { flex-shrink: 0; position: relative; top: 1px; }
+.cs-cal-risk { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border); font-size: var(--text-xs); font-weight: 600; color: var(--text); }
+.cs-cal-risk--ontrack { border-color: color-mix(in srgb, var(--clover) 45%, transparent); }
+.cs-cal-risk--attention { border-color: color-mix(in srgb, var(--canary) 45%, transparent); }
+.cs-cal-risk--atrisk { border-color: color-mix(in srgb, var(--poppy) 45%, transparent); }
+.cs-cal-risk--done { border-color: var(--border); color: var(--text-muted); }
+.cs-cal-risk-auto { color: var(--text-faint); font-weight: 400; }
+
+/* Agenda list */
+.cs-cal-agenda { overflow: auto; height: calc(100vh - 280px); min-height: 360px; }
+.cs-cal-daygroup { margin-bottom: 18px; }
+.cs-cal-day-h { display: flex; align-items: baseline; gap: 10px; padding: 8px 2px 10px; position: sticky; top: 0; background: var(--surface-sunken); }
+.cs-cal-day-lab { font-size: 1rem; font-weight: 700; text-transform: uppercase; color: var(--text); }
+.cs-cal-day-dt { font-size: var(--text-xs); color: var(--text-muted); }
+.cs-cal-day-n { margin-left: auto; font-size: var(--text-xs); color: var(--text-muted); }
+.cs-cal-arow { margin-bottom: 8px; }
+.cs-cal-arow .cs-cal-job { margin-bottom: 0; }
+
+/* Inline-edit affordance (mirrors the table's .cs-editable states) */
+.cs-cal-page .cs-editable { cursor: pointer; border-radius: 4px; }
+.cs-cal-page .cs-editable:hover { background: var(--surface-hover); }
+.cs-cal-page .cs-cell-editing { background: var(--surface-hover); }
+.cs-cal-page .cs-cell-error { outline: 1px solid var(--poppy); }

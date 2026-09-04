@@ -11,10 +11,12 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.modules.core.shared.models import Project, ProjectDesigner, Contact, UserTableLayout
 from app.modules.core.shared.lib.users import active_users
-from app.modules.core.shared.lib.status_vocabulary import derive_project_status
 from app.modules.core.shared.services.status_tracking import bulk_project_client_approved_at
 
 from app.modules.client_servicing.models import ClientServicing, ClientServicingScope
+from app.modules.client_servicing.lib.status import (
+    effective_cs_status, cs_design_indicator, CS_STATUS_OPTIONS,
+)
 from app.modules.client_servicing.lib.access import can_access_client_servicing, _effective_user
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 
@@ -132,13 +134,15 @@ def _eager_load(query):
         joinedload(Project.client_brand),
         selectinload(Project.assigned_designers).joinedload(ProjectDesigner.designer),
         joinedload(Project.client_servicing).joinedload(ClientServicing.scope),
+        selectinload(Project.project_deliverables),
     )
 
 
 def _serialize_row(p, contacts_by_id, client_approved_at):
     cs = p.client_servicing
     contact = contacts_by_id.get(p.contact_id) if p.contact_id else None
-    status_label, status_class = derive_project_status(p)
+    status_label, status_class, status_is_auto = effective_cs_status(p)
+    status_indicators = cs_design_indicator(p) if (status_is_auto and status_label == 'In Design') else []
     designers = [_serialize_person(pd.designer) for pd in p.assigned_designers]
     return {
         'id': p.id,
@@ -154,6 +158,9 @@ def _serialize_row(p, contacts_by_id, client_approved_at):
         'client_approved_at': client_approved_at.get(p.id),
         'status_label': status_label,
         'status_class': status_class,
+        'status_is_auto': status_is_auto,
+        'status_indicators': status_indicators,
+        'cs_status': cs.cs_status if cs else None,
         'job_number': p.job_number,
         'contact_id': p.contact_id,
         'cs_lead': _serialize_person(p.cs_lead),
@@ -225,6 +232,7 @@ def _page_context():
         'table_key': TABLE_KEY,
         'column_widths': _column_widths(saved),
         'scope_options': _scope_options(),
+        'status_options': [{'id': label, 'name': label} for label in CS_STATUS_OPTIONS],
         'cs_lead_options': _person_options('cs'),
         'project_owner_options': _person_options('project_owner'),
         'contacts_by_client': _contacts_by_client(client_ids),

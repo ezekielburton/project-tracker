@@ -12,6 +12,7 @@ from app.modules.core.shared.models import (
     DesignType, DesignDirection, ActivityLog, NotificationSound
 )
 from app.modules.core.shared.lib.utils import log_activity
+from app.modules.core.shared.lib.profilepic import save_profile_pic, delete_profile_pic, AVATAR_FOLDER
 from app.modules.core.shared.lib.decorators import role_required
 from app.modules.core.shared.services.notifications import broadcast_update_email
 from werkzeug.security import generate_password_hash
@@ -34,7 +35,8 @@ def admin_required(f):
 def list_users():
     users = User.query.order_by(User.name).all()
     return jsonify([{'id': u.id, 'name': u.name, 'email': u.email, 'role': u.role,
-                     'team': u.team, 'is_active': u.is_active} for u in users])
+                     'team': u.team, 'is_active': u.is_active,
+                     'avatar_filename': u.avatar_filename} for u in users])
 
 @admin_bp.route ('/admin/emulate/<int:user_id>', methods=['POST'])
 @login_required
@@ -187,7 +189,8 @@ def update_user(user_id):
 
     db.session.commit()
     return jsonify({'success': True, 'user': {'id': user.id, 'name': user.name, 'email': user.email,
-                    'role': user.role, 'team': user.team, 'is_active': user.is_active}})
+                    'role': user.role, 'team': user.team, 'is_active': user.is_active,
+                    'avatar_filename': user.avatar_filename}})
 
 
 @admin_bp.route('/admin/api/users/<int:user_id>/reset-password', methods=['POST'])
@@ -218,6 +221,29 @@ def set_user_active(user_id):
                  f'{current_user.name} {verb} account "{user.name}"',
                  user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
     return jsonify({'success': True, 'is_active': user.is_active})
+
+
+@admin_bp.route('/admin/api/users/<int:user_id>/avatar', methods=['POST'])
+@login_required
+@admin_required
+def set_user_avatar(user_id):
+    """Admin sets/replaces any user's profile photo via the shared helper.
+    Works for deactivated users too (they still show in the admin list)."""
+    user = User.query.get_or_404(user_id)
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+
+    stored_filename = save_profile_pic(request.files['file'], AVATAR_FOLDER)
+    if not stored_filename:
+        return jsonify({'success': False, 'error': 'Invalid file'}), 400
+
+    delete_profile_pic(AVATAR_FOLDER, user.avatar_filename)
+    user.avatar_filename = stored_filename
+    user.avatar_step_completed = True
+    db.session.commit()
+    log_activity('user_avatar_set', f'{current_user.name} updated the photo for "{user.name}"',
+                 user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
+    return jsonify({'success': True, 'url': url_for('static', filename=f'avatars/{stored_filename}')})
 
 
 @admin_bp.route('/admin/api/users/<int:user_id>', methods=['DELETE'])

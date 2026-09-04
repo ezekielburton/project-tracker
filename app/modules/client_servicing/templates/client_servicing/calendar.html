@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% from 'client_servicing/_calendar_macros.html' import cal_header %}
 {% block title %}Client Servicing — Calendar{% endblock %}
 
 {% block content %}
@@ -9,13 +9,57 @@
         {% include "client_servicing/_sidebar.html" %}
         {% endwith %}
         <main class="cs-main">
-            <div class="client-servicing-page">
-                <div class="cs-page-header">
-                    <h1>Calendar</h1>
+            <div class="client-servicing-page cs-cal-page">
+                {{ cal_header('month', kpis, month_label) }}
+
+                <div class="cs-cal-toolbar">
+                    <div class="cs-cal-monthnav">
+                        <a class="cs-cal-navbtn" href="{{ url_for('client_servicing.calendar', month=prev_month) }}" aria-label="Previous month">‹</a>
+                        <span class="cs-cal-m">{{ month_label }}</span>
+                        <a class="cs-cal-navbtn" href="{{ url_for('client_servicing.calendar', month=next_month) }}" aria-label="Next month">›</a>
+                    </div>
+                    <a class="cs-cal-today-btn" href="{{ url_for('client_servicing.calendar', month=this_month) }}">Today</a>
+                    <span class="cs-cal-spacer"></span>
+                    <div class="cs-cal-legend">
+                        <span class="cs-cal-lg"><span class="cs-cal-sw cs-cal-sw--ontrack"></span>On track</span>
+                        <span class="cs-cal-lg"><span class="cs-cal-sw cs-cal-sw--attention"></span>Attention</span>
+                        <span class="cs-cal-lg"><span class="cs-cal-sw cs-cal-sw--atrisk"></span>At risk</span>
+                        <span class="cs-cal-lg"><span class="cs-cal-sw cs-cal-sw--done"></span>Done</span>
+                    </div>
                 </div>
-                <p class="cs-muted">Nothing here yet — this section is coming in a future chunk.</p>
+
+                <div class="cs-cal-split">
+                    <div class="cs-cal-wrap">
+                        <div class="cs-cal-dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
+                        <div class="cs-cal-grid" id="cs-cal-grid">
+                            {% for week in weeks %}{% for day in week %}
+                            <div class="cs-cal-cell{% if not day.in_month %} cs-cal-cell--out{% endif %}{% if day.is_today %} cs-cal-cell--today{% endif %}{% if selected_day and day.date == selected_day.date %} cs-cal-cell--sel{% endif %}{% if day.installs %} cs-cal-cell--has{% endif %}"{% if day.installs %} data-date="{{ day.date.isoformat() }}"{% endif %}>
+                                <div class="cs-cal-dn"><span class="cs-cal-num">{{ day.date.day }}</span>{% if day.count %}<span class="cs-cal-cnt">{{ day.count }}</span>{% endif %}</div>
+                                {% for it in day.installs[:3] %}
+                                <div class="cs-cal-chip cs-cal-chip--{{ it.risk_class }}"><span class="cs-cal-rd cs-cal-rd--{{ it.risk_class }}"></span>{{ it.client }}</div>
+                                {% endfor %}
+                                {% if day.count > 3 %}<div class="cs-cal-more">+{{ day.count - 3 }} more</div>{% endif %}
+                            </div>
+                            {% endfor %}{% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="cs-cal-drawer" id="cs-cal-drawer">
+                        {% with day = selected_day %}
+                        {% include "client_servicing/_calendar_drawer.html" %}
+                        {% endwith %}
+                    </div>
+                </div>
             </div>
         </main>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    var __csRiskOptions = {{ risk_options | tojson }};
+    var __csStatusOptions = {{ status_options | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/client_servicing_calendar.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

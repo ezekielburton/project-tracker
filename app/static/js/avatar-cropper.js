@@ -10,13 +10,16 @@
 // btnDone() from main.js (called later, inside event handlers, by which
 // point main.js has always finished loading).
 //
-// Public API: HelixAvatarCropper.wireFileInput(inputEl, mode, onSuccess)
+// Public API: HelixAvatarCropper.wireFileInput(inputEl, mode, onSuccess, options)
 //   inputEl:   the <input type="file"> to watch
 //   mode:      'avatar' or 'banner' — controls aspect ratio, output size,
-//              modal title, and which endpoint (/profile/<mode>) it posts to
+//              and modal title
 //   onSuccess: called with the parsed JSON response after a successful
 //              upload — the caller decides what happens next (profile.js
 //              reloads the page; the wizard just updates its own preview)
+//   options:   optional. { uploadUrl } overrides where the crop POSTs — a
+//              string, or a function resolved per open for a per-row target;
+//              defaults to /profile/<mode>. Used by the admin panel.
 
 window.HelixAvatarCropper = (function () {
     var cropModal = document.getElementById('crop-modal');
@@ -32,6 +35,7 @@ window.HelixAvatarCropper = (function () {
     var currentMode = null;
     var currentInput = null;     // whichever file input triggered this open — reset on close
     var currentOnSuccess = null; // this open's caller-supplied callback
+    var currentUploadUrl = null; // where this open POSTs — default /profile/<mode>
 
     var MODE_CONFIG = {
         avatar: { aspectRatio: 1, outputWidth: 512, outputHeight: 512, title: 'Adjust Photo' },
@@ -88,6 +92,7 @@ window.HelixAvatarCropper = (function () {
             cropper = null;
         }
         if (currentInput) currentInput.value = '';
+        currentUploadUrl = null;
         if (window.helixPolling) window.helixPolling.resume();
     }
 
@@ -113,7 +118,7 @@ window.HelixAvatarCropper = (function () {
             var formData = new FormData();
             formData.append('file', blob, currentMode + '.jpg');
 
-            fetch('/profile/' + currentMode, { method: 'POST', body: formData })
+            fetch(currentUploadUrl, { method: 'POST', body: formData })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     btnDone(cropSaveBtn);
@@ -131,13 +136,19 @@ window.HelixAvatarCropper = (function () {
         }, 'image/jpeg', 0.85);
     });
 
-    function wireFileInput(input, mode, onSuccess) {
+    function wireFileInput(input, mode, onSuccess, options) {
+        options = options || {};
         input.addEventListener('change', function () {
             var file = this.files[0];
             if (!file) return;
 
             currentInput = input;
             currentOnSuccess = onSuccess;
+            // uploadUrl may be a string or a function (resolved per open, so one
+            // wiring can target a different user each time); defaults to the
+            // self-service /profile/<mode> endpoint.
+            var uu = options.uploadUrl;
+            currentUploadUrl = (typeof uu === 'function') ? uu() : (uu || ('/profile/' + mode));
 
             var reader = new FileReader();
             reader.onload = function (e) { openCropModal(e.target.result, mode); };

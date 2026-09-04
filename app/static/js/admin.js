@@ -259,12 +259,55 @@
             });
     }
 
+    // Admin avatar picker — one hidden file input + the shared crop modal,
+    // targeting whichever user's "Replace photo" was clicked.
+    var adminAvatarInput = null;
+    var adminAvatarTargetId = null;
+
+    function ensureAdminAvatarCropper() {
+        if (adminAvatarInput || !window.HelixAvatarCropper) return;
+        adminAvatarInput = document.createElement('input');
+        adminAvatarInput.type = 'file';
+        adminAvatarInput.accept = 'image/jpeg,image/png,image/webp';
+        adminAvatarInput.style.display = 'none';
+        document.body.appendChild(adminAvatarInput);
+        HelixAvatarCropper.wireFileInput(adminAvatarInput, 'avatar', function (data) {
+            var wrap = document.querySelector('.account-user-avatar[data-id="' + adminAvatarTargetId + '"]');
+            if (wrap) {
+                var btn = wrap.querySelector('.account-avatar-btn');
+                wrap.innerHTML = '<img class="user-avatar-img" src="' + data.url + '" alt="">';
+                if (btn) wrap.appendChild(btn);
+            }
+            if (typeof showToast === 'function') showToast('Photo updated.', 'success');
+        }, { uploadUrl: function () { return '/admin/api/users/' + adminAvatarTargetId + '/avatar'; } });
+    }
+
+    function openAdminAvatarPicker(userId) {
+        ensureAdminAvatarCropper();
+        if (!adminAvatarInput) return;
+        adminAvatarTargetId = userId;
+        adminAvatarInput.value = '';
+        adminAvatarInput.click();
+    }
+
+    function renderAvatarCell(user) {
+        var inner = user.avatar_filename
+            ? '<img class="user-avatar-img" src="/static/avatars/' + user.avatar_filename + '" alt="">'
+            : '<span class="user-avatar-initials">' + user.name.charAt(0).toUpperCase() + '</span>';
+        return '<span class="user-avatar-link user-avatar--profile account-user-avatar" data-id="' + user.id + '">' +
+            inner +
+            '<button type="button" class="account-avatar-btn" title="Replace photo">\uD83D\uDCF7</button>' +
+            '</span>';
+    }
+
     function renderAccountDisplay(user) {
         var teamTag = user.team ? '<span class="account-user-team">' + user.team + '</span>' : '';
         var activeToggle = user.is_active
             ? '<button type="button" class="account-deactivate-btn">Deactivate</button>'
             : '<button type="button" class="account-reactivate-btn">Reactivate</button>';
-        return '<div class="account-user-info">' +
+        return '<div class="account-user-display">' +
+            renderAvatarCell(user) +
+            '<div class="account-user-info">' +
             '<span class="account-user-name">' + user.name + '</span>' +
             '<span class="account-user-role">' + user.role + '</span>' +
             teamTag +
@@ -274,6 +317,7 @@
             '<button type="button" class="account-edit-btn" data-name="' + user.name + '" data-role="' + user.role + '" data-team="' + (user.team || '') + '">Edit</button>' +
             '<button type="button" class="account-reset-btn" data-name="' + user.name + '">&#8635;</button>' +
             '<button type="button" class="account-delete-btn" data-name="' + user.name + '">&times;</button>' +
+            '</div>' +
             '</div>';
     }
 
@@ -305,6 +349,11 @@
         var saveBtn = row.querySelector('.account-save-btn');
         var cancelBtn = row.querySelector('.account-cancel-edit-btn');
         var editRole = row.querySelector('.edit-role');
+
+        var avatarBtn = row.querySelector('.account-avatar-btn');
+        if (avatarBtn) {
+            avatarBtn.addEventListener('click', function () { openAdminAvatarPicker(user.id); });
+        }
 
         if (editBtn) {
             editBtn.addEventListener('click', function () {

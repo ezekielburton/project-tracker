@@ -1,0 +1,16 @@
+{# Day drawer body — the selected day's installs. Rendered inline on the
+   Month page and returned on its own by the calendar_day fragment route. #}
+{% from 'client_servicing/_calendar_macros.html' import job_card %}
+{% if day and day.installs %}
+{% set nr = day.installs | selectattr('risk_class', 'equalto', 'atrisk') | list | length %}
+{% set na = day.installs | selectattr('risk_class', 'equalto', 'attention') | list | length %}
+<div class="cs-cal-dr-head">
+    <div class="cs-cal-dr-d">{{ day.date.strftime('%a') }} · {{ day.date.day }} {{ day.date.strftime('%b') }}</div>
+    <div class="cs-cal-dr-s">{{ day.count }} INSTALL{{ 'S' if day.count != 1 else '' }}{% if nr %} · {{ nr }} AT RISK{% endif %}{% if na %} · {{ na }} ATTENTION{% endif %}</div>
+</div>
+<div class="cs-cal-dr-body">
+    {% for it in day.installs %}{{ job_card(it) }}{% endfor %}
+</div>
+{% else %}
+<div class="cs-cal-dr-empty cs-muted">{% if day %}No installs on {{ day.date.day }} {{ day.date.strftime('%b') }}.{% else %}Pick a day with installs to see its jobs.{% endif %}</div>
+{% endif %}

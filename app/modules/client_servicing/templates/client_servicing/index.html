@@ -30,6 +30,7 @@
 {% block extra_js %}
 <script>
     window.__csScopeOptions = {{ scope_options | tojson }};
+    window.__csStatusOptions = {{ status_options | tojson }};
     window.__csLeadOptions = {{ cs_lead_options | tojson }};
     window.__csProjectOwnerOptions = {{ project_owner_options | tojson }};
     window.__csContactsByClient = {{ contacts_by_client | tojson }};

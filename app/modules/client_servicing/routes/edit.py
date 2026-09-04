@@ -24,6 +24,10 @@ from app.modules.projects.services import mutations as project_mutations
 
 from app.modules.client_servicing.models import ClientServicing, ClientServicingScope
 from app.modules.client_servicing.lib.access import can_access_client_servicing, _effective_user
+from app.modules.client_servicing.lib.status import (
+    effective_cs_status, cs_design_indicator, CS_STATUS_OPTIONS,
+)
+from app.modules.client_servicing.lib.calendar import effective_risk, RISK_OPTIONS
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 from app.modules.client_servicing.routes.table import _serialize_person
 
@@ -53,6 +57,18 @@ def _parse_date(value):
         return date.fromisoformat(value)
     except (TypeError, ValueError):
         raise _FieldError('must be a valid date')
+
+
+def _parse_qty(value):
+    if value in (None, ''):
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        raise _FieldError('must be a whole number')
+    if n < 1:
+        raise _FieldError('must be at least 1')
+    return n
 
 
 def _parse_money(value):
@@ -108,6 +124,9 @@ _EDITABLE_FIELDS = {
     'inward_cost': _parse_money,
     'scope_id': _parse_scope_id,
     'priority': _text_parser(120),
+    'next_action': _text_parser(255),
+    'action_owner': _text_parser(120),
+    'install_qty': _parse_qty,
     'lpo_date': _parse_date,
     'project_value': _parse_money,
     'invoice_number': _text_parser(120),
@@ -197,6 +216,56 @@ def _save_cs_only_field(project, field, raw_value):
     }), None
 
 
+
+_CS_STATUS_SET = set(CS_STATUS_OPTIONS)
+
+def _save_cs_status(project, raw_value):
+    """Manual operational-status overlay. Stores on the CS row only —
+    never Project.project_status. An empty value clears it back to the
+    derived status. Returns the recomputed effective status so the cell
+    can re-render pill + indicator chips + the auto hint."""
+    value = (raw_value or '').strip()
+    if value and value not in _CS_STATUS_SET:
+        return None, 'must be a valid status'
+    cs = project.client_servicing
+    if cs is None:
+        cs = ClientServicing(project_id=project.id)
+        db.session.add(cs)
+    cs.cs_status = value or None
+    db.session.commit()
+
+    label, modifier, is_auto = effective_cs_status(project)
+    indicators = cs_design_indicator(project) if (is_auto and label == 'In Design') else []
+    return jsonify({
+        'field': 'cs_status',
+        'value': cs.cs_status or '',
+        'status': {'label': label, 'modifier': modifier, 'is_auto': is_auto, 'indicators': indicators},
+    }), None
+
+
+_RISK_SET = set(RISK_OPTIONS)
+
+def _save_cs_risk(project, raw_value):
+    """Manual installation-risk override. Stores on the CS row only; empty
+    clears it back to the derived risk. Returns the recomputed effective
+    risk so the calendar cell can re-render."""
+    value = (raw_value or '').strip()
+    if value and value not in _RISK_SET:
+        return None, 'must be a valid risk'
+    cs = project.client_servicing
+    if cs is None:
+        cs = ClientServicing(project_id=project.id)
+        db.session.add(cs)
+    cs.risk = value or None
+    db.session.commit()
+    label, modifier, is_auto = effective_risk(project)
+    return jsonify({
+        'field': 'risk',
+        'value': cs.risk or '',
+        'risk': {'label': label, 'modifier': modifier, 'is_auto': is_auto},
+    }), None
+
+
 @client_servicing_bp.route('/<int:project_id>', methods=['PATCH'])
 @login_required
 def update_field(project_id):
@@ -215,6 +284,18 @@ def update_field(project_id):
 
     if field in _FINANCE_FIELDS and getattr(actor, 'role', None) not in _FINANCE_EDIT_ROLES:
         abort(403)
+
+    if field == 'cs_status':
+        response, error = _save_cs_status(project, raw_value)
+        if error:
+            return jsonify({'error': error}), 400
+        return response
+
+    if field == 'risk':
+        response, error = _save_cs_risk(project, raw_value)
+        if error:
+            return jsonify({'error': error}), 400
+        return response
 
     if field in _EDITABLE_FIELDS:
         response, error = _save_cs_only_field(project, field, raw_value)

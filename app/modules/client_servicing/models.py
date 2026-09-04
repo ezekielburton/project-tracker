@@ -45,6 +45,19 @@ class ClientServicing(db.Model):
     )
     priority = db.Column(db.String(120), nullable=True)
 
+    # Manual operational-status overlay — the CS master-sheet lifecycle,
+    # which is wider than the platform's derived status. None = fall back
+    # to the derived status. See lib/status.py (never touches Project).
+    cs_status = db.Column(db.String(40), nullable=True)
+
+    # Installation-calendar overlay (CS annotations). risk is a manual
+    # override of the derived risk (status-vs-install-date); None = auto.
+    # next_action / action_owner are free-text notes shown on the calendar.
+    risk = db.Column(db.String(20), nullable=True)
+    next_action = db.Column(db.String(255), nullable=True)
+    action_owner = db.Column(db.String(120), nullable=True)
+    install_qty = db.Column(db.Integer, nullable=True)  # manual install quantity; None = not filled
+
     # Invoicing (finance-owned) fields.
     lpo_date = db.Column(db.Date, nullable=True)
     project_value = db.Column(db.Numeric(12, 2), nullable=True)

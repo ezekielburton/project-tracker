@@ -58,6 +58,7 @@
 /admin/api/users/<int:user_id>	DELETE	admin.delete_user
 /admin/api/users/<int:user_id>	PATCH	admin.update_user
 /admin/api/users/<int:user_id>/active	POST	admin.set_user_active
+/admin/api/users/<int:user_id>/avatar	POST	admin.set_user_avatar
 /admin/api/users/<int:user_id>/reset-password	POST	admin.admin_reset_password
 /admin/emulate/<int:user_id>	POST	admin.start_emulation
 /admin/emulate/exit	POST	admin.exit_emulation
