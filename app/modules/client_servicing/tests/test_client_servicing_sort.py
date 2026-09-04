@@ -36,7 +36,7 @@ def test_rows_carry_data_row_order_matching_default_name_order(app, client, db_s
     to match that exactly, since it's what a cleared sort restores to."""
     user = _user(db_session, 'a')
     for name in ('Zeta Project', 'Alpha Project', 'Mid Project'):
-        db_session.add(Project(name=name, cs_lead_id=user.id, created_by_id=user.id))
+        db_session.add(Project(name=name, cs_lead_id=user.id, created_by_id=user.id, project_status='briefed'))
     db_session.flush()
     login_as(client, app, user, 'password123')
 
@@ -62,7 +62,7 @@ def test_numeric_columns_carry_raw_numbers_not_formatted_text(app, client, db_se
     it's derived here from cost/inward the same way the model computes
     it, not set directly (it has no setter)."""
     user = _user(db_session, 'b')
-    project = Project(name='Numeric Sort Project', cs_lead_id=user.id, created_by_id=user.id, value=100000.5)
+    project = Project(name='Numeric Sort Project', cs_lead_id=user.id, created_by_id=user.id, value=100000.5, project_status='briefed')
     db_session.add(project)
     db_session.flush()
     db_session.add(ClientServicing(project_id=project.id, cost_to_client=9999.99, inward_cost=8000))
@@ -83,7 +83,7 @@ def test_date_columns_carry_isoformat_not_display_format(app, client, db_session
     as a plain string, which is exactly how client_servicing.js compares
     non-numeric columns."""
     user = _user(db_session, 'c')
-    project = Project(name='Date Sort Project', cs_lead_id=user.id, created_by_id=user.id, briefing_date=date(2026, 3, 5))
+    project = Project(name='Date Sort Project', cs_lead_id=user.id, created_by_id=user.id, briefing_date=date(2026, 3, 5), project_status='briefed')
     db_session.add(project)
     db_session.flush()
     login_as(client, app, user, 'password123')
@@ -98,7 +98,7 @@ def test_missing_values_carry_an_empty_sort_value(app, client, db_session):
     "—"), which is the exact sentinel client_servicing.js's applySort()
     checks for to push blank rows to the bottom of a sort."""
     user = _user(db_session, 'd')
-    project = Project(name='Blank Fields Project', cs_lead_id=user.id, created_by_id=user.id)
+    project = Project(name='Blank Fields Project', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed')
     db_session.add(project)
     db_session.flush()
     login_as(client, app, user, 'password123')
@@ -115,7 +115,7 @@ def test_designers_sort_value_is_comma_joined_names(app, client, db_session):
     user = _user(db_session, 'e')
     designer_1 = _user(db_session, 'e2', role='designer')
     designer_2 = _user(db_session, 'e3', role='designer')
-    project = Project(name='Multi Designer Project', cs_lead_id=user.id, created_by_id=user.id)
+    project = Project(name='Multi Designer Project', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed')
     db_session.add(project)
     db_session.flush()
     db_session.add(ProjectDesigner(project_id=project.id, user_id=designer_1.id, team='2D'))

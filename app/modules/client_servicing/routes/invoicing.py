@@ -4,6 +4,8 @@ By Project (the per-project finance table) and Monthly Summary (rollup).
 Finance fields are plain ClientServicing columns and read-only here —
 editing lives in edit.py.
 """
+from datetime import date
+
 from flask import render_template, abort, request, jsonify
 from flask_login import login_required
 
@@ -13,7 +15,9 @@ from app.modules.core.shared.models import Project
 from app.modules.client_servicing.models import ClientServicingSetting
 from app.modules.client_servicing.lib.access import can_access_client_servicing, _effective_user
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
-from app.modules.client_servicing.routes.table import _eager_load
+from app.modules.client_servicing.routes.table import _base_projects
+from app.modules.client_servicing.routes.edit import _FINANCE_EDIT_ROLES
+from app.modules.client_servicing.lib import summary as summary_lib
 
 
 # Who may change the Days Pending colour thresholds.
@@ -72,11 +76,17 @@ def _finance_row(p, green_max, red_max):
         'days_class': days_class,
         'gr_received': bool(cs.gr_received) if cs else False,
         'validation': _VALIDATION.get(cs.validation_status) if cs else None,
+        # Raw values for the inline editors (ISO dates, plain numbers).
+        'lpo_date_iso': cs.lpo_date.isoformat() if (cs and cs.lpo_date) else '',
+        'invoice_date_iso': cs.invoice_date.isoformat() if (cs and cs.invoice_date) else '',
+        'project_value_raw': str(cs.project_value) if (cs and cs.project_value is not None) else '',
+        'invoice_amount_raw': str(cs.invoice_amount) if (cs and cs.invoice_amount is not None) else '',
+        'validation_value': (cs.validation_status if cs else '') or '',
     }
 
 
 def _rows(settings):
-    projects = _eager_load(Project.query).order_by(Project.name.asc()).all()
+    projects = _base_projects().order_by(Project.name.asc()).all()
     return [_finance_row(p, settings.days_green_max, settings.days_red_max) for p in projects]
 
 
@@ -92,6 +102,7 @@ def invoicing():
         rows=_rows(settings),
         settings=settings,
         can_edit_thresholds=getattr(actor, 'role', None) in _THRESHOLD_ROLES,
+        can_edit_finance=getattr(actor, 'role', None) in _FINANCE_EDIT_ROLES,
     )
 
 
@@ -100,7 +111,34 @@ def invoicing():
 def invoicing_summary():
     if not can_access_client_servicing(_effective_user()):
         abort(403)
-    return render_template('client_servicing/invoicing_summary.html')
+
+    today = date.today()
+
+    def _arg(name, default):
+        try:
+            return int(request.args.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    year = _arg('year', today.year)
+    month = _arg('month', today.month)
+    if not 1 <= month <= 12:
+        month = today.month
+
+    rows, total = summary_lib.year_summary(year)
+    kpi = rows[month - 1]
+    due = summary_lib.due_this_month(year, month)
+    for d in due:
+        d['validation'] = _VALIDATION.get(d['validation'])
+
+    years = list(range(today.year - 3, today.year + 2))
+    months = [(m, date(2000, m, 1).strftime('%B')) for m in range(1, 13)]
+
+    return render_template(
+        'client_servicing/invoicing_summary.html',
+        year=year, month=month, rows=rows, total=total, kpi=kpi, due=due,
+        years=years, months=months, current_year=today.year, current_month=today.month,
+    )
 
 
 @client_servicing_bp.route('/invoicing/day-thresholds', methods=['POST'])

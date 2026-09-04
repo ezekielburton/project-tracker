@@ -23,7 +23,7 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if can_edit_thresholds %}
+{% if can_edit_thresholds or can_edit_finance %}
 <script src="{{ url_for('static', filename='js/client_servicing_invoicing.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endif %}
 {% endblock %}

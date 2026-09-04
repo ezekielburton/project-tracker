@@ -695,3 +695,117 @@
     font-size: var(--text-sm);
     margin-bottom: var(--space-3);
 }
+
+/* Inline finance-cell editing (admin/cs/finance) */
+.cs-inv-editable,
+.cs-inv-editable-bool,
+.cs-inv-editable-select {
+    cursor: pointer;
+}
+
+.cs-inv-table tbody tr:hover td.cs-inv-editable {
+    outline: 1px solid var(--border-strong);
+    outline-offset: -1px;
+}
+
+.cs-inv-edit-input {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    padding: 2px 4px;
+}
+
+.cs-inv-gr-sep {
+    color: var(--text-faint);
+    margin: 0 2px;
+}
+
+/* ── Monthly Summary tab ── */
+.cs-inv-selectors {
+    display: flex;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.cs-inv-selectors select {
+    height: 36px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--text-sm);
+}
+
+.cs-inv-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.cs-inv-kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+}
+
+.cs-inv-kpi-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+}
+
+.cs-inv-kpi-value {
+    font-family: var(--font-mono);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--text);
+}
+
+.cs-inv-kpi-value--alert {
+    color: var(--salmon);
+}
+
+/* Single-row header tables (summary) don't need the two-row sticky offset */
+.cs-inv-sumtable thead th {
+    position: static;
+}
+
+.cs-inv-progress {
+    height: 8px;
+    min-width: 80px;
+    background: var(--surface-hover);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.cs-inv-progress-bar {
+    height: 100%;
+    background: var(--clover);
+    border-radius: 999px;
+}
+
+:root[data-theme="dark"] .cs-inv-progress-bar {
+    background: var(--tone-clover);
+}
+
+.cs-inv-current-row td {
+    background: color-mix(in srgb, var(--coral) 8%, transparent);
+}
+
+.cs-inv-total-row td {
+    font-weight: 700;
+    border-top: 2px solid var(--border);
+    background: var(--surface);
+}
+
+.cs-inv-due-title {
+    font-size: var(--text-med);
+    color: var(--text);
+    margin: var(--space-5) 0 var(--space-3);
+}

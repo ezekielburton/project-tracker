@@ -11,73 +11,92 @@ dashboard.
 ## Structure
 ```
 app/modules/client_servicing/
-  models.py                 # ClientServicing (1:1 companion) + ClientServicingScope
-  lib/access.py             # can_access_client_servicing + emulation-aware _effective_user
+  models.py                 # ClientServicing (1:1 companion), ClientServicingScope, ClientServicingSetting
+  lib/
+    access.py               # can_access_client_servicing + emulation-aware _effective_user
+    summary.py              # Monthly Summary rollup (computed live, nothing stored)
   routes/
     blueprint.py            # the client_servicing blueprint (url_prefix /client-servicing)
-    table.py                # table page + live-refresh rows partial, row serialize, column layout read
-    edit.py                 # PATCH one cell — the single field-update endpoint
+    table.py                # table page + live-refresh rows partial, row serialize, shared draft-excluding query
+    edit.py                 # PATCH one cell — the single field-update endpoint (CS + finance fields)
     layout.py               # save per-user column widths/order (shared UserTableLayout)
     scopes_admin.py         # CS Scope option-list CRUD + inline quick-add
     calendar.py             # Calendar section (placeholder)
-    invoicing.py            # Invoicing section (placeholder)
+    invoicing.py            # Invoicing section — By Project + Monthly Summary tabs, thresholds endpoint
   templates/client_servicing/
   tests/
 ```
-Routes are split one concern per file. Static: `app/static/js/client_servicing.js`,
-`app/static/css/client_servicing.css` (served from the global loader).
+Routes are split one concern per file. Static: `app/static/js/client_servicing.js`
+(table), `app/static/js/client_servicing_invoicing.js` (invoicing edits +
+thresholds modal), `app/static/css/client_servicing.css`.
 
 ## Architecture
-The CS-only fields live on a companion table, never on the shared `Project`.
-Everything a CS user edits that also exists on the project (CS lead, owner,
-job number, value, deadlines, SPOC) is written to the same project record —
-so there is one source of truth, not a copy that drifts.
+The CS-only and finance fields live on a companion table, never on the shared
+`Project`. Everything a CS user edits that also exists on the project (CS lead,
+owner, job number, value, deadlines, SPOC) is written to the same project
+record — one source of truth, not a copy that drifts. Draft projects are
+excluded everywhere in the module via the shared `table.py::_base_projects()`
+(`project_status != 'draft'`) — a draft isn't a real project yet.
 
 ## Data model
 - **`ClientServicing`** — 1:1 with a project (`project_id` unique, `ON DELETE
-  CASCADE`). Fields: `lpo`, `store_location`, `removal_date`, `invoice_month`,
-  `cost_to_client` / `inward_cost` (`Numeric(12,2)`), `scope_id`, `priority`.
-  `margin_percent` is a derived property — `(cost_to_client - inward_cost) /
-  cost_to_client × 100`, `None` when either figure is missing or cost is zero.
-  Never stored.
+  CASCADE`).
+  - CS fields: `lpo`, `store_location`, `removal_date`, `invoice_month`,
+    `cost_to_client` / `inward_cost` (`Numeric(12,2)`), `scope_id`, `priority`.
+  - Finance fields: `lpo_date`, `project_value` (`Numeric(12,2)`, the
+    sell/quotation value — separate from `Project.value`), `invoice_number`,
+    `invoice_date`, `invoice_amount` (`Numeric(12,2)`), `gr_received` /
+    `invoice_uploaded` (bool), `validation_status` (`valid` / `pending` /
+    `no_lpo` / `overdue`).
+  - Derived, never stored: `margin_percent` (`(cost_to_client - inward_cost) /
+    cost_to_client × 100`, `None` if either cost missing or zero); `days_pending`
+    (days since `invoice_date` if invoiced, else `removal_date`, else `None`).
 - **`ClientServicingScope`** — the CS team's own scope option list (`name`,
-  `active`), separate from the projects module's `Scope`. Deactivating, not
-  deleting, keeps existing rows valid while dropping the option from future
-  selection.
-Migration: `migrations/add_client_servicing_tables.py`.
+  `active`), separate from the projects module's `Scope`. Deactivate, don't
+  delete: existing rows keep their scope, the option drops from future picks.
+- **`ClientServicingSetting`** — single settings row; currently the Days Pending
+  colour thresholds (`days_green_max` 30, `days_red_max` 60). `current()` returns
+  a transient default when none is saved.
+
+Migrations: `add_client_servicing_tables.py`, `add_client_servicing_invoicing_fields.py`,
+`add_client_servicing_settings.py` (run directly, not Alembic).
 
 ## Access
 `lib/access.py` is the single gate — every route calls
 `can_access_client_servicing(_effective_user())`, never an inline role check.
-Roles: admin, management, cs, project_owner (`finance` is listed commented-out,
-pending that role existing on the User model). `_effective_user()` is
-emulation-aware, so an admin previewing as someone else is gated, has their
-layout saved, and has edits attributed as that person. The admin-only Scope
-CRUD stays on `current_user` so real admin tools survive a preview.
+Page-access roles: admin, management, cs, project_owner, finance. Editing the
+**finance fields** is further restricted to **admin / cs / finance**
+(`_FINANCE_EDIT_ROLES` in `edit.py`) — narrower than page access, so
+management/project_owner can view them but not edit. Editing the **day
+thresholds** is admin/management only. `_effective_user()` is emulation-aware,
+so an admin previewing as someone else is gated, has their layout saved, and
+has edits attributed as that person; the admin-only Scope CRUD stays on
+`current_user` so real admin tools survive a preview.
 
 ## Routes (blueprint prefix `/client-servicing`)
 - `GET /` — the table page. `GET /table-rows` — the rows partial for live refresh.
-- `PATCH /<project_id>` — update one cell: `{field, value}`.
+- `PATCH /<project_id>` — update one cell: `{field, value}` (CS + finance fields).
 - `POST /layout` — save this user's column widths/order.
 - `GET|POST /scopes`, `PATCH /scopes/<id>`, `POST /scopes/quick-add` — scope CRUD + inline add.
-- `GET /calendar`, `GET /invoicing` — the two other sections (placeholders).
+- `GET /invoicing` — By Project finance table. `GET /invoicing/summary?year=&month=` — Monthly Summary.
+- `POST /invoicing/day-thresholds` — save the Days Pending thresholds (admin/management).
+- `GET /calendar` — placeholder.
 
 ## The table
 Reuses the projects-table patterns: the shared `UserTableLayout` model
 (`table_key = 'client_servicing:table'`) for per-user column widths/order,
-data-driven columns, click-to-sort (client-side only — a live re-order of the
-rows on screen, no server round-trip or saved sort), column resize/reorder,
-a sticky Project-name column, and an "Open in Projects" button per row that
-deep-links to that project's overlay (`?project=<id>`). No project overlay
-here — every cell is edited in place.
+data-driven columns, client-side click-to-sort (no server round-trip, no saved
+sort), column resize/reorder, a sticky Project-name column, and an "Open in
+Projects" button per row that deep-links to that project's overlay
+(`?project=<id>`). No project overlay here — every cell is edited in place.
 
 ## Cell editing (`edit.py`)
 One endpoint, `PATCH /<project_id>` with `{field, value}`. It resolves the
-effective user, gates access, then routes by field:
-- **CS-only fields** (`lpo`, `store_location`, `removal_date`, `invoice_month`,
-  `cost_to_client`, `inward_cost`, `scope_id`, `priority`) — parsed/validated
-  per field and written to the project's `ClientServicing` row; the response
-  carries the recomputed margin.
+effective user, gates access (finance fields additionally gated to
+admin/cs/finance), then routes by field:
+- **CS + finance fields** — parsed/validated per field and written straight to
+  the project's `ClientServicing` row; the response carries the recomputed
+  margin. Finance fields are plain columns — no writeback, no notifications.
 - **Writeback fields** — routed through `app/modules/projects/services/
   mutations.py` (see below), never a raw column write.
 - Anything else is rejected as not editable here.
@@ -86,53 +105,62 @@ Edit scope:
 - **Read-only mirror** (edit via the Projects page): Client Name, Project Name,
   Project Brief Date, Lead Designer(s), Client Approval, Status.
 - **Editable → writes back to the project**: Job No, CS Lead, Project Owner,
-  Client SPOC, Installation Date, Project Value, Due Date (the project's
-  `first_output_deadline`).
-- **CS-only**: Scope (its own list), LPO, Store/Location, Removal Date, Invoice
-  Month, Cost to Client, Inward Cost; Margin (computed, read-only); Priority
-  (free text, not linked to the project's urgency).
+  Client SPOC, Installation Date, Project Value, Due Date.
+- **CS-only**: Scope, LPO, Store/Location, Removal Date, Invoice Month, Cost to
+  Client, Inward Cost; Margin (computed); Priority.
+- **Finance** (admin/cs/finance): LPO Date, Project Value, Invoice No./Date/
+  Amount, GR, Invoice Uploaded, Validation Status.
 
 ## Writeback + notifications
 `app/modules/projects/services/mutations.py` is the projects module's public
-write path: `reassign_cs_lead`, `set_project_owner`, and `save_detail_field`
-(job number, SPOC, installation date, value, due date). It does the commit,
+write path: `reassign_cs_lead`, `set_project_owner`, `save_detail_field` (job
+number, SPOC, installation date, value, due date). It does the commit,
 activity-log entry and notifications, so a change made here produces the same
-history and notifications as the same change made in the Projects overlay —
-the overlay's own routes delegate to it too, so there is a single
-implementation. Callers do their own permission checks first. Due-date,
-job-number and SPOC changes notify designers / secondary CS / owner as
-appropriate; CS-lead and owner changes notify through the same path the
-overlay uses.
+history as the same change on the Projects overlay — the overlay delegates to
+it too, so there is one implementation. Callers do their own permission checks
+first.
+
+## Invoicing (`invoicing.py`, `lib/summary.py`)
+Two tabs behind an in-page strip; drafts excluded from both.
+
+- **By Project** (`GET /invoicing`) — a fixed-column finance table over the
+  same projects, with the finance columns in an "Invoicing — Master Control"
+  band. Finance cells are inline-edited (text/date/number, a GR toggle, a
+  validation dropdown) via the shared `PATCH /<project_id>`. Days Pending is a
+  badge coloured by the configurable thresholds; no anchor date → a muted dash.
+- **Monthly Summary** (`GET /invoicing/summary?year=&month=`) — computed live,
+  nothing stored. Four KPI cards for the selected month, a 12-month rollup
+  (pipeline / confirmed / invoiced / progress / stuck + FY total), and a
+  "due this month" list of that month's uninvoiced projects. Each project is
+  bucketed by billing month (invoice date › removal date › due date); Pipeline
+  = Σ project value, Confirmed = has LPO, Invoiced = Σ invoice amount, Stuck =
+  no LPO or overdue/no-LPO validation. Calendar-year window for now.
+- **Day thresholds** — green/amber/red day cut-offs in `ClientServicingSetting`,
+  edited by admin/management from a toolbar button + modal. The toolbar's
+  search / month & validation filters / Export are present but not yet wired.
 
 ## Scope option list
 CS-managed. Users add options inline from the Scope dropdown (`/scopes/quick-add`);
 admins manage the full list from the "CS Scopes" tab in the Admin Panel
 (`scopes_admin.py`), mirroring the Design Types/Directions tabs.
 
-## Sections
-The sidebar shell has three: **Table** (built), **Calendar** and **Invoicing**
-(real, clickable placeholder pages, content not yet built).
+## Demo data
+`seed_invoicing_demo.py` (repo root) wipes and reseeds tagged dummy data for
+manual testing — demo users (`@invdemo.local`), clients/projects (`Demo — `),
+finance rows spread across the year, plus a hidden draft. Marker-scoped, so it
+never touches real data; `--wipe` clears only. Not the real importer.
 
-## TEMPORARY: main-sidebar link disabled (2 Sep 2026)
-Ezekiel is deploying other changes and wants this module visible-but-disabled
-in the global app sidebar (management can see it exists) without exposing a
-working link to a still-half-built page. Only `base.html` changed: the CS
-sidebar entry is a `<span class="sidebar-item sidebar-item--unlinked">`
-instead of `<a ... class="sidebar-item sidebar-item--nav">` — greyed out, no
-href, same pattern already used there for Design Outing Board / Birthday
-Calendar. Still gated on `can_access_client_servicing`, so it only shows
-(greyed out) to people who could actually use a direct link. Nothing else
-changed — the page, its routes, and its access gate are exactly as before;
-still fully reachable at `/client-servicing/` for anyone with access.
-**To restore**: swap that `<span>`/`sidebar-item--unlinked` back for the
-`<a>`/`sidebar-item--nav` + `href="{{ url_for('client_servicing.index') }}"`.
+## Sections
+Sidebar shell: **Table** and **Invoicing** (both built), **Calendar**
+(placeholder). The module's entry in the global app sidebar is currently a
+disabled (greyed) `<span class="sidebar-item sidebar-item--unlinked">`; to
+enable, swap it back for `<a href="{{ url_for('client_servicing.index') }}"
+class="sidebar-item sidebar-item--nav">`.
 
 ## Remaining scope
-- **Invoicing** — real content. The finance fields deliberately kept off the
-  table land here: LPO/PO Number, LPO Date, Invoice #/Date/Amount, Collected
-  Amount, Collection Date, Days Pending, GR, Invoice Uploaded, Validation Status.
+- **Invoicing toolbar** — search, month/validation filters and Export are
+  visual only; not wired.
 - **Calendar** — real content; scope not yet defined.
-- **Data seeding** from the master spreadsheet — import not built; needs the
-  real sheet (matching rows to existing projects, handling rows that don't match).
-- **`finance` role** — add to the User model, then uncomment it in `access.py`
-  (plus a migration).
+- **Data import** — mapping the real master spreadsheet to `Project` +
+  `ClientServicing` (matching/creating projects, handling non-matching rows).
+  Not built; `seed_invoicing_demo.py` is the pattern to adapt.

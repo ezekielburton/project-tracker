@@ -67,6 +67,24 @@ def _parse_money(value):
     return amount
 
 
+_VALIDATION_VALUES = {'valid', 'pending', 'no_lpo', 'overdue'}
+
+
+def _parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ('true', '1', 'yes', 'on')
+
+
+def _parse_validation(value):
+    if value in (None, ''):
+        return None
+    text = str(value).strip().lower()
+    if text not in _VALIDATION_VALUES:
+        raise _FieldError('must be a valid status')
+    return text
+
+
 def _parse_scope_id(value):
     if value in (None, ''):
         return None
@@ -90,7 +108,23 @@ _EDITABLE_FIELDS = {
     'inward_cost': _parse_money,
     'scope_id': _parse_scope_id,
     'priority': _text_parser(120),
+    'lpo_date': _parse_date,
+    'project_value': _parse_money,
+    'invoice_number': _text_parser(120),
+    'invoice_date': _parse_date,
+    'invoice_amount': _parse_money,
+    'gr_received': _parse_bool,
+    'invoice_uploaded': _parse_bool,
+    'validation_status': _parse_validation,
 }
+
+# Finance/master-control fields — editable by a NARROWER set than page
+# access (finance, CS, admin only), same gate as the Invoicing tab.
+_FINANCE_FIELDS = {
+    'lpo_date', 'project_value', 'invoice_number', 'invoice_date',
+    'invoice_amount', 'gr_received', 'invoice_uploaded', 'validation_status',
+}
+_FINANCE_EDIT_ROLES = {'admin', 'cs', 'finance'}
 
 
 def _display_value(field, value):
@@ -103,6 +137,10 @@ def _display_value(field, value):
     if field == 'scope_id':
         scope = ClientServicingScope.query.get(value)
         return scope.name if scope else None
+    if field in ('lpo_date', 'invoice_date'):
+        return value.strftime('%d %b')
+    if field in ('project_value', 'invoice_amount'):
+        return '{:,.0f}'.format(value)
     return value
 
 
@@ -174,6 +212,9 @@ def update_field(project_id):
     data = request.get_json(silent=True) or {}
     field = data.get('field')
     raw_value = data.get('value')
+
+    if field in _FINANCE_FIELDS and getattr(actor, 'role', None) not in _FINANCE_EDIT_ROLES:
+        abort(403)
 
     if field in _EDITABLE_FIELDS:
         response, error = _save_cs_only_field(project, field, raw_value)

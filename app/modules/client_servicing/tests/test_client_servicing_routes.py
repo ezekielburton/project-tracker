@@ -76,7 +76,7 @@ def test_invoicing_forbidden_for_designer(app, client, db_session):
 
 def test_index_shows_project_and_cs_fields(app, client, db_session):
     user = _user(db_session, 'b', role='cs')
-    project = Project(name='Storefront Refresh', cs_lead_id=user.id, created_by_id=user.id, job_number='JOB-1')
+    project = Project(name='Storefront Refresh', cs_lead_id=user.id, created_by_id=user.id, job_number='JOB-1', project_status='briefed')
     db_session.add(project)
     db_session.flush()
     db_session.add(ClientServicing(project_id=project.id, lpo='LPO-9'))
@@ -96,7 +96,7 @@ def test_index_shows_project_and_cs_fields(app, client, db_session):
 
 def test_table_rows_endpoint_returns_fragment(app, client, db_session):
     user = _user(db_session, 'c', role='admin')
-    project = Project(name='Kiosk Build', cs_lead_id=user.id, created_by_id=user.id)
+    project = Project(name='Kiosk Build', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed')
     db_session.add(project)
     db_session.flush()
 
@@ -117,7 +117,7 @@ def test_deactivated_scope_drops_out_of_options_but_still_shows_on_its_row(app, 
     scope = ClientServicingScope(name='Legacy Scope', active=True)
     db_session.add(scope)
     db_session.flush()
-    project = Project(name='Old Scope Project', cs_lead_id=user.id, created_by_id=user.id)
+    project = Project(name='Old Scope Project', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed')
     db_session.add(project)
     db_session.flush()
     db_session.add(ClientServicing(project_id=project.id, scope_id=scope.id))
@@ -143,7 +143,7 @@ def test_invoicing_by_project_renders_finance_band_and_values(app, client, db_se
     from datetime import date
     from decimal import Decimal
     user = _user(db_session, 'inv1', role='cs')
-    project = Project(name='Storefront Refresh', cs_lead_id=user.id, created_by_id=user.id)
+    project = Project(name='Storefront Refresh', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed')
     db_session.add(project)
     db_session.flush()
     db_session.add(ClientServicing(
@@ -222,3 +222,21 @@ def test_day_thresholds_rejects_green_not_less_than_amber(app, client, db_sessio
     resp = client.post(url, data=json.dumps({'days_green_max': 60, 'days_red_max': 30}),
                        content_type='application/json')
     assert resp.status_code == 400
+
+
+def test_draft_projects_are_hidden_from_the_table(app, client, db_session):
+    """Drafts aren't real projects yet — they must not appear on the CS
+    table or the Invoicing tab."""
+    user = _user(db_session, 'draft', role='cs')
+    db_session.add(Project(name='Real Briefed Project', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed'))
+    db_session.add(Project(name='Hidden Draft Project', cs_lead_id=user.id, created_by_id=user.id, project_status='draft'))
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        table_url = url_for('client_servicing.index')
+        inv_url = url_for('client_servicing.invoicing')
+    for url in (table_url, inv_url):
+        body = client.get(url).get_data(as_text=True)
+        assert 'Real Briefed Project' in body
+        assert 'Hidden Draft Project' not in body

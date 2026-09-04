@@ -104,3 +104,76 @@ def test_scope_must_be_active_and_existing(app, client, db_session):
 
     missing = _patch(client, app, project.id, 'scope_id', 999999)
     assert missing.status_code == 400
+
+
+# ── Finance fields (Invoicing tab): editable by admin/cs/finance only ──
+
+def test_finance_field_saved_by_finance_user(app, client, db_session):
+    user = _user(db_session, 'fin1', role='finance')
+    project = _project(db_session, 'fin1', user)
+    login_as(client, app, user, 'password123')
+
+    resp = _patch(client, app, project.id, 'invoice_amount', '1234')
+    assert resp.status_code == 200
+    assert resp.get_json()['value'] == '1,234'
+    cs = ClientServicing.query.filter_by(project_id=project.id).first()
+    from decimal import Decimal
+    assert cs.invoice_amount == Decimal('1234')
+
+
+def test_finance_date_and_validation_saved_by_cs(app, client, db_session):
+    user = _user(db_session, 'fin2', role='cs')
+    project = _project(db_session, 'fin2', user)
+    login_as(client, app, user, 'password123')
+
+    r1 = _patch(client, app, project.id, 'lpo_date', '2026-08-16')
+    assert r1.status_code == 200
+    assert r1.get_json()['value'] == '16 Aug'
+
+    r2 = _patch(client, app, project.id, 'validation_status', 'valid')
+    assert r2.status_code == 200
+    cs = ClientServicing.query.filter_by(project_id=project.id).first()
+    assert cs.validation_status == 'valid'
+
+
+def test_gr_received_boolean_roundtrip(app, client, db_session):
+    user = _user(db_session, 'fin3', role='finance')
+    project = _project(db_session, 'fin3', user)
+    login_as(client, app, user, 'password123')
+
+    assert _patch(client, app, project.id, 'gr_received', 'true').status_code == 200
+    cs = ClientServicing.query.filter_by(project_id=project.id).first()
+    assert cs.gr_received is True
+
+    assert _patch(client, app, project.id, 'gr_received', 'false').status_code == 200
+    db_session.refresh(cs)
+    assert cs.gr_received is False
+
+
+def test_invalid_validation_value_rejected(app, client, db_session):
+    user = _user(db_session, 'fin4', role='cs')
+    project = _project(db_session, 'fin4', user)
+    login_as(client, app, user, 'password123')
+
+    resp = _patch(client, app, project.id, 'validation_status', 'nonsense')
+    assert resp.status_code == 400
+
+
+def test_management_and_owner_cannot_edit_finance_fields(app, client, db_session):
+    for role in ('management', 'project_owner'):
+        user = _user(db_session, 'finx-' + role, role=role)
+        project = _project(db_session, 'finx-' + role, user)
+        login_as(client, app, user, 'password123')
+        resp = _patch(client, app, project.id, 'project_value', '5000')
+        assert resp.status_code == 403, role
+
+
+def test_management_can_still_edit_non_finance_cs_field(app, client, db_session):
+    """The finance gate is narrower than page access — it must not block the
+    ordinary CS-only fields management could already edit."""
+    user = _user(db_session, 'finy', role='management')
+    project = _project(db_session, 'finy', user)
+    login_as(client, app, user, 'password123')
+    resp = _patch(client, app, project.id, 'priority', 'High')
+    assert resp.status_code == 200
+    assert resp.get_json()['value'] == 'High'

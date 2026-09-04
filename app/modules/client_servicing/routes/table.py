@@ -195,12 +195,18 @@ def _contacts_by_client(client_ids):
     return by_client
 
 
+def _base_projects():
+    """The projects the CS module lists — drafts excluded (a draft isn't a
+    real project yet). Shared by the table and the Invoicing tab."""
+    return _eager_load(Project.query).filter(Project.project_status != 'draft')
+
+
 def _page_context():
     """Everything a template needs: the rows, plus every dropdown's
     option list. scope/cs-lead/project-owner options are global; contact
     options are keyed by client_id since Client SPOC's choices are
     whichever client that row's project belongs to."""
-    projects = _eager_load(Project.query).order_by(Project.name.asc()).all()
+    projects = _base_projects().order_by(Project.name.asc()).all()
 
     contact_ids = {p.contact_id for p in projects if p.contact_id}
     contacts_by_id = (

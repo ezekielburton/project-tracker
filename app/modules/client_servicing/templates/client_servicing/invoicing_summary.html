@@ -13,7 +13,96 @@
                 {% with active_tab = 'summary' %}
                 {% include "client_servicing/_invoicing_tabs.html" %}
                 {% endwith %}
-                <p class="cs-muted">Monthly Summary is coming in the next chunk.</p>
+
+                <form class="cs-inv-selectors" method="get" action="{{ url_for('client_servicing.invoicing_summary') }}">
+                    <select name="year" onchange="this.form.submit()">
+                        {% for y in years %}<option value="{{ y }}"{% if y == year %} selected{% endif %}>{{ y }}</option>{% endfor %}
+                    </select>
+                    <select name="month" onchange="this.form.submit()">
+                        {% for m, mlabel in months %}<option value="{{ m }}"{% if m == month %} selected{% endif %}>{{ mlabel }}</option>{% endfor %}
+                    </select>
+                    <noscript><button type="submit" class="cs-inv-ghost">Go</button></noscript>
+                </form>
+
+                <div class="cs-inv-kpis">
+                    <div class="cs-inv-kpi">
+                        <div class="cs-inv-kpi-label">Pipeline (AED)</div>
+                        <div class="cs-inv-kpi-value">{{ '{:,.0f}'.format(kpi.pipeline) }}</div>
+                    </div>
+                    <div class="cs-inv-kpi">
+                        <div class="cs-inv-kpi-label">Confirmed (AED)</div>
+                        <div class="cs-inv-kpi-value">{{ '{:,.0f}'.format(kpi.confirmed) }}</div>
+                    </div>
+                    <div class="cs-inv-kpi">
+                        <div class="cs-inv-kpi-label">Invoiced (AED)</div>
+                        <div class="cs-inv-kpi-value">{{ '{:,.0f}'.format(kpi.invoiced) }}</div>
+                    </div>
+                    <div class="cs-inv-kpi">
+                        <div class="cs-inv-kpi-label">Stuck</div>
+                        <div class="cs-inv-kpi-value{% if kpi.stuck %} cs-inv-kpi-value--alert{% endif %}">{{ kpi.stuck }}</div>
+                    </div>
+                </div>
+
+                <div class="cs-inv-tablewrap">
+                    <table class="cs-inv-table cs-inv-sumtable">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th>Pipeline</th>
+                                <th>Confirmed</th>
+                                <th>Invoiced</th>
+                                <th>Progress</th>
+                                <th>Stuck</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                            <tr{% if year == current_year and row.month == current_month %} class="cs-inv-current-row"{% endif %}>
+                                <td>{{ row.label }}</td>
+                                <td class="cs-inv-num">{{ '{:,.0f}'.format(row.pipeline) }}</td>
+                                <td class="cs-inv-num">{{ '{:,.0f}'.format(row.confirmed) }}</td>
+                                <td class="cs-inv-num">{{ '{:,.0f}'.format(row.invoiced) }}</td>
+                                <td>
+                                    <div class="cs-inv-progress" title="{{ row.progress }}%">
+                                        <div class="cs-inv-progress-bar" style="width: {{ row.progress }}%"></div>
+                                    </div>
+                                </td>
+                                <td class="cs-inv-num{% if row.stuck %} cs-inv-kpi-value--alert{% endif %}">{{ row.stuck }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="cs-inv-total-row">
+                                <td>FY {{ year }}</td>
+                                <td class="cs-inv-num">{{ '{:,.0f}'.format(total.pipeline) }}</td>
+                                <td class="cs-inv-num">{{ '{:,.0f}'.format(total.confirmed) }}</td>
+                                <td class="cs-inv-num">{{ '{:,.0f}'.format(total.invoiced) }}</td>
+                                <td></td>
+                                <td class="cs-inv-num">{{ total.stuck }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h2 class="cs-inv-due-title">Due this month</h2>
+                <div class="cs-inv-tablewrap">
+                    <table class="cs-inv-table cs-inv-sumtable">
+                        <thead>
+                            <tr><th>Client</th><th>Project</th><th>CS</th><th>Value AED</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for d in due %}
+                            <tr>
+                                <td>{{ d.client or '—' }}</td>
+                                <td class="cs-inv-proj">{{ d.project }}</td>
+                                <td class="{{ 'cs-inv-muted' if d.cs else 'cs-inv-none' }}">{{ d.cs or '—' }}</td>
+                                <td class="{{ 'cs-inv-num' if d.value is not none else 'cs-inv-none' }}">{{ '{:,.0f}'.format(d.value) if d.value is not none else '—' }}</td>
+                                <td>{% if d.validation %}<span class="status-pill cs-inv-badge status-pill--{{ d.validation[1] }}">{{ d.validation[0] }}</span>{% else %}<span class="cs-inv-none">—</span>{% endif %}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="cs-inv-empty">Nothing due this month.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </main>
     </div>
