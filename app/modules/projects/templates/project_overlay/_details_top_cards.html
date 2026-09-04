@@ -3,9 +3,16 @@ the calling template wraps this include plus its own brief-specific
 rows in one .overlay-properties list, so it reads as continuous. #}
 {% from '_shared_macros.html' import status_pill, status_override_picker %}
 
-<div class="overlay-property-row">
+<div class="overlay-property-row"{% if can_edit_project %} data-field="job_number"
+    data-field-type="text"{% endif %}>
     <span class="overlay-property-label">Job Number</span>
-    <span class="overlay-property-value">{{ project.job_number or '—' }}</span>
+    <span class="overlay-property-value">
+        <span class="overlay-edit-view">{{ project.job_number or '—' }}</span>
+        {% if can_edit_project %}
+        <input type="text" class="overlay-edit-input is-hidden" maxlength="100"
+            value="{{ project.job_number or '' }}">
+        {% endif %}
+    </span>
 </div>
 <div class="overlay-property-row">
     <span class="overlay-property-label">Project Status</span>

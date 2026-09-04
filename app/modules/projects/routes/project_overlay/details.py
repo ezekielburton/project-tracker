@@ -476,6 +476,24 @@ def overlay_details_save(project_id):
             'error': 'This project was changed by someone else while you were editing. Reload and try again.',
         }), 409
 
+    # Job Number routes through the Projects module's shared write path
+    # (services/mutations.save_detail_field) — the same one the Client
+    # Servicing table uses — so an edit here produces the exact duplicate
+    # check, change notification and history entry a job-number edit made
+    # anywhere else does. That service self-commits/logs/notifies, so it's
+    # handled here on its own, apart from the whitelist batch below.
+    job_number_changed = False
+    if 'job_number' in fields:
+        from app.modules.projects.services import mutations as project_mutations
+        old_job_number = project.job_number
+        try:
+            new_job_number = project_mutations.save_detail_field(
+                project, actor, 'job_number', fields.get('job_number')
+            )
+        except project_mutations.FieldError as exc:
+            return jsonify({'success': False, 'error': f'Job Number {exc}.'}), 400
+        job_number_changed = new_job_number != old_job_number
+
     # field name (matches the templates' data-field) -> (Project attr, parser)
     FIELD_MAP = {
         'client_id': ('client_id', lambda v: int(v) if v else None),
@@ -539,7 +557,11 @@ def overlay_details_save(project_id):
             changes.append({'field': 'design_teams_requested', 'old': old_value, 'new': new_value})
 
     if not changes:
-        return jsonify({'success': True, 'changed': False})
+        return jsonify({
+            'success': True,
+            'changed': job_number_changed,
+            'changes': ['job_number'] if job_number_changed else [],
+        })
 
     db.session.commit()
 
@@ -570,7 +592,11 @@ def overlay_details_save(project_id):
             user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
         )
 
-    return jsonify({'success': True, 'changed': True, 'changes': [c['field'] for c in changes]})
+    return jsonify({
+        'success': True,
+        'changed': True,
+        'changes': [c['field'] for c in changes] + (['job_number'] if job_number_changed else []),
+    })
 
 
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/start', methods=['POST'])
