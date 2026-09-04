@@ -15,12 +15,14 @@ Adjustments:
 
 - SPA navigation done for projects tabs & filtering navigations.
 - Loading bar added for in app navigation.
-
+- Wiki, references and blog updated to support video and audio files.
+- Updated everyone's profile pictures
 
 
 Bug Fixes:
 
 - Fixed deliverables page loading extremely slowly.
+- Fixed page hangs when navigating quickly
 
 ================================================================================
 v2.4
