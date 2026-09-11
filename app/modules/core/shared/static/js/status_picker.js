@@ -24,46 +24,27 @@ window.StatusPicker = (function () {
         var popover = pickerEl.querySelector('.status-picker-popover');
         if (!trigger || !popover) return null;
 
+        window.PopoverPosition.claim(pickerEl, popover);
+
         function closeOnScroll(e) {
             if (popover.contains(e.target)) return;
             close();
-        }
-
-        function positionPopover() {
-            // position:fixed (shared.css, same as .avatar-picker-popover)
-            // so it escapes any ancestor's overflow clipping — the status
-            // pill lives inside scrollable overlay cards/lists.
-            var rect = trigger.getBoundingClientRect();
-            var margin = 8;
-            var popoverWidth = popover.offsetWidth;
-            var popoverHeight = popover.offsetHeight;
-
-            var top = rect.bottom + margin;
-            var left = rect.left;
-
-            if (top + popoverHeight > window.innerHeight && rect.top - popoverHeight - margin > 0) {
-                top = rect.top - popoverHeight - margin;
-            }
-            if (left + popoverWidth > window.innerWidth) {
-                left = Math.max(margin, window.innerWidth - popoverWidth - margin);
-            }
-
-            popover.style.top = top + 'px';
-            popover.style.left = left + 'px';
         }
 
         function open() {
             if (activeClose && activeClose !== close) {
                 activeClose();
             }
-            popover.hidden = false;
-            positionPopover();
+            window.PopoverPosition.attach(popover);
+            popover.hidden = false;   // must be in the render tree before it can be measured
+            window.PopoverPosition.place(popover, trigger);
             activeClose = close;
             window.addEventListener('scroll', closeOnScroll, true);
         }
 
         function close() {
             popover.hidden = true;
+            window.PopoverPosition.release(popover);
             window.removeEventListener('scroll', closeOnScroll, true);
             if (activeClose === close) activeClose = null;
         }
@@ -78,7 +59,10 @@ window.StatusPicker = (function () {
         }
 
         function outsideClick(e) {
-            if (!pickerEl.contains(e.target)) close();
+            // While open the popover lives on <body>, so it is no longer a
+            // descendant of pickerEl — both have to count as inside.
+            if (pickerEl.contains(e.target) || popover.contains(e.target)) return;
+            close();
         }
 
         function escHandler(e) {
@@ -98,6 +82,7 @@ window.StatusPicker = (function () {
 
         return {
             destroy: function () {
+                window.PopoverPosition.release(popover);
                 window.removeEventListener('scroll', closeOnScroll, true);
                 if (activeClose === close) activeClose = null;
                 document.removeEventListener('click', outsideClick);

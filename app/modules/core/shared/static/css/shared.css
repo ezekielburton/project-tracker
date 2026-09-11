@@ -398,6 +398,9 @@
     min-width: 200px;
     max-height: 280px;
     overflow-y: auto;
+    /* Stops the list's scroll chaining to the page at either end, which
+       would fire a page scroll and close the popover. */
+    overscroll-behavior: contain;
     background: var(--white);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
@@ -484,6 +487,9 @@ person chip; kept as its own class family rather than reusing
     min-width: 180px;
     max-height: 280px;
     overflow-y: auto;
+    /* Stops the list's scroll chaining to the page at either end, which
+       would fire a page scroll and close the popover. */
+    overscroll-behavior: contain;
     background: var(--white);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
