@@ -8,6 +8,8 @@ window.AvatarPicker = (function () {
         var popover = pickerEl.querySelector('.avatar-picker-popover');
         if (!trigger || !popover) return null;
 
+        window.PopoverPosition.claim(pickerEl, popover);
+
         function closeOnScroll(e) {
             // Scrolling the popover's own option list also fires a scroll
             // event (it captures up through window same as any other) —
@@ -16,40 +18,13 @@ window.AvatarPicker = (function () {
             close();
         }
 
-        function positionPopover() {
-            // popover is position:fixed (shared.css) so it escapes any
-            // ancestor's overflow clipping — computed here from the
-            // trigger's actual on-screen position each time it opens.
-            var rect = trigger.getBoundingClientRect();
-            var margin = 8;
-            var popoverWidth = popover.offsetWidth;
-            var popoverHeight = popover.offsetHeight;
-
-            var top = rect.bottom + margin;
-            var left = rect.left;
-
-            // Flip above the trigger if there's no room below — the
-            // trigger button stays visible either way, since the popover
-            // sits adjacent to it, never on top of it.
-            if (top + popoverHeight > window.innerHeight && rect.top - popoverHeight - margin > 0) {
-                top = rect.top - popoverHeight - margin;
-            }
-
-            // Clamp horizontally so it never renders off the right edge.
-            if (left + popoverWidth > window.innerWidth) {
-                left = Math.max(margin, window.innerWidth - popoverWidth - margin);
-            }
-
-            popover.style.top = top + 'px';
-            popover.style.left = left + 'px';
-        }
-
         function open() {
             if (activeClose && activeClose !== close) {
                 activeClose();
             }
-            popover.hidden = false;   // must be in the render tree before offsetWidth/Height can be measured
-            positionPopover();
+            window.PopoverPosition.attach(popover);
+            popover.hidden = false;   // must be in the render tree before it can be measured
+            window.PopoverPosition.place(popover, trigger);
             activeClose = close;
             // A fixed-position popover doesn't move if an ancestor (e.g.
             // a card's own scrollable list) scrolls underneath it — close
@@ -61,6 +36,7 @@ window.AvatarPicker = (function () {
 
         function close() {
             popover.hidden = true;
+            window.PopoverPosition.release(popover);
             window.removeEventListener('scroll', closeOnScroll, true);
             if (activeClose === close) activeClose = null;
         }
@@ -75,7 +51,10 @@ window.AvatarPicker = (function () {
         }
 
         function outsideClick(e) {
-            if (!pickerEl.contains(e.target)) close();
+            // While open the popover lives on <body>, so it is no longer a
+            // descendant of pickerEl — both have to count as inside.
+            if (pickerEl.contains(e.target) || popover.contains(e.target)) return;
+            close();
         }
 
         function escHandler(e) {
@@ -95,6 +74,7 @@ window.AvatarPicker = (function () {
 
         return {
             destroy: function () {
+                window.PopoverPosition.release(popover);
                 window.removeEventListener('scroll', closeOnScroll, true);
                 if (activeClose === close) activeClose = null;
                 document.removeEventListener('click', outsideClick);

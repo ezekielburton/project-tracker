@@ -29,52 +29,31 @@ window.DeliverablePicker = (function () {
                 : count + ' deliverable' + (count === 1 ? '' : 's') + ' selected';
         }
 
-        function closeOnScroll() { close(); }
+        window.PopoverPosition.claim(pickerEl, popover);
 
-        // Opt-in via data-popover-align="above-center" on the root element
-        // (set by Mark Approved's picker only — see _submissions_draft_card.
-        // html) so this doesn't change the default below/left-aligned
-        // behavior every other picker on the page still uses.
-        var alignAboveCenter = pickerEl.dataset.popoverAlign === 'above-center';
-
-        function positionPopover() {
-            var rect = trigger.getBoundingClientRect();
-            var margin = 8;
-            var popoverWidth = popover.offsetWidth;
-            var popoverHeight = popover.offsetHeight;
-            var top, left;
-
-            if (alignAboveCenter) {
-                top = Math.max(rect.top - popoverHeight - margin, margin);
-                left = rect.left + (rect.width / 2) - (popoverWidth / 2);
-                left = Math.min(Math.max(left, margin), window.innerWidth - popoverWidth - margin);
-            } else {
-                // Unchanged default behavior — below the trigger, left-
-                // aligned, only flipping/clamping on overflow.
-                top = rect.bottom + margin;
-                left = rect.left;
-                if (top + popoverHeight > window.innerHeight && rect.top - popoverHeight - margin > 0) {
-                    top = rect.top - popoverHeight - margin;
-                }
-                if (left + popoverWidth > window.innerWidth) {
-                    left = Math.max(margin, window.innerWidth - popoverWidth - margin);
-                }
-            }
-
-            popover.style.top = top + 'px';
-            popover.style.left = left + 'px';
+        function closeOnScroll(e) {
+            // The popover's own option list is a scroll container too —
+            // only close for scrolling OUTSIDE it.
+            if (popover.contains(e.target)) return;
+            close();
         }
 
         function open() {
             if (activeClose && activeClose !== close) activeClose();
-            popover.hidden = false;
-            positionPopover();
+            window.PopoverPosition.attach(popover);
+            popover.hidden = false;   // must be in the render tree before it can be measured
+            // Opt-in via data-popover-align="above-center" on the root element
+            // (Mark Approved's and Client Revision's pickers only, set in
+            // project_submissions_draft_card.js); every other picker keeps
+            // the default below/left-aligned placement.
+            window.PopoverPosition.place(popover, trigger, { align: pickerEl.dataset.popoverAlign });
             activeClose = close;
             window.addEventListener('scroll', closeOnScroll, true);
         }
 
         function close() {
             popover.hidden = true;
+            window.PopoverPosition.release(popover);
             window.removeEventListener('scroll', closeOnScroll, true);
             if (activeClose === close) activeClose = null;
         }
@@ -85,7 +64,10 @@ window.DeliverablePicker = (function () {
         }
 
         function outsideClick(e) {
-            if (!pickerEl.contains(e.target)) close();
+            // While open the popover lives on <body>, so it is no longer a
+            // descendant of pickerEl — both have to count as inside.
+            if (pickerEl.contains(e.target) || popover.contains(e.target)) return;
+            close();
         }
         function escHandler(e) {
             if (e.key === 'Escape') close();
@@ -127,6 +109,7 @@ window.DeliverablePicker = (function () {
         return {
             getSelectedIds: selectedIds,
             destroy: function () {
+                window.PopoverPosition.release(popover);
                 window.removeEventListener('scroll', closeOnScroll, true);
                 if (activeClose === close) activeClose = null;
                 document.removeEventListener('click', outsideClick);

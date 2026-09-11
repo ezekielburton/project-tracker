@@ -2201,8 +2201,10 @@ button.overlay-chat-reaction-chip:hover {
    picker-trigger's own #overlay-mark-approved-form override) rather than a
    small inline control. Positioning itself (above/centered) is JS —
    deliverable_picker.js's data-popover-align opt-in, set in
-   project_submissions_draft_card.js. */
-#overlay-mark-approved-picker .deliverable-picker-popover {
+   project_submissions_draft_card.js. Targeted by data-popover-owner, not
+   a descendant selector: while open the popover is parked on <body> (see
+   popover_position.js) so it is not inside the picker. */
+.deliverable-picker-popover[data-popover-owner="overlay-mark-approved-picker"] {
     min-width: 320px;
     max-width: 420px;
     max-height: 360px;
@@ -2210,12 +2212,12 @@ button.overlay-chat-reaction-chip:hover {
     gap: var(--space-3);
 }
 
-#overlay-mark-approved-picker .deliverable-picker-option {
+[data-popover-owner="overlay-mark-approved-picker"] .deliverable-picker-option {
     font-size: var(--text-base);
     padding: var(--space-2) var(--space-3);
 }
 
-#overlay-mark-approved-picker .deliverable-picker-footer button {
+[data-popover-owner="overlay-mark-approved-picker"] .deliverable-picker-footer button {
     font-size: var(--text-sm);
 }
 
