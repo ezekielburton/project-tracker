@@ -236,7 +236,7 @@ def _build_details_context(project, actor):
 
     # Start Project — the one manual gate that moves a project off "Briefed".
     # Nothing deliverable-driven does; a project sits at Briefed until started.
-    can_start_project = can_edit_project and project.project_status == 'briefed'
+    can_start_project = can('start_projects', actor) and project.project_status == 'briefed'
 
     # Cancel/Reactivate — the template branches on project.cancelled_at directly.
     can_cancel_project = _can_cancel_project(project, actor)
@@ -621,13 +621,7 @@ def overlay_start_project(project_id):
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
 
-    can_edit_project = (
-        can('manage_projects', actor)
-        or actor.id == project.cs_lead_id
-        or actor.id in {a.user_id for a in project.secondary_cs_assignments}
-        or (can('claim_ownership', actor) and actor.id == project.project_owner_id)
-    )
-    if not can_edit_project:
+    if not can('start_projects', actor):
         return jsonify({'success': False, 'error': 'You do not have permission to start this project.'}), 403
 
     if project.project_status != 'briefed':

@@ -19,6 +19,26 @@ def _get_actor():
     for core/shared's effective_user()."""
     return effective_user()
 
+def submissions_blocked_reason(project):
+    """Why Submissions is read-only for this project, or None when it's open.
+
+    A project at Briefed takes no draft work — Start Project comes first. The
+    exception is a project already carrying a submission from before this rule:
+    that work stays reachable. No new project can reach that state, since
+    creating the first draft is itself blocked."""
+    if project.project_status != 'briefed':
+        return None
+
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import ProjectSubmission
+
+    grandfathered = db.session.query(
+        ProjectSubmission.query.filter_by(project_id=project.id).exists()
+    ).scalar()
+    if grandfathered:
+        return None
+    return 'This project has not been started yet.'
+
 def _can_manage_deliverables(project, actor):
     """Admin/management, the project's CS Lead / Secondary CS / Project Owner,
     the draft's creator while it's still a draft, or anyone with an approved

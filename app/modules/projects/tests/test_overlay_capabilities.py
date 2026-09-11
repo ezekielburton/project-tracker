@@ -45,6 +45,12 @@ class _StubProject:
         self.secondary_cs_assignments = []
 
 
+class _StubUser:
+    """A role is all can() reads."""
+    def __init__(self, role):
+        self.role = role
+
+
 class _StubFlag:
     def __init__(self, created_by_id):
         self.created_by_id = created_by_id
@@ -138,3 +144,13 @@ def test_blog_editor_opens_for_an_admin(app, client, db_session):
     with app.test_request_context():
         url = url_for('blog.editor')
     assert client.get(url).status_code == 200
+
+
+# ── Start Project ──────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('role', ALL_ROLES)
+def test_only_design_management_and_admin_can_start_a_project(role):
+    """CS deliberately lost this: Start Project used to run on a relationship
+    check that included the CS lead. The people doing the work start it now."""
+    expected = role in ('designer', 'team_lead', 'management', 'admin')
+    assert can('start_projects', _StubUser(role)) is expected

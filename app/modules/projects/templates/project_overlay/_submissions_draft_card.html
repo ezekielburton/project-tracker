@@ -178,6 +178,12 @@ can_request_client_revision (a sent deck with no revision already pending). #}
 {% endset %}
 
 {% call card(('Next Draft' if sent_submission else 'Draft'), draft_header_extra) %}
+{% if not submissions_open %}
+<p class="overlay-field-empty" id="overlay-draft-not-started">
+    This project hasn't been started yet — a designer, management or an admin
+    needs to press Start Project on the Details tab first.
+</p>
+{% endif %}
 {% if workflow_status != 'draft' %}
 {% if workflow_status == 'internal_revision' and events and events[-1].message %}
 <div class="revision-card" id="overlay-draft-revision-spotlight">

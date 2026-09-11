@@ -29,7 +29,13 @@ window.DeliverablePicker = (function () {
                 : count + ' deliverable' + (count === 1 ? '' : 's') + ' selected';
         }
 
-        function closeOnScroll() { close(); }
+        // Capture-phase, so a scroll in any container closes this. The
+        // popover's own option list is a scroll container too — ignore it,
+        // or scrolling the options closes them.
+        function closeOnScroll(e) {
+            if (popover.contains(e.target)) return;
+            close();
+        }
 
         // Opt-in via data-popover-align="above-center" on the root element
         // (set by Mark Approved's picker only — see _submissions_draft_card.

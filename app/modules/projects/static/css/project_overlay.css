@@ -2180,6 +2180,9 @@ button.overlay-chat-reaction-chip:hover {
     max-width: 320px;
     max-height: 280px;
     overflow-y: auto;
+    /* Stops the list's scroll chaining to the page at either end, which would
+       fire a page scroll and close the popover. */
+    overscroll-behavior: contain;
     background: var(--white);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);

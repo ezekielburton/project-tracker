@@ -9,7 +9,8 @@ from flask_login import login_required
 
 from app.modules.core.shared.models import Project
 
-from ._common import project_overlay_bp, _get_actor, ensure_posm_channels
+from ._common import (project_overlay_bp, _get_actor, ensure_posm_channels,
+                      submissions_blocked_reason)
 from app.modules.core.shared.lib.capabilities import can
 
 def _build_submission_regions(project):
@@ -297,10 +298,15 @@ def _build_draft_card_context(project, actor, resolved):
             if link.deliverable
         ]
 
+    # Submissions is read-only until the project is started. Same helper the
+    # write routes use, so the card never offers what the server will refuse.
+    submissions_open = submissions_blocked_reason(project) is None
+
     return {
         'draft': draft,
         'cached_files': cached_files,
-        'can_manage_draft': can('manage_drafts', actor),
+        'can_manage_draft': can('manage_drafts', actor) and submissions_open,
+        'submissions_open': submissions_open,
         'can_review': can('review_submissions', actor),
         'workflow_status': workflow_status,
         'is_being_edited': is_being_edited,
@@ -415,6 +421,11 @@ def overlay_submissions_upload(project_id):
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
+    if not can('manage_drafts', actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to change this draft.'}), 403
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
 
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
@@ -533,6 +544,11 @@ def overlay_submissions_remove_draft_file(project_id, file_id):
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
+    if not can('manage_drafts', actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to change this draft.'}), 403
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
 
     target = ProjectSubmissionFile.query.filter_by(
         id=file_id, project_id=project.id, storage_location='cache'
@@ -610,6 +626,11 @@ def overlay_submissions_set_main_deck(project_id, file_id):
 
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
+    if not can('manage_drafts', actor):
+        return jsonify({'success': False, 'error': 'You do not have permission to change this draft.'}), 403
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
 
     target = ProjectSubmissionFile.query.filter_by(
         id=file_id, project_id=project.id, storage_location='cache'
@@ -657,7 +678,11 @@ def overlay_submissions_submit_for_review(project_id):
     actor = _get_actor()
     if not can('manage_drafts', actor):
         return jsonify({'success': False, 'error': 'You do not have permission to submit this draft.'}), 403
-    
+
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
+
     data = request.get_json() or {}
     scope = data.get('scope', 'ckv')
     customer_id = data.get('customer_id')
@@ -755,6 +780,10 @@ def overlay_submissions_edit_draft(project_id):
     if not can('manage_drafts', actor):
         return jsonify({'success': False, 'error': 'You do not have permission to edit this draft.'}), 403
 
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
+
     data = request.get_json() or {}
     scope = data.get('scope', 'ckv')
     customer_id = data.get('customer_id')
@@ -808,6 +837,10 @@ def overlay_submissions_flag_internal_revision(project_id):
     actor = _get_actor()
     if not can('review_submissions', actor):
         return jsonify({'success': False, 'error': 'You do not have permission to flag this submission.'}), 403
+
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
 
     data = request.get_json() or {}
     scope = data.get('scope', 'ckv')
@@ -931,6 +964,10 @@ def overlay_submissions_submit_to_client(project_id):
     actor = _get_actor()
     if not can('review_submissions', actor):
         return jsonify({'success': False, 'error': 'You do not have permission to submit to client.'}), 403
+
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
 
     data = request.get_json() or {}
     scope = data.get('scope', 'ckv')
@@ -1206,6 +1243,10 @@ def overlay_submissions_client_revision(project_id):
     if not can('review_submissions', actor):
         return jsonify({'success': False, 'error': 'You do not have permission to request a client revision.'}), 403
 
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
+
     data = request.get_json() or {}
     scope = data.get('scope', 'ckv')
     customer_id = data.get('customer_id')
@@ -1349,6 +1390,10 @@ def overlay_submissions_approve(project_id):
     actor = _get_actor()
     if not can('review_submissions', actor):
         return jsonify({'success': False, 'error': 'You do not have permission to approve this submission.'}), 403
+
+    blocked = submissions_blocked_reason(project)
+    if blocked:
+        return jsonify({'success': False, 'error': blocked}), 409
 
     data = request.get_json() or {}
     scope = data.get('scope', 'ckv')

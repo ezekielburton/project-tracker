@@ -31,6 +31,7 @@ ALL_CAPABILITIES = frozenset({
     'view_all_projects',
     'manage_projects',
     'create_projects',
+    'start_projects',
     'toggle_project_hold',
     'claim_ownership',
     'complete_preproduction',
@@ -91,7 +92,7 @@ ROLE_CAPABILITIES = {
 
     'management': {
         'view_cs', 'view_finance', 'edit_invoicing_thresholds', 'close_projects',
-        'view_all_projects', 'manage_projects', 'create_projects',
+        'view_all_projects', 'manage_projects', 'create_projects', 'start_projects',
         'review_submissions', 'transfer_projects', 'edit_client_directory',
         'raise_flags', 'manage_flags', 'log_site_visits', 'manage_reference_data',
         'complete_preproduction', 'manage_project_files',
@@ -121,9 +122,11 @@ ROLE_CAPABILITIES = {
     # the team a deliverable belongs to, which is a per-record rule, not a role.
     'designer': {
         'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
+        'start_projects',
     },
     'team_lead': {
         'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
+        'start_projects',
     },
 
     'digital_innovation': {
