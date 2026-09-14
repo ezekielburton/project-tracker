@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}HSE — My performance{% endblock %}
+
+{% macro delta(d, unit) %}
+    {# No arrow when there is nothing to compare against. A first period
+       gets an honest blank rather than an invented improvement. #}
+    {% if d %}
+    <div class="hse-pf-delta{{ ' is-up' if d.improved else (' is-down' if d.improved is sameas false else '') }}">
+        {% if d.improved %}▲{% elif d.improved is sameas false %}▼{% else %}—{% endif %}
+        <span>from {{ d.from }}{{ unit }}</span>
+    </div>
+    {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="hse-page">
+    <div class="hse-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="hse-main">
+            <div class="hse-inner hse-inner--fill">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">My performance</h1>
+                    <div class="hse-header-actions">
+                        <span class="hse-month-chip">{{ window.label }}</span>
+                        <span class="hse-pf-toggle">
+                            <a class="hse-pf-toggle-opt{{ ' is-on' if window.view == 'month' else '' }}"
+                               href="{{ url_for('hse.performance', view='month', month=window.start.strftime('%Y-%m')) }}">Month</a>
+                            <a class="hse-pf-toggle-opt{{ ' is-on' if window.view == 'year' else '' }}"
+                               href="{{ url_for('hse.performance', view='year', month=window.end.strftime('%Y-%m')) }}">Year</a>
+                        </span>
+                        <a class="hse-btn hse-tab"
+                           href="{{ url_for('hse.performance_report', view=window.view, month=window.end.strftime('%Y-%m')) }}"
+                           target="_blank" rel="noopener">Print</a>
+                        <a class="hse-btn hse-btn--primary hse-tab"
+                           href="{{ url_for('hse.performance_report', view=window.view, month=window.end.strftime('%Y-%m'), auto=1) }}"
+                           target="_blank" rel="noopener">Export for review</a>
+                    </div>
+                </div>
+
+                <div class="hse-pf-body">
+                    <div class="hse-pf-col">
+
+                        <div class="hse-pf-tiles">
+                            {% for t in tiles %}
+                            <div class="hse-pf-tile">
+                                <div class="hse-pf-val">
+                                    {% if t.value is none %}<span class="hse-pf-num">—</span>
+                                    {% else %}<span class="hse-pf-num">{{ t.value }}</span>
+                                    <span class="hse-pf-unit">{{ t.unit }}</span>{% endif %}
+                                </div>
+                                <div class="hse-pf-lab">{{ t.label }}</div>
+                                {{ delta(t.delta, t.delta_unit) }}
+                                {% if t.detail %}<div class="hse-pf-note">{{ t.detail }}</div>{% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <section class="hse-pf-card">
+                            <div class="hse-pf-cardhead">
+                                <h2 class="hse-pf-cardttl">Inspections — planned against completed</h2>
+                                <span class="hse-pf-legend">
+                                    <span class="hse-pf-key"><i class="hse-pf-sw hse-pf-sw--planned"></i>Planned</span>
+                                    <span class="hse-pf-key"><i class="hse-pf-sw hse-pf-sw--done"></i>Completed</span>
+                                </span>
+                            </div>
+                            {% include 'hse/_pf_bars.html' %}
+                        </section>
+
+                        <section class="hse-pf-card hse-pf-card--grow hse-pf-card--chart">
+                            <div class="hse-pf-cardhead">
+                                <h2 class="hse-pf-cardttl">How long an action stays open</h2>
+                                <span class="hse-pf-sub">Average, all registers</span>
+                            </div>
+                            {% include 'hse/_pf_line.html' %}
+                        </section>
+
+                    </div>
+
+                    <div class="hse-pf-side">
+
+                        <section class="hse-pf-card">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Reporting culture</h2>
+                            <div class="hse-pf-val">
+                                {% if reporting.ratio is none %}<span class="hse-pf-num">—</span>
+                                {% else %}<span class="hse-pf-num">{{ reporting.ratio }}</span>{% endif %}
+                                <span class="hse-pf-unit">near misses per incident</span>
+                            </div>
+                            {{ delta(reporting.delta, '') }}
+                            {% if reporting.unclassified %}
+                            <div class="hse-pf-note">{{ reporting.unclassified }} not yet classified</div>
+                            {% endif %}
+                            {# Kept on the page deliberately. Read cold, a rising
+                               number looks like a worse site, and that misreading
+                               punishes the behaviour he is trying to build. #}
+                            <p class="hse-pf-callout">
+                                <strong>Read this one carefully.</strong> More near misses reported is a
+                                <em>good</em> result — it means people are raising things before somebody
+                                gets hurt. A falling number usually means under-reporting, not a safer site.
+                            </p>
+                        </section>
+
+                        <section class="hse-pf-card">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Compliance health</h2>
+                            <div class="hse-pf-line">
+                                <span>Items valid today</span>
+                                <span class="hse-pf-fig">{{ compliance.valid }} / {{ compliance.total }}</span>
+                            </div>
+                            <div class="hse-pf-line">
+                                <span>Renewed before expiry</span>
+                                <span class="hse-pf-fig">{{ compliance.renewals.on_time }} / {{ compliance.renewals.renewed }}</span>
+                            </div>
+                            <div class="hse-pf-line hse-pf-line--last">
+                                <span>Lapsed on my watch</span>
+                                <span class="hse-pf-fig{{ ' is-bad' if compliance.lapsed_count else '' }}">{{ compliance.lapsed_count }}</span>
+                            </div>
+                            {# Named, not hidden. A page that only flatters is
+                               worth nothing in the room. #}
+                            {% for row in compliance.lapsed %}
+                            <p class="hse-pf-foot">{{ row.item }} — expired {{ row.due_at.strftime('%d %b %Y') }}</p>
+                            {% endfor %}
+                        </section>
+
+                        <section class="hse-pf-card hse-pf-card--grow">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Open actions, by age</h2>
+                            {% for b in ageing.buckets %}
+                            <div class="hse-pf-age">
+                                <div class="hse-pf-agehead">
+                                    <span>{{ b.label }}</span>
+                                    <span class="hse-pf-agecount">{{ b.count }}</span>
+                                </div>
+                                <div class="hse-pf-track">
+                                    <div class="hse-pf-fill hse-pf-fill--{{ b.tone }}"
+                                         style="width: {{ b.percent }}%"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% if ageing.oldest %}
+                            <p class="hse-pf-foot">
+                                The oldest is {{ ageing.oldest.ref }}, open {{ ageing.oldest.days }} days{% if ageing.oldest.waiting_on %},
+                                waiting on {{ ageing.oldest.waiting_on }}{% endif %}.
+                            </p>
+                            {% endif %}
+                        </section>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

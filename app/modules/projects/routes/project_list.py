@@ -768,6 +768,7 @@ def _compute_rows_and_groups(all_rows):
 
 @project_list_bp.route('/table-rows')
 @login_required
+@require('view_workspace')
 def table_rows():
     """
     The Projects table's full refresh endpoint. On an SSE ping the client
@@ -785,6 +786,7 @@ def table_rows():
 
 @project_list_bp.route('/table-rows/<int:project_id>')
 @login_required
+@require('view_workspace')
 def table_row(project_id):
     """
     Targeted single-row refresh, answered without building the whole view.
@@ -1001,6 +1003,7 @@ def index():
 
 @project_list_bp.route('/page-state')
 @login_required
+@require('view_workspace')
 def page_state():
     """
     AJAX/JSON counterpart to index() — same context via _build_page_context(),
@@ -1059,6 +1062,7 @@ def page_state():
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required
+@require('view_workspace')
 def save_layout():
     """
     Silently persists one user's column widths/order for one table+view.
@@ -1086,6 +1090,7 @@ def save_layout():
 
 @project_list_bp.route('/<int:project_id>/expand')
 @login_required
+@require('view_workspace')
 def expand(project_id):
     project = Project.query.get_or_404(project_id)
 
@@ -1115,6 +1120,7 @@ def expand(project_id):
 
 @project_list_bp.route('/customer/<int:project_customer_id>/expand')
 @login_required
+@require('view_workspace')
 def expand_customer(project_customer_id):
     """
     Sublevel 2, C&CM only: one customer's own deliverables. Same on-
@@ -1286,6 +1292,7 @@ def _group_rows(rows, field):
 
 @project_list_bp.route('/views', methods=['POST'])
 @login_required
+@require('view_workspace')
 def create_view():
     """
     Saves the current filter selection (whatever's active right now) as a
@@ -1314,6 +1321,7 @@ def create_view():
 
 @project_list_bp.route('/views/<int:view_id>/rename', methods=['POST'])
 @login_required
+@require('view_workspace')
 def rename_view(view_id):
     user = _effective_user()
     view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first_or_404()
@@ -1329,6 +1337,7 @@ def rename_view(view_id):
 
 @project_list_bp.route('/views/<int:view_id>/delete', methods=['POST'])
 @login_required
+@require('view_workspace')
 def delete_view(view_id):
     user = _effective_user()
     view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first_or_404()

@@ -1,0 +1,304 @@
+{# The HSE performance report — four A4 pages, printed from the browser.
+
+   Deliberately NOT extending base.html: this is a document, not a screen.
+   It carries no app chrome, no theme switch and no navigation, because all
+   three would end up in the PDF.
+
+   Every figure comes from the same view model the page uses, so the report
+   and the screen can never disagree. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HSE Performance Report — {{ window.label }}</title>
+<link rel="stylesheet"
+      href="{{ url_for('hse_assets.static', filename='css/hse_report.css') }}?v={{ config.STATIC_VERSION }}">
+</head>
+<body>
+
+<button class="rp-noprint" onclick="window.print()">Save as PDF</button>
+
+{% set pages = 4 %}
+{% macro foot(n) %}
+<div class="rp-foot">
+    <span>OVP — HSE Performance Report{% if n == pages %} · generated {{ today.strftime('%d %b %Y') }}{% endif %}</span>
+    <span>Page {{ n }} of {{ pages }}</span>
+</div>
+{% endmacro %}
+
+{% macro stat(value, unit, label, sub) %}
+<div class="rp-stat">
+    <div class="rp-statval">{% if value is none %}—{% else %}{{ value }}{% endif %}{% if unit == '%' %}%{% endif %}</div>
+    <div class="rp-statlab">{{ label }}</div>
+    <div class="rp-statsub">{{ sub }}</div>
+</div>
+{% endmacro %}
+
+<!-- ═══ page 1 — the picture ═══ -->
+<section class="rp-page">
+    <div class="rp-badge">OVP</div>
+    <div class="rp-eyebrow">OVP · HSE &amp; Compliance</div>
+    <h1 class="rp-title">HSE Performance<br>Report</h1>
+    <div class="rp-rule"></div>
+    <p class="rp-lede">
+        What the safety function delivered over the period — what was closed and how
+        quickly, how much of the planned inspection programme actually happened, and
+        where compliance stands today.
+    </p>
+    <div class="rp-meta">{{ window.label }} · prepared for review</div>
+
+    <div class="rp-stats">
+        {{ stat(tiles[0].value, tiles[0].unit, 'Closed on time', tiles[0].detail) }}
+        {{ stat(tiles[1].value, tiles[1].unit, 'Avg days to close', tiles[1].detail or 'over the period') }}
+        {{ stat(tiles[2].value, tiles[2].unit, 'Inspection coverage', tiles[2].detail) }}
+        {{ stat(tiles[3].value, tiles[3].unit, 'Training sessions', tiles[3].detail) }}
+    </div>
+
+    <div class="rp-card">
+        <div class="rp-sectionhead" style="border:0; padding:0;">
+            <div>
+                <h3 class="rp-h3">Inspections — planned against completed</h3>
+                <div class="rp-h3sub">Trailing twelve months</div>
+            </div>
+            <span class="rp-legend">
+                <span class="rp-key"><i class="rp-sw rp-sw--planned"></i>Planned</span>
+                <span class="rp-key"><i class="rp-sw rp-sw--done"></i>Completed</span>
+            </span>
+        </div>
+        {% include 'hse/_pf_bars.html' %}
+        <p class="rp-cardnote">
+            Planned is what the schedule called for, counted once per asset. Completed is
+            work filed against that occurrence — a late entry still counts, on the date
+            it was due.
+        </p>
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">How long an action stays open</h3>
+        <div class="rp-h3sub">Average days to close, by month</div>
+        {% include 'hse/_pf_line.html' %}
+        <p class="rp-cardnote">
+            A month with nothing closed leaves a gap rather than dropping to zero.
+            The clock runs from the date the action was raised to the date it closed.
+        </p>
+    </div>
+
+    {{ foot(1) }}
+</section>
+
+<!-- ═══ page 2 — what was closed ═══ -->
+<section class="rp-page">
+    <div class="rp-section">
+        <div class="rp-sectionhead">
+            <div>
+                <div class="rp-eyebrow">Section 01</div>
+                <h2 class="rp-h2">What was closed</h2>
+            </div>
+            <span class="rp-sectionnote">{{ tiles[0].detail }}</span>
+        </div>
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">The service levels this is measured against</h3>
+        <div class="rp-h3sub">Days allowed, by severity</div>
+        <table class="rp-table">
+            <tr><th>Severity</th><th>Days allowed</th></tr>
+            {% for label, days in sla %}
+            <tr><td>{{ label }}</td><td class="rp-num">{{ days }}</td></tr>
+            {% endfor %}
+        </table>
+        <p class="rp-cardnote">
+            Time an action spends parked with someone else is excluded from this clock:
+            another department's delay is not the safety function's.
+        </p>
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">Closed on time, by severity</h3>
+        <div class="rp-h3sub">Where the headline percentage comes from</div>
+        <table class="rp-table">
+            <tr><th>Severity</th><th>Closed</th><th>On time</th><th>Rate</th></tr>
+            {% for row in severity_rows %}
+            <tr>
+                <td>{{ row.label }}</td>
+                <td class="rp-num">{{ row.closed }}</td>
+                <td class="rp-num">{{ row.on_time }}</td>
+                <td class="rp-num">{{ row.percent }}%</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="rp-empty" style="text-align:left;">Nothing closed in this period.</td></tr>
+            {% endfor %}
+        </table>
+        {# A severity with nothing closed is left out rather than printed as
+           0%, which would read as a failure that never happened. #}
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">Open actions, by age</h3>
+        <div class="rp-h3sub">Everything still outstanding today — {{ ageing.total }} actions</div>
+        {% for b in ageing.buckets %}
+        <div class="rp-row">
+            <span class="rp-rowlab">{{ b.label }}</span>
+            <span class="rp-track"><span class="rp-fill" style="width: {{ b.percent }}%"></span></span>
+            <span class="rp-rowval">{{ b.count }}</span>
+            <span class="rp-rowpct">{{ b.percent }}%</span>
+        </div>
+        {% endfor %}
+        {% if ageing.oldest %}
+        <p class="rp-cardnote">
+            The oldest is {{ ageing.oldest.ref }}, open {{ ageing.oldest.days }} days{% if ageing.oldest.waiting_on %},
+            waiting on {{ ageing.oldest.waiting_on }}{% endif %}.
+        </p>
+        {% endif %}
+    </div>
+
+    {{ foot(2) }}
+</section>
+
+<!-- ═══ page 3 — inspections and training ═══ -->
+<section class="rp-page">
+    <div class="rp-section">
+        <div class="rp-sectionhead">
+            <div>
+                <div class="rp-eyebrow">Section 02</div>
+                <h2 class="rp-h2">Inspections &amp; training</h2>
+            </div>
+            <span class="rp-sectionnote">Programme delivery</span>
+        </div>
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">Coverage by schedule</h3>
+        <div class="rp-h3sub">Completed against planned, this period</div>
+        {% for row in schedule_rows %}
+        <div class="rp-row">
+            <span class="rp-rowlab">{{ row.label }}</span>
+            <span class="rp-track"><span class="rp-fill rp-fill--blue" style="width: {{ row.percent }}%"></span></span>
+            <span class="rp-rowval">{{ row.done }}/{{ row.due }}</span>
+            <span class="rp-rowpct">{{ row.percent }}%</span>
+        </div>
+        {% else %}
+        <p class="rp-empty">No recurring schedules were running in this period.</p>
+        {% endfor %}
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">Training delivered</h3>
+        <div class="rp-h3sub">{{ training.sessions }} sessions · {{ training.attendees }} attendees</div>
+        <table class="rp-table">
+            <tr><th>Type</th><th>Sessions</th><th>Attendees</th></tr>
+            {% for row in training.by_type %}
+            <tr>
+                <td>{{ row.label }}</td>
+                <td class="rp-num">{{ row.sessions }}</td>
+                <td class="rp-num">{{ row.attendees }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="rp-empty" style="text-align:left;">Nothing recorded in this period.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">Reporting culture</h3>
+        <div class="rp-h3sub">Near misses raised per incident</div>
+        <div class="rp-figure">
+            <span class="rp-figureval">{% if reporting.ratio is none %}—{% else %}{{ reporting.ratio }}{% endif %}</span>
+            <span class="rp-figurelab">
+                near misses per incident — {{ reporting.near_misses }} near misses
+                to {{ reporting.incidents }} incidents
+            </span>
+        </div>
+        {# The note is the reason this metric can go in front of a manager at
+           all. Removing it turns good reporting into a bad-looking number. #}
+        <p class="rp-cardnote">
+            <strong>Read this one carefully.</strong> A higher ratio is the good result — it
+            means people are raising things before somebody gets hurt. A falling number
+            usually points to under-reporting rather than a safer site.
+        </p>
+    </div>
+
+    {{ foot(3) }}
+</section>
+
+<!-- ═══ page 4 — compliance ═══ -->
+<section class="rp-page">
+    <div class="rp-section">
+        <div class="rp-sectionhead">
+            <div>
+                <div class="rp-eyebrow">Section 03</div>
+                <h2 class="rp-h2">Compliance</h2>
+            </div>
+            <span class="rp-sectionnote">Position today</span>
+        </div>
+    </div>
+
+    <div class="rp-stats">
+        {{ stat(compliance.percent, '%', 'Items valid today', compliance.valid ~ ' of ' ~ compliance.total ~ ' tracked') }}
+        {{ stat(compliance.renewals.on_time, '', 'Renewed before expiry', 'of ' ~ compliance.renewals.renewed ~ ' renewals') }}
+        {{ stat(compliance.lapsed_count, '', 'Lapsed in period', 'named below') }}
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">What expires next</h3>
+        <div class="rp-h3sub">Inside the next 30 days</div>
+        <table class="rp-table">
+            <tr><th>Item</th><th>Reference</th><th>Expires</th></tr>
+            {% for row in expiring %}
+            <tr>
+                <td>{{ row.item }}</td>
+                <td class="rp-num">{{ row.ref }}</td>
+                <td class="rp-num">{{ row.due_at.strftime('%d %b %Y') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="rp-empty" style="text-align:left;">Nothing expiring in the next month.</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    {% if compliance.lapsed %}
+    <div class="rp-card">
+        <h3 class="rp-h3">What lapsed</h3>
+        <div class="rp-h3sub">Named rather than netted off the percentage</div>
+        <table class="rp-table">
+            <tr><th>Item</th><th>Reference</th><th>Expired</th></tr>
+            {% for row in compliance.lapsed %}
+            <tr>
+                <td>{{ row.item }}</td>
+                <td class="rp-num">{{ row.ref }}</td>
+                <td class="rp-num">{{ row.due_at.strftime('%d %b %Y') }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+
+    <div class="rp-callouts">
+        {% for c in callouts %}
+        <div class="rp-callout">
+            <div class="rp-calloutttl">{{ c.title }}</div>
+            <p>{{ c.body }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <p class="rp-method">
+        <strong>How this was measured.</strong> Every figure is computed from the HSE
+        registers at the moment this report was generated; nothing is stored or
+        hand-entered. Inspection coverage counts planned occurrences once per asset and
+        credits a late entry to the date it was due. The service-level clock excludes
+        time an action spent parked with another department. Compliance health counts
+        items valid today against items tracked, and names what expired rather than
+        removing it from the total.
+    </p>
+
+    {{ foot(4) }}
+</section>
+
+{% if auto %}
+{# Opened from "Export for review" — go straight to the print dialog. #}
+<script>window.addEventListener('load', function () { window.print(); });</script>
+{% endif %}
+
+</body>
+</html>

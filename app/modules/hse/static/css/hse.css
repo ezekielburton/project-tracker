@@ -32,11 +32,30 @@
 .hse-main {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .hse-inner {
     padding: var(--space-6);
     padding-bottom: 0;
+}
+
+/* Opt-in: the page fills the shell top to bottom, so its panels stretch
+   rather than leaving dead space under them, and a wide table's horizontal
+   scrollbar stays on screen instead of sliding below the fold.
+
+   The height is solved by core/shared/js/fill_height.js, not by flexbox:
+   .main-content is a flex ITEM with no definite height, so a flex child
+   here would just grow to its content and scroll the page instead. The
+   fallback is a viewport fraction rather than calc(100vh - N) — an offset
+   goes stale the moment the header changes, which is what left Digital
+   Innovation's closed strip unreachable. */
+.hse-inner--fill {
+    height: var(--fill-height, 72vh);
+    display: flex;
+    flex-direction: column;
+    padding-bottom: var(--space-6);
 }
 
 /* The module's header bar — the same grey as the side rail, running the
@@ -70,8 +89,51 @@
     margin-right: var(--space-4);
 }
 
-.hse-search .form-input {
-    min-width: 260px;
+/* ── The filter bar ──
+   What the table is filtered to on the left, the controls that change it on
+   the right. Everything in it is a link or a form GET, so a filtered view
+   survives a refresh and can be pasted to someone else. */
+
+.hse-filterbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+}
+
+.hse-filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.hse-select,
+.hse-search-input {
+    height: 30px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--text-sm);
+}
+
+.hse-search-input { min-width: 180px; }
+.hse-select { cursor: pointer; }
+
+.hse-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 /* ── Status filter chips ──
@@ -82,16 +144,19 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-bottom: var(--space-4);
 }
 
+/* Square, not a pill: the wireframe's chips are the same shape as every
+   other control on the page, and a pill row reads as tags rather than as a
+   filter. */
 .hse-chip {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-1) var(--space-3);
+    height: 30px;
+    padding: 0 var(--space-3);
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: var(--radius-sm);
     font-size: var(--text-sm);
     color: var(--text-muted);
     text-decoration: none;
@@ -102,20 +167,20 @@
     color: var(--text);
 }
 
+/* Tangerine is the app's "this one is active" colour — the same signal the
+   rail uses. A grey selected chip cannot be picked out of a row of six. */
 .hse-chip.is-selected {
-    background: var(--surface-hover);
-    border-color: var(--border-strong);
-    color: var(--text);
+    background: var(--surface-raised);
+    border-color: var(--tangerine);
+    color: var(--tangerine);
     font-weight: 600;
 }
+
+.hse-chip.is-selected .hse-chip-count { color: var(--tangerine); }
 
 .hse-chip-count {
     font-size: var(--text-xs);
     color: var(--text-faint, var(--text-muted));
-}
-
-.hse-chip.is-selected .hse-chip-count {
-    color: var(--text-muted);
 }
 
 /* ── Table ── */
@@ -131,11 +196,50 @@
     background-color: inherit;
 }
 
+/* The table sits on its own raised surface, the way the wireframe draws it
+   — on the page background it reads as a hole rather than a panel. */
+.hse-table-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+/* No magic offset. The card is a flex child of .hse-inner--fill, so the
+   scroller takes whatever height is left — a calc(100vh - N) here is the
+   pattern that left Digital Innovation's closed strip unreachable. */
 .hse-table-scroll {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
-    max-height: calc(100vh - 320px);
 }
+
+.hse-table-card .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface);
+}
+
+.hse-table-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-pager { display: flex; gap: var(--space-2); }
+.hse-pager .hse-btn { text-decoration: none; display: inline-flex; align-items: center; }
+.hse-btn.is-disabled { opacity: 0.45; cursor: default; }
 
 /* Deliberately weight, not colour. The palette's --poppy has no dark
    override and is too light for small text on white, and the app has no
@@ -366,8 +470,10 @@ body.hse-modal-open {
 
 /* ── Lists & people ── */
 
+/* Pinned to the bottom by .module-rail-foot (shared.css). The top margin
+   it used to carry is gone: the rule that pushes it down is margin-top:auto,
+   and a second margin there would just fight it. */
 .hse-rail-foot {
-    margin-top: var(--space-5);
     padding-top: var(--space-4);
     border-top: 1px solid var(--border-subtle);
 }
@@ -1435,3 +1541,423 @@ body.hse-modal-open {
 }
 
 .hse-ov-more { font-size: var(--text-xs); }
+
+/* ══ My performance ══════════════════════════════════════════════════════
+   The two chart series and the gridline. Declared as a pair with an explicit
+   dark override, same rule as the calendar's state tokens: a series that is
+   themed in one mode and not the other is the trap this module keeps hitting.
+
+   These are the handoff's validated series colours, deliberately NOT the UI
+   accent — OVP's coral is too light against the light surface and sits
+   outside the lightness band on dark. */
+:root {
+    --hse-s1: #D95F2E;
+    --hse-s2: #2F6FA8;
+    --hse-grid: var(--border-subtle);
+}
+
+:root[data-theme="dark"] {
+    --hse-s1: #E86A3C;
+    --hse-s2: #3F8BCC;
+}
+
+/* stretch, not flex-start: the two columns run the full height of the page
+   so the charts and the ageing panel grow into it. */
+.hse-pf-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    gap: var(--space-4);
+    align-items: stretch;
+}
+
+.hse-pf-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.hse-pf-side {
+    flex: 0 0 310px;
+    width: 310px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+/* ── the four tiles ── */
+
+.hse-pf-tiles { display: flex; gap: var(--space-3); align-items: stretch; }
+
+.hse-pf-tile {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.hse-pf-val { display: flex; align-items: baseline; gap: var(--space-1); }
+.hse-pf-num { font-size: 31px; font-weight: 700; line-height: 1; color: var(--text); }
+.hse-pf-unit { font-size: var(--text-sm); color: var(--text-muted); }
+
+.hse-pf-lab {
+    margin-top: var(--space-1);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* An improvement is green whichever direction the number moved: lower is
+   better for time-to-close, and an arrow that does not know that is worse
+   than no arrow at all. */
+.hse-pf-delta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-1);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.hse-pf-delta.is-up { color: var(--clover); }
+.hse-pf-delta.is-down { color: var(--text-muted); }
+
+.hse-pf-note {
+    margin-top: 3px;
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+
+/* ── cards ── */
+
+.hse-pf-card {
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.hse-pf-card--grow {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* A chart sits in the middle of the height it is given; a panel of rows
+   starts at the top like every other panel. */
+.hse-pf-card--chart { justify-content: center; }
+
+.hse-pf-cardhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2);
+}
+
+.hse-pf-cardttl {
+    margin: 0;
+    font-size: var(--text-med);
+    font-weight: 700;
+    color: var(--tangerine);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.hse-pf-cardttl--ruled {
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+
+.hse-pf-sub, .hse-pf-legend {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.hse-pf-key { display: flex; align-items: center; gap: var(--space-2); }
+.hse-pf-sw { width: 10px; height: 10px; border-radius: 2px; }
+.hse-pf-sw--planned { background: var(--hse-s2); }
+.hse-pf-sw--done { background: var(--hse-s1); }
+
+/* ── the charts ── */
+
+/* height:auto lets the viewBox aspect set the height. With a fixed pixel
+   height the browser scales the drawing down to fit it and centres it, so
+   the chart sat 1:1 in the middle of the card with dead space each side. */
+.hse-pf-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.hse-pf-grid { stroke: var(--hse-grid); stroke-width: 1; }
+.hse-pf-bar--planned { fill: var(--hse-s2); }
+.hse-pf-bar--done { fill: var(--hse-s1); }
+.hse-pf-path { stroke: var(--hse-s1); stroke-width: 2; stroke-linejoin: round; }
+.hse-pf-dot { fill: var(--hse-s1); stroke: var(--surface-raised); stroke-width: 2; }
+
+.hse-pf-axis, .hse-pf-tick, .hse-pf-point {
+    font-size: 9.5px;
+    fill: var(--text-faint);
+}
+
+.hse-pf-point { fill: var(--text-muted); font-size: 10px; }
+
+/* ── reporting culture ── */
+
+.hse-pf-callout {
+    margin: var(--space-3) 0 0;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-sunken);
+    border-left: 3px solid var(--clover);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    color: var(--text);
+}
+
+/* ── compliance health ── */
+
+.hse-pf-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-pf-line--last { border-bottom: none; }
+
+.hse-pf-fig { font-size: var(--text-med); font-weight: 700; color: var(--text); }
+/* Bold, not red — the register surface made the same call: --poppy is ~3.4:1
+   on the light surface and there is no danger-text token. */
+.hse-pf-fig.is-bad { color: var(--text); font-weight: 700; }
+
+.hse-pf-foot {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-xs);
+    line-height: 1.55;
+    color: var(--text-faint);
+}
+
+/* ── open actions by age ── */
+
+.hse-pf-age { margin-bottom: var(--space-3); }
+
+.hse-pf-agehead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.hse-pf-agecount { font-size: var(--text-xs); color: var(--text-muted); }
+
+.hse-pf-track {
+    height: 7px;
+    background: var(--surface-sunken);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.hse-pf-fill { height: 100%; border-radius: 4px; }
+.hse-pf-fill--good { background: var(--clover); }
+.hse-pf-fill--warn { background: var(--canary); }
+.hse-pf-fill--late { background: var(--tangerine); }
+.hse-pf-fill--bad { background: var(--poppy); }
+
+/* ── the Month / Year toggle ── */
+
+.hse-pf-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.hse-pf-toggle-opt {
+    padding: 0 var(--space-3);
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.hse-pf-toggle-opt.is-on {
+    background: var(--tangerine);
+    color: var(--white);
+    font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+    .hse-pf-body { flex-direction: column; }
+    .hse-pf-side { flex: 1 1 auto; width: 100%; }
+    .hse-pf-tiles { flex-wrap: wrap; }
+    .hse-pf-tile { flex: 1 1 200px; }
+}
+
+/* ══ Overview ════════════════════════════════════════════════════════════
+   The tiles are cards with a number, what it counts, and what that number
+   is *of* — the sub-line is what stops "13" being read as thirteen of
+   anything. */
+
+.hse-ov-tiles {
+    display: flex;
+    gap: var(--space-3);
+    align-items: stretch;
+    margin-bottom: var(--space-3);
+}
+
+.hse-ov-tile {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.hse-ov-num {
+    font-size: 31px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text);
+}
+
+.hse-ov-num .hse-ov-of {
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.hse-ov-lab {
+    margin-top: var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.hse-ov-sub {
+    margin-top: 2px;
+    font-size: var(--text-xs);
+    color: var(--text-faint, var(--text-muted));
+}
+
+/* Two columns that run the full height of the page, so the panels stretch
+   rather than leaving dead space under them. */
+.hse-ov-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    gap: var(--space-3);
+    align-items: stretch;
+    padding-bottom: var(--space-6);
+}
+
+.hse-ov-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.hse-ov-side { flex: 0 0 320px; width: 320px; display: flex; flex-direction: column; gap: var(--space-3); }
+.hse-ov-panel--grow { flex: 1; min-height: 0; }
+
+.hse-ov-title--ruled {
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+
+.hse-ov-note {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+/* Which register a row came from, so the panel reads as one list of work
+   rather than six lists stacked. */
+.hse-ov-tag {
+    flex: 0 0 auto;
+    align-self: center;
+    min-width: 92px;
+    text-align: center;
+    padding: 2px var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ── This week ── */
+
+.hse-ov-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-ov-line--last { border-bottom: none; }
+.hse-ov-fig { font-size: var(--text-med); font-weight: 700; color: var(--text); }
+.hse-ov-fig .hse-ov-of { font-size: var(--text-sm); font-weight: 400; color: var(--text-muted); }
+
+.hse-ov-foot {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-xs);
+    line-height: 1.55;
+    color: var(--text-faint, var(--text-muted));
+}
+
+/* ── Incidents by severity ── */
+
+.hse-ov-bar { margin-bottom: var(--space-3); }
+
+.hse-ov-barhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.hse-ov-barcount { font-size: var(--text-xs); color: var(--text-muted); }
+
+.hse-ov-track {
+    height: 7px;
+    background: var(--surface-sunken);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.hse-ov-fill { height: 100%; border-radius: 4px; }
+.hse-ov-fill--good { background: var(--clover); }
+.hse-ov-fill--warn { background: var(--canary); }
+.hse-ov-fill--late { background: var(--tangerine); }
+.hse-ov-fill--bad { background: var(--poppy); }
+
+@media (max-width: 1100px) {
+    .hse-ov-body { flex-direction: column; }
+    .hse-ov-side { flex: 1 1 auto; width: 100%; }
+    .hse-ov-tiles { flex-wrap: wrap; }
+    .hse-ov-tile { flex: 1 1 180px; }
+}
+
+/* The row is space-between across tag · title · meta. Without this the
+   title centres itself in the leftover space instead of sitting against
+   its tag. */
+.hse-ov-row .hse-ov-row-main { flex: 1; min-width: 0; }

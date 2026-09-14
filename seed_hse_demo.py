@@ -64,7 +64,8 @@ def _ref_rows():
               + [('department', v) for v in DEPARTMENTS]
               + [('incident_type', v) for v in INCIDENT_TYPES]
               + [('issue_type', v) for v in ISSUE_TYPES]
-              + [('compliance_type', v) for v in COMPLIANCE_TYPES])
+              + [('compliance_type', v) for v in COMPLIANCE_TYPES]
+              + [('compliance_item', label) for label, *_ in COMPLIANCE_ITEMS])
     existing = {(r.kind, r.label) for r in HseReference.query.all()}
     made = {}
     for order, (kind, label) in enumerate(wanted):
@@ -147,13 +148,15 @@ def seed():
 
     # Compliance & renewal — status is computed from the expiry date, so
     # nothing writes it here. Two are already past their date.
+    items = {r.label: r for r in refs.get('compliance_item', [])}
     for label, kind, issued_offset, expiry_offset in COMPLIANCE_ITEMS:
         db.session.add(HseEntry(
             register='compliance_renewal', ref=next_ref('compliance_renewal'),
             entry_date=today + timedelta(days=issued_offset),
             due_at=today + timedelta(days=expiry_offset),
             assigned_to_id=rng.choice(people).id,
-            data={DEMO_KEY: True, 'item': label, 'compliance_type': kind},
+            compliance_item_id=items[label].id,
+            data={DEMO_KEY: True, 'compliance_type': kind},
         ))
 
     db.session.commit()

@@ -136,7 +136,7 @@ def expiry_items(entries, start, end):
             continue
         if not (start <= entry.due_at <= end):
             continue
-        label = (entry.data or {}).get('item') or _register_label(entry.register)
+        label = (getattr(entry, 'compliance_item', None) and entry.compliance_item.label) or _register_label(entry.register)
         if entry.asset is not None:
             label = f'{label} — {entry.asset.label}'
         out.append(_item(

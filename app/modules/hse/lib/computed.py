@@ -17,7 +17,8 @@ EXPIRING_SOON_DAYS = 30
 SEVERITY_SCORE = {'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4}
 
 # Days an action of each severity may stay open before it is late.
-SLA_DAYS = {'Critical': 3, 'High': 7, 'Medium': 30, 'Low': 90}
+# Agreed with the officer, 14 Sep 2026.
+SLA_DAYS = {'Critical': 4, 'High': 7, 'Medium': 15, 'Low': 30}
 
 
 def _today(today=None):

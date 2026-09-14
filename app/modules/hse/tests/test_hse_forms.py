@@ -28,6 +28,7 @@ VALID = {
     'entry_date': '2026-09-14',
     'location': '3',
     'department': '5',
+    'event_class': 'Incident',
     'incident_type': 'Slip/Fall',
     'description': 'Wet floor by the loading bay.',
     'severity': 'High',
@@ -52,8 +53,8 @@ def test_every_missing_required_field_is_reported_at_once():
     with pytest.raises(ValidationError) as e:
         apply_payload(Stub(), INCIDENTS, {})
     missing = e.value.errors
-    for name in ('entry_date', 'location', 'incident_type', 'severity',
-                 'reported_by', 'status'):
+    for name in ('entry_date', 'location', 'event_class', 'incident_type',
+                 'severity', 'reported_by', 'status'):
         assert missing[name] == 'Required', f'{name} should be required'
 
 
@@ -85,6 +86,17 @@ def test_a_severity_outside_the_closed_set_is_refused():
     assert e.value.errors['severity'] == 'Not a severity'
 
 
+def test_an_event_class_outside_the_closed_set_is_refused():
+    """Incident or near miss is a closed set, not a reference list: the
+    near-miss ratio is a reported number, and a free-text value behind it
+    would change what that number means without anyone noticing."""
+    payload = dict(VALID)
+    payload['event_class'] = 'Almost'
+    with pytest.raises(ValidationError) as e:
+        apply_payload(Stub(), INCIDENTS, payload)
+    assert e.value.errors['event_class'] == 'Not an event class'
+
+
 def test_a_status_from_another_register_is_refused():
     """'Valid' belongs to compliance. Accepting it here would file an entry
     no filter chip on this register could ever find."""
@@ -109,12 +121,13 @@ def test_a_jsonb_choice_keeps_its_label_not_an_id():
 
 def test_an_expiry_register_needs_its_dates_and_writes_no_status():
     entry = apply_payload(Stub(), COMPLIANCE_RENEWAL, {
-        'item': 'ISO 45001 Certification',
+        'item': '7',
         'compliance_type': 'Certificate',
         'entry_date': '2025-06-01',
         'due_at': '2026-06-01',
         'assigned_to': '1',
     })
     assert entry.due_at == date(2026, 6, 1)
-    assert entry.data['item'] == 'ISO 45001 Certification'
+    assert entry.compliance_item_id == 7   # the certificate, by id now
+    assert 'item' not in entry.data
     assert entry.status is None, 'status is computed for this register'

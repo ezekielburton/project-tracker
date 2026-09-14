@@ -31,6 +31,11 @@ class _Asset:
         self.id, self.label, self.active = id, label, active
 
 
+class _Ref:
+    def __init__(self, id, label):
+        self.id, self.label = id, label
+
+
 class _Schedule:
     def __init__(self, assets=None, **kw):
         for name in SCHEDULE_FIELDS:
@@ -45,7 +50,8 @@ class _User:
 
 
 class _Entry:
-    def __init__(self, data=None, asset=None, created_by=None, created_at=None, **kw):
+    def __init__(self, data=None, asset=None, created_by=None, created_at=None,
+                 compliance_item=None, **kw):
         for name in ENTRY_FIELDS:
             setattr(self, name, kw.pop(name, None))
         assert not kw, f'Unknown field(s): {sorted(kw)}'
@@ -53,6 +59,7 @@ class _Entry:
         self.asset = asset
         self.created_by = created_by
         self.created_at = created_at
+        self.compliance_item = compliance_item
 
 
 def vehicles():
@@ -114,7 +121,7 @@ def test_an_expiry_is_drawn_on_the_day_it_runs_out_not_the_day_it_was_filed():
     calendar twice."""
     cert = _Entry(id=3, register='compliance_renewal', ref='COM-0004',
                   entry_date=date(2026, 6, 1), due_at=date(2026, 9, 30),
-                  data={'item': 'ISO 45001 Certification'})
+                  compliance_item=_Ref(3, 'ISO 45001 Certification'))
     assert logged_items([cert], date(2026, 6, 1), date(2026, 9, 30)) == []
     items = expiry_items([cert], date(2026, 9, 1), date(2026, 9, 30))
     assert len(items) == 1
@@ -369,7 +376,7 @@ def test_an_expiring_card_keeps_its_register_line():
     renewal" — so the subtitle earns its place."""
     cert = _Entry(id=3, register='compliance_renewal', ref='COM-0004',
                   entry_date=date(2026, 6, 1), due_at=date(2026, 9, 30),
-                  data={'item': 'ISO 45001 Certification'})
+                  compliance_item=_Ref(3, 'ISO 45001 Certification'))
     grouped = items_by_day([], [cert], date(2026, 9, 1), date(2026, 9, 30), TODAY)
     card = drawer_cards(grouped[date(2026, 9, 30)], TODAY)[0]
     assert card['subtitle'] == 'Compliance & renewal'
@@ -378,7 +385,7 @@ def test_an_expiring_card_keeps_its_register_line():
 def test_an_expiring_card_counts_down():
     cert = _Entry(id=3, register='compliance_renewal', ref='COM-0004',
                   entry_date=date(2026, 6, 1), due_at=date(2026, 9, 30),
-                  data={'item': 'ISO 45001 Certification'})
+                  compliance_item=_Ref(3, 'ISO 45001 Certification'))
     grouped = items_by_day([], [cert], date(2026, 9, 1), date(2026, 9, 30), TODAY)
     card = drawer_cards(grouped[date(2026, 9, 30)], TODAY)[0]
     assert card['title'] == 'ISO 45001 Certification'

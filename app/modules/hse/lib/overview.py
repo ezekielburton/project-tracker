@@ -15,7 +15,7 @@ from app.modules.hse.lib.computed import (
 from app.modules.hse.lib.metrics import (
     compliance_health, done_vs_due, expiring_soon_count, sla_pressure,
 )
-from app.modules.hse.lib.query import OPEN_STATUSES
+from app.modules.hse.lib.vocab import OPEN_STATUSES
 from app.modules.hse.lib.registers import BY_KEY
 
 # How many rows each panel shows before it starts saying "and N more". The
@@ -73,9 +73,9 @@ def needs_you_now(entries, today=None, limit=PANEL_LIMIT):
         'entry': entry,
         'register_label': _label(entry),
         'ref': entry.ref,
-        'title': (entry.data or {}).get('description')
-                 or (entry.data or {}).get('item')
-                 or _label(entry),
+        'title': ((entry.data or {}).get('description')
+                  or (getattr(entry, 'compliance_item', None) and entry.compliance_item.label)
+                  or _label(entry)),
         'severity': entry.severity,
         'days_open': days_open(entry, today),
         'over_sla': pressure if pressure > 0 else 0,
@@ -116,7 +116,7 @@ def expiring_panel(health, today=None, limit=PANEL_LIMIT):
             'entry': entry,
             'ref': entry.ref,
             'register_label': _label(entry),
-            'title': (entry.data or {}).get('item') or _label(entry),
+            'title': (getattr(entry, 'compliance_item', None) and entry.compliance_item.label) or _label(entry),
             'due_at': entry.due_at,
             'days': remaining,
             'lapsed': remaining is not None and remaining < 0,
@@ -146,3 +146,75 @@ def tiles(schedules, entries, month_start, month_end, today=None):
         'health_valid': health['valid'],
         'health_total': health['total'],
     }, health
+
+
+# Severity order, worst last, so the bars read as a ramp rather than a
+# jumble. The tone names are the ones hse.css paints.
+SEVERITY_BARS = (('Low', 'good'), ('Medium', 'warn'),
+                 ('High', 'late'), ('Critical', 'bad'))
+
+
+def severity_breakdown(entries, start, end):
+    """Incidents by severity over the period, as bars.
+
+    Counted across the whole Incidents group — an injury is an incident
+    whether it was filed under Incidents, First aid or Lost time injury —
+    and each entry is counted once, in the register it was actually filed
+    in, so nothing is double counted.
+
+    The bars are scaled against the largest bar, not the total: with four
+    severities a share-of-total bar is always short and tells you nothing.
+    """
+    rows = [e for e in entries
+            if BY_KEY.get(e.register) is not None
+            and BY_KEY[e.register].group == INCIDENT_GROUP
+            and e.entry_date is not None and start <= e.entry_date <= end]
+
+    counts = {label: 0 for label, _ in SEVERITY_BARS}
+    for entry in rows:
+        if entry.severity in counts:
+            counts[entry.severity] += 1
+
+    top = max(counts.values()) if counts else 0
+    bars = [{'label': label, 'tone': tone, 'count': counts[label],
+             'percent': round(counts[label] * 100 / top) if top else 0}
+            for label, tone in SEVERITY_BARS]
+
+    resolved = sum(1 for e in rows if e.closed_at is not None)
+    return {'bars': bars, 'total': len(rows), 'resolved': resolved,
+            'unrated': len(rows) - sum(counts.values())}
+
+
+def this_week(schedules, entries, start, end, today=None):
+    """The six numbers the weekly HSC report is built from.
+
+    They are counted here rather than typed by him: every column of that
+    report is derivable from the registers, which is why it is a generated
+    view and not a register of its own.
+    """
+    today = today or date.today()
+
+    def filed(*groups):
+        return [e for e in entries
+                if BY_KEY.get(e.register) is not None
+                and BY_KEY[e.register].group in groups
+                and e.entry_date is not None and start <= e.entry_date <= end]
+
+    incidents = filed(INCIDENT_GROUP)
+    near = sum(1 for e in incidents
+               if (e.data or {}).get('event_class') == 'Near miss')
+    cov = done_vs_due(schedules, entries, start, end, today)
+
+    return {
+        'incidents': len(incidents) - near,
+        'near_misses': near,
+        'inspections_done': cov['done'],
+        'inspections_due': cov['due'],
+        'trainings': len(filed('training')),
+        'opened': sum(1 for e in entries
+                      if e.entry_date is not None and start <= e.entry_date <= end
+                      and BY_KEY.get(e.register) is not None
+                      and BY_KEY[e.register].status_source == 'stored'),
+        'closed': sum(1 for e in entries
+                      if e.closed_at is not None and start <= e.closed_at <= end),
+    }

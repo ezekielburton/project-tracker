@@ -1309,6 +1309,7 @@
     {# Routes the inner module rail's links through sidebar.js's navigateTo.
        Document-delegated, so it loads once here rather than per module. #}
     <script src="{{ url_for('core.static', filename='js/module_rail.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('core.static', filename='js/fill_height.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('core.static', filename='js/settings-overlay.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}

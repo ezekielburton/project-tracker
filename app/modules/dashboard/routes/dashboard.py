@@ -1115,6 +1115,7 @@ def _compute_project_stats(user):
 
 @dashboard_bp.route('/api/project-stats')
 @login_required
+@require('view_workspace')
 def api_project_stats():
     _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_project_stats(scope_user))
@@ -1122,6 +1123,7 @@ def api_project_stats():
 
 @dashboard_bp.route('/api/summary')
 @login_required
+@require('view_workspace')
 def api_summary():
     # Scope-aware since (management view-switcher) — the SSE
     # live-refresh in dashboard.js hits this endpoint with whatever
@@ -1177,6 +1179,7 @@ def _compute_what_changed(user):
 
 @dashboard_bp.route('/api/what-changed')
 @login_required
+@require('view_workspace')
 def api_what_changed():
     _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_what_changed(scope_user))
@@ -1337,6 +1340,7 @@ def _compute_due(user, filter_type):
 
 @dashboard_bp.route('/api/due')
 @login_required
+@require('view_workspace')
 def api_due():
     # Default changed (fourth follow-up) from 'overdue_today'
     # to 'overdue', matching the Due card's new overdue-only scope — the
@@ -1441,6 +1445,7 @@ def _compute_decisions(user, all_flags=False):
 
 @dashboard_bp.route('/api/decisions')
 @login_required
+@require('view_workspace')
 def api_decisions():
     scope_mode, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_decisions(scope_user, all_flags=(scope_mode == 'my')))
@@ -1577,6 +1582,7 @@ def _compute_next_actions(user, filter_type):
 
 @dashboard_bp.route('/api/next-actions')
 @login_required
+@require('view_workspace')
 def api_next_actions():
     _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     filter_type = request.args.get('filter', 'mine')
@@ -2076,6 +2082,7 @@ def _compute_clashes_response(user):
 
 @dashboard_bp.route('/api/clashes')
 @login_required
+@require('view_workspace')
 def api_clashes():
     _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_clashes_response(scope_user))
@@ -2483,6 +2490,7 @@ def _compute_leadership_focus(user, decisions_count, risk_overdue):
 
 @dashboard_bp.route('/api/risk-overdue')
 @login_required
+@require('view_workspace')
 def api_risk_overdue():
     _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_risk_overdue(scope_user))
@@ -2508,6 +2516,7 @@ def api_risk_overdue():
 # the full client-side writeup.
 @dashboard_bp.route('/api/active-projects')
 @login_required
+@require('view_workspace')
 def api_active_projects():
     _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_your_active_projects(scope_user))
@@ -2515,6 +2524,7 @@ def api_active_projects():
 
 @dashboard_bp.route('/api/pending-approval-projects')
 @login_required
+@require('view_workspace')
 def api_pending_approval_projects():
     _, scope_user, _, _ = _resolve_dashboard_scope(get_actor())
     return jsonify(_compute_pending_approval_projects(scope_user))
@@ -2522,6 +2532,7 @@ def api_pending_approval_projects():
 
 @dashboard_bp.route('/api/waiting-on-others')
 @login_required
+@require('view_workspace')
 def api_waiting_on_others():
     # Leadership-only, same as /api/risk-overdue just above (the CS
     # dashboard's OWN Waiting on Others card, _compute_waiting_on_others,
@@ -2543,6 +2554,7 @@ def api_waiting_on_others():
 # touched again. These three routes are what that refresh now calls.
 @dashboard_bp.route('/api/escalated-projects')
 @login_required
+@require('view_workspace')
 def api_escalated_projects():
     # CS dashboard's "My Escalated Projects" card. Same shape as every
     # other /api/* route above.
@@ -2552,6 +2564,7 @@ def api_escalated_projects():
 
 @dashboard_bp.route('/api/my-escalation-history')
 @login_required
+@require('view_workspace')
 def api_my_escalation_history():
     # CS dashboard only — "My Escalation History" (this CS's own resolved
     # flags). Company-wide equivalent is /api/escalation-history below, a
@@ -2562,6 +2575,7 @@ def api_my_escalation_history():
 
 @dashboard_bp.route('/api/escalation-history')
 @login_required
+@require('view_workspace')
 def api_escalation_history():
     # Leadership dashboard only. _compute_escalation_history takes no
     # user/scope argument at all — always company-wide, same "not part of
@@ -2587,6 +2601,7 @@ def api_escalation_history():
 # same Jinja partial server-side avoids duplicating that structure in JS.
 @dashboard_bp.route('/api/time-tracking-rows')
 @login_required
+@require('view_workspace')
 def api_time_tracking_rows():
     actor = get_actor()
     if not can('view_time_reports', actor):

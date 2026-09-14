@@ -23,6 +23,7 @@ RELATION_ATTRS = {
     'assigned_to_id': ('assigned_to', 'name'),
     'subject_id': ('subject', 'name'),
     'waiting_on_id': ('waiting_on', 'name'),
+    'compliance_item_id': ('compliance_item', 'label'),
 }
 
 

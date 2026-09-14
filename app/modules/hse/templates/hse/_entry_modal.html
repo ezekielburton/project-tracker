@@ -49,7 +49,7 @@
                     {{ f.label }}{% if f.required %}<span class="hse-required">*</span>{% endif %}
                 </label>
 
-                {% if f.type == 'severity' %}
+                {% if f.type in ('severity', 'event_class') %}
                 <div class="hse-segmented" role="group" aria-label="{{ f.label }}">
                     {% for opt in f.options %}
                     <button type="button" class="hse-seg{{ ' is-selected' if opt.value == f.value else '' }}"

@@ -102,6 +102,50 @@ Jinja's search path by the `core` blueprint, so any module can
   everywhere at once. The admin panel is the one place that still lists them,
   so they can be reactivated.
 
+## `static/js/fill_height.js` — filling to the footer
+
+`.main-content` is a flex ITEM with no definite height, so a flex child inside
+a module shell just grows to its content and the **page** scrolls rather than
+the box. That matters beyond looks: a scroll box taller than the viewport
+takes its own horizontal scrollbar off screen with it, so a wide table can
+only be scrolled sideways after scrolling the page to the bottom.
+
+The helper measures the real gap — the box's top from `getBoundingClientRect()`
+and the footer's height — and writes it to a CSS variable the module's own CSS
+reads. Loaded once from `base.html`.
+
+```js
+window.watchFillHeight('.di-shell', '--di-shell-height');  // solve now + on resize
+window.fillHeightToFooter(el, '--some-var');               // one-shot
+```
+
+**Call `watchFillHeight` from a page script, not from here.** Page scripts
+re-execute on every SPA swap; the helper's resize listener is registered once
+and its selector list is deduped, so calling it per swap is correct and cheap.
+A swap lands on a fresh box that has to be measured again — putting the call
+behind a "already wired" guard is the bug that makes this work on first load
+and silently stop after a tab click.
+
+Three modules had their own copy of this solve before it moved here: Client
+Servicing (`syncTableScrollHeight`, for its scrolling table), Digital
+Innovation (`digital_innovation_shell.js`, for `.di-shell`) and HSE. All three
+now delegate. Each keeps its own CSS variable name, so no module CSS changed.
+
+**Every fallback in CSS should be a viewport fraction, not `calc(100vh - N)`.**
+An offset goes stale the moment the header or footer changes height, and a
+shell that is quietly too tall is how Digital Innovation's closed strip ended
+up out of reach.
+
+## The module rail
+
+`.module-rail` is a flex column. Two things follow:
+
+- **`.module-rail-foot` pins a block to the bottom** (`margin-top: auto`). It
+  is opt-in — DI's project switcher belongs directly under the nav, not floated
+  away from it. HSE uses it for *Lists & people* and *My performance*.
+- **`.module-rail-item--active` is tangerine**, matching `.settings-nav-item.active`.
+  The alpha wash reads on both grounds, so there is no dark override.
+
 ## Testing
 The shared pytest harness lives here:
 - `testing.py` — fixtures: `app` (built on the dedicated `project_tracker_test`

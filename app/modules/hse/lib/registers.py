@@ -15,7 +15,7 @@ from collections import namedtuple
 
 # Field types the form and table renderers handle.
 FIELD_TYPES = ('text', 'textarea', 'date', 'number', 'money', 'choice',
-               'severity', 'person', 'asset', 'status')
+               'severity', 'event_class', 'person', 'asset', 'status')
 
 # How a register's status is arrived at. 'stored' means the officer sets
 # it; 'expiry' means it is computed from due_at and nothing writes it;
@@ -52,6 +52,10 @@ INCIDENTS = Register(
     statuses=('Open', 'In Progress', 'Escalated', 'Resolved'),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
+        # What kind of event it was, kept apart from what caused it — an
+        # electrical near miss is still electrical. Without this split the
+        # register cannot answer the question its own name asks.
+        f('event_class', 'Incident or near miss', 'event_class', required=True),
         f('location', 'Location', 'choice', column='location_id',
           choices_kind='location', required=True),
         f('department', 'Department', 'choice', column='department_id',
@@ -100,7 +104,8 @@ COMPLIANCE_RENEWAL = Register(
     status_source='expiry',
     statuses=(),
     fields=(
-        f('item', 'Compliance item', 'text', required=True),
+        f('item', 'Compliance item', 'choice', column='compliance_item_id',
+          choices_kind='compliance_item', required=True),
         f('compliance_type', 'Type', 'choice', choices_kind='compliance_type'),
         f('entry_date', 'Issue date', 'date', column='entry_date', required=True),
         f('due_at', 'Expiry date', 'date', column='due_at', required=True),

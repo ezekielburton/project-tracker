@@ -55,6 +55,10 @@
     }
 
     function teardown() {
+        if (window.helixBlockDrag) {
+            window.helixBlockDrag.destroy();
+            window.helixBlockDrag = null;
+        }
         if (window.helixWikiEditor && typeof window.helixWikiEditor.destroy === 'function') {
             window.helixWikiEditor.destroy();
         }
@@ -81,13 +85,16 @@
 
         teardown();
 
-        window.helixWikiEditor = new window.EditorJS({
+        var editor = new window.EditorJS({
             holder: holder,
             data: readDocument(),
             tools: tools(),
             placeholder: 'Write the article. Press / to add a block.',
-            minHeight: 200
+            minHeight: 200,
+            onReady: function () { window.helixBlockDrag = window.HelixBlockDrag.attach(editor, holder); }
         });
+
+        window.helixWikiEditor = editor;
 
         wireSubmit(form, field);
     }

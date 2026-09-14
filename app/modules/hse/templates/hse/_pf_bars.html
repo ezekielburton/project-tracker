@@ -1,0 +1,22 @@
+{# Planned against completed, drawn server-side so it survives into the PDF.
+   Shared by the page and the report — neither draws its own.
+
+   No height attribute: the viewBox aspect sets the height, so the chart
+   fills the card's width instead of being letterboxed inside it. #}
+<svg class="hse-pf-svg" viewBox="0 0 {{ bars.width }} {{ bars.height }}"
+     width="100%" role="img"
+     aria-label="Inspections planned against completed, by month">
+    {% for g in bars.gridlines %}
+    <line x1="0" y1="{{ g.y }}" x2="{{ bars.width }}" y2="{{ g.y }}" class="hse-pf-grid"/>
+    <text x="0" y="{{ g.y - 5 }}" class="hse-pf-axis"
+          style="font-size: {{ bars.axis_font }}px">{{ g.value }}</text>
+    {% endfor %}
+    {% for b in bars.bars %}
+    <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" rx="4"
+          class="hse-pf-bar hse-pf-bar--{{ b.series }}"/>
+    {% if b.label %}
+    <text x="{{ b.label_x }}" y="{{ bars.label_y }}" class="hse-pf-tick"
+          style="font-size: {{ bars.tick_font }}px" text-anchor="middle">{{ b.label }}</text>
+    {% endif %}
+    {% endfor %}
+</svg>

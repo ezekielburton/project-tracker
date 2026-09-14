@@ -600,3 +600,17 @@ ol.wiki-block-list {
     margin: 0.5rem 0 0;
     min-height: 1em;
 }
+
+.wiki-editor-shell .ce-block--helix-drop-above > .ce-block__content {
+    box-shadow: 0 -2px 0 0 var(--border-strong);
+}
+
+.wiki-editor-shell .ce-block--helix-drop-below > .ce-block__content {
+    box-shadow: 0 2px 0 0 var(--border-strong);
+}
+
+.wiki-editor-shell .wiki-editor--dragging,
+.wiki-editor-shell .wiki-editor--dragging * {
+    -webkit-user-select: none;
+    user-select: none;
+}

@@ -5,15 +5,13 @@
 {% block content %}
 {# The module's own page/shell wrapper. The rail is the shared
    .module-rail; .hse-page / .hse-shell / .hse-main are this module's own
-   height chain, copied from client_servicing.css's (the one that solves
-   against the real footer rather than guessing a viewport offset).
-   Deliberately not a nested <main> — spa_strip_response() slices at the
-   first </main>. #}
+   height chain. Deliberately not a nested <main> — spa_strip_response()
+   slices at the first </main>. #}
 <div class="hse-page">
     <div class="hse-shell">
         {% include 'hse/_rail.html' %}
         <div class="hse-main">
-            <div class="hse-inner">
+            <div class="hse-inner hse-inner--fill">
 
                 <div class="hse-header">
                     <h1 class="hse-title">{{ reg.label }}</h1>
@@ -27,11 +25,6 @@
                         </button>
                         {% endif %}
                     </div>
-                    <div class="hse-search">
-                        <input type="search" id="hse-search" class="form-input"
-                               placeholder="Search {{ reg.label|lower }}…"
-                               aria-label="Search {{ reg.label|lower }}">
-                    </div>
                 </div>
 
                 {# The registers behind this rail entry. #}
@@ -44,26 +37,53 @@
                 </div>
                 {% endif %}
 
-                {# Status filter. Each chip is a link, so the filter survives
-                   a refresh and can be shared. A log declares no statuses
-                   and gets no strip. #}
-                {% if chips %}
-                <div class="hse-chips">
-                    {% for chip in chips %}
-                    <a class="hse-chip{{ ' is-selected' if chip.value == active_status else '' }}"
-                       href="{{ url_for('hse.register_page', group_key=active_group, register_key=reg.key, status=chip.value) }}">
-                        <span class="hse-chip-text">{{ chip.label }}</span>
-                        <span class="hse-chip-count">{{ chip.count }}</span>
-                    </a>
-                    {% endfor %}
+                {# One row: what the table is filtered to on the left, the
+                   controls that change it on the right. Every one of them is
+                   a link or a form GET, so the view survives a refresh. #}
+                <div class="hse-filterbar">
+                    {% if chips %}
+                    <div class="hse-chips">
+                        {% for chip in chips %}
+                        <a class="hse-chip{{ ' is-selected' if chip.value == filters.status else '' }}"
+                           href="{{ chip.url }}">
+                            {{ chip.label }}<span class="hse-chip-count">{{ chip.count }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div></div>
+                    {% endif %}
+
+                    <form class="hse-filters" method="get"
+                          action="{{ url_for('hse.register_page', group_key=active_group, register_key=reg.key) }}">
+                        {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+
+                        {% if severities %}
+                        <select class="hse-select" name="severity" aria-label="Filter by severity">
+                            <option value="">All severities</option>
+                            {% for s in severities %}
+                            <option value="{{ s }}"{{ ' selected' if s == filters.severity else '' }}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+
+                        {% if years %}
+                        <select class="hse-select" name="year" aria-label="Filter by year">
+                            <option value="">All years</option>
+                            {% for y in years %}
+                            <option value="{{ y }}"{{ ' selected' if y == filters.year else '' }}>{{ y }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+
+                        <input type="search" name="q" class="hse-search-input" value="{{ filters.search or '' }}"
+                               placeholder="Search…" aria-label="Search {{ reg.label|lower }}">
+                        <button type="submit" class="hse-visually-hidden">Search</button>
+                    </form>
                 </div>
-                {% endif %}
 
                 {% include 'hse/_table.html' %}
 
-                {% if truncated %}
-                <p class="hse-truncated">Showing the {{ rows|length }} most recent entries.</p>
-                {% endif %}
             </div>
         </div>
     </div>

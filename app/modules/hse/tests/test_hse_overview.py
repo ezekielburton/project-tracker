@@ -31,13 +31,19 @@ class _Person:
         self.name = name
 
 
+class _Ref:
+    def __init__(self, id, label):
+        self.id, self.label = id, label
+
+
 class _Entry:
-    def __init__(self, data=None, waiting_on=None, **kw):
+    def __init__(self, data=None, waiting_on=None, compliance_item=None, **kw):
         for name in ENTRY_FIELDS:
             setattr(self, name, kw.pop(name, None))
         assert not kw, f'Unknown field(s): {sorted(kw)}'
         self.data = data or {}
         self.waiting_on = waiting_on
+        self.compliance_item = compliance_item
         self.asset = None
 
 
@@ -50,13 +56,15 @@ def entry(**kw):
 
 
 def cert(days_left, **kw):
-    """A compliance item expiring in `days_left` days — negative for gone."""
+    """A compliance item expiring in `days_left` days — negative for gone.
+    The certificate name lives on the reference now, not in the blob."""
     kw.setdefault('id', 100 + days_left)
     kw.setdefault('ref', f'COM-{abs(days_left):04d}')
+    name = kw.pop('item', f'Item {days_left}')
     return _Entry(register='compliance_renewal',
                   entry_date=date(2026, 1, 1),
                   due_at=TODAY + timedelta(days=days_left),
-                  data={'item': kw.pop('item', f'Item {days_left}')}, **kw)
+                  compliance_item=_Ref(kw['id'], name), **kw)
 
 
 def test_the_stub_only_uses_real_columns():
@@ -78,7 +86,7 @@ def test_health_is_items_valid_today_over_items_tracked():
 def test_health_names_what_lapsed_rather_than_hiding_it():
     """A page that only flatters is worth nothing in the room."""
     health = compliance_health([cert(100), cert(-5, item='Fire certificate')], TODAY)
-    assert [e.data['item'] for e in health['lapsed']] == ['Fire certificate']
+    assert [e.compliance_item.label for e in health['lapsed']] == ['Fire certificate']
 
 
 def test_lapsed_items_come_back_oldest_first():

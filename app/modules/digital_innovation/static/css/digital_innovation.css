@@ -30,7 +30,11 @@
 .di-shell {
     display: flex;
     align-items: stretch;
-    height: var(--di-shell-height, calc(100vh - 200px));
+    /* Solved by core/shared/js/fill_height.js. The fallback is a viewport
+       fraction, not calc(100vh - N): an offset goes stale the moment the
+       header or the footer changes height, and a shell that is quietly too
+       tall is what put the closed strip out of reach. */
+    height: var(--di-shell-height, 72vh);
 }
 
 /* ── The Projects switcher that hangs under the rail ──

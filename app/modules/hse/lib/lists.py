@@ -41,6 +41,7 @@ KIND_LABELS = {
     'unit': 'Units',
     'training_type': 'Training types',
     'expense_category': 'Expense categories',
+    'compliance_item': 'Compliance items',
 }
 
 ASSET_KIND_LABELS = {

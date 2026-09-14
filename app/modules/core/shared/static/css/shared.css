@@ -541,6 +541,17 @@ the backend already handles fine. */
     position: sticky;
     top: 0;
     align-self: stretch;
+    /* A column so a module can push its own footer block to the bottom with
+       .module-rail-foot. Everything else keeps the order it had: a rail with
+       no foot renders exactly as before. */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Pinned to the bottom of the rail. Opt-in: Digital Innovation's project
+   switcher belongs directly under the nav, not floated away from it. */
+.module-rail-foot {
+    margin-top: auto;
 }
 
 .module-rail-nav {
@@ -572,9 +583,13 @@ the backend already handles fine. */
     gap: var(--space-2);
 }
 
+/* Tangerine, matching .settings-nav-item.active — the app already says
+   "this one is active" this way, and a grey fill cannot be picked out of a
+   rail of nine. The alpha wash reads on both grounds, which is why there is
+   no dark override here. */
 .module-rail-item--active {
-    background: var(--surface-hover);
-    color: var(--text);
+    background: rgba(242, 127, 85, 0.14);
+    color: var(--tangerine);
     font-weight: 600;
 }
 

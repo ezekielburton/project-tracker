@@ -100,6 +100,24 @@ recorded as a marker DiIntakeItem — the request itself is untouched.
 - Live refresh rides the DI-wide SSE ping, which fires only for DI's own watched
   models — a brand-new FeatureRequest submission appears on the next full load, not live.
 
+## Shell height
+
+`.di-shell` fills the gap between the global header and the footer so a
+screen's content (`.di-columns`, `.di-closed-strip`) can flex into it. CSS
+alone cannot express that here — `.main-content` is a flex item with no
+definite height — so the height is measured.
+
+`digital_innovation_shell.js` used to carry that maths itself. It now calls
+`core/shared/js/fill_height.js`, which is the same solve Client Servicing and
+HSE need; three copies is the bug, so it was extracted. The variable name
+`--di-shell-height` is unchanged, so `digital_innovation.css` is untouched
+apart from its fallback.
+
+**The fallback used to be `calc(100vh - 200px)`** — a fixed offset that goes
+stale whenever the header or footer changes height, leaving the shell too tall
+and the closed strip below the fold. It is now `72vh`, which has no offset to
+go stale.
+
 ## Remaining scope
 A management dashboard rolling DI hours/profit up into a linked system project
 (`DiProject.linked_project_id` exists for this); wiring FeatureRequest submissions into

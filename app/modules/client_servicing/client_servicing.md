@@ -113,6 +113,19 @@ Six panels:
 - **Layout** — role tokens, light + dark; the two list panels scroll internally, the page scrolls to the bottom row.
 - **Live refresh** — panels live in `_dashboard_panels.html`, re-rendered by `GET /dashboard-panels`. `polling.js` opens `/sse/dashboard` on the `.cs-dash` marker and calls `window.helixRefreshCSDashboard()` (`client_servicing_dashboard.js`), which swaps `#cs-dash-panels`. Same doorbell as the table/calendar.
 
+## Table height
+
+`.cs-table-scroll` is sized so its bottom edge meets the footer, which is what
+keeps its horizontal scrollbar on screen. Flexbox cannot do it — `.main-content`
+is a flex item with no definite height, so a flex child grows to its content
+and the page scrolls instead.
+
+`syncTableScrollHeight()` is now a two-line call into
+`core/shared/js/fill_height.js`; the maths moved there when Digital Innovation
+and HSE turned out to need the same solve. Its call sites are unchanged, and
+`--cs-table-scroll-height` still drives the CSS. If that file ever fails to
+load, the CSS `calc()` fallback takes over.
+
 ## The table
 Reuses the projects-table patterns: the shared `UserTableLayout` model
 (`table_key = 'client_servicing:table'`) for per-user column widths/order,

@@ -173,7 +173,7 @@ box. There is a test that fails if either turns up as an editable list.
 
 ## Building another page in this module
 
-Three things bite every time, and all three have bitten already.
+Six things bite every time, and all six have bitten already.
 
 **A table needs `data-table`, not just `hse-table`.** `data-table` (main.css) is
 where the padding, the mono uppercase header, the row borders, the hover and the
@@ -194,3 +194,55 @@ no len()" several files from the cause. The calendar's lists are called
 system — without the script every tab click is a full page reload. It is a
 separate file precisely so a new page can load it without dragging in the
 register surface's search code.
+
+**An SVG with a fixed pixel height gets letterboxed, not filled.** Give a chart
+`width="100%"` and `height="300"` and the browser scales the whole drawing down
+to fit 300px and centres it — so a 556-wide chart sat 1:1 in the middle of a
+1160px card with dead space either side, which reads as a rendering bug rather
+than a sizing one. Set `width="100%"`, no height attribute, and `height: auto`
+in CSS: the viewBox aspect then sets the height and the chart fills the card.
+
+**Size a chart's viewBox to the width it will render at.** Everything inside an
+SVG scales with it, type included, so a chart drawn 556 wide and stretched
+across 1160px renders its 9px labels at 19px. `lib/charts.py` takes a `width`
+and the two surfaces pass their own — `SCREEN_WIDTH` for the page,
+`PRINT_WIDTH` for the A4 report — rather than sharing one and hoping.
+
+**A page fills the shell by opting in.** `.hse-main` is a flex column and
+`.hse-inner--fill` makes the inner block take the remaining height, so panels
+stretch to the bottom instead of floating at the top of an empty shell. Only
+My performance uses it today; every other page keeps content-height behaviour.
+
+**A page fills by measurement, not by flexbox.** `.hse-inner--fill` opts a page
+in, but the height itself comes from `core/shared/js/fill_height.js` — asked
+for in `hse_nav.js`, **outside** the double-wiring guard. The listener is wired
+once; every SPA swap lands on a fresh box that has to be measured again, so a
+call behind that guard works on first load and silently stops after a tab
+click. `.main-content` is a flex item with no definite height, so a pure CSS
+chain just grows to its content and scrolls the page — which also drags a wide
+table's horizontal scrollbar below the fold.
+
+---
+
+## The register surface, after the filter pass
+
+`/hse/<group>/<register>` takes `status`, `severity`, `year`, `q` and `page`,
+all as URL parameters, so a filtered view survives a refresh and can be pasted
+to someone else. Nothing is held in JavaScript.
+
+- **`lib/query.py` owns filtering and paging**, not the route, so the chip
+  counts and the rows they filter can never be built from two different sets.
+  `page_of()` returns rows, counts and page arithmetic together.
+- **Chip counts ignore the status filter** and honour the others — a chip shows
+  how many rows it would land on, not how many exist.
+- **Search is server-side.** It had to be: client-side search over a paged
+  table only searches the page on screen, which quietly returns nothing. It
+  covers the ref, the whole JSONB blob, and the names behind the foreign keys;
+  the six outer joins only go on when someone is actually searching.
+- **A stored status is SQL; a computed expiry status is not.** `status_source
+  == 'expiry'` is a function of `due_at` and today, so that branch loads the
+  matching rows and pages in Python. Compliance is the only expiry register and
+  it holds certificates, not events, so the set stays small by nature.
+- **Every link is built in the route**, not reassembled in the template — a new
+  filter is one entry in `carried`, and a chip clears `page` so filtering to
+  eleven rows while sitting on page 3 cannot show an empty table.

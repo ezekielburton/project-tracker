@@ -13,11 +13,16 @@ Nothing is stored. Every figure is computed from entries at read time.
 from datetime import date
 
 from app.modules.hse.lib.computed import (
-    EXPIRING_SOON_DAYS, closed_on_time, days_owned, days_to_expiry,
-    expiry_status, sla_days,
+    EXPIRING_SOON_DAYS, closed_on_time, days_open, days_owned,
+    days_to_expiry, expiry_status, sla_days,
 )
 from app.modules.hse.lib.registers import BY_KEY
 from app.modules.hse.lib.schedule import coverage
+
+
+# Delivery, not spend. Training expenses are money and are counted on the
+# cost line, never as a session the officer ran.
+TRAINING_REGISTERS = ('induction_training', 'toolbox_talk')
 
 
 def expiry_registers():
@@ -114,3 +119,73 @@ def done_vs_due(schedules, entries, start, end, today=None):
     """Planned work done over planned work due — the calendar's coverage,
     read rather than recomputed."""
     return coverage(schedules, entries, start, end, today)
+
+
+def average_days_to_close(entries, start, end):
+    """Mean days from entry date to closing date, over entries closed in
+    the period.
+
+    Calendar days, not owned days: this answers how long the person who
+    raised it actually waited, and they waited through the parked time
+    too. closed_on_time_rate is the one that excludes it, because that is
+    the one judging him.
+    """
+    closed = [e for e in entries
+              if e.closed_at is not None and start <= e.closed_at <= end]
+    spans = [d for d in (days_open(e) for e in closed) if d is not None]
+    if not spans:
+        return {'days': None, 'closed': len(closed)}
+    return {'days': round(sum(spans) / len(spans), 1), 'closed': len(closed)}
+
+
+def near_miss_ratio(entries, start, end):
+    """Near misses raised for every incident that happened.
+
+    Counted from the Incidents register alone: an injury logged there and
+    again under First Aid would otherwise be two incidents.
+
+    None when nothing was recorded — dividing by nothing is not a perfect
+    score. `unclassified` is entries filed before the field existed, and
+    the page shows it rather than folding them into either side.
+    """
+    rows = [e for e in entries
+            if e.register == 'incidents'
+            and e.entry_date is not None and start <= e.entry_date <= end]
+    classes = [(e.data or {}).get('event_class') for e in rows]
+    near = sum(1 for c in classes if c == 'Near miss')
+    incidents = sum(1 for c in classes if c == 'Incident')
+    return {
+        'ratio': round(near / incidents, 1) if incidents else None,
+        'near_misses': near,
+        'incidents': incidents,
+        'unclassified': sum(1 for c in classes if c is None),
+    }
+
+
+def training_delivered(entries, start, end):
+    """Sessions run and people in the room, over both training registers.
+
+    An induction and a toolbox talk are both delivery — he ran the room
+    either way — so they are one number, broken out by type underneath.
+    """
+    rows = [e for e in entries
+            if e.register in TRAINING_REGISTERS
+            and e.entry_date is not None and start <= e.entry_date <= end]
+    by_type = {}
+    attendees = 0
+    for entry in rows:
+        data = entry.data or {}
+        count = data.get('attendees') or 0
+        attendees += count
+        # A toolbox talk has no type field — the register is the type.
+        label = data.get('training_type') or BY_KEY[entry.register].label
+        bucket = by_type.setdefault(label, {'label': label, 'sessions': 0,
+                                            'attendees': 0})
+        bucket['sessions'] += 1
+        bucket['attendees'] += count
+    return {
+        'sessions': len(rows),
+        'attendees': attendees,
+        'by_type': sorted(by_type.values(),
+                          key=lambda b: (-b['attendees'], b['label'])),
+    }

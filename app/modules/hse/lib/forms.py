@@ -10,7 +10,7 @@ from datetime import date, datetime
 
 from app.modules.hse.lib.registers import register
 from app.modules.hse.models import (
-    SEVERITIES, HseAsset, HsePerson, HseReference,
+    EVENT_CLASSES, SEVERITIES, HseAsset, HsePerson, HseReference,
 )
 
 
@@ -53,6 +53,8 @@ def _options(field):
                 for r in rows]
     if field.type == 'severity':
         return [{'value': s, 'label': s} for s in SEVERITIES]
+    if field.type == 'event_class':
+        return [{'value': c, 'label': c} for c in EVENT_CLASSES]
     return []
 
 
@@ -127,6 +129,12 @@ def _parse(field, raw, errors):
     if field.type == 'severity':
         if raw not in SEVERITIES:
             errors[field.name] = 'Not a severity'
+            return None
+        return raw
+
+    if field.type == 'event_class':
+        if raw not in EVENT_CLASSES:
+            errors[field.name] = 'Not an event class'
             return None
         return raw
 

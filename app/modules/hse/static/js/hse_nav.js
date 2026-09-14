@@ -14,6 +14,15 @@
 // listener is document-delegated and guarded, so re-running never stacks
 // a second one.
 (function () {
+    // Give the page a definite height so its panels, and the table's scroll
+    // box, can fill it — .main-content is a flex item with no height of its
+    // own, so a pure CSS chain just grows to its content. Deliberately
+    // outside the wiring guard below: the listener is wired once, but every
+    // swap lands on a fresh box that has to be measured again.
+    if (window.watchFillHeight) {
+        window.watchFillHeight('.hse-inner--fill', '--fill-height');
+    }
+
     if (window._hseTabNavWired) { return; }
     window._hseTabNavWired = true;
 

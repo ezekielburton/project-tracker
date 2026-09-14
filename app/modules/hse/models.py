@@ -20,6 +20,11 @@ from app.modules.core.shared.extensions import db
 # no SLA behind it.
 SEVERITIES = ('Low', 'Medium', 'High', 'Critical')
 
+# Something that happened, or something that nearly did. A closed set
+# rather than a reference list: "near misses per incident" is a reported
+# metric, and a renamed value would quietly change it.
+EVENT_CLASSES = ('Incident', 'Near miss')
+
 # Reference-list kinds. A new simple list is a new kind here, not a new table.
 # Everything past the first two is filled in by the officer himself on the
 # Lists & people page — they need no code beyond this tuple and a label.
@@ -30,6 +35,7 @@ REFERENCE_KINDS = (
     'inspection_type', 'service_type', 'vehicle_document',
     'maintenance_type', 'pm_frequency', 'tool_category', 'condition',
     'material_category', 'unit', 'training_type', 'expense_category',
+    'compliance_item',
 )
 
 # Asset kinds. An asset is a physical thing several registers point at.
@@ -177,6 +183,11 @@ class HseEntry(db.Model):
     subject_id = db.Column(
         db.Integer, db.ForeignKey('hse_people.id', ondelete='SET NULL'), nullable=True)
 
+    # The certificate a compliance entry is about — a reference, not free
+    # text, so renaming it keeps its renewal history instead of splitting it.
+    compliance_item_id = db.Column(
+        db.Integer, db.ForeignKey('hse_reference.id', ondelete='SET NULL'), nullable=True)
+
     # Parked with someone else. The pair is set and cleared together.
     waiting_on_id = db.Column(
         db.Integer, db.ForeignKey('hse_people.id', ondelete='SET NULL'), nullable=True)
@@ -202,6 +213,7 @@ class HseEntry(db.Model):
     reported_by = db.relationship('HsePerson', foreign_keys=[reported_by_id])
     assigned_to = db.relationship('HsePerson', foreign_keys=[assigned_to_id])
     subject = db.relationship('HsePerson', foreign_keys=[subject_id])
+    compliance_item = db.relationship('HseReference', foreign_keys=[compliance_item_id])
     waiting_on = db.relationship('HsePerson', foreign_keys=[waiting_on_id])
     schedule = db.relationship('HseSchedule', foreign_keys=[schedule_id])
     created_by = db.relationship('User', foreign_keys=[created_by_id])
