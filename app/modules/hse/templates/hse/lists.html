@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}HSE — Lists &amp; people{% endblock %}
+
+{% block content %}
+<div class="hse-page">
+    <div class="hse-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="hse-main">
+            <div class="hse-inner">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">Lists &amp; people</h1>
+                    <span class="hse-header-note">Yours to edit</span>
+                </div>
+
+                <div class="tab-strip">
+                    {% for t in tabs %}
+                    <a class="tab-strip-item hse-tab{{ ' active' if t.key == active_tab else '' }}"
+                       href="{{ url_for('hse.lists_page', tab_key=t.key) }}">{{ t.label }}</a>
+                    {% endfor %}
+                </div>
+
+                <p class="hse-lists-intro">
+                    Every dropdown in the module is filled from these lists. Nothing here
+                    is ever deleted — entries already filed still point at it, so a value
+                    you retire is deactivated and simply stops being offered.
+                </p>
+
+                {% for section in sections %}
+                <div class="hse-list-section"
+                     data-kind="{{ section.kind }}"
+                     {% if section.asset_kind %}data-asset-kind="{{ section.asset_kind }}"{% endif %}>
+                    <div class="hse-list-head">
+                        <h2 class="hse-list-title">{{ section.label }}</h2>
+                        <span class="hse-list-count">{{ section.rows | selectattr('active') | list | length }} in use</span>
+                    </div>
+
+                    <div class="hse-list-rows">
+                        {% for row in section.rows %}
+                        <div class="hse-list-row{{ '' if row.active else ' is-off' }}" data-row-id="{{ row.id }}">
+                            <span class="hse-list-label">{{ row.label }}</span>
+                            {% if section.kind == 'people' %}
+                            <span class="hse-list-meta">
+                                {{ row.role or '—' }}{% if row.organisation %} · {{ row.organisation }}{% endif %}
+                                {%- if row.is_external %} <span class="hse-tag">external</span>{% endif %}
+                                {%- if row.can_hold_actions %} <span class="hse-tag">can hold an action</span>{% endif %}
+                            </span>
+                            {% elif section.kind == 'assets' and row.ref %}
+                            <span class="hse-list-meta mono">{{ row.ref }}</span>
+                            {% endif %}
+                            <button type="button" class="hse-list-toggle"
+                                    data-row-id="{{ row.id }}" data-active="{{ 'yes' if row.active else 'no' }}">
+                                {{ 'Deactivate' if row.active else 'Reactivate' }}
+                            </button>
+                        </div>
+                        {% else %}
+                        <p class="hse-list-empty">Nothing here yet.</p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="hse-list-add">
+                        {% if section.kind == 'people' %}
+                        <input type="text" class="form-input hse-add-name" placeholder="Name">
+                        <input type="text" class="form-input hse-add-role" placeholder="Role">
+                        <input type="text" class="form-input hse-add-org" placeholder="Organisation">
+                        <label class="hse-add-check">
+                            <input type="checkbox" class="hse-add-holds"> Actions can wait on them
+                        </label>
+                        {% elif section.kind == 'assets' %}
+                        <input type="text" class="form-input hse-add-name" placeholder="Name">
+                        <input type="text" class="form-input hse-add-ref" placeholder="Plate / serial">
+                        {% else %}
+                        <input type="text" class="form-input hse-add-name" placeholder="Add to {{ section.label|lower }}…">
+                        {% endif %}
+                        <button type="button" class="hse-btn hse-list-add-btn">Add</button>
+                    </div>
+                    <span class="hse-list-note"></span>
+                </div>
+                {% endfor %}
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_lists.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

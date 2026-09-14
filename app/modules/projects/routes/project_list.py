@@ -11,7 +11,7 @@ from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel, ActivityLog, ProjectNote, ProjectActivitySeen, DeliverableAssignment
 from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 from app.modules.core.shared.services.status_tracking import bulk_project_status_started_at, bulk_project_client_approved_at
-from app.modules.core.shared.lib.capabilities import can, effective_user
+from app.modules.core.shared.lib.capabilities import can, effective_user, require
 from app.modules.core.shared.lib.utils import ACTIVITY_SEEN_ROLLOUT_CUTOFF
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new', template_folder='../templates')
@@ -975,6 +975,7 @@ def _build_page_context(view, user):
 
 @project_list_bp.route('/')
 @login_required
+@require('view_workspace')
 def index():
     """ Three fixes presets. Set now as we build it out"""
     user = _effective_user()

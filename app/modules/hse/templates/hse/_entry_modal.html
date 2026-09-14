@@ -1,0 +1,151 @@
+{# The entry overlay. Fetched as a fragment by hse_registers.js, so its
+   dropdowns always reflect the reference lists as they are now.
+
+   Uses the app's standard .modal-overlay/.modal-box, not the project
+   overlay — that one is for a fetched multi-tab body, and its
+   backdrop-filter is what broke every picker inside it. Anything
+   floating added here must go through PopoverPosition for the same
+   reason: .modal-overlay carries backdrop-filter too. #}
+<div class="modal-overlay hse-modal" id="hse-entry-modal"
+     data-entry-id="{{ entry.id if entry else '' }}"
+     data-register="{{ reg.key }}"
+     data-save-url="{{ url_for('hse.update_entry', entry_id=entry.id) if entry
+                       else url_for('hse.create_entry', register_key=reg.key) }}"
+     data-method="{{ 'PATCH' if entry else 'POST' }}"
+     {# Set only when the form was opened from a planned occurrence. The
+        server re-checks that the occurrence is real before stamping it. #}
+     data-schedule-id="{{ occurrence.schedule_id if occurrence else '' }}"
+     data-occurrence-date="{{ occurrence.date if occurrence else '' }}">
+    <div class="modal-box hse-modal-box">
+
+        <div class="hse-modal-head">
+            <div>
+                <div class="modal-title">{{ 'Edit ' ~ entry.ref if entry else 'New entry' }}</div>
+                <div class="hse-modal-sub">{{ reg.label }} register</div>
+            </div>
+            <button type="button" class="modal-close" id="hse-modal-close" aria-label="Close">&times;</button>
+        </div>
+
+        {% if blocked_by %}
+        {# Filing an entry with a hole where a location should be is worse
+           than refusing it. #}
+        <p class="hse-modal-blocked">
+            Set up <strong>{{ blocked_by | join(', ') }}</strong> before filing an entry here.
+        </p>
+        {% endif %}
+
+        <div class="hse-modal-body">
+            {% for lock in locked %}
+            <div class="form-group hse-locked">
+                <label>{{ lock.label }}</label>
+                <div class="hse-locked-box mono">{{ entry.ref if entry else '—' }}</div>
+                <span class="hse-hint">{{ lock.note }}</span>
+            </div>
+            {% endfor %}
+
+            {% for f in fields %}
+            <div class="form-group hse-field" data-field="{{ f.name }}" data-type="{{ f.type }}">
+                <label for="hse-f-{{ f.name }}">
+                    {{ f.label }}{% if f.required %}<span class="hse-required">*</span>{% endif %}
+                </label>
+
+                {% if f.type == 'severity' %}
+                <div class="hse-segmented" role="group" aria-label="{{ f.label }}">
+                    {% for opt in f.options %}
+                    <button type="button" class="hse-seg{{ ' is-selected' if opt.value == f.value else '' }}"
+                            data-value="{{ opt.value }}">{{ opt.label }}</button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" id="hse-f-{{ f.name }}" value="{{ f.value or '' }}">
+
+                {% elif f.type == 'status' %}
+                <select class="form-input" id="hse-f-{{ f.name }}">
+                    <option value="">—</option>
+                    {% for s in f.statuses %}
+                    <option value="{{ s }}"{{ ' selected' if s == f.value else '' }}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+
+                {% elif f.type in ('choice', 'person', 'asset') %}
+                {% if f.empty_list %}
+                <div class="hse-locked-box hse-empty-choice">Nothing set up yet</div>
+                <input type="hidden" id="hse-f-{{ f.name }}" value="">
+                {% else %}
+                <select class="form-input" id="hse-f-{{ f.name }}">
+                    <option value="">—</option>
+                    {% for opt in f.options %}
+                    <option value="{{ opt.value }}"{{ ' selected' if opt.value == f.value else '' }}>{{ opt.label }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+
+                {# A missing type gets noticed mid-entry, not before it. Sending
+                   him to another page to add one is how the real answer ends up
+                   typed into the description instead. #}
+                {% if f.type == 'choice' %}
+                <button type="button" class="hse-quick-link" data-quick-add="{{ f.name }}">+ Add a new one</button>
+                <div class="hse-quick-add" data-quick-for="{{ f.name }}" data-kind="{{ f.choices_kind }}"
+                     data-stores="{{ 'label' if f.stores_label else 'id' }}" hidden>
+                    <input type="text" class="form-input hse-quick-input" placeholder="New {{ f.label|lower }}">
+                    <button type="button" class="hse-btn hse-quick-save">Add</button>
+                </div>
+                {% endif %}
+
+                {% elif f.type == 'textarea' %}
+                <textarea class="form-input" id="hse-f-{{ f.name }}" rows="3">{{ f.value or '' }}</textarea>
+
+                {% elif f.type == 'date' %}
+                <input type="date" class="form-input" id="hse-f-{{ f.name }}"
+                       value="{{ f.value or (today if f.name == 'entry_date' and not entry else '') }}">
+
+                {% elif f.type == 'number' %}
+                <input type="number" class="form-input" id="hse-f-{{ f.name }}" value="{{ f.value if f.value is not none else '' }}">
+
+                {% else %}
+                <input type="text" class="form-input" id="hse-f-{{ f.name }}" value="{{ f.value or '' }}">
+                {% endif %}
+
+                <span class="hse-error" hidden></span>
+            </div>
+            {% endfor %}
+
+            {# Attachments need an entry to hang off, so they appear once it
+               exists. Creating one reopens this overlay in edit mode rather
+               than closing, so adding the report stays one continuous job. #}
+            {% if entry %}
+            <div class="form-group hse-files" id="hse-files"
+                 data-upload-url="{{ url_for('hse.upload_attachment', entry_id=entry.id) }}">
+                <label>Attachments</label>
+                <div class="hse-file-list" id="hse-file-list">
+                    {% for f in entry.attachments %}
+                    <div class="hse-file" data-file-id="{{ f.id }}">
+                        <a class="hse-file-name" href="{{ url_for('hse.download_attachment', attachment_id=f.id) }}">{{ f.original_filename }}</a>
+                        <span class="hse-file-meta">{{ f.uploaded_by.name if f.uploaded_by else '—' }}</span>
+                        <button type="button" class="hse-file-remove" data-remove-url="{{ url_for('hse.delete_attachment', attachment_id=f.id) }}"
+                                aria-label="Remove {{ f.original_filename }}">&times;</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <label class="hse-file-add">
+                    <input type="file" id="hse-file-input" hidden>
+                    Add a photo or report…
+                </label>
+                <span class="hse-hint" id="hse-file-note">Stored on the NAS under /HSE.</span>
+            </div>
+            {% else %}
+            <p class="hse-hint hse-files-later">Save the entry first — you can attach photos and reports straight after.</p>
+            {% endif %}
+        </div>
+
+        <div class="hse-modal-foot">
+            <span class="hse-modal-note" id="hse-modal-note"></span>
+            <span class="hse-modal-actions">
+                <button type="button" class="hse-btn" id="hse-modal-cancel">Cancel</button>
+                <button type="button" class="hse-btn hse-btn--primary" id="hse-modal-save"
+                        {{ 'disabled' if blocked_by else '' }}>
+                    {{ 'Save changes' if entry else 'Save entry' }}
+                </button>
+            </span>
+        </div>
+    </div>
+</div>

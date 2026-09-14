@@ -3,10 +3,11 @@
 {% block title %}Client Servicing{% endblock %}
 
 {% block content %}
-{# The module's own internal sidebar shell (Table / Invoicing / Calendar) —
-   see _sidebar.html. .cs-page/.cs-shell/.cs-sidebar/.cs-main are the shell;
-   the table under .cs-main keeps its own sticky-header/height-sync JS
-   (client_servicing.js) — see client_servicing.css. #}
+{# The module's own page/shell wrapper (Table / Invoicing / Calendar) —
+   see _sidebar.html, which renders the shared .module-rail. .cs-page /
+   .cs-shell / .cs-main are this module's own height chain; the table under
+   .cs-main keeps its sticky-header/height-sync JS (client_servicing.js) —
+   see client_servicing.css. #}
 <div class="cs-page">
     <div class="cs-shell">
         {% with active_nav = 'table' %}
@@ -71,6 +72,5 @@
     window.__csProjectOwnerOptions = {{ project_owner_options | tojson }};
     window.__csContactsByClient = {{ contacts_by_client | tojson }};
 </script>
-<script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

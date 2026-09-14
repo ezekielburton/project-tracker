@@ -23,7 +23,7 @@ with app.app_context():
         CREATE TABLE IF NOT EXISTS ovp_champions (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id),   -- matches OvpChampion.user_id
-            week_start DATE NOT NULL UNIQUE,                 -- the Monday of the week; one champion per week
+            week_start DATE NOT NULL UNIQUE,                     -- the Monday of the week; one champion per week
             set_by_id INTEGER REFERENCES users(id),          -- the admin who assigned it
             created_at TIMESTAMP
         );

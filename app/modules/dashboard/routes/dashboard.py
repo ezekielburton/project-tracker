@@ -8,7 +8,7 @@ from app.modules.core.shared.lib.utils import get_actor
 from app.modules.dashboard.lib.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer, needs_client_approval
 from app.modules.core.shared.lib.status_vocabulary import derive_project_status
 from app.modules.core.shared.lib.users import active_users_query
-from app.modules.core.shared.lib.capabilities import can
+from app.modules.core.shared.lib.capabilities import can, require
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for call for this blueprint's routes uses that, e.g.
@@ -199,6 +199,7 @@ def _resolve_dashboard_scope(user):
 
 @dashboard_bp.route('')
 @login_required
+@require('view_workspace')
 def index():
     user = get_actor()
     initial_view = request.args.get('view', '')

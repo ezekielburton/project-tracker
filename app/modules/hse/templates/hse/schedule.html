@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% from 'hse/_calendar_tabs.html' import calendar_tabs %}
+
+{% block title %}HSE — Schedule{% endblock %}
+
+{% block content %}
+<div class="hse-page">
+    <div class="hse-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="hse-main">
+            <div class="hse-inner">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">Calendar</h1>
+                    <div class="hse-header-actions">
+                        <span class="hse-month-chip">
+                            {{ count_live }} schedule{{ '' if count_live == 1 else 's' }}
+                            {%- if count_overdue %} &middot; {{ count_overdue }} overdue{% endif %}
+                        </span>
+                        {% if can('manage_hse', effective_user) %}
+                        <button type="button" class="hse-btn hse-btn--primary" id="hse-sched-new">+ New schedule</button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {{ calendar_tabs(active_view) }}
+
+                <p class="hse-lists-intro">
+                    What the site is <em>supposed</em> to do, and how often. Every row here
+                    puts items on the calendar — and gives inspection coverage its
+                    denominator.
+                </p>
+
+                <div class="hse-sched-layout">
+                    <div class="hse-sched-table-wrap">
+                        <table class="data-table hse-table hse-sched-table">
+                            <thead>
+                                <tr>
+                                    <th>What</th>
+                                    <th>Applies to</th>
+                                    <th>Frequency</th>
+                                    <th>Next due</th>
+                                    <th>Last done</th>
+                                    <th>Owner</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hse-sched-rows">
+                                {% for row in rows %}
+                                <tr data-schedule-id="{{ row.id }}"
+                                    class="{{ 'is-off' if not row.active else '' }}{{ ' clickable' if can('manage_hse', effective_user) else '' }}">
+                                    <td>
+                                        <div class="hse-sched-what">{{ row.label }}</div>
+                                        <div class="hse-sched-reg">{{ row.register_label }}</div>
+                                        {% if not row.active %}<span class="hse-tag">Retired</span>{% endif %}
+                                    </td>
+                                    <td>{{ row.applies_to }}</td>
+                                    <td>{{ row.cadence_short }}</td>
+                                    <td>
+                                        {% if row.due.date %}
+                                            <span class="hse-sched-due{{ ' is-overdue' if row.due.overdue_days else '' }}">
+                                                {{ row.due.date.strftime('%d %b %Y') }}
+                                            </span>
+                                            {% if row.due.label %}
+                                            <span class="hse-sched-badge{{ ' is-overdue' if row.due.overdue_days else '' }}">{{ row.due.label }}</span>
+                                            {% endif %}
+                                        {% else %}<span class="hse-hint">—</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if row.last_done %}{{ row.last_done.strftime('%d %b %Y') }}
+                                        {% else %}<span class="hse-hint">—</span>{% endif %}
+                                    </td>
+                                    <td>{{ row.owner or '—' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr class="hse-sched-empty">
+                                    <td colspan="6">
+                                        Nothing scheduled yet. Add his recurring week here —
+                                        vehicle checks, tool box talks, forklift inspections —
+                                        and the calendar fills itself.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if can('manage_hse', effective_user) %}
+                    {# One panel, two modes. The options are already on the page, so
+                       unlike the entry overlay it needs no fetch to open. #}
+                    <form class="hse-sched-panel" id="hse-sched-form" hidden>
+                        <div class="hse-sched-panel-head">
+                            <h2 class="hse-sched-panel-title" id="hse-sched-form-title">New schedule</h2>
+                        </div>
+
+                        <div class="form-group hse-field">
+                            <label>Name</label>
+                            <input type="text" class="form-input" name="label"
+                                   maxlength="200" placeholder="Weekly vehicle inspection">
+                            <span class="hse-error" data-error-for="label"></span>
+                        </div>
+
+                        <div class="form-group hse-field">
+                            <label>Register</label>
+                            <select class="form-input" name="register"></select>
+                            <span class="hse-error" data-error-for="register"></span>
+                        </div>
+
+                        <div class="form-group hse-field hse-sched-assets" id="hse-sched-assets" hidden>
+                            <label id="hse-sched-assets-label">Applies to</label>
+                            <div class="hse-sched-asset-list" id="hse-sched-asset-list"></div>
+                            <span class="hse-error" data-error-for="asset_ids"></span>
+                        </div>
+
+                        <div class="form-group hse-field">
+                            <label>Frequency</label>
+                            <div class="hse-segmented" role="group" aria-label="Frequency"
+                                 id="hse-sched-freq"></div>
+                            <input type="hidden" name="frequency">
+                            <span class="hse-error" data-error-for="frequency"></span>
+                        </div>
+
+                        <div class="hse-sched-row">
+                            <div class="form-group hse-field hse-field--narrow">
+                                <label>Every</label>
+                                <input type="number" class="form-input" name="interval"
+                                       min="1" max="99" value="1">
+                                <span class="hse-error" data-error-for="interval"></span>
+                            </div>
+
+                            <div class="form-group hse-field" data-when="weekly" hidden>
+                                <label>On</label>
+                                <select class="form-input" name="weekday"></select>
+                                <span class="hse-error" data-error-for="weekday"></span>
+                            </div>
+
+                            <div class="form-group hse-field" data-when="monthly" hidden>
+                                <label>Day of the month</label>
+                                <input type="number" class="form-input" name="day_of_month"
+                                       min="1" max="31" placeholder="Start date's day">
+                                <span class="hse-error" data-error-for="day_of_month"></span>
+                            </div>
+                        </div>
+
+                        <div class="hse-sched-row">
+                            <div class="form-group hse-field">
+                                <label>Starts</label>
+                                <input type="date" class="form-input" name="starts_on">
+                                <span class="hse-error" data-error-for="starts_on"></span>
+                            </div>
+                            <div class="form-group hse-field">
+                                <label>Ends <span class="hse-hint">optional</span></label>
+                                <input type="date" class="form-input" name="ends_on">
+                                <span class="hse-error" data-error-for="ends_on"></span>
+                            </div>
+                        </div>
+
+                        <div class="form-group hse-field">
+                            <label>Owner <span class="hse-hint">optional</span></label>
+                            <select class="form-input" name="owner_id"></select>
+                            <span class="hse-error" data-error-for="owner_id"></span>
+                        </div>
+
+                        <div class="hse-sched-preview" aria-live="polite">
+                            <span class="hse-sched-preview-label">Next dates</span>
+                            <span class="hse-sched-preview-dates" id="hse-sched-preview-dates">—</span>
+                        </div>
+
+                        <p class="hse-sched-panel-note">
+                            A schedule only says what <em>should</em> happen. Coverage on the
+                            performance page is what was done divided by what was due.
+                        </p>
+
+                        <div class="hse-sched-panel-actions">
+                            {# Retiring lives in the panel rather than the table: it needs
+                               the context of what the schedule is, and a retire button on
+                               every row is a row of invitations to break something. #}
+                            <button type="button" class="hse-link-btn" id="hse-sched-retire" hidden></button>
+                            <span class="hse-sched-spacer"></span>
+                            <button type="button" class="hse-btn" id="hse-sched-cancel">Cancel</button>
+                            <button type="submit" class="hse-btn hse-btn--primary" id="hse-sched-save">Save schedule</button>
+                        </div>
+                    </form>
+                    {% endif %}
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{# var, not const: this sits at inline-script top level and SPA navigation
+   re-executes it in the same scope. #}
+<script>
+    var HSE_SCHED_OPTIONS = {{ options | tojson }};
+    var HSE_SCHED_PEOPLE = {{ people | tojson }};
+    var HSE_SCHED_ASSETS = {{ assets | tojson }};
+    var HSE_SCHED_FORMS = {{ forms | tojson }};
+</script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_schedule.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

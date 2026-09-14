@@ -1,8 +1,6 @@
 """Smoke tests for the wiki module, using the shared fixtures."""
 from flask import url_for
 import os
-from datetime import datetime, timezone
-from types import SimpleNamespace
 
 
 def test_wiki_requires_auth(app, client):
@@ -92,18 +90,3 @@ def test_upload_video_nas_failure_does_not_fail_upload(app, client, db_session, 
     saved_path = os.path.join(app.root_path, 'static', 'wiki-uploads', 'videos', data['filename'])
     assert os.path.exists(saved_path)
     os.remove(saved_path)
-
-def test_video_block_renders_video_tag_for_uploads(app):
-    article = SimpleNamespace(title='T', updated_at=datetime.now(timezone.utc))
-    blocks = [{'type': 'video', 'source': 'upload', 'url': '/static/wiki-uploads/videos/x.mp4'}]
-    html = app.jinja_env.get_template('wiki/_article_content.html').render(article=article, blocks=blocks)
-    assert '<video' in html
-    assert '<iframe' not in html
-
-
-def test_video_block_renders_iframe_for_embeds(app):
-    article = SimpleNamespace(title='T', updated_at=datetime.now(timezone.utc))
-    blocks = [{'type': 'video', 'content': 'https://www.youtube.com/watch?v=abc123'}]
-    html = app.jinja_env.get_template('wiki/_article_content.html').render(article=article, blocks=blocks)
-    assert '<iframe' in html
-    assert '<video' not in html

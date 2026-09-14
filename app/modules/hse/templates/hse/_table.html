@@ -1,0 +1,31 @@
+{# The register table. Columns come from the declaration via lib/table.py,
+   so this file never names a register or a field. #}
+{% from '_shared_macros.html' import status_pill %}
+<div class="hse-table-scroll" id="hse-table-scroll">
+    <table class="data-table hse-table" id="hse-table">
+        <thead>
+            <tr>{% for head in columns %}<th>{{ head }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr data-entry-id="{{ row.id }}" data-search="{{ row.search }}"
+                {%- if can('manage_hse', effective_user) %} class="clickable"
+                data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.id) }}"{% endif %}>
+                {% for c in row.cells %}
+                <td class="{{ 'mono' if c.kind == 'mono' else '' }}{{ ' muted' if c.kind in ('muted', 'empty') else '' }}{{ ' hse-overdue' if c.tone == 'overdue' else '' }}">
+                    {%- if c.kind == 'pill' %}{{ status_pill(c.text, c.modifier) }}
+                    {%- else %}{{ c.text }}{% endif -%}
+                </td>
+                {% endfor %}
+            </tr>
+            {% else %}
+            <tr class="hse-empty-row">
+                <td colspan="{{ columns|length }}">
+                    Nothing filed in {{ reg.label|lower }} yet.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p class="hse-no-matches" id="hse-no-matches" hidden>No rows match that search.</p>

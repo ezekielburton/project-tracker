@@ -15,41 +15,37 @@ https://player.vimeo.com/video/{{ url.split('vimeo.com/')[1].split('?')[0] }}
 </div>
 
 {% for block in blocks %}
+{% set d = block.data %}
 
-{% if block.type == 'body' %}
-<p class="wiki-block-body">{{ block.content }}</p>
+{% if block.type == 'paragraph' %}
+<p class="wiki-block-body">{{ d.text | safe }}</p>
 
-{% elif block.type == 'richtext' %}
-<div class="wiki-block-richtext ql-editor">{{ block.content | safe }}</div>
+{% elif block.type == 'header' %}
+<h3 class="wiki-block-h3">{{ d.text | safe }}</h3>
 
-{% elif block.type == 'h3' %}
-<h3 class="wiki-block-h3">{{ block.content }}</h3>
-
-{% elif block.type == 'callout' %}
-<div class="wiki-block-callout">{{ block.content }}</div>
-
-{% elif block.type == 'callout-pine' %}
-<div class="wiki-block-callout wiki-block-callout--pine">{{ block.content }}</div>
+{% elif block.type == 'helixCallout' %}
+<div class="wiki-block-callout{% if d.variant == 'pine' %} wiki-block-callout--pine{% endif %}">{{ d.text | safe }}</div>
 
 {% elif block.type == 'list' %}
-<ul class="wiki-block-list">
-    {% for item in block['items'] %}
-    <li>{{ item }}</li>
+{% set list_tag = 'ol' if d.style == 'ordered' else 'ul' %}
+<{{ list_tag }} class="wiki-block-list">
+    {% for item in d['items'] %}
+    <li>{{ item | safe }}</li>
     {% endfor %}
-</ul>
+</{{ list_tag }}>
 
 {% elif block.type == 'image' %}
 <figure class="wiki-block-image">
-    <img src="{{ block.url }}" alt="{{ block.caption or '' }}">
-    {% if block.caption %}<figcaption>{{ block.caption }}</figcaption>{% endif %}
+    <img src="{{ d.file.url }}" alt="{{ d.caption | striptags }}">
+    {% if d.caption %}<figcaption>{{ d.caption | safe }}</figcaption>{% endif %}
 </figure>
 
-{% elif block.type == 'video' %}
+{% elif block.type == 'helixVideo' %}
 <div class="wiki-block-video">
-    {% if block.source == 'upload' and block.url %}
-    <video src="{{ block.url }}" controls></video>
+    {% if d.source == 'upload' %}
+    <video src="{{ d.url }}" controls></video>
     {% else %}
-    <iframe src="{{ embed_url(block.content) }}" frameborder="0"
+    <iframe src="{{ embed_url(d.url) }}" frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowfullscreen></iframe>
     {% endif %}

@@ -1,0 +1,1437 @@
+/* HSE & Compliance module. Role tokens only, per theming.md — no
+   hard-coded hex (hse.css is in test_dark_mode_css.py's SWEPT_FILES). */
+
+/* Module's own page/shell wrapper. The rail is shared (.module-rail in
+   shared.css); what lives here is the height chain, copied from
+   client_servicing.css's — a flex chain that reaches the real footer
+   rather than a viewport-derived guess. */
+.hse-page {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+/* Let the rail run flush against the global sidebar and the viewport's
+   right edge — .main-content's blanket padding otherwise leaves a gap on
+   both sides. .module-rail and .hse-inner re-add their own inner padding. */
+.main-content:has(.hse-page) {
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.hse-shell {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+}
+
+.hse-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.hse-inner {
+    padding: var(--space-6);
+    padding-bottom: 0;
+}
+
+/* The module's header bar — the same grey as the side rail, running the
+   full width beside it on every HSE page.
+
+   The negative margin cancels .hse-inner's padding so the bar reaches the
+   edges of .hse-main; the padding puts the title and buttons back where
+   the rest of the page's content sits. Keep the two in step: if the inner
+   padding changes, this changes with it. */
+.hse-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin: calc(var(--space-6) * -1) calc(var(--space-6) * -1) var(--space-4);
+    padding: var(--space-4) var(--space-6);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.hse-title {
+    font-size: var(--text-xl);
+    color: var(--text);
+}
+
+.hse-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+    margin-right: var(--space-4);
+}
+
+.hse-search .form-input {
+    min-width: 260px;
+}
+
+/* ── Status filter chips ──
+   One row, one field. Deliberately not the multi-column faceted panels
+   Projects and CS build — a different component, not a third copy. */
+
+.hse-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.hse-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.hse-chip:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.hse-chip.is-selected {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.hse-chip-count {
+    font-size: var(--text-xs);
+    color: var(--text-faint, var(--text-muted));
+}
+
+.hse-chip.is-selected .hse-chip-count {
+    color: var(--text-muted);
+}
+
+/* ── Table ── */
+
+/* .data-table freezes its first column, which gives that column its own
+   background per row state while the rest stay transparent — two shades
+   side by side read as a divider (the seam found on the DI Performance
+   table). This register table is narrow enough not to need it. */
+.hse-table th:first-child,
+.hse-table td:first-child {
+    position: static;
+    box-shadow: none;
+    background-color: inherit;
+}
+
+.hse-table-scroll {
+    overflow: auto;
+    overscroll-behavior: contain;
+    max-height: calc(100vh - 320px);
+}
+
+/* Deliberately weight, not colour. The palette's --poppy has no dark
+   override and is too light for small text on white, and the app has no
+   semantic danger-text token to reach for — so the row's severity and
+   status pills carry the colour, and this just carries emphasis. A tuned
+   token pair in main.css would be the way to make it red. */
+.hse-overdue {
+    font-weight: 600;
+}
+
+.hse-empty-row td {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--space-6) var(--space-4);
+}
+
+.hse-no-matches,
+.hse-truncated {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    padding: var(--space-4) 0;
+}
+
+/* ── Entry overlay ──
+   Uses the app's .modal-overlay/.modal-box. That overlay carries
+   backdrop-filter, so anything floating added in here must go through
+   PopoverPosition rather than position:fixed of its own. */
+
+.hse-modal-box {
+    width: 680px;
+    max-width: 92vw;
+    display: flex;
+    flex-direction: column;
+    max-height: 88vh;
+}
+
+.hse-modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.hse-modal-sub {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+}
+
+.hse-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-5) 0;
+}
+
+.hse-modal-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.hse-modal-actions {
+    display: flex;
+    gap: var(--space-3);
+}
+
+.hse-modal-note {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-modal-blocked {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text);
+    margin: var(--space-4) 0 0;
+}
+
+/* A computed value is shown, never typed — the dashed border says so. */
+.hse-locked-box {
+    padding: var(--space-2) var(--space-3);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+}
+
+.hse-hint {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-faint, var(--text-muted));
+    margin-top: var(--space-1);
+}
+
+.hse-required {
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+/* Severity is buttons rather than a dropdown: it drives the overview list,
+   the chart and the SLA, so it must never be left unset by accident. */
+.hse-segmented {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.hse-seg {
+    flex: 1;
+    padding: var(--space-2) 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+
+.hse-seg.is-selected {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.hse-error {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text);
+    font-weight: 600;
+    margin-top: var(--space-1);
+}
+
+.hse-field.has-error .form-input,
+.hse-field.has-error select,
+.hse-field.has-error textarea {
+    border-color: var(--border-strong);
+}
+
+/* The page behind the overlay must not scroll with it. */
+body.hse-modal-open {
+    overflow: hidden;
+}
+
+/* ── Attachments ──
+   Files live on the NAS under /HSE; these rows are the record of where.
+   Downloads stream through the app so view_hse is actually enforced and
+   the NAS is never exposed to the browser. */
+
+.hse-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+
+.hse-file {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: var(--text-sm);
+}
+
+.hse-file-name {
+    color: var(--text);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hse-file-name:hover {
+    text-decoration: underline;
+}
+
+.hse-file-meta {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.hse-file-remove {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: var(--text-base);
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 var(--space-1);
+}
+
+.hse-file-remove:hover {
+    color: var(--text);
+}
+
+.hse-file-add {
+    display: inline-block;
+    padding: var(--space-2) var(--space-3);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+
+.hse-file-add:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+
+.hse-files-later {
+    margin-top: var(--space-4);
+}
+
+/* ── Lists & people ── */
+
+.hse-rail-foot {
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.hse-header-note {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-lists-intro {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0 0 var(--space-5);
+    max-width: 70ch;
+}
+
+.hse-list-section {
+    margin-bottom: var(--space-6);
+    max-width: 900px;
+}
+
+.hse-list-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+}
+
+.hse-list-title {
+    font-size: var(--text-base);
+    color: var(--text);
+    margin: 0;
+}
+
+.hse-list-count {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.hse-list-rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+
+.hse-list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: var(--text-sm);
+}
+
+/* Deactivated stays visible — entries already filed still point at it, so
+   it has to be findable, just clearly not on offer. */
+.hse-list-row.is-off {
+    opacity: 0.55;
+}
+
+.hse-list-row.is-off .hse-list-label {
+    text-decoration: line-through;
+}
+
+.hse-list-meta {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+}
+
+.hse-tag {
+    display: inline-block;
+    padding: 0 var(--space-2);
+    border-radius: 999px;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+}
+
+.hse-list-toggle {
+    margin-left: var(--space-3);
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    cursor: pointer;
+    padding: 0;
+}
+
+.hse-list-toggle:hover {
+    color: var(--text);
+    text-decoration: underline;
+}
+
+.hse-list-row:not(.is-off) .hse-list-meta + .hse-list-toggle,
+.hse-list-row .hse-list-label + .hse-list-toggle {
+    margin-left: auto;
+}
+
+.hse-list-add {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.hse-list-add .form-input {
+    min-width: 180px;
+    flex: 0 1 220px;
+}
+
+.hse-add-check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-list-empty,
+.hse-list-note {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-list-note {
+    display: block;
+    margin-top: var(--space-2);
+}
+
+/* ── Quick-add, inside the entry form ── */
+
+.hse-quick-add {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+.hse-quick-add[hidden] {
+    display: none;
+}
+
+.hse-quick-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: var(--space-1);
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.hse-quick-link:hover {
+    color: var(--text);
+}
+
+/* ── Schedule tab ── */
+
+.hse-sched-layout {
+    display: flex;
+    gap: var(--space-4);
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-top: var(--space-4);
+}
+
+/* Capped and scrolled, per conventions — but deliberately NOT a
+   calc(100vh - <magic number>): that is the pattern behind Digital
+   Innovation's closed-strip bug, where the offset silently stops matching
+   the chrome above it. A plain fraction of the viewport cannot go stale. */
+.hse-sched-table-wrap {
+    flex: 1 1 520px;
+    min-width: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.hse-sched-what { color: var(--text); }
+
+/* The register, in the accent: it answers "what does this file into?"
+   without a second column. */
+.hse-sched-reg {
+    font-size: var(--text-xs);
+    color: var(--tangerine);
+}
+
+.hse-sched-due.is-overdue { color: var(--text); font-weight: 600; }
+
+/* Bold rather than red: --poppy is ~3.4:1 on the light surface and there is
+   no semantic danger-text token yet — the same call the register tables
+   make for overdue counts. */
+.hse-sched-badge {
+    display: inline-block;
+    margin-left: var(--space-2);
+    padding: 1px var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.hse-sched-badge.is-overdue {
+    border-color: var(--hse-overdue);
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* A retired schedule stays visible — it explains occurrences already on the
+   calendar — but reads as past. */
+.hse-sched-table tr.is-off td { color: var(--text-muted); }
+
+.hse-sched-empty td {
+    padding: var(--space-5) var(--space-3);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    text-align: center;
+}
+
+/* ── The side panel ── */
+
+.hse-sched-panel {
+    flex: 1 1 320px;
+    min-width: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.hse-sched-panel[hidden] { display: none; }
+
+.hse-sched-panel-head { margin-bottom: var(--space-3); }
+
+.hse-sched-panel-title {
+    margin: 0;
+    font-size: var(--text-base);
+    color: var(--text);
+}
+
+.hse-sched-row {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.hse-sched-row > .hse-field { flex: 1 1 140px; min-width: 0; }
+.hse-sched-row > .hse-field--narrow { flex: 0 0 96px; }
+
+/* Capped and scrolled: a long fleet must not push the save button off the
+   panel. Contained so the scroll does not chain to the page behind it. */
+.hse-sched-asset-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 160px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.hse-sched-asset {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.hse-sched-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--surface-hover);
+}
+
+.hse-sched-preview-label {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-sched-preview-dates {
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.hse-sched-panel-note {
+    margin: var(--space-3) 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* Shared by the schedule panel, the register picker and the drawer — an
+   action that is a link in weight but a button in job. */
+.hse-link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.hse-link-btn:hover { color: var(--text); }
+
+.hse-sched-assets { margin-top: var(--space-1); }
+
+.hse-sched-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+}
+
+.hse-sched-spacer { flex: 1 1 auto; }
+
+/* ── Calendar ──
+   Theming trap 1: these five states are coloured, so each needs an explicit
+   dark value rather than inheriting the light palette. They are declared
+   once as tokens and used everywhere below, so a state can never be
+   half-themed.
+
+   Pick the dark counterpart by COLOUR, not by name. --poppy is #FF4F4F
+   (red) and its dark tone is --tone-salmon (#FF7A7A); --tone-poppy is
+   #FFC24D, an amber, and belongs to a different pill. The names in
+   main.css do not line up and following them would flip overdue to yellow
+   in dark mode. */
+
+:root {
+    --hse-overdue: var(--poppy);
+    --hse-expiring: var(--canary);
+    --hse-planned: var(--sky);
+    --hse-done: var(--clover);
+    --hse-logged: var(--oak);
+}
+
+:root[data-theme="dark"] {
+    --hse-overdue: var(--tone-salmon);
+    --hse-expiring: var(--tone-canary);
+    --hse-planned: var(--tone-sky);
+    --hse-done: var(--tone-clover);
+    --hse-logged: var(--tone-oak);
+}
+
+/* The state dot. Hollow means still to do, filled means settled or
+   shouting — the grid, the legend and the cards all use this one element,
+   so the key on the month bar genuinely is the key. */
+.hse-cal-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--hse-planned);
+}
+
+.hse-cal-dot--overdue { background: var(--hse-overdue); }
+.hse-cal-dot--expiring { background: var(--hse-expiring); }
+.hse-cal-dot--planned { background: var(--hse-planned); }
+.hse-cal-dot--logged { background: var(--hse-logged); }
+.hse-cal-dot--done { background: var(--hse-done); }
+
+.hse-cal-dot.is-hollow {
+    background: transparent;
+    border: 1.5px solid var(--hse-planned);
+}
+
+.hse-cal-dot--overdue.is-hollow { border-color: var(--hse-overdue); }
+.hse-cal-dot--expiring.is-hollow { border-color: var(--hse-expiring); }
+.hse-cal-dot--logged.is-hollow { border-color: var(--hse-logged); }
+.hse-cal-dot--done.is-hollow { border-color: var(--hse-done); }
+
+/* ── Header ── */
+
+/* .btn-primary and .btn-secondary are page actions: mono, uppercase, 2px
+   border, 1.5rem of padding. Three of them side by side at different
+   heights read as a pile rather than a set, so this module's header, month
+   bar and cards share one compact button instead. Same colours, one
+   height, sentence case. */
+.hse-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 30px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--text-sm);
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.hse-btn:hover { border-color: var(--border-strong); }
+
+.hse-btn--primary {
+    border-color: var(--tangerine);
+    background: var(--tangerine);
+    color: var(--white);
+}
+
+.hse-btn--primary:hover { border-color: var(--tangerine); opacity: 0.9; }
+
+/* Committing a form deserves more presence than a control in a header
+   bar, without going back to the 2px uppercase page button. */
+.hse-modal-actions .hse-btn,
+.hse-sched-panel-actions .hse-btn {
+    height: 34px;
+    padding: 0 var(--space-4);
+}
+
+/* Reads as a label, not an action — but keeps the height so the row of
+   controls sits on one line. */
+.hse-btn--quiet {
+    color: var(--text-muted);
+    border-color: var(--border-subtle);
+    cursor: default;
+}
+
+.hse-month-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ── The five tiles ── */
+
+/* One bar with hairline dividers, not five cards in a row. Five borders
+   and four gaps turn a summary into a toolbar. */
+/* --surface-raised, not --surface: the tile bar and the month sit a step
+   above the page, and the drawer beside them sits on --surface. Three
+   levels, deliberately — sunken page, raised panels, plain drawer. */
+.hse-cal-kpis {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    margin: var(--space-3) 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    overflow: hidden;
+}
+
+@media (max-width: 900px) {
+    .hse-cal-kpis {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+}
+
+.hse-cal-kpi {
+    padding: var(--space-2) var(--space-4);
+    border-left: 1px solid var(--border-subtle);
+}
+
+.hse-cal-kpi:first-child { border-left: none; }
+
+.hse-cal-kpi-lab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-cal-kpi-val {
+    font-size: var(--text-1g);
+    line-height: 1.3;
+    color: var(--text);
+}
+
+/* ── Month bar and legend ── */
+
+.hse-cal-monthbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin: var(--space-3) 0 var(--space-2);
+}
+
+.hse-cal-monthnav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.hse-cal-monthlabel {
+    min-width: 11ch;
+    text-align: center;
+    font-size: var(--text-base);
+    color: var(--text);
+}
+
+.hse-cal-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 30px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: var(--text-med);
+    line-height: 1;
+}
+
+.hse-cal-arrow:hover { color: var(--text); }
+
+/* Smaller still: inside a card these sit beside two lines of text. */
+.hse-cal-btn {
+    height: 26px;
+    font-size: var(--text-xs);
+}
+
+.hse-cal-today { margin-left: var(--space-2); }
+
+.hse-cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}
+
+.hse-cal-legend { gap: var(--space-3); }
+
+.hse-cal-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.hse-cal-legend-item:hover { color: var(--text); }
+
+/* The active state is underlined rather than boxed — a box here competes
+   with the grid right below it. */
+.hse-cal-legend-item.is-selected {
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* ── Grid ── */
+
+/* A grid, not a flex row: grid stretches both columns to one height, so
+   the month and the day beside it end on the same line instead of one
+   trailing off below the other. */
+.hse-cal-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: var(--space-4);
+    align-items: stretch;
+}
+
+@media (max-width: 900px) {
+    .hse-cal-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* One frame around the weekday band and the cells, so the header reads as
+   part of the calendar rather than floating above it. The background is
+   the hairline colour; the 1px gaps let it through between cells. */
+.hse-cal-grid-wrap {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--border-subtle);
+}
+
+.hse-cal-weekdays,
+.hse-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 1px;
+}
+
+.hse-cal-weekdays { border-bottom: 1px solid var(--border-subtle); }
+
+/* Rows share the height left over, so the month fills its frame instead of
+   stopping short with dead space under it. The minmax floor keeps a sparse
+   month from collapsing to nothing. */
+.hse-cal-grid {
+    flex: 1 1 auto;
+    grid-auto-rows: minmax(96px, 1fr);
+}
+
+.hse-cal-weekday {
+    padding: var(--space-2);
+    background: var(--surface);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-cal-day {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 96px;
+    padding: var(--space-2);
+    border: none;
+    background: var(--surface-raised);
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    overflow: hidden;
+}
+
+.hse-cal-day:hover { background: var(--surface-hover); }
+.hse-cal-day.is-out { opacity: 0.45; }
+
+/* Inset rather than a border: the cells have no borders of their own now,
+   and adding one back would shift every neighbour by a pixel. */
+.hse-cal-day.is-selected { box-shadow: inset 0 0 0 2px var(--text); }
+.hse-cal-day.is-today { box-shadow: inset 0 0 0 1px var(--tangerine); }
+.hse-cal-day.is-today.is-selected { box-shadow: inset 0 0 0 2px var(--text); }
+
+.hse-cal-dayhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+}
+
+.hse-cal-daynum {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+/* Today is a filled badge, not a border: at a glance the eye finds a solid
+   shape far faster than a one-pixel outline. The accent, not the overdue
+   red — today is not a problem, and colouring it red would say it was. */
+.hse-cal-day.is-today .hse-cal-daynum {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: var(--tangerine);
+    color: var(--white);
+}
+
+.hse-cal-daycount {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.hse-cal-daychips {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.hse-cal-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    font-size: var(--text-xs);
+    color: var(--text);
+}
+
+.hse-cal-chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hse-cal-more {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ── Drawer ── */
+
+/* A flex column so the footer can sit at the bottom of whatever height the
+   grid beside it ends up being. The max-height is a runaway guard, not the
+   usual case — normally the month decides how tall this is. */
+.hse-cal-drawer {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-height: 80vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.hse-cal-drawer.is-loading { opacity: 0.6; }
+
+.hse-cal-drawer-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.hse-cal-drawer-head { margin-bottom: var(--space-3); }
+
+.hse-cal-drawer-title {
+    margin: 0;
+    font-size: var(--text-sm);
+    letter-spacing: 0.06em;
+    color: var(--text);
+}
+
+.hse-cal-drawer-sum {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-cal-drawer-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.hse-cal-card-title { line-height: 1.4; }
+.hse-cal-card-sub { line-height: 1.4; }
+
+/* ── One card, one thing to do ── */
+
+.hse-cal-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--hse-planned);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.hse-cal-card--overdue { border-left-color: var(--hse-overdue); }
+.hse-cal-card--expiring { border-left-color: var(--hse-expiring); }
+.hse-cal-card--planned { border-left-color: var(--hse-planned); }
+.hse-cal-card--logged { border-left-color: var(--hse-logged); }
+.hse-cal-card--done { border-left-color: var(--hse-done); }
+
+.hse-cal-card-body { min-width: 0; }
+
+.hse-cal-card-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* The register, in the accent: it answers "where will this be filed?"
+   without another line of prose. */
+.hse-cal-card-sub {
+    font-size: var(--text-xs);
+    color: var(--tangerine);
+}
+
+.hse-cal-card-ref,
+.hse-cal-card-meta {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.hse-cal-card-action { flex: 0 0 auto; }
+
+.hse-cal-btn {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+
+.hse-cal-done {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--hse-done);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.hse-cal-tick { font-size: var(--text-sm); }
+
+/* Pinned to the bottom of the drawer rather than trailing the last card:
+   it is the way out of the list, not the end of it. */
+.hse-cal-drawer-foot {
+    margin-top: auto;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* Dashed, because it starts something rather than confirming it. */
+.hse-cal-logmore {
+    width: 100%;
+    padding: var(--space-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+
+.hse-cal-logmore:hover { color: var(--text); background: var(--surface-hover); }
+
+.hse-cal-drawer-note {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* ── Register picker ── */
+
+.hse-picker {
+    margin-bottom: var(--space-4);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.hse-picker[hidden] { display: none; }
+
+.hse-picker-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.hse-picker-title { font-size: var(--text-sm); color: var(--text); }
+
+.hse-picker-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-2);
+    max-height: 40vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.hse-picker-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.hse-picker-item:hover { background: var(--surface-hover); }
+.hse-picker-item-label { font-size: var(--text-sm); }
+.hse-picker-item-group {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+/* ── Agenda ── */
+
+/* A list, not a grid: full bleed strands every row at the left edge of a
+   wide screen. Each day gets a surface so it reads as a card. */
+.hse-cal-agenda {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    max-width: 880px;
+}
+
+.hse-cal-agenda-day {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+}
+
+.hse-cal-agenda-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.hse-cal-agenda-date { color: var(--text); }
+
+.hse-cal-agenda-sum {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-cal-agenda-day .hse-cal-card + .hse-cal-card { margin-top: var(--space-2); }
+
+/* ── Overview ── */
+
+.hse-ov-of {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-ov-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--space-3);
+    align-items: start;
+}
+
+.hse-ov-panel {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+}
+
+/* The two panels that carry the most rows get the room when there is any. */
+@media (min-width: 1100px) {
+    .hse-ov-grid { grid-template-columns: 1.4fr 1fr; }
+    .hse-ov-panel--wide { grid-column: span 1; }
+}
+
+.hse-ov-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-1);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.hse-ov-title {
+    margin: 0;
+    font-size: var(--text-sm);
+    letter-spacing: 0.06em;
+    color: var(--text);
+}
+
+.hse-ov-count {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-ov-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    text-decoration: none;
+    color: inherit;
+}
+
+.hse-ov-row:last-of-type { border-bottom: none; }
+.hse-ov-row:hover .hse-ov-row-title { color: var(--tangerine); }
+
+.hse-ov-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.hse-ov-row-title {
+    font-size: var(--text-sm);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hse-ov-row-sub {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.hse-ov-row-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 0 0 auto;
+}
+
+.hse-ov-sev,
+.hse-ov-age {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* Bold rather than red — the same call the register tables make. --poppy
+   is ~3.4:1 on the light surface and there is no danger-text token yet. */
+.hse-ov-late {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.hse-ov-row.is-lapsed { border-left: 2px solid var(--hse-overdue); padding-left: var(--space-2); }
+
+.hse-ov-empty,
+.hse-ov-more {
+    margin: var(--space-3) 0 var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-ov-more { font-size: var(--text-xs); }

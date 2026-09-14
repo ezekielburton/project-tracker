@@ -35,7 +35,6 @@ app/modules/client_servicing/
 Routes are one concern per file. Static (in the module):
 `static/js/client_servicing.js` (table inline-edit, sort, search + filter),
 `static/js/client_servicing_dashboard.js` (dashboard SSE refresh),
-`static/js/client_servicing_nav.js` (internal SPA nav),
 `static/js/client_servicing_calendar.js`, `static/js/client_servicing_invoicing.js`,
 `static/css/client_servicing.css` (table, calendar, dashboard, toolbar).
 
@@ -196,10 +195,10 @@ Sidebar shell, in order: **Dashboard** (landing) · **Table** · **Invoicing** �
 app-sidebar entry is a live link pointing at `client_servicing.index`.
 
 Internal nav between the four sections is SPA soft-nav:
-`client_servicing_nav.js` routes `.cs-nav-item` clicks through the app's
-`window.navigateTo`. The global `sidebar.js` only intercepts its own
-`.sidebar-item--nav`, so each module SPA-ifies its own secondary nav — same
-pattern as `digital_innovation_nav.js`. The listener is document-delegated and
+core/shared's `module_rail.js` routes `.module-rail-item` clicks through the
+app's `window.navigateTo`. The global `sidebar.js` only intercepts its own
+`.sidebar-item--nav`, so the shared rail SPA-ifies itself for every module that
+uses it. The listener is document-delegated and
 guarded (`_csNavDispatcherWired`), so it survives SPA swaps without stacking.
 
 ## Remaining scope

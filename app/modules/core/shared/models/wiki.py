@@ -34,9 +34,8 @@ class WikiSection(db.Model):
 
 class WikiArticle(db.Model):
     """
-    A single page within a wiki section. sections_json stores content as a JSON array of block objects
-    same pattern as BlogPost, supporting: body, richtext, h3, callout,
-    callout-pins, list, image, video block types.
+    A single page within a wiki section. sections_json holds the Editor.js
+    document; legacy_sections_json keeps the pre-Editor.js content as a fallback.
     """
 
     __tablename__='wiki_articles'
@@ -45,7 +44,8 @@ class WikiArticle(db.Model):
     section_id      = db.Column(db.Integer, db.ForeignKey('wiki_sections.id'), nullable=False)
     title           = db.Column(db.String(200), nullable=False)
     slug            = db.Column(db.String(200), nullable=False)
-    sections_json    = db.Column(db.Text)
+    sections_json   = db.Column(db.Text)
+    legacy_sections_json = db.Column(db.Text)
     sort_order      = db.Column(db.Integer, default=0)
     is_published    = db.Column(db.Boolean, default=False)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)

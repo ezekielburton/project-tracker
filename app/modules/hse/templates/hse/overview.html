@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}HSE — Overview{% endblock %}
+
+{% block content %}
+<div class="hse-page">
+    <div class="hse-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="hse-main">
+            <div class="hse-inner">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">Overview</h1>
+                    <div class="hse-header-actions">
+                        <span class="hse-month-chip">{{ today.strftime('%d %b %Y') }}</span>
+                        <a class="hse-btn hse-tab"
+                           href="{{ url_for('hse.calendar_month') }}">Calendar</a>
+                        {% if can('manage_hse', effective_user) %}
+                        <a class="hse-btn hse-btn--primary hse-tab"
+                           href="{{ url_for('hse.calendar_today') }}">+ Log entry</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="hse-cal-kpis">
+                    <div class="hse-cal-kpi">
+                        <div class="hse-cal-kpi-lab">Needs you now</div>
+                        <div class="hse-cal-kpi-val">{{ tiles.needs_you_now }}</div>
+                    </div>
+                    <div class="hse-cal-kpi">
+                        <div class="hse-cal-kpi-lab">Open incidents</div>
+                        <div class="hse-cal-kpi-val">{{ tiles.open_incidents }}</div>
+                    </div>
+                    <div class="hse-cal-kpi">
+                        <div class="hse-cal-kpi-lab">Done vs due · {{ month_label }}</div>
+                        <div class="hse-cal-kpi-val">{{ tiles.done }}<span class="hse-ov-of">/{{ tiles.due }}</span></div>
+                    </div>
+                    <div class="hse-cal-kpi">
+                        <div class="hse-cal-kpi-lab">Expiring soon</div>
+                        <div class="hse-cal-kpi-val">{{ tiles.expiring_soon }}</div>
+                    </div>
+                    {# Nothing tracked is not the same as nothing valid, so an
+                       empty register reads as a dash rather than 0%. #}
+                    <div class="hse-cal-kpi">
+                        <div class="hse-cal-kpi-lab">Compliance health</div>
+                        <div class="hse-cal-kpi-val">
+                            {% if tiles.health_percent is none %}—
+                            {% else %}{{ tiles.health_percent }}%{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hse-ov-grid">
+
+                    <section class="hse-ov-panel hse-ov-panel--wide">
+                        <div class="hse-ov-head">
+                            <h2 class="hse-ov-title">Needs you now</h2>
+                            <span class="hse-ov-count">{{ needs.total }}</span>
+                        </div>
+                        {% for row in needs.rows %}
+                        <a class="hse-ov-row" href="#"
+                           data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
+                            <span class="hse-ov-row-main">
+                                <span class="hse-ov-row-title">{{ row.title }}</span>
+                                <span class="hse-ov-row-sub">{{ row.register_label }} · {{ row.ref }}</span>
+                            </span>
+                            <span class="hse-ov-row-meta">
+                                {% if row.severity %}<span class="hse-ov-sev">{{ row.severity }}</span>{% endif %}
+                                {# Bold, not red: --poppy is ~3.4:1 on the light
+                                   surface and there is no danger-text token. #}
+                                {% if row.over_sla %}<span class="hse-ov-late">{{ row.over_sla }}d over</span>
+                                {% else %}<span class="hse-ov-age">{{ row.days_open }}d open</span>{% endif %}
+                            </span>
+                        </a>
+                        {% else %}
+                        <p class="hse-ov-empty">Nothing outstanding. Everything open is either new or with someone else.</p>
+                        {% endfor %}
+                        {% if needs.more %}
+                        <p class="hse-ov-more">and {{ needs.more }} more</p>
+                        {% endif %}
+                    </section>
+
+                    <section class="hse-ov-panel">
+                        <div class="hse-ov-head">
+                            <h2 class="hse-ov-title">Waiting on others</h2>
+                            <span class="hse-ov-count">{{ waiting.total }}</span>
+                        </div>
+                        {# Its own panel on purpose: the performance page refuses
+                           to measure what he does not control, and this should
+                           not read as work he is behind on. #}
+                        {% for row in waiting.rows %}
+                        <a class="hse-ov-row" href="#"
+                           data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
+                            <span class="hse-ov-row-main">
+                                <span class="hse-ov-row-title">{{ row.title }}</span>
+                                <span class="hse-ov-row-sub">{{ row.person }} · {{ row.ref }}</span>
+                            </span>
+                            <span class="hse-ov-row-meta">
+                                <span class="hse-ov-age">{{ row.days }}d</span>
+                            </span>
+                        </a>
+                        {% else %}
+                        <p class="hse-ov-empty">Nothing parked with anyone.</p>
+                        {% endfor %}
+                        {% if waiting.more %}
+                        <p class="hse-ov-more">and {{ waiting.more }} more</p>
+                        {% endif %}
+                    </section>
+
+                    <section class="hse-ov-panel hse-ov-panel--wide">
+                        <div class="hse-ov-head">
+                            <h2 class="hse-ov-title">Compliance</h2>
+                            <span class="hse-ov-count">
+                                {% if health.percent is none %}nothing tracked
+                                {% else %}{{ health.valid }} of {{ health.total }} valid{% endif %}
+                            </span>
+                        </div>
+                        {# What lapsed is named rather than hidden. A page that
+                           only flatters is worth nothing in the room. #}
+                        {% for row in expiring.rows %}
+                        <a class="hse-ov-row{{ ' is-lapsed' if row.lapsed else '' }}" href="#"
+                           data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
+                            <span class="hse-ov-row-main">
+                                <span class="hse-ov-row-title">{{ row.title }}</span>
+                                <span class="hse-ov-row-sub">{{ row.register_label }} · {{ row.ref }}</span>
+                            </span>
+                            <span class="hse-ov-row-meta">
+                                {% if row.lapsed %}
+                                <span class="hse-ov-late">expired {{ row.days | abs }}d ago</span>
+                                {% else %}
+                                <span class="hse-ov-age">{{ row.days }}d left</span>
+                                {% endif %}
+                            </span>
+                        </a>
+                        {% else %}
+                        <p class="hse-ov-empty">Nothing expiring in the next month.</p>
+                        {% endfor %}
+                        {% if expiring.more %}
+                        <p class="hse-ov-more">and {{ expiring.more }} more</p>
+                        {% endif %}
+                    </section>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_entry_modal.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

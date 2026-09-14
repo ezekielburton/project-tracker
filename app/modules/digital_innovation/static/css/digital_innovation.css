@@ -33,46 +33,9 @@
     height: var(--di-shell-height, calc(100vh - 200px));
 }
 
-/* ── Module's own secondary sidebar ── */
-
-.di-sidebar {
-    width: 220px;
-    flex-shrink: 0;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    padding: var(--space-5) var(--space-4);
-    position: sticky;
-    top: 0;
-    align-self: stretch;
-}
-
-.di-sidebar-nav {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin-bottom: var(--space-6);
-}
-
-.di-nav-item {
-    display: block;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-sm);
-    color: var(--text-muted);
-    text-decoration: none;
-}
-
-.di-nav-item--active {
-    background: var(--surface-hover);
-    color: var(--text);
-    font-weight: 600;
-}
-
-.di-nav-item--disabled {
-    color: var(--text-faint, var(--text-muted));
-    cursor: default;
-    opacity: 0.6;
-}
+/* ── The Projects switcher that hangs under the rail ──
+   The rail itself is shared: .module-rail in shared.css, rendered by
+   _shared_macros.html's module_rail(). Only this section is DI's own. */
 
 .di-sidebar-section-label {
     display: block;
