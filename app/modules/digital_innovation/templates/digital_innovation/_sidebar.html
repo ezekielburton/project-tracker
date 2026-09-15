@@ -1,28 +1,26 @@
-{# Shared DI sidebar — project switcher + top nav. Included by board.html,
-   templates.html and archive.html so every screen stays visually
-   identical without duplicating this markup (extracted out of board.html
-   when templates.html was added). `active_nav` picks which nav item
-   renders as the active link vs a plain link vs the disabled
-   placeholder: 'board' | 'templates' | 'archive'. `can_edit_board` hides
-   each project's Close button for anyone who's view-only (lib/access.py's
-   can_edit_di_board) — the Archive link itself stays visible to
-   everyone, same as Board, since viewing never needs the gate. "+ New
-   project" lives in board.html's header now, not here — see board.html.
-   `project` marks the current project in the
-   list and builds the Board link — on templates.html/archive.html (not
-   project-scoped) it's just the default project, so "Board" always has
-   somewhere sensible to go back to. #}
-<aside class="di-sidebar">
-    <nav class="di-sidebar-nav">
-        <a href="{{ url_for('digital_innovation.project_board', di_project_id=project.id) }}" class="di-nav-item{% if active_nav == 'board' %} di-nav-item--active{% endif %}">Board</a>
-        {% if can_view_performance %}
-        <a href="{{ url_for('digital_innovation.performance_screen') }}" class="di-nav-item{% if active_nav == 'performance' %} di-nav-item--active{% endif %}">Performance</a>
-        {% endif %}
-        {% if can_edit_templates %}
-        <a href="{{ url_for('digital_innovation.templates_screen') }}" class="di-nav-item{% if active_nav == 'templates' %} di-nav-item--active{% endif %}">Edit Templates</a>
-        {% endif %}
-    </nav>
+{# Shared DI rail — top nav + project switcher. Included by board.html,
+   performance.html, templates.html and archive.html so every screen stays
+   visually identical without duplicating markup. The nav itself comes from
+   the shared module_rail macro; the Projects section below it is DI's own
+   and is passed in as the macro's call body.
 
+   `active_nav` picks the active item: 'board' | 'performance' |
+   'templates' | 'archive'. `can_edit_board` hides each project's Close
+   button for anyone view-only (lib/access.py's can_edit_di_board) — the
+   Archive link stays visible to everyone, same as Board, since viewing
+   never needs the gate. "+ New project" lives in board.html's header, not
+   here. `project` marks the current project in the list and builds the
+   Board link — on templates.html/archive.html (not project-scoped) it's
+   the default project, so "Board" always has somewhere sensible to go. #}
+{% from '_shared_macros.html' import module_rail %}
+{% set di_rail_items =
+    [{'key': 'board', 'label': 'Board',
+      'url': url_for('digital_innovation.project_board', di_project_id=project.id)}]
+    + ([{'key': 'performance', 'label': 'Performance',
+         'url': url_for('digital_innovation.performance_screen')}] if can_view_performance else [])
+    + ([{'key': 'templates', 'label': 'Edit Templates',
+         'url': url_for('digital_innovation.templates_screen')}] if can_edit_templates else []) %}
+{% call module_rail(di_rail_items, active_nav) %}
     <div class="di-sidebar-section">
         <span class="di-sidebar-section-label">Projects</span>
         <ul class="di-project-list">
@@ -45,6 +43,6 @@
             </li>
             {% endfor %}
         </ul>
-        <a href="{{ url_for('digital_innovation.archive_screen') }}" class="di-nav-item di-archive-link{% if active_nav == 'archive' %} di-nav-item--active{% endif %}">Archive</a>
+        <a href="{{ url_for('digital_innovation.archive_screen') }}" class="module-rail-item di-archive-link{% if active_nav == 'archive' %} module-rail-item--active{% endif %}">Archive</a>
     </div>
-</aside>
+{% endcall %}

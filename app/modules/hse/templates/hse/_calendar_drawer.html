@@ -1,0 +1,29 @@
+{# One day, fetched when a cell is clicked. Rendered server-side on first
+   load too, so the page arrives with a day already open.
+
+   The list is `cards`, not `items`: Jinja resolves an attribute before a
+   subscript, so {{ drawer.items }} would hand this template the bound
+   dict.items method and fail with "no len()". #}
+{% from 'hse/_calendar_macros.html' import drawer_card %}
+<div class="hse-cal-drawer-inner" data-drawer-date="{{ drawer.date.isoformat() }}">
+    <div class="hse-cal-drawer-head">
+        <h2 class="hse-cal-drawer-title">
+            {{ drawer.date.strftime('%a') }} &middot; {{ drawer.date.day }} {{ drawer.date.strftime('%b') }}
+            {%- if drawer.date == today %} <span class="hse-tag">Today</span>{% endif %}
+        </h2>
+        <div class="hse-cal-drawer-sum">{{ drawer.summary or 'Nothing on this day' }}</div>
+    </div>
+
+    <div class="hse-cal-drawer-body">
+        {% for card in drawer.cards %}
+            {{ drawer_card(card, can('manage_hse', effective_user)) }}
+        {% endfor %}
+    </div>
+
+    {% if can('manage_hse', effective_user) %}
+    <div class="hse-cal-drawer-foot">
+        <button type="button" class="hse-cal-logmore" data-hse-open-picker>+ Log something else</button>
+        <p class="hse-cal-drawer-note">Anything logged here saves straight into its register.</p>
+    </div>
+    {% endif %}
+</div>

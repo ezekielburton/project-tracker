@@ -1,0 +1,33 @@
+{# Average days to close. A month with nothing closed breaks the line rather
+   than dropping it to zero — nothing closed is not instant.
+
+   No height attribute, for the same reason as the bars. #}
+<svg class="hse-pf-svg" viewBox="0 0 {{ line.width }} {{ line.height }}"
+     width="100%" role="img"
+     aria-label="Average days to close, by month">
+    {% for g in line.gridlines %}
+    <line x1="0" y1="{{ g.y }}" x2="{{ line.width }}" y2="{{ g.y }}" class="hse-pf-grid"/>
+    <text x="0" y="{{ g.y - 5 }}" class="hse-pf-axis"
+          style="font-size: {{ line.axis_font }}px">{{ g.value }}</text>
+    {% endfor %}
+    {% for d in line.paths %}
+    <path d="{{ d }}" fill="none" class="hse-pf-path"/>
+    {% endfor %}
+    {% if line.first %}
+    <circle cx="{{ line.first.x }}" cy="{{ line.first.y }}" r="{{ line.dot_r }}" class="hse-pf-dot"/>
+    <text x="{{ line.first.x + line.dot_r + 6 }}" y="{{ line.first.y - 12 }}"
+          class="hse-pf-point" style="font-size: {{ line.tick_font }}px">{{ line.first.days }} days</text>
+    {% endif %}
+    {% if line.last %}
+    <circle cx="{{ line.last.x }}" cy="{{ line.last.y }}" r="{{ line.dot_r }}" class="hse-pf-dot"/>
+    <text x="{{ line.last.x - line.dot_r - 6 }}" y="{{ line.last.y - 12 }}"
+          class="hse-pf-point" style="font-size: {{ line.tick_font }}px"
+          text-anchor="end">{{ line.last.days }} days</text>
+    {% endif %}
+    {% for p in line.points %}
+    {% if p.show_label %}
+    <text x="{{ p.x }}" y="{{ line.label_y }}" class="hse-pf-tick"
+          style="font-size: {{ line.tick_font }}px" text-anchor="middle">{{ p.label }}</text>
+    {% endif %}
+    {% endfor %}
+</svg>

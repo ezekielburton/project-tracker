@@ -1,47 +1,20 @@
-// Digital Innovation — shared .di-shell height sync for every DI screen
-// (board.html/templates.html/archive.html/performance.html all share
-// .di-page/.di-shell from the module's own CSS, digital_innovation.css).
+// Digital Innovation — the .di-shell height solve.
 //
-// Why JS and not pure CSS: .di-shell is meant to fill the gap between
-// the global fixed header and the global footer so a screen's main
-// content (e.g. board.html's .di-columns/.di-closed-strip) can flex to
-// fill it. CSS alone doesn't reliably express that here — .main-content
-// is only a flex ITEM (flex:1) of body's flex column, not itself a flex
-// container with a definite height its own descendants can percentage
-// against; client_servicing.css hit and documented this exact problem
-// for its own scrolling table (a headless Chromium repro showed the box
-// just grows to fit its content, no scroll boundary at all) and fixed
-// it the same way this does: measure the real gap with
-// getBoundingClientRect() instead of asking CSS to derive it
-// (client_servicing.js::syncTableScrollHeight — same approach, mirrored
-// here for .di-shell instead of .cs-table-scroll).
+// The maths used to live here in full. It now lives in
+// core/shared/js/fill_height.js: Client Servicing had it first for its
+// scrolling table, this file mirrored it for .di-shell, and HSE needed it a
+// third time. Three copies is the bug, so it was extracted (conventions.md).
+//
+// Why JS and not CSS at all: .main-content is a flex ITEM with no definite
+// height, so a flex child just grows to its content and the page scrolls
+// instead of the shell. The shared helper measures the real gap between the
+// shell's top and the footer and writes it to --di-shell-height, which is
+// the variable digital_innovation.css already reads — so the CSS is
+// unchanged and every DI screen keeps working the way it did.
 (function () {
-    function syncDiShellHeight() {
-        var shell = document.querySelector('.di-shell');
-        var footer = document.querySelector('.footer');
-        if (!shell || !footer) return;
-        // Height that makes the shell's bottom edge meet the footer's
-        // top — shell.top and the footer's height are both independent
-        // of the shell's own height, so this solves it directly rather
-        // than nudging a delta.
-        var shellRect = shell.getBoundingClientRect();
-        var footerRect = footer.getBoundingClientRect();
-        var target = window.innerHeight - shellRect.top - footerRect.height;
-        if (target > 100) { // guard against a mid-layout-thrash reading
-            shell.style.setProperty('--di-shell-height', target + 'px');
-        }
+    // Re-measured on every SPA swap (this script re-executes) and on resize
+    // (the helper registers one listener for the whole app).
+    if (window.watchFillHeight) {
+        window.watchFillHeight('.di-shell', '--di-shell-height');
     }
-
-    syncDiShellHeight();
-
-    // Guard against re-registering a new resize listener on every SPA
-    // navigation (sidebar.js swaps #main-content's innerHTML and
-    // re-executes any <script> tags it finds, including this one) —
-    // same convention as digital_innovation_board.js's
-    // _diDispatcherWired. The direct call above still re-measures for
-    // whichever .di-shell is live right now, on every execution.
-    if (!window._diShellSyncWired) {
-        window._diShellSyncWired = true;
-        window.addEventListener('resize', syncDiShellHeight);
-    }
-})();
+}());

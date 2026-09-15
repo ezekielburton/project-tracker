@@ -1,0 +1,337 @@
+/* ══ HSE performance report — the print sheet ═════════════════════════════
+   A4 pages built as fixed blocks, each carrying its own footer. That is how
+   the reference report gets "Page 1 of 4" without the browser's own header
+   and footer, which CSS cannot reach.
+
+   Light only, on purpose: this is a document that gets printed and handed
+   across a desk, not a screen that follows the app theme.
+
+   Fonts are shipped with the module rather than pulled from a CDN, so the
+   report renders the same on the server as on a laptop with no internet. */
+
+@font-face { font-family: 'Barlow Condensed'; font-weight: 700; font-style: normal;
+    font-display: block; src: url('../fonts/barlow-condensed-700.woff2') format('woff2'); }
+@font-face { font-family: 'Public Sans'; font-weight: 400; font-style: normal;
+    font-display: block; src: url('../fonts/public-sans-400.woff2') format('woff2'); }
+@font-face { font-family: 'Public Sans'; font-weight: 600; font-style: normal;
+    font-display: block; src: url('../fonts/public-sans-600.woff2') format('woff2'); }
+@font-face { font-family: 'Public Sans'; font-weight: 700; font-style: normal;
+    font-display: block; src: url('../fonts/public-sans-700.woff2') format('woff2'); }
+@font-face { font-family: 'DM Mono'; font-weight: 400; font-style: normal;
+    font-display: block; src: url('../fonts/dm-mono-400.woff2') format('woff2'); }
+
+:root {
+    --paper: #F5F0E8;
+    --card: #FFFFFF;
+    --ink: #1F1B16;
+    --body: #3C362E;
+    --muted: #6B6B6B;
+    --faint: #8A8070;
+    --rule: #E3DBCD;
+    --track: #ECE7DE;
+    --rust: #C2551F;
+    --rust-dk: #A8461A;
+    --blue: #1565A8;
+    --green: #2E8B4E;
+    --plum: #8A3B72;
+
+    --head: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+    --text: 'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--body);
+    font-family: var(--text);
+    font-size: 11px;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* ── the page ── */
+
+.rp-page {
+    position: relative;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 8mm;
+    padding: 16mm 14mm 18mm;
+    background: var(--paper);
+}
+
+.rp-foot {
+    position: absolute;
+    left: 14mm;
+    right: 14mm;
+    bottom: 10mm;
+    display: flex;
+    justify-content: space-between;
+    padding-top: 4mm;
+    border-top: 1px solid var(--rule);
+    font-size: 8.5px;
+    color: var(--faint);
+}
+
+/* ── type ── */
+
+.rp-eyebrow {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+h1.rp-title {
+    margin: 4px 0 0;
+    font-family: var(--head);
+    font-size: 40px;
+    font-weight: 700;
+    line-height: .96;
+    letter-spacing: .01em;
+    text-transform: uppercase;
+    color: var(--ink);
+}
+
+.rp-rule { width: 54px; height: 3px; margin: 10px 0 12px; background: var(--rust); }
+
+.rp-lede { max-width: 118mm; font-size: 12px; line-height: 1.55; color: var(--body); }
+
+.rp-meta {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.rp-badge {
+    position: absolute;
+    top: 16mm;
+    right: 14mm;
+    padding: 7px 13px;
+    border-radius: 5px;
+    background: var(--rust);
+    color: #fff;
+    font-family: var(--head);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+
+.rp-section { margin: 0 0 6mm; }
+
+.rp-sectionhead {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--rule);
+}
+
+h2.rp-h2 {
+    margin: 2px 0 0;
+    font-family: var(--head);
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: .01em;
+    text-transform: uppercase;
+    color: var(--rust-dk);
+}
+
+.rp-sectionnote {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* ── cards ── */
+
+.rp-card {
+    margin-top: 5mm;
+    padding: 5mm 6mm;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+}
+
+h3.rp-h3 {
+    margin: 0;
+    font-family: var(--head);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--ink);
+}
+
+.rp-h3sub {
+    margin-top: 1px;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.rp-cardnote { margin: 4mm 0 0; font-size: 10px; line-height: 1.55; color: var(--body); }
+
+/* ── stat row ── */
+
+.rp-stats { display: flex; gap: 4mm; margin-top: 6mm; }
+
+.rp-stat {
+    flex: 1;
+    padding: 4mm 5mm;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+}
+
+.rp-statval {
+    font-family: var(--head);
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--rust-dk);
+}
+
+.rp-statlab {
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.rp-statsub { margin-top: 2px; font-size: 9.5px; color: var(--muted); }
+
+/* ── tables and bar rows ── */
+
+.rp-table { width: 100%; border-collapse: collapse; margin-top: 4mm; }
+
+.rp-table th {
+    padding: 0 0 5px;
+    font-family: var(--mono);
+    font-size: 8px;
+    font-weight: 400;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: right;
+    border-bottom: 1px solid var(--rule);
+}
+
+.rp-table th:first-child, .rp-table td:first-child { text-align: left; }
+
+.rp-table td {
+    padding: 6px 0;
+    font-size: 10.5px;
+    text-align: right;
+    border-bottom: 1px solid var(--track);
+}
+
+.rp-table td.rp-num { font-family: var(--mono); font-size: 10px; }
+.rp-table tr:last-child td { border-bottom: none; }
+
+.rp-row { display: flex; align-items: center; gap: 4mm; padding: 4px 0; }
+.rp-rowlab { flex: 0 0 42mm; font-size: 10.5px; color: var(--body); }
+.rp-track { display: block; flex: 1; height: 13px; border-radius: 7px; background: var(--track); overflow: hidden; }
+.rp-fill { display: block; height: 100%; border-radius: 7px; background: var(--rust); }
+.rp-fill--blue { background: var(--blue); }
+.rp-fill--green { background: var(--green); }
+.rp-fill--plum { background: var(--plum); }
+.rp-rowval { flex: 0 0 14mm; text-align: right; font-family: var(--mono); font-size: 10px; }
+.rp-rowpct { flex: 0 0 12mm; text-align: right; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+/* ── the charts ── */
+
+.rp-chart, .hse-pf-svg { display: block; width: 100%; height: auto;
+    margin-top: 3mm; overflow: visible; }
+.hse-pf-grid { stroke: var(--rule); stroke-width: 1; }
+.hse-pf-bar--planned { fill: var(--blue); }
+.hse-pf-bar--done { fill: var(--rust); }
+.hse-pf-path { stroke: var(--rust); stroke-width: 2; stroke-linejoin: round; }
+.hse-pf-dot { fill: var(--rust); stroke: var(--card); stroke-width: 2; }
+.hse-pf-axis, .hse-pf-tick { font-size: 9px; fill: var(--faint); font-family: var(--mono); }
+.hse-pf-tick { font-family: var(--text); font-size: 9.5px; }
+.hse-pf-point { font-size: 10px; fill: var(--muted); font-family: var(--mono); }
+
+.rp-legend { display: flex; gap: 5mm; }
+.rp-key { display: flex; align-items: center; gap: 6px; font-size: 9.5px; color: var(--muted); }
+.rp-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.rp-sw--planned { background: var(--blue); }
+.rp-sw--done { background: var(--rust); }
+
+/* ── callouts ── */
+
+.rp-callouts { display: flex; flex-wrap: wrap; gap: 4mm; margin-top: 5mm; }
+
+.rp-callout {
+    flex: 1 1 calc(50% - 2mm);
+    padding: 4mm 5mm;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rust);
+    border-radius: 0 8px 8px 0;
+}
+
+.rp-calloutttl {
+    font-family: var(--head);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--ink);
+}
+
+.rp-callout p { margin: 5px 0 0; font-size: 10px; line-height: 1.6; }
+
+.rp-method { margin-top: 5mm; font-size: 9px; line-height: 1.6; color: var(--muted); }
+.rp-method strong { color: var(--body); }
+
+.rp-empty { margin: 4mm 0 0; font-size: 10.5px; color: var(--muted); }
+
+/* ── printing ── */
+
+@page { size: A4; margin: 0; }
+
+@media print {
+    body { background: var(--paper); }
+    .rp-page { margin: 0; page-break-after: always; box-shadow: none; }
+    .rp-page:last-child { page-break-after: auto; }
+    .rp-noprint { display: none !important; }
+}
+
+@media screen {
+    body { padding: 8mm 0; }
+    .rp-page { box-shadow: 0 2px 18px rgba(31, 27, 22, .13); }
+    .rp-noprint {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        padding: 9px 16px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--rust);
+        color: #fff;
+        font-family: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+}
+
+.rp-figure { display: flex; align-items: baseline; gap: 8px; margin-top: 3mm; }
+.rp-figureval { font-family: var(--head); font-size: 34px; font-weight: 700;
+    line-height: 1; color: var(--rust-dk); }
+.rp-figurelab { font-size: 10.5px; color: var(--muted); }

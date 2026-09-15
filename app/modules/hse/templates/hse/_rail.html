@@ -1,0 +1,27 @@
+{# The HSE rail. The nav itself is the shared component; what hangs below is
+   this module's own — his lists and his performance page, which are about
+   him rather than about the site.
+
+   Not pinned to the very bottom: that would need .module-rail to become a
+   flex column, which is a shared change affecting Client Servicing and
+   Digital Innovation too. Worth doing in one deliberate pass when "My
+   performance" also needs pinning — not as a side effect of this page. #}
+{% from '_shared_macros.html' import module_rail %}
+{% call module_rail(rail, active_group) %}
+<div class="module-rail-foot hse-rail-foot">
+    <a class="module-rail-item module-rail-item--rich{{ ' module-rail-item--active' if active_group == 'lists' else '' }}"
+       href="{{ url_for('hse.lists_page') }}">
+        <svg class="module-rail-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>
+        </svg>Lists &amp; people
+    </a>
+    <a class="module-rail-item module-rail-item--rich{{ ' module-rail-item--active' if active_group == 'performance' else '' }}"
+       href="{{ url_for('hse.performance') }}">
+        <svg class="module-rail-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19V10M9.5 19V5M15 19v-7M20.5 19v-4"/>
+        </svg>My performance
+    </a>
+</div>
+{% endcall %}

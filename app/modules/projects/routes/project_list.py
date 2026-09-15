@@ -11,7 +11,7 @@ from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectDesigner, Deliverable, User as UserModel, Client, UserTableLayout, ProjectCustomer, DesignType, ProjectTableView, ProjectStatusLog, ProjectPosmChannel, ActivityLog, ProjectNote, ProjectActivitySeen, DeliverableAssignment
 from app.modules.core.shared.lib.status_vocabulary import derive_deliverable_status, derive_project_status, derive_customer_pipeline_status
 from app.modules.core.shared.services.status_tracking import bulk_project_status_started_at, bulk_project_client_approved_at
-from app.modules.core.shared.lib.capabilities import can, effective_user
+from app.modules.core.shared.lib.capabilities import can, effective_user, require
 from app.modules.core.shared.lib.utils import ACTIVITY_SEEN_ROLLOUT_CUTOFF
 
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new', template_folder='../templates')
@@ -768,6 +768,7 @@ def _compute_rows_and_groups(all_rows):
 
 @project_list_bp.route('/table-rows')
 @login_required
+@require('view_workspace')
 def table_rows():
     """
     The Projects table's full refresh endpoint. On an SSE ping the client
@@ -785,6 +786,7 @@ def table_rows():
 
 @project_list_bp.route('/table-rows/<int:project_id>')
 @login_required
+@require('view_workspace')
 def table_row(project_id):
     """
     Targeted single-row refresh, answered without building the whole view.
@@ -975,6 +977,7 @@ def _build_page_context(view, user):
 
 @project_list_bp.route('/')
 @login_required
+@require('view_workspace')
 def index():
     """ Three fixes presets. Set now as we build it out"""
     user = _effective_user()
@@ -1000,6 +1003,7 @@ def index():
 
 @project_list_bp.route('/page-state')
 @login_required
+@require('view_workspace')
 def page_state():
     """
     AJAX/JSON counterpart to index() — same context via _build_page_context(),
@@ -1058,6 +1062,7 @@ def page_state():
 
 @project_list_bp.route('/layout', methods=['POST'])
 @login_required
+@require('view_workspace')
 def save_layout():
     """
     Silently persists one user's column widths/order for one table+view.
@@ -1085,6 +1090,7 @@ def save_layout():
 
 @project_list_bp.route('/<int:project_id>/expand')
 @login_required
+@require('view_workspace')
 def expand(project_id):
     project = Project.query.get_or_404(project_id)
 
@@ -1114,6 +1120,7 @@ def expand(project_id):
 
 @project_list_bp.route('/customer/<int:project_customer_id>/expand')
 @login_required
+@require('view_workspace')
 def expand_customer(project_customer_id):
     """
     Sublevel 2, C&CM only: one customer's own deliverables. Same on-
@@ -1285,6 +1292,7 @@ def _group_rows(rows, field):
 
 @project_list_bp.route('/views', methods=['POST'])
 @login_required
+@require('view_workspace')
 def create_view():
     """
     Saves the current filter selection (whatever's active right now) as a
@@ -1313,6 +1321,7 @@ def create_view():
 
 @project_list_bp.route('/views/<int:view_id>/rename', methods=['POST'])
 @login_required
+@require('view_workspace')
 def rename_view(view_id):
     user = _effective_user()
     view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first_or_404()
@@ -1328,6 +1337,7 @@ def rename_view(view_id):
 
 @project_list_bp.route('/views/<int:view_id>/delete', methods=['POST'])
 @login_required
+@require('view_workspace')
 def delete_view(view_id):
     user = _effective_user()
     view = ProjectTableView.query.filter_by(id=view_id, user_id=user.id).first_or_404()

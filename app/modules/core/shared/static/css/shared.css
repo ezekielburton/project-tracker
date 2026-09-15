@@ -526,3 +526,89 @@ the backend already handles fine. */
     background: var(--surface-hover);
 }
 
+/*  ---- Module rail
+    The inner left nav a module's own screens share (Client Servicing,
+    Digital Innovation, HSE). Markup comes from _shared_macros.html's
+    module_rail(). Each module still owns its page/shell wrapper and its
+    height strategy — only the rail itself lives here. */
+
+.module-rail {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: var(--space-5) var(--space-4);
+    position: sticky;
+    top: 0;
+    align-self: stretch;
+    /* A column so a module can push its own footer block to the bottom with
+       .module-rail-foot. Everything else keeps the order it had: a rail with
+       no foot renders exactly as before. */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Pinned to the bottom of the rail. Opt-in: Digital Innovation's project
+   switcher belongs directly under the nav, not floated away from it. */
+.module-rail-foot {
+    margin-top: auto;
+}
+
+.module-rail-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+/* Separates the nav from whatever a module puts below it. A rail with
+   nothing after the nav gets no trailing gap. */
+.module-rail-nav:not(:last-child) {
+    margin-bottom: var(--space-6);
+}
+
+.module-rail-item {
+    display: block;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+/* Carries an icon or a count, so the row becomes a flex line. Text-only
+   items stay display:block, which is what they rendered as before. */
+.module-rail-item--rich {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+/* Tangerine, matching .settings-nav-item.active — the app already says
+   "this one is active" this way, and a grey fill cannot be picked out of a
+   rail of nine. The alpha wash reads on both grounds, which is why there is
+   no dark override here. */
+.module-rail-item--active {
+    background: rgba(242, 127, 85, 0.14);
+    color: var(--tangerine);
+    font-weight: 600;
+}
+
+.module-rail-item--disabled {
+    color: var(--text-faint, var(--text-muted));
+    cursor: default;
+    opacity: 0.6;
+}
+
+.module-rail-icon {
+    flex-shrink: 0;
+}
+
+.module-rail-count {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    padding: 0 var(--space-2);
+    border-radius: 999px;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+}

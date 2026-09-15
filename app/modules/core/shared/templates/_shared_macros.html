@@ -319,5 +319,42 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     </div>
     {% endmacro %}
 
+    {# Inner module rail — the left nav a module's own screens share
+       (Client Servicing, Digital Innovation, HSE). `items` is a list of
+       dicts: key, label, url (falsy renders a non-link placeholder), plus
+       optional count (a badge), icon (SVG path data) and extra_class. The
+       item whose key equals `active` renders active. Anything a module
+       needs below the nav goes in a {% call %} block.
+       Each module still owns its own page/shell wrapper and its height
+       strategy — only the rail is shared. #}
+    {% macro module_rail(items, active) %}
+    <aside class="module-rail">
+        <nav class="module-rail-nav">
+            {%- for item in items %}
+            {%- set rich = item.get('icon') or item.get('count') is not none %}
+            {%- set classes = 'module-rail-item'
+                ~ (' module-rail-item--rich' if rich else '')
+                ~ (' module-rail-item--active' if item.get('key') == active else '')
+                ~ ('' if item.get('url') else ' module-rail-item--disabled')
+                ~ ((' ' ~ item.get('extra_class')) if item.get('extra_class') else '') %}
+            {%- if item.get('url') %}
+            <a href="{{ item.get('url') }}" class="{{ classes }}">{{ module_rail_body(item, rich) }}</a>
+            {%- else %}
+            <span class="{{ classes }}">{{ module_rail_body(item, rich) }}</span>
+            {%- endif %}
+            {%- endfor %}
+        </nav>
+        {%- if caller %}{{ caller() }}{% endif %}
+    </aside>
+    {% endmacro %}
 
-
+    {# Row contents. A plain item emits its label as a bare text node, so a
+       text-only rail renders exactly as it did before the rail was shared. #}
+    {% macro module_rail_body(item, rich) %}
+    {%- if not rich %}{{ item.get('label') }}
+    {%- else %}
+    {%- if item.get('icon') %}<svg class="module-rail-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.get('icon') }}"/></svg>{% endif %}
+    {{- item.get('label') }}
+    {%- if item.get('count') is not none %}<span class="module-rail-count">{{ item.get('count') }}</span>{% endif %}
+    {%- endif %}
+    {%- endmacro %}

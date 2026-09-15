@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}HSE — {{ reg.label }}{% endblock %}
+
+{% block content %}
+{# The module's own page/shell wrapper. The rail is the shared
+   .module-rail; .hse-page / .hse-shell / .hse-main are this module's own
+   height chain. Deliberately not a nested <main> — spa_strip_response()
+   slices at the first </main>. #}
+<div class="hse-page">
+    <div class="hse-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="hse-main">
+            <div class="hse-inner hse-inner--fill">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">{{ reg.label }}</h1>
+                    <div class="hse-header-actions">
+                        {# Filing is manage_hse. Management reads the register
+                           and gets no opener; the endpoints 403 regardless. #}
+                        {% if can('manage_hse', effective_user) %}
+                        <button type="button" class="hse-btn hse-btn--primary"
+                                data-hse-form-url="{{ url_for('hse.new_entry_form', register_key=reg.key) }}">
+                            + New entry
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# The registers behind this rail entry. #}
+                {% if tabs|length > 1 %}
+                <div class="tab-strip">
+                    {% for t in tabs %}
+                    <a class="tab-strip-item hse-tab{{ ' active' if t.key == reg.key else '' }}"
+                       href="{{ url_for('hse.register_page', group_key=t.group, register_key=t.key) }}">{{ t.label }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {# One row: what the table is filtered to on the left, the
+                   controls that change it on the right. Every one of them is
+                   a link or a form GET, so the view survives a refresh. #}
+                <div class="hse-filterbar">
+                    {% if chips %}
+                    <div class="hse-chips">
+                        {% for chip in chips %}
+                        <a class="hse-chip{{ ' is-selected' if chip.value == filters.status else '' }}"
+                           href="{{ chip.url }}">
+                            {{ chip.label }}<span class="hse-chip-count">{{ chip.count }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div></div>
+                    {% endif %}
+
+                    <form class="hse-filters" method="get"
+                          action="{{ url_for('hse.register_page', group_key=active_group, register_key=reg.key) }}">
+                        {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+
+                        {% if severities %}
+                        <select class="hse-select" name="severity" aria-label="Filter by severity">
+                            <option value="">All severities</option>
+                            {% for s in severities %}
+                            <option value="{{ s }}"{{ ' selected' if s == filters.severity else '' }}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+
+                        {% if years %}
+                        <select class="hse-select" name="year" aria-label="Filter by year">
+                            <option value="">All years</option>
+                            {% for y in years %}
+                            <option value="{{ y }}"{{ ' selected' if y == filters.year else '' }}>{{ y }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+
+                        <input type="search" name="q" class="hse-search-input" value="{{ filters.search or '' }}"
+                               placeholder="Search…" aria-label="Search {{ reg.label|lower }}">
+                        <button type="submit" class="hse-visually-hidden">Search</button>
+                    </form>
+                </div>
+
+                {% include 'hse/_table.html' %}
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_registers.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_entry_modal.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from 'hse/_calendar_tabs.html' import calendar_tabs %}
+{% from 'hse/_calendar_macros.html' import cal_kpis, cal_legend, drawer_card, log_picker %}
+
+{% block title %}HSE — Agenda{% endblock %}
+
+{% block content %}
+<div class="hse-page">
+    <div class="hse-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="hse-main">
+            <div class="hse-inner">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">Calendar</h1>
+                    <div class="hse-header-actions">
+                        <span class="hse-month-chip">Next {{ days_ahead }} days</span>
+                        <a class="hse-btn hse-tab"
+                           href="{{ url_for('hse.schedule_page') }}">+ New schedule</a>
+                        {% if can('manage_hse', effective_user) %}
+                        <button type="button" class="hse-btn hse-btn--primary"
+                                data-hse-open-picker>+ Log entry</button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {{ calendar_tabs(active_view) }}
+                {{ cal_kpis(kpis) }}
+
+                <div class="hse-cal-monthbar">
+                    {{ cal_legend(chips, 'agenda') }}
+                </div>
+
+                {{ log_picker(log_registers) }}
+
+                <div class="hse-cal-agenda">
+                    {% for group in groups %}
+                    <section class="hse-cal-agenda-day">
+                        <div class="hse-cal-agenda-head">
+                            <span class="hse-cal-agenda-date">
+                                {{ group.date.strftime('%a') }} &middot; {{ group.date.day }} {{ group.date.strftime('%b') }}
+                                {%- if group.date == today %} <span class="hse-tag">Today</span>{% endif %}
+                            </span>
+                            <span class="hse-cal-agenda-sum">{{ group.summary }}</span>
+                        </div>
+                        {% for card in group.cards %}
+                            {{ drawer_card(card, can('manage_hse', effective_user)) }}
+                        {% endfor %}
+                    </section>
+                    {% else %}
+                    <p class="hse-cal-drawer-sum">
+                        Nothing due in the next {{ days_ahead }} days. If that looks wrong,
+                        the Schedule tab is where the recurring work is set up.
+                    </p>
+                    {% endfor %}
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_entry_modal.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_calendar.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

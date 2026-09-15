@@ -224,6 +224,10 @@
     margin-bottom: 0.35rem;
 }
 
+ol.wiki-block-list {
+    list-style-type: decimal;
+}
+
 .wiki-block-image {
     margin: 1.25rem 0;
 }
@@ -438,4 +442,175 @@
     font-size: 0.85rem;
     color: var(--grey-mid);
     font-style: italic;
+}
+
+/* ── Article editor (Editor.js) ──────────────────────────────────────────── */
+
+.wiki-editor-shell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 0.5rem;
+    min-height: 320px;
+}
+
+.wiki-editor-shell .codex-editor {
+    color: var(--text);
+}
+
+.wiki-editor-shell .ce-block__content,
+.wiki-editor-shell .ce-toolbar__content {
+    max-width: none;
+    margin: 0 2.75rem;
+}
+
+.wiki-editor-shell .ce-paragraph[data-placeholder]:empty::before,
+.wiki-editor-shell .ce-header[data-placeholder]:empty::before,
+.wiki-editor-shell .codex-editor--empty .ce-block:first-child .ce-paragraph[data-placeholder]::before {
+    color: var(--text-faint);
+}
+
+.wiki-editor-shell .ce-header {
+    color: var(--tangerine);
+}
+
+.wiki-editor-shell .ce-toolbar__plus,
+.wiki-editor-shell .ce-toolbar__settings-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+}
+
+.wiki-editor-shell .ce-toolbar__plus:hover,
+.wiki-editor-shell .ce-toolbar__settings-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+/* The "/" insert menu and the per-block settings menu */
+.wiki-editor-shell .ce-popover__container {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+}
+
+.wiki-editor-shell .ce-popover-item__title,
+.wiki-editor-shell .ce-popover-item__icon,
+.wiki-editor-shell .ce-popover__items {
+    color: var(--text);
+}
+
+.wiki-editor-shell .ce-popover-item:hover:not(.ce-popover-item--no-hover),
+.wiki-editor-shell .ce-popover-item--active {
+    background: var(--surface-hover);
+}
+
+.wiki-editor-shell .cdx-search-field {
+    background: var(--surface);
+    border: 1px solid var(--border);
+}
+
+.wiki-editor-shell .cdx-search-field__input {
+    color: var(--text);
+}
+
+.wiki-editor-shell .ce-inline-toolbar {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.wiki-editor-shell .ce-inline-tool,
+.wiki-editor-shell .ce-inline-toolbar__dropdown {
+    color: var(--text);
+}
+
+.wiki-editor-shell .ce-inline-tool:hover,
+.wiki-editor-shell .ce-inline-toolbar__dropdown:hover {
+    background: var(--surface-hover);
+}
+
+/* ── Custom block: callout ───────────────────────────────────────────────── */
+
+.wiki-editor-callout {
+    background: var(--sandstone);
+    border-left: 3px solid var(--tangerine);
+    border-radius: 0 6px 6px 0;
+    padding: 0.85rem 1.1rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.wiki-editor-callout--pine {
+    border-left-color: var(--pine);
+}
+
+.wiki-editor-callout__text:focus {
+    outline: none;
+}
+
+.wiki-editor-callout__text:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-faint);
+}
+
+:root[data-theme="dark"] .wiki-editor-callout {
+    background: color-mix(in srgb, var(--tangerine) 14%, transparent);
+}
+
+:root[data-theme="dark"] .wiki-editor-callout--pine {
+    background: color-mix(in srgb, var(--pine) 14%, transparent);
+}
+
+/* ── Custom block: video ─────────────────────────────────────────────────── */
+
+.wiki-editor-video {
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+}
+
+.wiki-editor-video__modes {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.wiki-editor-video__mode {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.75rem;
+}
+
+.wiki-editor-video__mode.is-active {
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+.wiki-editor-video__input {
+    width: 100%;
+}
+
+.wiki-editor-video__status {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin: 0.5rem 0 0;
+    min-height: 1em;
+}
+
+.wiki-editor-shell .ce-block--helix-drop-above > .ce-block__content {
+    box-shadow: 0 -2px 0 0 var(--border-strong);
+}
+
+.wiki-editor-shell .ce-block--helix-drop-below > .ce-block__content {
+    box-shadow: 0 2px 0 0 var(--border-strong);
+}
+
+.wiki-editor-shell .wiki-editor--dragging,
+.wiki-editor-shell .wiki-editor--dragging * {
+    -webkit-user-select: none;
+    user-select: none;
 }

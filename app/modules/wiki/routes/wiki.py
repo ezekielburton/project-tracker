@@ -6,6 +6,7 @@ from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import WikiSection, WikiArticle
 from app.modules.core.shared.lib.capabilities import can, require
 from app.modules.core.shared.lib.utils import slugify
+from app.modules.wiki.lib.blocks import load_blocks, sanitize_document
 
 wiki_bp = Blueprint('wiki', __name__, template_folder='../templates')
 
@@ -26,7 +27,7 @@ def get_article(article_id):
     article = WikiArticle.query.get_or_404(article_id)
     if not article.is_published and not can('manage_wiki'):
         abort(403)
-    blocks = json.loads(article.sections_json or '[]')
+    blocks = load_blocks(article.sections_json)
     return render_template('wiki/_article_content.html', article=article, blocks=blocks)
 
 #------ Image upload & serve ------
@@ -139,9 +140,15 @@ def save_article():
         return jsonify({'success': False, 'error': 'Title and section are required'}), 400
 
     try:
-        json.loads(sections_json)
+        payload = json.loads(sections_json)
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid content data'}), 400
+
+    document = sanitize_document(payload)
+    if document is None:
+        return jsonify({'success': False, 'error': 'Invalid content data'}), 400
+
+    sections_json = json.dumps(document)
 
     if article_id:
         article               = WikiArticle.query.get_or_404(int(article_id))

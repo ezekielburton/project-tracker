@@ -1,0 +1,12 @@
+{# The calendar's three views. Each is a plain link; hse_nav.js routes
+   .hse-tab clicks through navigateTo so they stay SPA swaps. #}
+{% macro calendar_tabs(active_view) %}
+<div class="tab-strip">
+    <a class="tab-strip-item hse-tab{{ ' active' if active_view == 'month' else '' }}"
+       href="{{ url_for('hse.calendar_month') }}">Month</a>
+    <a class="tab-strip-item hse-tab{{ ' active' if active_view == 'agenda' else '' }}"
+       href="{{ url_for('hse.calendar_month', view='agenda') }}">Agenda</a>
+    <a class="tab-strip-item hse-tab{{ ' active' if active_view == 'schedule' else '' }}"
+       href="{{ url_for('hse.schedule_page') }}">Schedule</a>
+</div>
+{% endmacro %}

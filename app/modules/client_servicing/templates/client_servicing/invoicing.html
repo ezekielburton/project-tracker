@@ -25,7 +25,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {# Loaded for everyone now — the search box is in here too, and each
    feature no-ops when its own DOM isn't present. #}
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_invoicing.js') }}?v={{ config.STATIC_VERSION }}"></script>

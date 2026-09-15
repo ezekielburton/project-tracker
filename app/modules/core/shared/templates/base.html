@@ -53,6 +53,7 @@
     <link rel="stylesheet" href="{{ url_for('project_assets.static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('project_assets.static', filename='css/chat_tray.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('digital_innovation_assets.static', filename='css/digital_innovation.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('hse_assets.static', filename='css/hse.css') }}?v={{ config.STATIC_VERSION }}">
     {% block extra_css %}{% endblock %}
 
     {# Local-dev safety net: the Werkzeug reloader restarting mid-session (a
@@ -152,8 +153,13 @@
                 <span class="sidebar-section-label">Internal Tools</span>
                 <div class="sidebar-grid">
 
-                            {# Dashboard link — no role gate, every role gets it,
-                               same as Projects/Wiki below. #}
+                            {# The general workspace. A single-module role (the HSE officer) holds no
+                               view_workspace, so everything inside this gate is hidden for them —
+                               they get their own module, File Storage and the Wiki. Hiding is
+                               cosmetic; the routes are the real boundary and 403 regardless. #}
+                            {% if can('view_workspace', effective_user) %}
+
+                            {# Dashboard link — every role that holds view_workspace. #}
                             <a href="{{ url_for('projects.index') }}" class="sidebar-item sidebar-item--nav"
                                 data-link="dashboard" title="Dashboard">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
@@ -206,6 +212,32 @@
                                 <span class="sidebar-item-label">Client Servicing</span>
                             </span>
                             {% endif %}
+                            {% endif %}{# /view_workspace #}
+
+                            {# HSE & Compliance — internal nav link. Gated on view_hse; without
+                               it the item dims to a plain span, the same sidebar-item--unlinked
+                               treatment Client Servicing uses — the routes 403 regardless. #}
+                            {% if can('view_hse', effective_user) %}
+                            <a href="{{ url_for('hse.index') }}" class="sidebar-item sidebar-item--nav" data-link="hse"
+                                title="HSE &amp; Compliance">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" />
+                                    <path d="M9 12l2 2 4-4" />
+                                </svg>
+                                <span class="sidebar-item-label">HSE &amp; Compliance</span>
+                            </a>
+                            {% else %}
+                            <span class="sidebar-item sidebar-item--unlinked" data-link="hse"
+                                title="HSE &amp; Compliance — not available for your role">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" />
+                                    <path d="M9 12l2 2 4-4" />
+                                </svg>
+                                <span class="sidebar-item-label">HSE &amp; Compliance</span>
+                            </span>
+                            {% endif %}
 
                             {# File Storage — external link, opens NAS in new tab #}
                             <a href="http://quickconnect.to/vitaminNAS26/drive" target="_blank"
@@ -222,6 +254,7 @@
                                 <span class="sidebar-item-label">File Storage</span>
                             </a>
 
+                            {% if can('view_workspace', effective_user) %}
                             {# Digital Innovation — internal nav link, JS intercepts and loads without refresh #}
                             <a href="{{ url_for('digital_innovation.index') }}" class="sidebar-item sidebar-item--nav"
                                 data-link="digital-innovation" title="Digital Innovation">
@@ -234,6 +267,7 @@
                                 </svg>
                                 <span class="sidebar-item-label">Digital Innovation</span>
                             </a>
+                            {% endif %}{# /view_workspace #}
 
                             {# Wiki — internal knowledge base #}
                             <a href="{{ url_for('wiki.index') }}" class="sidebar-item sidebar-item--nav" data-link="wiki" title="Wiki">
@@ -262,6 +296,7 @@
                 </div>
             </div>
 
+            {% if can('view_workspace', effective_user) %}
             <div class="sidebar-divider"></div>
 
             {# ── SECTION 2: External Tools ── #}
@@ -427,19 +462,9 @@
                         <span class="sidebar-item-label">Birthday Calendar</span>
                     </span>
 
-                    <span class="sidebar-item sidebar-item--unlinked" data-link="raise-issue" title="Raise an Issue">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path
-                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                            <line x1="12" y1="9" x2="12" y2="13" />
-                            <line x1="12" y1="17" x2="12.01" y2="17" />
-                        </svg>
-                        <span class="sidebar-item-label">Raise an Issue</span>
-                    </span>
-
                 </div>
             </div>
+            {% endif %}{# /view_workspace #}
 
         </nav>
     </aside>
@@ -1281,6 +1306,10 @@
     {% block extra_js %}{% endblock %}
     <!-- SPA:EXTRA_JS:END -->
     <script src="{{ url_for('core.static', filename='js/sidebar.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    {# Routes the inner module rail's links through sidebar.js's navigateTo.
+       Document-delegated, so it loads once here rather than per module. #}
+    <script src="{{ url_for('core.static', filename='js/module_rail.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('core.static', filename='js/fill_height.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('core.static', filename='js/settings-overlay.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
     {% if current_user.is_authenticated %}

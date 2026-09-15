@@ -26,18 +26,13 @@
     // property the box's `height` reads; the CSS calc(100vh - 180px) is
     // only the pre-JS fallback.
     function syncTableScrollHeight() {
-        var box = document.getElementById('cs-table-scroll');
-        var footer = document.querySelector('.footer');
-        if (!box || !footer) return;
-        // Height that makes the box's bottom edge meet the footer's top.
-        // box.top and the footer height are independent of the box's own
-        // height, so this solves it directly rather than nudging a delta.
-        var boxRect = box.getBoundingClientRect();
-        var footerRect = footer.getBoundingClientRect();
-        var target = window.innerHeight - boxRect.top - footerRect.height;
-        if (target > 100) { // guard against a mid-layout-thrash reading
-            box.style.setProperty('--cs-table-scroll-height', target + 'px');
-        }
+        // The solve moved to core/shared/js/fill_height.js when HSE needed
+        // the same one — second copy, so it was extracted (conventions.md).
+        // The call sites below are unchanged. If that file ever fails to
+        // load, .cs-table-scroll falls back to its own calc() in the CSS.
+        if (!window.fillHeightToFooter) return;
+        window.fillHeightToFooter(document.getElementById('cs-table-scroll'),
+                                  '--cs-table-scroll-height');
     }
 
     // ── Click-to-sort ─────────────────────────────────────────────

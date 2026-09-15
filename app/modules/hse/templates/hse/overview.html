@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}HSE — Overview{% endblock %}
+
+{% block content %}
+<div class="hse-page">
+    <div class="hse-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="hse-main">
+            <div class="hse-inner hse-inner--fill">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">Overview</h1>
+                    <div class="hse-header-actions">
+                        <span class="hse-month-chip">Week of {{ week_label }} {{ year_label }}</span>
+                        <a class="hse-btn hse-tab"
+                           href="{{ url_for('hse.calendar_month') }}">Calendar</a>
+                        {% if can('manage_hse', effective_user) %}
+                        <a class="hse-btn hse-btn--primary hse-tab"
+                           href="{{ url_for('hse.calendar_today') }}">+ Log entry</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# Five cards, each a number with what it counts underneath.
+                   The sub-line is what stops a manager reading "13" as
+                   thirteen of anything. #}
+                <div class="hse-ov-tiles">
+                    <div class="hse-ov-tile">
+                        <div class="hse-ov-num">{{ tiles.needs_you_now }}</div>
+                        <div class="hse-ov-lab">Needs you now</div>
+                        <div class="hse-ov-sub">Overdue or lapsed</div>
+                    </div>
+                    <div class="hse-ov-tile">
+                        <div class="hse-ov-num">{{ tiles.open_incidents }}</div>
+                        <div class="hse-ov-lab">Open incidents</div>
+                        <div class="hse-ov-sub">Of {{ severity.total }} this year</div>
+                    </div>
+                    <div class="hse-ov-tile">
+                        <div class="hse-ov-num">{{ tiles.done }}<span class="hse-ov-of">/{{ tiles.due }}</span></div>
+                        <div class="hse-ov-lab">Done vs due</div>
+                        <div class="hse-ov-sub">{{ month_label }}</div>
+                    </div>
+                    <div class="hse-ov-tile">
+                        <div class="hse-ov-num">{{ tiles.expiring_soon }}</div>
+                        <div class="hse-ov-lab">Expiring soon</div>
+                        <div class="hse-ov-sub">Certificates &amp; insurance</div>
+                    </div>
+                    {# Nothing tracked is not the same as nothing valid, so an
+                       empty register reads as a dash rather than 0%. #}
+                    <div class="hse-ov-tile">
+                        <div class="hse-ov-num">
+                            {% if tiles.health_percent is none %}—{% else %}{{ tiles.health_percent }}%{% endif %}
+                        </div>
+                        <div class="hse-ov-lab">Compliance health</div>
+                        <div class="hse-ov-sub">{{ tiles.health_valid }} of {{ tiles.health_total }} valid</div>
+                    </div>
+                </div>
+
+                <div class="hse-ov-body">
+                    <div class="hse-ov-col">
+
+                        <section class="hse-ov-panel hse-ov-panel--grow">
+                            <div class="hse-ov-head">
+                                <h2 class="hse-ov-title">Needs you now</h2>
+                                <span class="hse-ov-note">Oldest first</span>
+                            </div>
+                            {% for row in needs.rows %}
+                            <a class="hse-ov-row" href="#"
+                               data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
+                                <span class="hse-ov-tag">{{ row.register_label }}</span>
+                                <span class="hse-ov-row-main">
+                                    <span class="hse-ov-row-title">{{ row.title }}</span>
+                                    <span class="hse-ov-row-sub">{{ row.ref }}</span>
+                                </span>
+                                <span class="hse-ov-row-meta">
+                                    {% if row.severity %}<span class="hse-ov-sev">{{ row.severity }}</span>{% endif %}
+                                    {% if row.over_sla %}<span class="hse-ov-late">{{ row.over_sla }}d over</span>
+                                    {% else %}<span class="hse-ov-age">{{ row.days_open }}d open</span>{% endif %}
+                                </span>
+                            </a>
+                            {% else %}
+                            <p class="hse-ov-empty">Nothing outstanding. Everything open is either new or with someone else.</p>
+                            {% endfor %}
+                            {% if needs.more %}
+                            <p class="hse-ov-more">and {{ needs.more }} more</p>
+                            {% endif %}
+                        </section>
+
+                        <section class="hse-ov-panel">
+                            <div class="hse-ov-head">
+                                <h2 class="hse-ov-title">Compliance</h2>
+                                <span class="hse-ov-note">
+                                    {% if health.percent is none %}nothing tracked
+                                    {% else %}{{ health.valid }} of {{ health.total }} valid{% endif %}
+                                </span>
+                            </div>
+                            {# What lapsed is named rather than hidden. A page that
+                               only flatters is worth nothing in the room. #}
+                            {% for row in expiring.rows %}
+                            <a class="hse-ov-row{{ ' is-lapsed' if row.lapsed else '' }}" href="#"
+                               data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
+                                <span class="hse-ov-row-main">
+                                    <span class="hse-ov-row-title">{{ row.title }}</span>
+                                    <span class="hse-ov-row-sub">{{ row.register_label }} · {{ row.ref }}</span>
+                                </span>
+                                <span class="hse-ov-row-meta">
+                                    {% if row.lapsed %}
+                                    <span class="hse-ov-late">expired {{ row.days | abs }}d ago</span>
+                                    {% else %}
+                                    <span class="hse-ov-age">{{ row.days }}d left</span>
+                                    {% endif %}
+                                </span>
+                            </a>
+                            {% else %}
+                            <p class="hse-ov-empty">Nothing expiring in the next month.</p>
+                            {% endfor %}
+                            {% if expiring.more %}
+                            <p class="hse-ov-more">and {{ expiring.more }} more</p>
+                            {% endif %}
+                        </section>
+
+                    </div>
+
+                    <div class="hse-ov-side">
+
+                        {# Counted, not typed. Every column of the weekly HSC
+                           report is derivable from the registers, which is
+                           why that report is a generated view. #}
+                        <section class="hse-ov-panel">
+                            <h2 class="hse-ov-title hse-ov-title--ruled">This week</h2>
+                            <div class="hse-ov-line"><span>Incidents</span><span class="hse-ov-fig">{{ week.incidents }}</span></div>
+                            <div class="hse-ov-line"><span>Near misses</span><span class="hse-ov-fig">{{ week.near_misses }}</span></div>
+                            <div class="hse-ov-line">
+                                <span>Inspections</span>
+                                <span class="hse-ov-fig">{{ week.inspections_done }}<span class="hse-ov-of">/{{ week.inspections_due }}</span></span>
+                            </div>
+                            <div class="hse-ov-line"><span>Trainings</span><span class="hse-ov-fig">{{ week.trainings }}</span></div>
+                            <div class="hse-ov-line"><span>Actions opened</span><span class="hse-ov-fig">{{ week.opened }}</span></div>
+                            <div class="hse-ov-line hse-ov-line--last"><span>Actions closed</span><span class="hse-ov-fig">{{ week.closed }}</span></div>
+                            <p class="hse-ov-foot">
+                                Feeds the weekly HSC report. Due counts come from the calendar schedule.
+                            </p>
+                        </section>
+
+                        <section class="hse-ov-panel hse-ov-panel--grow">
+                            <h2 class="hse-ov-title hse-ov-title--ruled">Incidents by severity</h2>
+                            {# Scaled against the tallest bar, not the total:
+                               with four severities a share-of-total bar is
+                               always short and says nothing. #}
+                            {% for b in severity.bars %}
+                            <div class="hse-ov-bar">
+                                <div class="hse-ov-barhead">
+                                    <span>{{ b.label }}</span>
+                                    <span class="hse-ov-barcount">{{ b.count }}</span>
+                                </div>
+                                <div class="hse-ov-track">
+                                    <div class="hse-ov-fill hse-ov-fill--{{ b.tone }}" style="width: {{ b.percent }}%"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            <p class="hse-ov-foot">
+                                {{ severity.total }} logged in {{ year_label }} · {{ severity.resolved }} resolved{% if severity.unrated %} · {{ severity.unrated }} without a severity{% endif %}
+                            </p>
+                        </section>
+
+                        <section class="hse-ov-panel">
+                            <div class="hse-ov-head">
+                                <h2 class="hse-ov-title">Waiting on others</h2>
+                                <span class="hse-ov-count">{{ waiting.total }}</span>
+                            </div>
+                            {# Its own panel on purpose: the performance page refuses
+                               to measure what he does not control, and this should
+                               not read as work he is behind on. #}
+                            {% for row in waiting.rows %}
+                            <a class="hse-ov-row" href="#"
+                               data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
+                                <span class="hse-ov-row-main">
+                                    <span class="hse-ov-row-title">{{ row.title }}</span>
+                                    <span class="hse-ov-row-sub">{{ row.person }} · {{ row.ref }}</span>
+                                </span>
+                                <span class="hse-ov-row-meta"><span class="hse-ov-age">{{ row.days }}d</span></span>
+                            </a>
+                            {% else %}
+                            <p class="hse-ov-empty">Nothing parked with anyone.</p>
+                            {% endfor %}
+                        </section>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_entry_modal.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

@@ -1,10 +1,12 @@
 /* Client Servicing page. All colours are role tokens, per theming.md —
    no hard-coded hex. */
 
-/* Module's own internal sidebar shell (Table / Invoicing / Calendar),
-   mirroring Digital Innovation's .di-page/.di-shell/.di-sidebar — copied
-   per the modular-build convention rather than shared. .client-servicing-page
-   is unchanged; it just nests inside .cs-main now. */
+/* Module's own page/shell wrapper (Table / Invoicing / Calendar). The rail
+   itself is shared — .module-rail in shared.css, rendered by
+   _shared_macros.html's module_rail(). What stays here is the height
+   strategy, which is this module's own: the flex chain below is what lets
+   syncTableScrollHeight() solve against the real footer.
+   .client-servicing-page is unchanged; it nests inside .cs-main. */
 
 /* Fills whatever height .main-content ends up with, so the sidebar reaches
    the footer on a short page (Closed, an empty Calendar) instead of stopping
@@ -20,7 +22,7 @@
 /* Let the sidebar run flush against the global sidebar and flush to the
    viewport's right edge — .main-content's blanket 2rem padding (meant
    for ordinary pages) otherwise leaves a 32px gap on both sides.
-   .cs-sidebar and .client-servicing-page re-add their own inner
+   .module-rail and .client-servicing-page re-add their own inner
    padding, so content still isn't jammed against the edges. */
 .main-content:has(.cs-page) {
     padding-left: 0;
@@ -38,38 +40,6 @@
     display: flex;
     align-items: stretch;
     flex: 1;
-}
-
-.cs-sidebar {
-    width: 220px;
-    flex-shrink: 0;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    padding: var(--space-5) var(--space-4);
-    position: sticky;
-    top: 0;
-    align-self: stretch;
-}
-
-.cs-sidebar-nav {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-}
-
-.cs-nav-item {
-    display: block;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-sm);
-    color: var(--text-muted);
-    text-decoration: none;
-}
-
-.cs-nav-item--active {
-    background: var(--surface-hover);
-    color: var(--text);
-    font-weight: 600;
 }
 
 .cs-main {

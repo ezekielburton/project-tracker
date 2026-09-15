@@ -57,6 +57,13 @@ ALL_CAPABILITIES = frozenset({
     'write_friction_log',
     # Time tracking
     'view_time_reports',
+    # HSE & Compliance
+    'view_hse',
+    'manage_hse',
+    # The app shell. Held by every role whose work spans the platform, so a
+    # single-module role sees only its own module plus the things everyone
+    # gets (File Storage, the Wiki).
+    'view_workspace',
 })
 
 
@@ -80,6 +87,7 @@ ADMIN_ONLY = frozenset({
 # Read-only across Projects and Client Servicing. Shared by the roles whose own
 # modules do not exist yet, so their access widens in one place later.
 _READ_ONLY_STAFF = {
+    'view_workspace',
     'view_cs',
     'view_finance',
     'view_all_projects',
@@ -91,6 +99,7 @@ ROLE_CAPABILITIES = {
     'admin': {'*'},
 
     'management': {
+        'view_workspace',
         'view_cs', 'view_finance', 'edit_invoicing_thresholds', 'close_projects',
         'view_all_projects', 'manage_projects', 'create_projects', 'start_projects',
         'review_submissions', 'transfer_projects', 'edit_client_directory',
@@ -98,11 +107,13 @@ ROLE_CAPABILITIES = {
         'complete_preproduction', 'manage_project_files',
         'switch_dashboard_scope', 'view_team_snapshot',
         'view_di_performance', 'view_all_di',
+        'view_hse',
         'write_friction_log',
         'view_time_reports',
     },
 
     'cs': {
+        'view_workspace',
         'view_cs', 'view_finance', 'edit_finance', 'close_projects',
         'view_all_projects', 'create_projects', 'review_submissions',
         'transfer_projects', 'edit_client_directory', 'raise_flags',
@@ -110,10 +121,12 @@ ROLE_CAPABILITIES = {
     },
 
     'finance': {
+        'view_workspace',
         'view_cs', 'view_finance', 'edit_finance',
     },
 
     'project_owner': {
+        'view_workspace',
         'view_cs', 'view_all_projects', 'create_projects', 'log_site_visits',
         'claim_ownership',
     },
@@ -121,16 +134,26 @@ ROLE_CAPABILITIES = {
     # Designer and team_lead hold the same capabilities; what separates them is
     # the team a deliverable belongs to, which is a per-record rule, not a role.
     'designer': {
+        'view_workspace',
         'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
         'start_projects',
     },
     'team_lead': {
+        'view_workspace',
         'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
         'start_projects',
     },
 
     'digital_innovation': {
+        'view_workspace',
         'view_all_di',
+    },
+
+    # No view_workspace: the officer sees the HSE module, File Storage and
+    # the Wiki, and nothing else. test_hse_sidebar.py pins that decision so a
+    # new role cannot land here by accident.
+    'hse': {
+        'view_hse', 'manage_hse',
     },
 
     'hr': set(_READ_ONLY_STAFF),
@@ -151,6 +174,7 @@ ROLE_LABELS = {
     'hr': 'HR',
     'production': 'Production',
     'logistics': 'Logistics',
+    'hse': 'HSE Officer',
     'admin': 'Admin',
 }
 

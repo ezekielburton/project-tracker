@@ -1,0 +1,112 @@
+{# Calendar render macros — the KPI row, the legend, a day's chips and one
+   drawer card. Shared by the month grid, the agenda and the fetched day
+   drawer so the three cannot drift apart. #}
+
+{% macro cal_kpis(kpis) %}
+<div class="hse-cal-kpis">
+    <div class="hse-cal-kpi">
+        <div class="hse-cal-kpi-lab">Planned this month</div>
+        <div class="hse-cal-kpi-val">{{ kpis.due }}</div>
+    </div>
+    <div class="hse-cal-kpi">
+        <div class="hse-cal-kpi-lab"><span class="hse-cal-dot hse-cal-dot--done"></span>Done</div>
+        <div class="hse-cal-kpi-val">{{ kpis.done }}</div>
+    </div>
+    <div class="hse-cal-kpi">
+        <div class="hse-cal-kpi-lab"><span class="hse-cal-dot hse-cal-dot--overdue"></span>Overdue</div>
+        <div class="hse-cal-kpi-val">{{ kpis.overdue }}</div>
+    </div>
+    {# Nothing due is not the same as failing, so it reads as a dash. #}
+    <div class="hse-cal-kpi">
+        <div class="hse-cal-kpi-lab">Coverage to date</div>
+        <div class="hse-cal-kpi-val">{% if kpis.percent is none %}—{% else %}{{ kpis.percent }}%{% endif %}</div>
+    </div>
+    <div class="hse-cal-kpi">
+        <div class="hse-cal-kpi-lab">Unplanned logged</div>
+        <div class="hse-cal-kpi-val">{{ kpis.unplanned }}</div>
+    </div>
+</div>
+{% endmacro %}
+
+{# The legend is also the filter: clicking a state narrows to it, clicking
+   it again clears. Hollow and filled match the grid, so it reads as a key. #}
+{% macro cal_legend(chips, view) %}
+<div class="hse-cal-legend">
+    {% for chip in chips %}
+    {# A key first and a filter second, so it stays as quiet as a key: the
+       count lives in the tooltip rather than putting a number and a box
+       around every state. #}
+    <a class="hse-cal-legend-item{{ ' is-selected' if chip.active else '' }}"
+       href="{{ url_for('hse.calendar_month', view=view, state=chip.href_state) }}"
+       title="{{ chip.count }} {{ chip.label|lower }}">
+        <span class="hse-cal-dot hse-cal-dot--{{ chip.value }}{{ '' if chip.filled else ' is-hollow' }}"></span>{{ chip.label }}
+    </a>
+    {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro item_chip(item) %}
+<span class="hse-cal-chip" title="{{ item.label }}">
+    <span class="hse-cal-dot hse-cal-dot--{{ item.state }}{{ '' if item.filled else ' is-hollow' }}"></span>
+    <span class="hse-cal-chip-text">{{ item.label }}</span>
+</span>
+{% endmacro %}
+
+{# One card, one thing to do. Flat on purpose — an occurrence covering six
+   vehicles is six cards, because six vehicles is six jobs. #}
+{% macro drawer_card(card, can_edit) %}
+<div class="hse-cal-card hse-cal-card--{{ card.state }}">
+    <div class="hse-cal-card-body">
+        <div class="hse-cal-card-title">{{ card.title }}</div>
+        {% if card.subtitle %}<div class="hse-cal-card-sub">{{ card.subtitle }}</div>{% endif %}
+        {% if card.ref and card.state in ('done', 'logged') %}
+        <div class="hse-cal-card-ref mono">{{ card.ref }}</div>
+        {% endif %}
+        {% if card.meta %}<div class="hse-cal-card-meta">{{ card.meta }}</div>{% endif %}
+    </div>
+
+    <div class="hse-cal-card-action">
+        {% if card.state in ('done', 'logged') %}
+            {% if card.entry_id %}
+            <a class="hse-cal-done" href="#"
+               data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=card.entry_id) }}">
+                <span class="hse-cal-tick">&check;</span>{{ 'Done' if card.state == 'done' else 'Logged' }}
+            </a>
+            {% endif %}
+        {% elif card.entry_id %}
+            <a class="hse-btn hse-cal-btn" href="#"
+               data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=card.entry_id) }}">Open</a>
+        {% elif can_edit and card.register %}
+            {# Prefilled, and the save is an ordinary entry — the register
+               table and the tiles update from it too. #}
+            <a class="hse-btn hse-cal-btn" href="#"
+               data-hse-form-url="{{ url_for('hse.new_entry_form',
+                    register_key=card.register,
+                    date=card.date.isoformat(),
+                    asset=card.asset_id,
+                    schedule=card.schedule_id,
+                    occurrence=(card.date.isoformat() if card.schedule_id else None)) }}">Log it</a>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+{# The register picker behind "+ Log entry" and "+ Log something else".
+   Rendered once per page and shown on demand; hse_calendar.js stamps the
+   open day onto the link before handing it to the entry overlay. #}
+{% macro log_picker(log_registers) %}
+<div class="hse-picker" id="hse-picker" hidden>
+    <div class="hse-picker-head">
+        <span class="hse-picker-title">Log into which register?</span>
+        <button type="button" class="hse-link-btn" id="hse-picker-close">Cancel</button>
+    </div>
+    <div class="hse-picker-list">
+        {% for reg in log_registers %}
+        <button type="button" class="hse-picker-item" data-register="{{ reg.key }}">
+            <span class="hse-picker-item-label">{{ reg.label }}</span>
+            <span class="hse-picker-item-group">{{ reg.group|capitalize }}</span>
+        </button>
+        {% endfor %}
+    </div>
+</div>
+{% endmacro %}

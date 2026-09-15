@@ -92,7 +92,9 @@ def create_app(config=Config):
     from app.modules.time_tracking.blueprint import time_tracking_assets
     from app.modules.client_servicing.blueprint import client_servicing_assets
     from app.modules.digital_innovation.blueprint import digital_innovation_assets
+    from app.modules.hse.blueprint import hse_assets
     from app.modules.digital_innovation.models import DiProject, DiFeature, DiFeatureStep, DiStepTemplate, DiCostEntry, DiSetting, DiPeriodSnapshot, DiIntakeItem  # registers the tables with SQLAlchemy
+    from app.modules.hse.models import HseEntry, HseSchedule, HseAsset, HseReference, HsePerson, HseRefCounter, HseAttachment  # registers the tables with SQLAlchemy
     from app.modules.digital_innovation.routes import board as di_board  # registers board routes on digital_innovation_bp
     from app.modules.digital_innovation.routes import projects as di_projects  # registers project-create route on digital_innovation_bp
     from app.modules.digital_innovation.routes import features as di_features  # registers feature routes on digital_innovation_bp
@@ -112,6 +114,15 @@ def create_app(config=Config):
     from app.modules.client_servicing.routes import close as client_servicing_close  # close / close-out endpoint
     from app.modules.client_servicing.routes import closed as client_servicing_closed  # Closed Projects sidebar section
     from app.modules.client_servicing.routes.blueprint import client_servicing_bp
+    from app.modules.hse.routes import registers as hse_registers  # registers the register surface on hse_bp
+    from app.modules.hse.routes import entries as hse_entries  # registers the entry overlay + save endpoints on hse_bp
+    from app.modules.hse.routes import attachments as hse_attachments  # registers the NAS attachment endpoints on hse_bp
+    from app.modules.hse.routes import lists as hse_lists  # registers the officer's own reference lists on hse_bp
+    from app.modules.hse.routes import schedules as hse_schedules  # registers the Schedule tab on hse_bp
+    from app.modules.hse.routes import calendar as hse_calendar  # registers the calendar month/agenda/day on hse_bp
+    from app.modules.hse.routes import overview as hse_overview  # registers the module's front page on hse_bp
+    from app.modules.hse.routes import performance as hse_performance  # registers My performance and its report on hse_bp
+    from app.modules.hse.routes.blueprint import hse_bp
 
 
     app.register_blueprint(core_bp)  # shared templates + static
@@ -153,6 +164,8 @@ def create_app(config=Config):
     app.register_blueprint(digital_innovation_assets)
     app.register_blueprint(digital_innovation_bp)
     app.register_blueprint(client_servicing_bp)
+    app.register_blueprint(hse_assets)
+    app.register_blueprint(hse_bp)
 
     @app.context_processor
     def inject_notifications():

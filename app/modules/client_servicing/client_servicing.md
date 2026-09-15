@@ -35,7 +35,6 @@ app/modules/client_servicing/
 Routes are one concern per file. Static (in the module):
 `static/js/client_servicing.js` (table inline-edit, sort, search + filter),
 `static/js/client_servicing_dashboard.js` (dashboard SSE refresh),
-`static/js/client_servicing_nav.js` (internal SPA nav),
 `static/js/client_servicing_calendar.js`, `static/js/client_servicing_invoicing.js`,
 `static/css/client_servicing.css` (table, calendar, dashboard, toolbar).
 
@@ -113,6 +112,19 @@ Six panels:
 - **Module feed** — `services/dashboard_feed.py::feed_for(user)` exposes the cross-cutting subset (upcoming installs + finance items) for the future global Dashboard — same computation as the panels, one source. Empty for no-access users; finance items hidden from non-finance.
 - **Layout** — role tokens, light + dark; the two list panels scroll internally, the page scrolls to the bottom row.
 - **Live refresh** — panels live in `_dashboard_panels.html`, re-rendered by `GET /dashboard-panels`. `polling.js` opens `/sse/dashboard` on the `.cs-dash` marker and calls `window.helixRefreshCSDashboard()` (`client_servicing_dashboard.js`), which swaps `#cs-dash-panels`. Same doorbell as the table/calendar.
+
+## Table height
+
+`.cs-table-scroll` is sized so its bottom edge meets the footer, which is what
+keeps its horizontal scrollbar on screen. Flexbox cannot do it — `.main-content`
+is a flex item with no definite height, so a flex child grows to its content
+and the page scrolls instead.
+
+`syncTableScrollHeight()` is now a two-line call into
+`core/shared/js/fill_height.js`; the maths moved there when Digital Innovation
+and HSE turned out to need the same solve. Its call sites are unchanged, and
+`--cs-table-scroll-height` still drives the CSS. If that file ever fails to
+load, the CSS `calc()` fallback takes over.
 
 ## The table
 Reuses the projects-table patterns: the shared `UserTableLayout` model
@@ -196,10 +208,10 @@ Sidebar shell, in order: **Dashboard** (landing) · **Table** · **Invoicing** �
 app-sidebar entry is a live link pointing at `client_servicing.index`.
 
 Internal nav between the four sections is SPA soft-nav:
-`client_servicing_nav.js` routes `.cs-nav-item` clicks through the app's
-`window.navigateTo`. The global `sidebar.js` only intercepts its own
-`.sidebar-item--nav`, so each module SPA-ifies its own secondary nav — same
-pattern as `digital_innovation_nav.js`. The listener is document-delegated and
+core/shared's `module_rail.js` routes `.module-rail-item` clicks through the
+app's `window.navigateTo`. The global `sidebar.js` only intercepts its own
+`.sidebar-item--nav`, so the shared rail SPA-ifies itself for every module that
+uses it. The listener is document-delegated and
 guarded (`_csNavDispatcherWired`), so it survives SPA swaps without stacking.
 
 ## Remaining scope
