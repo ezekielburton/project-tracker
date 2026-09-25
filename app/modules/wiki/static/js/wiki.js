@@ -1,22 +1,8 @@
 (function () {
     'use strict';
 
-    // ── VIEWER ────────────────────────────────────────────────────────────────────
-
-    // NOTE: contentPanel is NOT captured at module scope. The wiki page can be
-    // reached via SPA navigation (sidebar.js swaps #main-content), in which case
-    // the DOM is replaced but this IIFE doesn't re-run. Always look it up fresh.
-
-    function toEmbedUrl(url) {
-        if (!url) return null;
-        var yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^\&\?\/]+)/);
-        if (yt) return 'https://www.youtube.com/embed/' + yt[1];
-        var vi = url.match(/vimeo\.com\/(\d+)/);
-        if (vi) return 'https://player.vimeo.com/video/' + vi[1];
-        return null;
-    }
-
     function loadArticle(articleId) {
+        // Looked up per call: an SPA swap replaces the panel without re-running this file.
         var contentPanel = document.getElementById('wiki-content-panel');
         if (!contentPanel) return;
 
@@ -28,15 +14,7 @@
 
         fetch('/wiki/article/' + articleId)
             .then(function (r) { return r.text(); })
-            .then(function (html) {
-                contentPanel.innerHTML = html;
-                contentPanel.querySelectorAll('[data-video-url]').forEach(function (el) {
-                    var embedUrl = toEmbedUrl(el.dataset.videoUrl);
-                    if (embedUrl) {
-                        el.innerHTML = '<iframe src="' + embedUrl + '" allowfullscreen></iframe>';
-                    }
-                });
-            })
+            .then(function (html) { contentPanel.innerHTML = html; })
             .catch(function () {
                 contentPanel.innerHTML = '<p style="padding:2rem;color:var(--rose);">Failed to load article.</p>';
             });
@@ -44,9 +22,7 @@
         history.replaceState(null, '', '#article-' + articleId);
     }
 
-    // Nav clicks — delegated to document so they survive SPA navigation
-    // (after sidebar.js swaps #main-content, the original <a> elements are gone
-    // but the document listener stays alive)
+    // Delegated to document so the binding outlives an SPA swap.
     document.addEventListener('click', function (e) {
         var a = e.target.closest('.wiki-nav-article');
         if (!a) return;
@@ -54,10 +30,8 @@
         loadArticle(a.dataset.articleId);
     });
 
-    // Auto-load: first article or hash-specified article.
-    // Named function so it can be called on both initial load AND SPA navigation.
     function autoLoadWiki() {
-        if (!document.getElementById('wiki-content-panel')) return; // not on wiki page
+        if (!document.getElementById('wiki-content-panel')) return;
         var match = window.location.hash.match(/^#article-(\d+)$/);
         if (match) {
             loadArticle(match[1]);
@@ -69,8 +43,6 @@
 
     autoLoadWiki();
     document.addEventListener('helix:navigated', autoLoadWiki);
-
-    // ── Section publish + delete (dashboard) ─────────────────────────────────────
 
     document.querySelectorAll('.wiki-section-publish-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -106,8 +78,6 @@
         });
     });
 
-    // ── Delete article ────────────────────────────────────────────────────────────
-
     var deleteArticleBtn = document.getElementById('wiki-delete-article-btn');
     if (deleteArticleBtn) {
         deleteArticleBtn.addEventListener('click', function () {
@@ -121,7 +91,6 @@
                     .catch(function () { showToast('Something went wrong', 'error'); });
             }, 'Delete Article');
         });
-    }  
+    }
 
 }());
-

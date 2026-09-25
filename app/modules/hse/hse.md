@@ -9,13 +9,20 @@ Twenty-one near-identical registers are one table plus one declaration.
 
 - `HSE_REGISTERS` (`lib/registers.py`) declares each register: key, label, rail
   group, ref prefix, how its status is arrived at, and its fields. Forms,
-  tables, filters and the importer render from it. **Adding a register is one
+  tables, filters and validation render from it. **Adding a register is one
   entry here, not a feature.**
 - `HseEntry` holds every entry. A field is a real column when it is shared
   across registers or is a foreign key; everything else lands in `data` (JSONB).
 
 **Person and asset references are always FK columns, never JSONB.** An id inside
 JSONB has no referential integrity and rots the first time a record is merged.
+
+**So is any name that has to track its source.** The compliance certificate sits
+behind `compliance_item_id` — a `HseReference` of kind `compliance_item` — rather
+than as text in `data`, so renaming a certificate carries its whole renewal
+history with it instead of forking a new one. A choice in JSONB stores the label,
+frozen at write time; only an FK-backed one survives a rename. Text that is
+genuinely free text (the Tools and Materials `item` fields) stays in `data`.
 
 ## Nothing derived is ever stored
 
@@ -31,6 +38,8 @@ A register declares `status_source`:
 - `stored` — the officer sets it, from the register's own `statuses` tuple.
 - `expiry` — Valid / Expiring soon / Expired, a pure function of `due_at`.
   Nothing writes the `status` column for these registers.
+- `none` — a log with no status at all (mileage, costs, toolbox talks). No chips,
+  no days-open column, and excluded from the rail's open counts.
 
 Read it through `computed.effective_status(entry, register)`, never off the
 column directly.
@@ -41,6 +50,26 @@ column directly.
 `can_hold_actions`. That time is reported on its own and is excluded from
 `days_owned`, so the SLA clock pauses. The performance page measures what the
 officer controls; a decision he chased for six weeks is not his delay.
+
+## The dashboards read one entry set
+
+`lib/metrics.py` holds the definitions so the Overview, the calendar and My
+performance cannot quote different numbers for the same word. **That is not
+enough on its own:** a shared function still gives two answers if each page hands
+it a different set of rows, which is exactly what happened when the two pages
+loaded 400 and 800 days. The loader is shared too — `dashboard_entries()` in
+`lib/query.py` — and a page that needs a longer window passes it as an argument.
+
+**Anything carrying a due date is loaded whatever its issue date.** `entry_date`
+on a certificate is when it was *issued*, so a window on that date drops a
+five-year licence out of the very number meant to count it.
+
+**Compliance health is one row per certificate, not one per renewal.** Renewing
+files a new entry and leaves the old one in the register, so counting both makes
+renewing *lower* the score — the superseded row reads as lapsed beside its valid
+replacement. `_expiring()` keeps the latest filing per `compliance_item_id`
+(later `entry_date`, and on a tie the higher id); an entry with no certificate
+set counts on its own.
 
 ## Refs
 
@@ -93,12 +122,12 @@ see what is coming without a dead link. The rail itself is the shared
 `.module-rail` — see `_shared_macros.html`.
 
 **Status chips are links, not client-side filters.** The filter then survives a
-refresh and can be pasted to someone. Search is client-side over the rows already
-on the page.
+refresh and can be pasted to someone. Search and paging are server-side too —
+see the filter pass at the end of this file.
 
 **Lists are eager-loaded in one round trip** (`lib/query.py`): a row shows five
 related records, and lazy-loading them is the N+1 the dashboard module is being
-rebuilt to undo. `ROW_LIMIT` caps a page at the 500 most recent entries.
+rebuilt to undo.
 
 ## Front-end notes
 
@@ -144,6 +173,14 @@ rebuilding it on read — relabelling a register later cannot orphan a file.
 - Attachments need an entry to hang off, so they appear once it exists. Creating
   an entry reopens the overlay in edit mode rather than closing, which keeps
   "file it, then attach the report" one continuous job.
+- **Preview reuses the app's one file-preview modal.** `openFilePreview` is
+  already global from `base.html` — the same modal the project reference files
+  open — so the Preview button on an attachment row needed only a route.
+  `/hse/files/<id>/preview` serves the same bytes inline and returns JSON with a
+  reason for a type it cannot render or a NAS read that fails, which is the
+  contract that modal reads. Previewable is images and PDF (`PREVIEWABLE` in
+  `lib/files.py`); Office and video stay downloads, because converting them is
+  the projects module's preview-cache job.
 
 
 ## Lists & people
@@ -237,8 +274,9 @@ to someone else. Nothing is held in JavaScript.
   how many rows it would land on, not how many exist.
 - **Search is server-side.** It had to be: client-side search over a paged
   table only searches the page on screen, which quietly returns nothing. It
-  covers the ref, the whole JSONB blob, and the names behind the foreign keys;
-  the six outer joins only go on when someone is actually searching.
+  covers the ref, the whole JSONB blob, and the names behind the foreign keys —
+  the compliance certificate included, which is a reference row and not text in
+  the blob; the seven outer joins only go on when someone is actually searching.
 - **A stored status is SQL; a computed expiry status is not.** `status_source
   == 'expiry'` is a function of `due_at` and today, so that branch loads the
   matching rows and pages in Python. Compliance is the only expiry register and

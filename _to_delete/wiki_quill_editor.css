@@ -1,0 +1,115 @@
+/* ═══════════════════════════════════════════════════════
+   Editor — block builder (mirrors blog editor style)
+   ═══════════════════════════════════════════════════════ */
+
+.wiki-editor-block {
+    border: 1px solid var(--grey-light, var(--gray-e5e5e5));
+    border-radius: 6px;
+    background: var(--white);
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+}
+
+.wiki-editor-block-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.75rem;
+    background: var(--sandstone);
+}
+
+.block-type-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--grey-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex: 1;
+}
+
+.wiki-editor-block-header .btn-icon {
+    background: none;
+    border: none;
+    color: var(--grey-mid);
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s;
+}
+
+.wiki-editor-block-header .btn-icon:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--black);
+}
+
+.wiki-editor-block-header .btn-icon:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+.wiki-editor-block-header .btn-icon[style*="rose"]:hover {
+    background: rgba(217, 162, 168, 0.15);
+}
+
+.wiki-editor-block-body {
+    padding: 0.65rem 0.75rem;
+}
+
+.wiki-editor-block-body textarea,
+.wiki-editor-block-body input[type="text"],
+.wiki-editor-block-body input[type="url"] {
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    color: var(--black);
+    resize: vertical;
+    line-height: 1.6;
+}
+
+/* Quill inside a block */
+.wiki-quill-container .ql-toolbar {
+    border: none;
+    border-bottom: 1px solid var(--sandstone);
+    padding: 0.25rem 0.5rem;
+}
+
+.wiki-quill-container .ql-container {
+    border: none;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    min-height: 80px;
+}
+
+/* Image upload area */
+.wiki-image-preview {
+    min-height: 40px;
+    margin-bottom: 0.4rem;
+}
+
+/* Add block toolbar */
+.wiki-add-block-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: var(--sandstone);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.wiki-add-block-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--grey-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 0.25rem;
+    white-space: nowrap;
+}

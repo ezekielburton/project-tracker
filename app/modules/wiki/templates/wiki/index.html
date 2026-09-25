@@ -19,7 +19,7 @@
                 <div style="display:flex;gap:0.25rem;flex-wrap:wrap;margin-top:0.25rem;">
                     {% if section.relevant_roles %}
                     {% for role in section.relevant_roles.split(',') %}
-                    <span class="wiki-role-badge">{{ role.strip() }}</span>
+                    <span class="wiki-role-badge">{{ role_label(role) }}</span>
                     {% endfor %}
                     {% endif %}
                     {% if not section.is_published %}

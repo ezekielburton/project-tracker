@@ -178,6 +178,11 @@ ROLE_LABELS = {
     'admin': 'Admin',
 }
 
+def role_label(value):
+    """ Key to label for a badge. Anything unrecognised passes through, so sections stored before roles became keys still read correctly."""
+    value = (value or '').strip()
+    return ROLE_LABELS.get(value, value)
+
 
 def effective_user():
     """The user whose role governs — the emulated user when an admin is viewing

@@ -13,6 +13,10 @@ app/modules/wiki/
   lib/help_keys.py          # the help-key registry and coverage figures
   static/js/wiki.js         # reader, dashboard CRUD, slug, publish/delete
   static/js/wiki_editor.js  # Editor.js setup for the article editor
+  static/js/block_drag.js   # capture-phase block dragging inside the editor
+  static/js/editor_autosave.js
+  static/js/editor_dashboard.js
+  static/js/help_tray.js    # loaded by base.html, not by the wiki templates
   static/js/blocks/         # helix_callout.js, helix_video.js — our two tools
   templates/wiki/           # index, _article_content, editor_dashboard,
                             # editor_article, _section_modal, _article_modal,
@@ -25,6 +29,7 @@ app/modules/wiki/
   tests/test_wiki_dashboard.py
   tests/test_wiki_help_keys.py
   tests/test_wiki_help_tray.py
+  tests/test_wiki_editor_access.py
   wiki.md
 ```
 
@@ -39,7 +44,8 @@ app/modules/wiki/
   Upload File (`block.source`).
 - `POST /wiki/editor/article/autosave` — parks the working copy in the
   article's draft; creates the article first if it does not exist yet. Writes
-  with raw SQL so it never bumps `updated_at`, which readers see.
+  through the ORM with `updated_at` assigned to itself, so the reader's Last
+  Updated never moves.
 - `GET /wiki/help` — every readable article, for the Help pill
 - `GET /wiki/help/<key>` — the article claiming that key, or the gap plus a
   "Write this article" shortcut for admins
@@ -67,9 +73,16 @@ the inline allowlist (nh3) to editor text, and `sanitize_document` cleans a
 whole document on save — dropping unknown blocks and unsafe media URLs. Block
 types: `paragraph`, `header`, `list`, `image`, `helixCallout`, `helixVideo`.
 
+Video embeds are host-checked, not substring-matched: `EMBED_HOSTS` allows
+youtube.com, youtu.be and vimeo.com, matched against the parsed hostname, and
+anything else renders as a plain link. `load_blocks` re-checks on read, so
+content migrated in before the save gate existed is judged too.
+
 ## Editor
 `editor_article.html` mounts Editor.js, pinned by exact version and loaded from
-jsDelivr: editorjs 2.30.7, header 2.8.9, list 1.9.0, image 2.10.3. `header` is
+jsDelivr: editorjs 2.30.7, header 2.8.9, list 1.9.0, image 2.10.3. Each is
+loaded with a subresource integrity hash and `crossorigin="anonymous"`, so a
+changed file on the CDN is refused rather than run. `header` is
 fixed to level 3, and `list` 1.x stores items as plain strings. Image and video
 uploads reuse the existing endpoints — the image tool goes through an
 `uploader.uploadByFile` hook so `/wiki/upload-image` keeps its response shape.
@@ -93,6 +106,12 @@ dashboard using the app's standard modal (`.modal-overlay` / `.modal-box`, plus
 the three templates; `tests/test_wiki_dashboard.py` reads that list and checks
 the markup.
 
+A section's Relevant roles are stored as role keys, and the picker is built from
+`ROLE_LABELS` in `core/shared/lib/capabilities.py` so it can never drift from
+the app's real role list. Badges render through the `role_label` helper, which
+passes an unrecognised value through unchanged — sections saved before the
+change still read correctly, with no migration.
+
 ## Help keys and coverage
 `lib/help_keys.py` is the registry: every place in the app that should have an
 article, grouped, as key and label. An article claims a key through
@@ -104,8 +123,9 @@ app rather than from memory.
 
 This is a declared-contract seam: nothing in Python or the test suite notices a
 page declaring a key that was never registered — it just renders a dead "?".
-`tests/test_wiki_help_keys.py` scans every template for `data-help-key="..."`
-and fails on any key missing from the registry.
+`tests/test_wiki_help_keys.py` scans every template for both `help_button('…')`
+calls and literal `data-help-key` attributes, and fails on any key missing from
+the registry.
 
 ## The contextual "?"
 `help_button(key)` in `core/shared/templates/_shared_macros.html` puts a "?"
@@ -151,6 +171,10 @@ the chosen skeleton at the end of its section, and reorder is admin-only.
 unique, no template names an unregistered key (it scans both `help_button('…')`
 calls and literal `data-help-key` attributes), the coverage figures add up, and
 claiming a key moves it off whichever article held it.
+`tests/test_wiki_editor_access.py` — every `/wiki/editor` route plus the two
+upload endpoints, read from the route baseline: a designer is refused, so is a
+designer claiming to emulate an admin, and a real admin gets through whether or
+not they are previewing as someone else.
 `tests/test_wiki_help_tray.py` — the dock offers a Help launcher, the help
 routes render an article or the gap, drafts read as a gap to a non-admin, and
 only an admin is offered the write shortcut.

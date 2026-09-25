@@ -18,11 +18,11 @@
                         else.</span>
                 </label>
                 <div class="wiki-role-options">
-                    {% for role in ['Admin', 'CS', 'Designer', 'Team Lead', 'Management'] %}
+                    {# Keys, not labels — capabilities.py owns the role list. #}
+                    {% for key, label in role_labels.items() %}
                     <label class="team-tag-toggle">
-                        <input type="checkbox" name="relevant_roles" value="{{ role }}"
-                            data-role="{{ role }}">
-                        {{ role }}
+                        <input type="checkbox" name="relevant_roles" value="{{ key }}" data-role="{{ key }}">
+                        {{ label }}
                     </label>
                     {% endfor %}
                 </div>

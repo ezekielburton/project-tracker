@@ -17,6 +17,8 @@ PINNED_LIBRARIES = [
     '@editorjs/image@2.10.3/dist/image.umd.js',
 ]
 
+SCRIPT_TAG = re.compile(r'<script\b[^>]*\bsrc="([^"]+)"[^>]*>', re.I)
+
 
 def _declared_ids():
     """Read the id list wiki_editor.js declares, rather than restating it here."""
@@ -47,9 +49,15 @@ def test_editor_template_carries_every_declared_id():
 
 
 def test_editor_template_pins_every_library():
+    """A pinned version is only half the promise — without a hash, a changed
+    file on the CDN still runs."""
     template = open(EDITOR_TEMPLATE, encoding='utf-8').read()
+    tags = {match.group(1): match.group(0) for match in SCRIPT_TAG.finditer(template)}
     for library in PINNED_LIBRARIES:
-        assert library in template, f'editor_article.html no longer loads {library}'
+        src = next((s for s in tags if library in s), None)
+        assert src, f'editor_article.html no longer loads {library}'
+        assert 'integrity="sha256-' in tags[src], f'{library} is loaded without an integrity hash'
+        assert 'crossorigin="anonymous"' in tags[src], f'{library} needs crossorigin for integrity to apply'
 
 
 def test_editor_template_resolves(app):

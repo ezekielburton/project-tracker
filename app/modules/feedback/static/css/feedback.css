@@ -112,27 +112,23 @@
 }
 
 .fr-status-pill--requested {
-    background: var(--tint-fef9c3);
-    color: var(--tint-78650a);
-    border-color: var(--tint-f0dc6a);
+    background: var(--sky);
+    color: var(--black);
 }
 
 .fr-status-pill--in_progress {
-    background: var(--tint-ffe4d0);
-    color: var(--tint-9a4a1a);
-    border-color: var(--tint-f9c094);
+    background: var(--coral);
+    color: var(--black);
 }
 
 .fr-status-pill--testing {
-    background: var(--tint-ffd5d5);
-    color: var(--tint-8a2020);
-    border-color: var(--tint-f5aaaa);
+    background: var(--canary);
+    color: var(--black);
 }
 
 .fr-status-pill--implemented {
-    background: var(--tint-d4f0d4);
-    color: var(--tint-1e6b1e);
-    border-color: var(--tint-a8dfa8);
+    background: var(--clover);
+    color: var(--black);
 }
 
 /* ── Feature detail header ───────────────────────────────── */
@@ -404,27 +400,23 @@
 }
 
 .br-status-pill--in_queue {
-    background: var(--tint-e8f4f8);
-    color: var(--tint-1a5276);
-    border-color: var(--tint-aed6f1);
+    background: var(--sky);
+    color: var(--black);
 }
 
 .br-status-pill--fix_in_progress {
-    background: var(--tint-ffe4d0);
-    color: var(--tint-9a4a1a);
-    border-color: var(--tint-f9c094);
+    background: var(--coral);
+    color: var(--black);
 }
 
 .br-status-pill--testing {
-    background: var(--tint-fef9c3);
-    color: var(--tint-78650a);
-    border-color: var(--tint-f0dc6a);
+    background: var(--canary);
+    color: var(--black);
 }
 
 .br-status-pill--resolved {
-    background: var(--tint-d4f0d4);
-    color: var(--tint-1e6b1e);
-    border-color: var(--tint-a8dfa8);
+    background: var(--clover);
+    color: var(--black);
 }
 
 /* Larger pill in detail title row */
@@ -433,4 +425,29 @@
     padding: 0.3rem 0.75rem;
     margin-top: 0.5rem;
     flex-shrink: 0;
+}
+
+/* ── Dark status pills — tint + tone ink, matching the Signal tray ──────── */
+:root[data-theme="dark"] .fr-status-pill--requested,
+:root[data-theme="dark"] .br-status-pill--in_queue {
+    background: rgba(185, 222, 254, 0.16);
+    color: var(--tone-sky);
+}
+
+:root[data-theme="dark"] .fr-status-pill--in_progress,
+:root[data-theme="dark"] .br-status-pill--fix_in_progress {
+    background: rgba(255, 133, 89, 0.16);
+    color: var(--tone-coral);
+}
+
+:root[data-theme="dark"] .fr-status-pill--testing,
+:root[data-theme="dark"] .br-status-pill--testing {
+    background: rgba(229, 210, 89, 0.16);
+    color: var(--tone-canary);
+}
+
+:root[data-theme="dark"] .fr-status-pill--implemented,
+:root[data-theme="dark"] .br-status-pill--resolved {
+    background: rgba(76, 175, 90, 0.18);
+    color: var(--tone-clover);
 }

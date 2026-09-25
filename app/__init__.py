@@ -327,9 +327,10 @@ def create_app(config=Config):
 
     # Capability gate. Templates ask can('view_finance') instead of listing
     # roles; role_labels drives every role picker from the same map.
-    from app.modules.core.shared.lib.capabilities import can, ROLE_LABELS
+    from app.modules.core.shared.lib.capabilities import can, ROLE_LABELS, role_label
     app.jinja_env.globals['can'] = can
     app.jinja_env.globals['role_labels'] = ROLE_LABELS
+    app.jinja_env.globals['role_label'] = role_label
 
     @app.context_processor
     def inject_effective_user():

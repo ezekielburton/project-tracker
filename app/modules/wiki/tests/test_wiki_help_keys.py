@@ -153,20 +153,16 @@ def test_the_article_losing_a_key_keeps_its_updated_at(app, client, db_session):
     section = WikiSection(title='S', slug='k-move-date')
     db_session.add(section)
     db_session.commit()
-    first = _article(db_session, section, 'k-date-first', help_key='cs_closed', title='First')
+    first = _article(db_session, section, 'k-date-first', help_key='cs.closed', title='First')
     second = _article(db_session, section, 'k-date-second', title='Second')
     was_updated_at = first.updated_at
 
     client.post('/wiki/editor/article/save', data={
         'article_id': str(second.id), 'section_id': str(section.id), 'title': 'Second',
-        'help_key': 'cs_closed',
+        'help_key': 'cs.closed',
         'sections_json': json.dumps({'time': 0, 'version': '2.30.7', 'blocks': []}),
     })
     db_session.expire_all()
 
     assert WikiArticle.query.get(first.id).help_key is None
     assert WikiArticle.query.get(first.id).updated_at == was_updated_at
-
-
-
-

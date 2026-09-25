@@ -325,3 +325,80 @@
     flex-grow: 1;
     resize: none;
 }
+
+/* ── Status pills ────────────────────────────────────────────
+   One colour per stage, shared by both boards. Same pill language as the
+   Projects status pills: solid pastel in light, tint + tone ink in dark. */
+.signal-tray__pill.is-in_queue,
+.signal-tray__pill.is-requested {
+    background: var(--sky);
+    color: var(--black);
+}
+
+.signal-tray__pill.is-fix_in_progress,
+.signal-tray__pill.is-in_progress {
+    background: var(--coral);
+    color: var(--black);
+}
+
+.signal-tray__pill.is-testing {
+    background: var(--canary);
+    color: var(--black);
+}
+
+.signal-tray__pill.is-resolved,
+.signal-tray__pill.is-implemented {
+    background: var(--clover);
+    color: var(--black);
+}
+
+:root[data-theme="dark"] .signal-tray__pill.is-in_queue,
+:root[data-theme="dark"] .signal-tray__pill.is-requested {
+    background: rgba(185, 222, 254, 0.16);
+    color: var(--tone-sky);
+}
+
+:root[data-theme="dark"] .signal-tray__pill.is-fix_in_progress,
+:root[data-theme="dark"] .signal-tray__pill.is-in_progress {
+    background: rgba(255, 133, 89, 0.16);
+    color: var(--tone-coral);
+}
+
+:root[data-theme="dark"] .signal-tray__pill.is-testing {
+    background: rgba(229, 210, 89, 0.16);
+    color: var(--tone-canary);
+}
+
+:root[data-theme="dark"] .signal-tray__pill.is-resolved,
+:root[data-theme="dark"] .signal-tray__pill.is-implemented {
+    background: rgba(76, 175, 90, 0.18);
+    color: var(--tone-clover);
+}
+
+/* ── Primary action ──────────────────────────────────────────
+   "Report a bug" / "New request" are the one action in the header, so they
+   take the app-wide tangerine treatment — solid in light, tinted in dark,
+   matching .btn-primary. .signal-tray__back stays neutral. */
+.signal-tray__new {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    color: var(--white);
+}
+
+.signal-tray__new:hover {
+    background: transparent;
+    border-color: var(--tangerine);
+    color: var(--tangerine);
+}
+
+:root[data-theme="dark"] .signal-tray__new {
+    background: rgba(242, 127, 85, 0.15);
+    border-color: rgba(242, 127, 85, 0.45);
+    color: var(--tangerine);
+}
+
+:root[data-theme="dark"] .signal-tray__new:hover {
+    background: rgba(242, 127, 85, 0.28);
+    border-color: var(--tangerine);
+    color: var(--tangerine);
+}
