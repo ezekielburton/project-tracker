@@ -328,6 +328,11 @@ ol.wiki-block-list {
     font-style: italic;
 }
 
+/* The empty line is the drop target's height, so it only hides once a row lands. */
+.wiki-editor-article-list:has(.wiki-editor-article-row) .wiki-editor-empty {
+    display: none;
+}
+
 /* ── Article editor (Editor.js) ──────────────────────────────────────────── */
 
 .wiki-editor-shell {

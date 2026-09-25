@@ -200,13 +200,15 @@ def _claim_help_key(article, key):
     return cleared
 
 
-def _apply_order(model, ids):
+def _apply_order(model, ids, extra=None):
     """Write sort_order from list position, leaving updated_at untouched."""
     for position, row_id in enumerate(ids):
         row_id = _int_or_none(str(row_id))
         if row_id is None:
             continue
         values = {'sort_order': position}
+        if extra:
+            values.update(extra)
         if hasattr(model, 'updated_at'):
             # Assigning the column to itself is what stops onupdate firing.
             values['updated_at'] = model.updated_at
@@ -250,7 +252,11 @@ def reorder_sections():
 @login_required
 @require('manage_wiki', real_user=True)
 def reorder_articles():
-    _apply_order(WikiArticle, (request.get_json(silent=True) or {}).get('article_ids') or [])
+    """The list a row is dropped into owns it, so the move and the order are one write."""
+    payload = request.get_json(silent=True) or {}
+    section_id = _int_or_none(str(payload.get('section_id') or ''))
+    extra = {'section_id': WikiSection.query.get_or_404(section_id).id} if section_id else None
+    _apply_order(WikiArticle, payload.get('article_ids') or [], extra)
     return jsonify({'success': True})
 
 

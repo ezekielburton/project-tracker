@@ -54,6 +54,11 @@ HELP_KEY_GROUPS = [
         ('time_tracking.log', 'Logging time'),
         ('blog.updates', 'Release updates'),
     ]),
+    ('Chat and Signal', [
+        ('chat.projects', 'Project chat'),
+        ('signal.report', 'Reporting a bug or an idea'),
+        ('signal.friction', 'The weekly friction log'),
+    ]),
     ('Wiki', [
         ('wiki.editor', 'Writing a wiki article'),
         ('wiki.help-keys', 'Help keys and coverage'),

@@ -48,7 +48,6 @@
             </div>
         </div>
 
-        {% if section.articles %}
         <div class="wiki-editor-article-list" data-section-id="{{ section.id }}">
             {% for article in section.articles %}
             <div class="wiki-editor-article-row" data-article-id="{{ article.id }}">
@@ -68,10 +67,8 @@
                     class="btn-secondary btn-sm">Edit</a>
             </div>
             {% endfor %}
+            <p class="wiki-editor-empty">No articles yet. Drag one here, or use New article.</p>
         </div>
-        {% else %}
-        <p class="wiki-editor-empty">No articles yet.</p>
-        {% endif %}
 
     </div>
     {% endfor %}

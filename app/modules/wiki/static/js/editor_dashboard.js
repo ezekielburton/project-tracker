@@ -36,8 +36,10 @@
     }
 
     function saveArticleOrder(list) {
-        post(WIKI_REORDER_ARTICLES_URL, { article_ids: idsIn(list, '.wiki-editor-article-row', 'articleId') })
-            .catch(function () { showToast('Could not save the new order', 'error'); });
+        post(WIKI_REORDER_ARTICLES_URL, {
+            section_id: list.dataset.sectionId,
+            article_ids: idsIn(list, '.wiki-editor-article-row', 'articleId')
+        }).catch(function () { showToast('Could not save the new order', 'error'); });
     }
 
     function startDragging() {
@@ -52,9 +54,14 @@
 
         document.querySelectorAll('.wiki-editor-article-list').forEach(function (articles) {
             new Sortable(articles, {
+                group: 'wiki-articles',
                 handle: '.wiki-article-drag-handle',
                 animation: 150,
-                onEnd: function () { saveArticleOrder(articles); }
+                onEnd: function (event) {
+                    // A row crossing sections changes both lists, so both are saved.
+                    saveArticleOrder(event.to);
+                    if (event.from !== event.to) { saveArticleOrder(event.from); }
+                }
             });
         });
     }
