@@ -127,24 +127,6 @@
         });
     }
 
-    // ── Publish toggle ────────────────────────────────────────────────────────────
-
-    var publishBtn = document.getElementById('wiki-publish-btn');
-    if (publishBtn) {
-        publishBtn.addEventListener('click', function () {
-            var articleId = this.dataset.articleId;
-            fetch('/wiki/editor/article/' + articleId + '/toggle-publish', { method: 'POST' })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data.success) {
-                        publishBtn.textContent = data.is_published ? 'Unpublish' : 'Publish';
-                        showToast(data.is_published ? 'Published' : 'Unpublished', 'success');
-                    }
-                })
-                .catch(function () { showToast('Something went wrong', 'error'); });
-        });
-    }
-
     // ── Delete article ────────────────────────────────────────────────────────────
 
     var deleteArticleBtn = document.getElementById('wiki-delete-article-btn');

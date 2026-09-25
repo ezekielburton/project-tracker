@@ -31,9 +31,40 @@ def expiry_registers():
     return tuple(k for k, reg in BY_KEY.items() if reg.status_source == 'expiry')
 
 
+def _filed_after(entry, other):
+    """Later issue date wins; on the same date the higher id is the later
+    filing."""
+    if entry.entry_date != other.entry_date:
+        return (entry.entry_date or date.min) > (other.entry_date or date.min)
+    return (entry.id or 0) > (other.id or 0)
+
+
 def _expiring(entries):
+    """The items compliance health is measured over — one row per
+    certificate, not one per renewal.
+
+    Renewing files a new entry and leaves the old one in the register.
+    Counting both makes renewing *lower* the score: the superseded row
+    expires on its old date and reads as lapsed while its replacement reads
+    as valid. The certificate is the thing being tracked, so only its most
+    recent entry counts.
+
+    An entry with no certificate set is counted on its own — it has no
+    history to supersede.
+    """
     keys = set(expiry_registers())
-    return [e for e in entries if e.register in keys and e.due_at is not None]
+    rows = [e for e in entries if e.register in keys and e.due_at is not None]
+
+    latest, loose = {}, []
+    for entry in rows:
+        item_id = getattr(entry, 'compliance_item_id', None)
+        if item_id is None:
+            loose.append(entry)
+            continue
+        current = latest.get(item_id)
+        if current is None or _filed_after(entry, current):
+            latest[item_id] = entry
+    return list(latest.values()) + loose
 
 
 def compliance_health(entries, today=None):

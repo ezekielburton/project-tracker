@@ -7,7 +7,7 @@ be taken into a review, and a page only its subject can see is no use there.
 Nothing is defined here. Every number comes from lib/performance.py, which
 reads lib/metrics.py, which the Overview and the calendar read as well.
 """
-from datetime import date, timedelta
+from datetime import date
 
 from flask import render_template, request
 from flask_login import login_required
@@ -21,9 +21,9 @@ from app.modules.hse.lib.performance import (
     expiring_next, open_by_age, period, read_outs, reporting,
     schedule_coverage, sla_table, tiles, trend_months,
 )
-from app.modules.hse.lib.query import open_counts_by_group
+from app.modules.hse.lib.query import dashboard_entries, open_counts_by_group
 from app.modules.hse.lib.rail import rail_items
-from app.modules.hse.models import HseEntry, HseSchedule
+from app.modules.hse.models import HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
 
 
@@ -48,10 +48,7 @@ def _view_model(today=None):
     today = today or date.today()
     window = period(request.args.get('view'), _anchor())
 
-    entries = (HseEntry.query
-               .options(selectinload(HseEntry.waiting_on))
-               .filter(HseEntry.entry_date >= today - timedelta(days=LOOKBACK_DAYS))
-               .all())
+    entries = dashboard_entries(today, LOOKBACK_DAYS)
     schedules = (HseSchedule.query
                  .options(selectinload(HseSchedule.assets))
                  .all())

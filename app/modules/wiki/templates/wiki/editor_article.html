@@ -5,9 +5,6 @@
     <h1>{{ 'Edit Article' if article else 'New Article' }}</h1>
     <div style="display:flex;gap:0.5rem;">
         {% if article %}
-        <button id="wiki-publish-btn" class="btn-secondary" data-article-id="{{ article.id }}">
-            {{ 'Unpublish' if article.is_published else 'Publish' }}
-        </button>
         <button id="wiki-delete-article-btn" data-article-id="{{ article.id }}"
             style="background:var(--rose);color:white;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;">
             Delete Article
@@ -18,9 +15,7 @@
 </div>
 
 <form id="wiki-article-form" method="POST" action="{{ url_for('wiki.save_article') }}">
-    {% if article %}
-    <input type="hidden" name="article_id" value="{{ article.id }}">
-    {% endif %}
+    <input type="hidden" id="wiki-article-id" name="article_id" value="{{ article.id if article else '' }}">
     <input type="hidden" name="section_id" value="{{ section.id if section else article.section_id }}">
     <input type="hidden" id="wiki-sections-json" name="sections_json" value="">
 
@@ -31,30 +26,51 @@
             <input type="text" name="title" id="wiki-title" value="{{ article.title if article else '' }}" required>
         </div>
         <div class="form-group">
-            <label>Slug <span class="form-hint">(auto-generated)</span></label>
-            <input type="text" name="slug" id="wiki-slug" value="{{ article.slug if article else '' }}">
-        </div>
-        <div class="form-group">
             <label>Sort Order</label>
             <input type="number" name="sort_order" value="{{ article.sort_order if article else 0 }}"
                 style="width:100px;">
         </div>
     </div>
 
+    <!-- ── Start from a skeleton (new articles only) ─── -->
+    {% if not article %}
+    <div class="wiki-template-picker" id="wiki-template-picker">
+        <p class="wiki-template-picker__label">Start from</p>
+        <div class="wiki-template-picker__options">
+            {% for template in templates %}
+            <button type="button" class="wiki-template-option{{ ' is-selected' if loop.first else '' }}"
+                data-template-key="{{ template.key }}">
+                <span class="wiki-template-option__label">{{ template.label }}</span>
+                <span class="wiki-template-option__description">{{ template.description }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- ── Body ─── -->
     <div class="wiki-editor-shell">
         <div id="wiki-editor"></div>
     </div>
 
-    <div style="margin-top:1.5rem;">
+    <!-- ── Save ─── -->
+    <div class="wiki-editor-actions">
+        <label class="wiki-publish-toggle">
+            <input type="checkbox" name="is_published" {{ 'checked' if article and article.is_published else '' }}>
+            <span>Published</span>
+        </label>
         <button type="submit" class="btn-primary">Save Article</button>
+        <span class="wiki-save-status" id="wiki-save-status"></span>
     </div>
 </form>
 
 <script>
-    var WIKI_ARTICLE_JSON = {{ (article.sections_json if article and article.sections_json else '') | tojson }};
+    var WIKI_ARTICLE_JSON = {{ content_json | tojson }};
+    var WIKI_TEMPLATE_DOCUMENTS = {{ template_documents | tojson }};
+    var WIKI_DRAFT_RESTORED = {{ draft_restored | tojson }};
     var WIKI_UPLOAD_IMAGE_URL = {{ url_for('wiki.upload_image') | tojson }};
     var WIKI_UPLOAD_VIDEO_URL = {{ url_for('wiki.upload_video') | tojson }};
+    var WIKI_AUTOSAVE_URL = {{ url_for('wiki.autosave_article') | tojson }};
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@2.30.7/dist/editorjs.umd.js"></script>
@@ -62,6 +78,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@1.9.0/dist/list.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@editorjs/image@2.10.3/dist/image.umd.js"></script>
 <script src="{{ url_for('wiki_assets.static', filename='js/block_drag.js') }}"></script>
+<script src="{{ url_for('wiki_assets.static', filename='js/editor_autosave.js') }}"></script>
 <script src="{{ url_for('wiki_assets.static', filename='js/blocks/helix_callout.js') }}"></script>
 <script src="{{ url_for('wiki_assets.static', filename='js/blocks/helix_video.js') }}"></script>
 <script src="{{ url_for('wiki_assets.static', filename='js/wiki.js') }}"></script>

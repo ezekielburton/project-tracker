@@ -7,16 +7,29 @@
     'use strict';
 
     // A test reads this list and checks editor_article.html still carries these ids.
-    var TEMPLATE_CONTRACT = ['wiki-article-form', 'wiki-editor', 'wiki-sections-json'];
+    var TEMPLATE_CONTRACT = ['wiki-article-form', 'wiki-editor', 'wiki-sections-json',
+        'wiki-article-id', 'wiki-save-status'];
 
+    function templateDocument(key) {
+        var documents = window.WIKI_TEMPLATE_DOCUMENTS || {};
+        return documents[key] || { blocks: [] };
+    }
+
+    function selectedTemplateKey() {
+        var chosen = document.querySelector('.wiki-template-option.is-selected');
+        return chosen ? chosen.dataset.templateKey : null;
+    }
+
+    /** Existing articles open on their content; new ones open on a skeleton. */
     function readDocument() {
         try {
             var parsed = window.WIKI_ARTICLE_JSON ? JSON.parse(window.WIKI_ARTICLE_JSON) : null;
             if (parsed && Array.isArray(parsed.blocks)) { return parsed; }
         } catch (error) {
-            /* fall through to an empty article */
+            /* fall through to a skeleton */
         }
-        return { blocks: [] };
+        var key = selectedTemplateKey();
+        return key ? templateDocument(key) : { blocks: [] };
     }
 
     /** Editor.js wants {success, file:{url}}; our endpoint answers {success, url}. */
@@ -55,6 +68,10 @@
     }
 
     function teardown() {
+        if (window.helixEditorAutosave) {
+            window.helixEditorAutosave.destroy();
+            window.helixEditorAutosave = null;
+        }
         if (window.helixBlockDrag) {
             window.helixBlockDrag.destroy();
             window.helixBlockDrag = null;
@@ -65,11 +82,27 @@
         window.helixWikiEditor = null;
     }
 
+    function wirePicker(editor) {
+        var picker = document.getElementById('wiki-template-picker');
+        if (!picker) { return; }
+
+        picker.addEventListener('click', function (event) {
+            var option = event.target.closest('.wiki-template-option');
+            if (!option) { return; }
+
+            picker.querySelectorAll('.wiki-template-option').forEach(function (button) {
+                button.classList.toggle('is-selected', button === option);
+            });
+            editor.blocks.render(templateDocument(option.dataset.templateKey));
+        });
+    }
+
     function wireSubmit(form, field) {
         form.addEventListener('submit', function (event) {
             event.preventDefault();
             window.helixWikiEditor.save().then(function (output) {
                 field.value = JSON.stringify(output);
+                if (window.helixEditorAutosave) { window.helixEditorAutosave.markSaved(field.value); }
                 form.submit();
             }).catch(function () {
                 showToast('Could not read the article content', 'error');
@@ -77,11 +110,27 @@
         });
     }
 
+    function startAutosave(editor, form, articleField, status) {
+        window.helixEditorAutosave = window.HelixEditorAutosave.start({
+            editor: editor,
+            form: form,
+            status: status,
+            articleField: articleField,
+            url: window.WIKI_AUTOSAVE_URL,
+            initialContent: window.WIKI_ARTICLE_JSON || ''
+        });
+        if (window.WIKI_DRAFT_RESTORED) {
+            status.textContent = 'Restored your unsaved draft — Save makes it live';
+        }
+    }
+
     function init() {
         var form = document.getElementById(TEMPLATE_CONTRACT[0]);
         var holder = document.getElementById(TEMPLATE_CONTRACT[1]);
         var field = document.getElementById(TEMPLATE_CONTRACT[2]);
-        if (!form || !holder || !field) { return; }
+        var articleField = document.getElementById(TEMPLATE_CONTRACT[3]);
+        var status = document.getElementById(TEMPLATE_CONTRACT[4]);
+        if (!form || !holder || !field || !articleField || !status) { return; }
 
         teardown();
 
@@ -91,7 +140,11 @@
             tools: tools(),
             placeholder: 'Write the article. Press / to add a block.',
             minHeight: 200,
-            onReady: function () { window.helixBlockDrag = window.HelixBlockDrag.attach(editor, holder); }
+            onReady: function () {
+                window.helixBlockDrag = window.HelixBlockDrag.attach(editor, holder);
+                wirePicker(editor);
+                startAutosave(editor, form, articleField, status);
+            }
         });
 
         window.helixWikiEditor = editor;

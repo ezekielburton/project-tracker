@@ -290,6 +290,17 @@
             return;
         }
 
+        var preview = e.target.closest('.hse-file-preview');
+        if (preview && window.openFilePreview) {
+            // The shared modal from base.html — the same one the project
+            // reference files open. Nothing to load, nothing to duplicate.
+            window.openFilePreview(preview.getAttribute('data-preview-url'),
+                                   preview.getAttribute('data-download-url'),
+                                   preview.getAttribute('data-file-name'),
+                                   preview.getAttribute('data-file-type'));
+            return;
+        }
+
         var remove = e.target.closest('.hse-file-remove');
         if (remove) {
             removeFile(remove);

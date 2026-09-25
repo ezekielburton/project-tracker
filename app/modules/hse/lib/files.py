@@ -24,6 +24,19 @@ ALLOWED_EXTENSIONS = {
 
 MAX_BYTES = 25 * 1024 * 1024  # 25 MB
 
+# What the shared preview modal can actually render. The Office formats and
+# video are downloads only — converting them is the projects module's
+# preview-cache job, and this module has no reason to grow one.
+MIME_TYPES = {
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    'heic': 'image/heic', 'webp': 'image/webp', 'pdf': 'application/pdf',
+}
+PREVIEWABLE = frozenset(MIME_TYPES)
+
+
+def is_previewable(filename):
+    return extension(filename) in PREVIEWABLE
+
 # NAS paths are shared with humans browsing the drive, so keep them boring.
 _UNSAFE = re.compile(r'[^A-Za-z0-9 ._&()-]+')
 

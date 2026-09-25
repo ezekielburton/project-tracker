@@ -117,10 +117,23 @@
                  data-upload-url="{{ url_for('hse.upload_attachment', entry_id=entry.id) }}">
                 <label>Attachments</label>
                 <div class="hse-file-list" id="hse-file-list">
+                    {# Preview opens the shared modal from base.html — the same
+                       one the project reference files use, already loaded with
+                       preview.js, so there is nothing to add here. A button
+                       rather than a thumbnail: there is no thumbnailing
+                       service, so a thumbnail would fetch every photo at full
+                       size just to sit in a list. #}
                     {% for f in entry.attachments %}
                     <div class="hse-file" data-file-id="{{ f.id }}">
                         <a class="hse-file-name" href="{{ url_for('hse.download_attachment', attachment_id=f.id) }}">{{ f.original_filename }}</a>
                         <span class="hse-file-meta">{{ f.uploaded_by.name if f.uploaded_by else '—' }}</span>
+                        {% if f.is_previewable %}
+                        <button type="button" class="hse-btn hse-btn--xs hse-file-preview"
+                                data-preview-url="{{ url_for('hse.preview_attachment', attachment_id=f.id) }}"
+                                data-download-url="{{ url_for('hse.download_attachment', attachment_id=f.id) }}"
+                                data-file-name="{{ f.original_filename }}"
+                                data-file-type="{{ f.file_type }}">Preview</button>
+                        {% endif %}
                         <button type="button" class="hse-file-remove" data-remove-url="{{ url_for('hse.delete_attachment', attachment_id=f.id) }}"
                                 aria-label="Remove {{ f.original_filename }}">&times;</button>
                     </div>

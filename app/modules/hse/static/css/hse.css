@@ -1961,3 +1961,23 @@ body.hse-modal-open {
    title centres itself in the leftover space instead of sitting against
    its tag. */
 .hse-ov-row .hse-ov-row-main { flex: 1; min-width: 0; }
+
+/* ── Attachment preview ──
+   Opens the shared preview modal from base.html — the same one the project
+   reference files use. A button rather than a thumbnail: there is no
+   thumbnailing service, so a thumbnail would fetch every photo at full
+   size just to sit in a list.
+
+   xs is the in-row size of the module's button family. Header buttons are
+   30px and modal-footer buttons 34px; both would tower over a file row. */
+.hse-btn--xs {
+    height: 22px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-xs);
+}
+
+.hse-file-preview { flex: 0 0 auto; }
+
+/* A flex item only shrinks below its content when min-width is zeroed, so
+   without this a long filename widens the row instead of ellipsing. */
+.hse-file .hse-file-name { min-width: 0; }

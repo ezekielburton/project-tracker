@@ -10,6 +10,8 @@ chip counts and the rows they filter can never be built from two different
 sets.
 """
 
+from datetime import date, timedelta
+
 from sqlalchemy import Text, cast, extract, func, or_
 from sqlalchemy.orm import aliased, selectinload
 
@@ -25,6 +27,10 @@ from app.modules.hse.models import HseAsset, HseEntry, HsePerson, HseReference
 # Rows per page. Small enough that the table never needs its own scrollbar
 # on a laptop, which is what the wireframe shows.
 PAGE_SIZE = 25
+
+# How far back the Overview looks. An incident ages out of usefulness; a
+# certificate does not.
+DASHBOARD_LOOKBACK_DAYS = 400
 
 
 def _eager(query):
@@ -204,3 +210,26 @@ class _DueOnly:
     def __init__(self, due_at, closed_at):
         self.due_at = due_at
         self.closed_at = closed_at
+
+
+
+def dashboard_entries(today=None, lookback=DASHBOARD_LOOKBACK_DAYS):
+    """The entry set the Overview and My performance both read.
+
+    One function on purpose. The metric definitions are already shared, but
+    two routes with two different windows still give two different answers
+    to "compliance health" — which is the drift sharing them was meant to
+    stop.
+
+    **Anything carrying a due date is loaded whatever its issue date.** An
+    event more than a year old is history; a five-year licence issued in
+    2024 is the most current thing the site owns, and filtering it out by
+    issue date makes it silently vanish from the number that counts it.
+    """
+    today = today or date.today()
+    cutoff = today - timedelta(days=lookback)
+    return (_eager(HseEntry.query)
+            .options(selectinload(HseEntry.waiting_on))
+            .filter(or_(HseEntry.entry_date >= cutoff,
+                        HseEntry.due_at.isnot(None)))
+            .all())

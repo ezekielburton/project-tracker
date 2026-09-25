@@ -34,8 +34,9 @@ class WikiSection(db.Model):
 
 class WikiArticle(db.Model):
     """
-    A single page within a wiki section. sections_json holds the Editor.js
-    document; legacy_sections_json keeps the pre-Editor.js content as a fallback.
+    A single page within a wiki section. sections_json holds the live Editor.js
+    document, draft_sections_json the autosaved working copy, and
+    legacy_sections_json the pre-Editor.js content as a fallback.
     """
 
     __tablename__='wiki_articles'
@@ -46,6 +47,8 @@ class WikiArticle(db.Model):
     slug            = db.Column(db.String(200), nullable=False)
     sections_json   = db.Column(db.Text)
     legacy_sections_json = db.Column(db.Text)
+    draft_sections_json  = db.Column(db.Text)
+    draft_saved_at       = db.Column(db.DateTime)
     sort_order      = db.Column(db.Integer, default=0)
     is_published    = db.Column(db.Boolean, default=False)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)

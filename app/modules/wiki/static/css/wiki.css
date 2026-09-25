@@ -614,3 +614,78 @@ ol.wiki-block-list {
     -webkit-user-select: none;
     user-select: none;
 }
+
+/* ── Template picker ─────────────────────────────────────────────────────── */
+
+.wiki-template-picker {
+    margin-bottom: 1rem;
+}
+
+.wiki-template-picker__label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin: 0 0 0.5rem;
+}
+
+.wiki-template-picker__options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.wiki-template-option {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    flex: 1 1 14rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.7rem 0.9rem;
+    text-align: left;
+}
+
+.wiki-template-option:hover {
+    border-color: var(--border-strong);
+}
+
+.wiki-template-option.is-selected {
+    border-color: var(--tangerine);
+}
+
+.wiki-template-option__label {
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+.wiki-template-option__description {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+/* ── Save row ────────────────────────────────────────────────────────────── */
+
+.wiki-editor-actions {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.wiki-publish-toggle {
+    align-items: center;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    font-size: 0.875rem;
+    gap: 0.4rem;
+}
+
+.wiki-save-status {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    min-height: 1em;
+}
