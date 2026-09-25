@@ -8,7 +8,8 @@ from app.modules.core.shared.lib.capabilities import can, require
 from app.modules.core.shared.lib.utils import slugify
 from sqlalchemy import text
 from app.modules.wiki.lib.blocks import load_blocks, sanitize_document, empty_document
-from app.modules.wiki.lib.article_templates import ARTICLE_TEMPLATES, picker_options
+from app.modules.wiki.lib.article_templates import picker_options, template_document
+from app.modules.wiki.lib.help_keys import HELP_KEY_GROUPS, coverage, is_registered
 
 wiki_bp = Blueprint('wiki', __name__, template_folder='../templates')
 
@@ -104,16 +105,56 @@ def upload_video():
         'url': url_for('static', filename=f'wiki-uploads/videos/{filename}')
     })
 
+def _next_sort_order(model, **filters):
+    """One past the current highest, so new rows land at the end of their list."""
+    query = model.query
+    if filters:
+        query = query.filter_by(**filters)
+    highest = query.order_by(model.sort_order.desc()).first()
+    return (highest.sort_order or 0) + 1 if highest else 0
+
+
+def _unique_section_slug(title):
+    """Section slugs are unique in the database, so a clash gets a suffix."""
+    base = slugify(title) or 'section'
+    slug, suffix = base, 2
+    while WikiSection.query.filter_by(slug=slug).first():
+        slug = f'{base}-{suffix}'
+        suffix += 1
+    return slug
+
+
+def _claim_help_key(article, key):
+    """One article per key, so a "?" can never be ambiguous."""
+    key = (key or '').strip()
+    if key and not is_registered(key):
+        key = ''
+
+    if key:
+        WikiArticle.query.filter(WikiArticle.help_key == key,
+                                 WikiArticle.id != article.id).update({'help_key': None})
+    article.help_key = key or None
+
+
+def _apply_order(table, ids):
+    """Write sort_order from list position. Raw SQL so articles keep their updated_at."""
+    for position, row_id in enumerate(ids):
+        db.session.execute(
+            text(f'UPDATE {table} SET sort_order = :position WHERE id = :id'),
+            {'position': position, 'id': int(row_id)}
+        )
+    db.session.commit()
+
+
 def _editor_context(article, section):
     """Everything the article editor page needs, for both new and existing articles."""
     content = (article.draft_sections_json or article.sections_json or '') if article else ''
     return {
         'article': article,
         'section': section,
-        'templates': picker_options(),
-        'template_documents': {t['key']: t['document'] for t in ARTICLE_TEMPLATES},
         'content_json': content,
         'draft_restored': bool(article and article.draft_sections_json),
+        'help_key_groups': HELP_KEY_GROUPS,
     }
 
 
@@ -121,16 +162,60 @@ def _editor_context(article, section):
 @wiki_bp.route('/wiki/editor')
 @login_required
 @require('manage_wiki', real_user=True)
-def editor_dashboard(): 
+def editor_dashboard():
     sections = WikiSection.query.order_by(WikiSection.sort_order).all()
-    return render_template('wiki/editor_dashboard.html', sections=sections)
+    claimed = [row.help_key for row in WikiArticle.query.with_entities(WikiArticle.help_key).all()]
+    return render_template('wiki/editor_dashboard.html', sections=sections,
+                           templates=picker_options(),
+                           help_key_groups=HELP_KEY_GROUPS,
+                           coverage=coverage(claimed))
 
-@wiki_bp.route('/wiki/editor/section/new')
+@wiki_bp.route('/wiki/editor/sections/reorder', methods=['POST'])
 @login_required
 @require('manage_wiki', real_user=True)
-def new_section():
-    sections = WikiSection.query.order_by(WikiSection.sort_order).all()
-    return render_template('wiki/editor_section.html', section=None)
+def reorder_sections():
+    _apply_order('wiki_sections', (request.get_json(silent=True) or {}).get('section_ids') or [])
+    return jsonify({'success': True})
+
+
+@wiki_bp.route('/wiki/editor/articles/reorder', methods=['POST'])
+@login_required
+@require('manage_wiki', real_user=True)
+def reorder_articles():
+    _apply_order('wiki_articles', (request.get_json(silent=True) or {}).get('article_ids') or [])
+    return jsonify({'success': True})
+
+
+@wiki_bp.route('/wiki/editor/article/create', methods=['POST'])
+@login_required
+@require('manage_wiki', real_user=True)
+def create_article():
+    """From the new-article overlay: seed the chosen skeleton, then open the editor."""
+    section_id = request.form.get('section_id', '').strip()
+    title      = request.form.get('title', '').strip()
+    template   = request.form.get('template', 'blank').strip()
+    help_key   = request.form.get('help_key', '').strip()
+
+    if not title or not section_id:
+        return redirect(url_for('wiki.editor_dashboard'))
+
+    section = WikiSection.query.get_or_404(int(section_id))
+    article = WikiArticle(
+        section_id=section.id,
+        title=title,
+        slug=slugify(title),
+        sections_json=json.dumps(template_document(template)),
+        sort_order=_next_sort_order(WikiArticle, section_id=section.id),
+        is_published=False
+    )
+    db.session.add(article)
+    db.session.commit()
+
+    _claim_help_key(article, help_key)
+    db.session.commit()
+
+    return redirect(url_for('wiki.edit_article', article_id=article.id))
+
 
 @wiki_bp.route('/wiki/editor/article/<int:article_id>/edit')
 @login_required
@@ -148,8 +233,8 @@ def save_article():
     section_id    = request.form.get('section_id', '').strip()
     title         = request.form.get('title', '').strip()
     sections_json = request.form.get('sections_json', '[]')
-    sort_order    = int(request.form.get('sort_order', 0))
     is_published  = request.form.get('is_published') == 'on'
+    help_key      = request.form.get('help_key', '').strip()
 
     if not title or not section_id:
         return jsonify({'success': False, 'error': 'Title and section are required'}), 400
@@ -171,18 +256,21 @@ def save_article():
         article.title         = title
         article.slug          = article.slug or slugify(title)
         article.sections_json = sections_json
-        article.sort_order    = sort_order
         article.is_published  = is_published
         article.updated_at    = datetime.utcnow()
     else:
         article = WikiArticle(section_id=int(section_id), title=title,
                               slug=slugify(title), sections_json=sections_json,
-                              sort_order=sort_order, is_published=is_published)
+                              sort_order=_next_sort_order(WikiArticle, section_id=int(section_id)),
+                              is_published=is_published)
         db.session.add(article)
 
     # Saving is what makes the draft live, so the stored draft is spent.
     article.draft_sections_json = None
     article.draft_saved_at      = None
+
+    db.session.flush()
+    _claim_help_key(article, help_key)
 
     db.session.commit()
     return redirect(url_for('wiki.edit_article', article_id=article.id))
@@ -213,6 +301,7 @@ def autosave_article():
         article = WikiArticle(section_id=int(section_id), title=title,
                               slug=slugify(title),
                               sections_json=json.dumps(empty_document()),
+                              sort_order=_next_sort_order(WikiArticle, section_id=int(section_id)),
                               is_published=False)
         db.session.add(article)
         db.session.commit()
@@ -250,21 +339,6 @@ def delete_article(article_id):
     db.session.commit()
     return jsonify({'success': True})
 
-@wiki_bp.route('/wiki/editor/article/new')
-@login_required
-@require('manage_wiki', real_user=True)
-def new_article():
-    section_id = request.args.get('section_id')
-    section = WikiSection.query.get_or_404(int(section_id)) if section_id else None
-    return render_template('wiki/editor_article.html', **_editor_context(None, section))
-
-
-@wiki_bp.route('/wiki/editor/section/<int:section_id>/edit')
-@login_required
-@require('manage_wiki', real_user=True)
-def edit_section(section_id):
-    section = WikiSection.query.get_or_404(section_id)
-    return render_template('wiki/editor_section.html', section=section)
 
 
 @wiki_bp.route('/wiki/editor/section/save', methods=['POST'])
@@ -273,9 +347,8 @@ def edit_section(section_id):
 def save_section():
     section_id     = request.form.get('section_id', '').strip()
     title          = request.form.get('title', '').strip()
-    slug           = request.form.get('slug', '').strip() or slugify(title)
     relevant_roles = ','.join(request.form.getlist('relevant_roles'))
-    sort_order     = int(request.form.get('sort_order', 0))
+    is_published   = request.form.get('is_published') == 'on'
 
     if not title:
         return redirect(url_for('wiki.editor_dashboard'))
@@ -283,14 +356,14 @@ def save_section():
     if section_id:
         section                = WikiSection.query.get_or_404(int(section_id))
         section.title          = title
-        section.slug           = slug
         section.relevant_roles = relevant_roles or None
-        section.sort_order     = sort_order
+        section.is_published   = is_published
     else:
         section = WikiSection(
-            title=title, slug=slug,
+            title=title, slug=_unique_section_slug(title),
             relevant_roles=relevant_roles or None,
-            sort_order=sort_order
+            sort_order=_next_sort_order(WikiSection),
+            is_published=is_published
         )
         db.session.add(section)
 

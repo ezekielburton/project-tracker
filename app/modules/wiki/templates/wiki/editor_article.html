@@ -20,33 +20,27 @@
     <input type="hidden" id="wiki-sections-json" name="sections_json" value="">
 
     <!-- ── Article meta ─── -->
-    <div class="form-card" style="margin-bottom:1rem;">
+    <div class="wiki-editor-meta">
         <div class="form-group">
             <label>Title</label>
             <input type="text" name="title" id="wiki-title" value="{{ article.title if article else '' }}" required>
         </div>
         <div class="form-group">
-            <label>Sort Order</label>
-            <input type="number" name="sort_order" value="{{ article.sort_order if article else 0 }}"
-                style="width:100px;">
+            <label>Help key <span class="form-hint">The page this article explains.</span></label>
+            <select name="help_key" id="wiki-help-key">
+                <option value="">No help key</option>
+                {% for group, pairs in help_key_groups %}
+                <optgroup label="{{ group }}">
+                    {% for key, label in pairs %}
+                    <option value="{{ key }}" {{ 'selected' if article and article.help_key == key else '' }}>
+                        {{ key }} — {{ label }}
+                    </option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
         </div>
     </div>
-
-    <!-- ── Start from a skeleton (new articles only) ─── -->
-    {% if not article %}
-    <div class="wiki-template-picker" id="wiki-template-picker">
-        <p class="wiki-template-picker__label">Start from</p>
-        <div class="wiki-template-picker__options">
-            {% for template in templates %}
-            <button type="button" class="wiki-template-option{{ ' is-selected' if loop.first else '' }}"
-                data-template-key="{{ template.key }}">
-                <span class="wiki-template-option__label">{{ template.label }}</span>
-                <span class="wiki-template-option__description">{{ template.description }}</span>
-            </button>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
 
     <!-- ── Body ─── -->
     <div class="wiki-editor-shell">
@@ -66,7 +60,6 @@
 
 <script>
     var WIKI_ARTICLE_JSON = {{ content_json | tojson }};
-    var WIKI_TEMPLATE_DOCUMENTS = {{ template_documents | tojson }};
     var WIKI_DRAFT_RESTORED = {{ draft_restored | tojson }};
     var WIKI_UPLOAD_IMAGE_URL = {{ url_for('wiki.upload_image') | tojson }};
     var WIKI_UPLOAD_VIDEO_URL = {{ url_for('wiki.upload_video') | tojson }};

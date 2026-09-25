@@ -417,7 +417,7 @@ def _base_query_for_view(view, user):
     # (Pre-Production / Handed to Production come after it), not a finish
     # line, so it is not excluded from My/All. Only 'handed_to_production'
     # (the real terminal state) is excluded, matching the dashboard's
-    # _scoped_projects(). A "Pre-Production only" list can be built as a
+    # scope_query(). A "Pre-Production only" list can be built as a
     # custom view (My or All + Status = Pre-Production). The one fixed tab
     # that hardcodes a status is 'design_complete' below; that view key was
     # renamed from 'approved' (confusing next to the unrelated 'approved'

@@ -615,64 +615,62 @@ ol.wiki-block-list {
     user-select: none;
 }
 
-/* ── Template picker ─────────────────────────────────────────────────────── */
+/* ── Editor dashboard: drag ordering ─────────────────────────────────────── */
 
-.wiki-template-picker {
-    margin-bottom: 1rem;
-}
-
-.wiki-template-picker__label {
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    margin: 0 0 0.5rem;
-}
-
-.wiki-template-picker__options {
+.wiki-editor-heading {
+    align-items: center;
     display: flex;
-    flex-wrap: wrap;
     gap: 0.6rem;
 }
 
-.wiki-template-option {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    cursor: pointer;
-    display: flex;
-    flex: 1 1 14rem;
-    flex-direction: column;
-    gap: 0.25rem;
-    padding: 0.7rem 0.9rem;
-    text-align: left;
+.wiki-drag-handle {
+    color: var(--text-faint);
+    cursor: grab;
+    font-size: 1rem;
+    line-height: 1;
+    user-select: none;
 }
 
-.wiki-template-option:hover {
+.wiki-drag-handle:active {
+    cursor: grabbing;
+}
+
+.wiki-editor-section-card:hover .wiki-drag-handle,
+.wiki-editor-article-row:hover .wiki-drag-handle {
+    color: var(--text-muted);
+}
+
+.sortable-ghost {
+    opacity: 0.4;
+}
+
+.sortable-chosen {
     border-color: var(--border-strong);
 }
 
-.wiki-template-option.is-selected {
-    border-color: var(--tangerine);
+/* ── Article editor: meta row ────────────────────────────────────────────── */
+
+/* Slimmer than .form-card, and full width so it lines up with the editor
+   below it rather than stopping short at 560px. */
+.wiki-editor-meta {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    padding: 1rem 1.25rem;
 }
 
-.wiki-template-option__label {
-    color: var(--text);
-    font-size: 0.875rem;
-    font-weight: 700;
+.wiki-editor-meta .form-group {
+    margin-bottom: 0;
 }
 
-.wiki-template-option__description {
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    line-height: 1.5;
-}
-
-/* ── Save row ────────────────────────────────────────────────────────────── */
+/* ── Article editor: save row ────────────────────────────────────────────── */
 
 .wiki-editor-actions {
     align-items: center;
     display: flex;
     gap: 1rem;
-    margin-top: 1.5rem;
+    margin-top: 1.25rem;
 }
 
 .wiki-publish-toggle {
@@ -688,4 +686,258 @@ ol.wiki-block-list {
     color: var(--text-muted);
     font-size: 0.8rem;
     min-height: 1em;
+}
+
+/* ── Wiki overlays ───────────────────────────────────────────────────────── */
+
+.wiki-modal {
+    max-width: 460px;
+}
+
+.wiki-modal .modal-title {
+    margin-bottom: 1.25rem;
+}
+
+.wiki-modal .wiki-publish-toggle {
+    margin: 0.25rem 0 1.25rem;
+}
+
+.wiki-role-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+/* ── Template chooser ────────────────────────────────────────────────────── */
+
+.wiki-template-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+}
+
+/* A radio dot in the first column, label and description stacked beside it,
+   so it reads as a choice rather than a row of text. */
+.wiki-template-option {
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    column-gap: 0.65rem;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    padding: 0.7rem 0.9rem;
+    row-gap: 0.2rem;
+    text-align: left;
+    width: 100%;
+}
+
+.wiki-template-option::before {
+    border: 2px solid var(--border-strong);
+    border-radius: 50%;
+    content: '';
+    grid-row: 1 / span 2;
+    height: 0.9rem;
+    margin-top: 0.15rem;
+    width: 0.9rem;
+}
+
+.wiki-template-option:hover {
+    border-color: var(--border-strong);
+}
+
+.wiki-template-option.is-selected {
+    background: color-mix(in srgb, var(--tangerine) 8%, var(--surface));
+    border-color: var(--tangerine);
+}
+
+.wiki-template-option.is-selected::before {
+    background: var(--tangerine);
+    border-color: var(--tangerine);
+    box-shadow: inset 0 0 0 2px var(--surface);
+}
+
+.wiki-template-option__label {
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+.wiki-template-option__description {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+/* ── Dashboard header ────────────────────────────────────────────────────── */
+
+.wiki-editor-hint {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin: 0.35rem 0 1rem;
+}
+
+/* ── Editor dashboard: two columns ───────────────────────────────────────── */
+
+.wiki-editor-layout {
+    align-items: start;
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+}
+
+@media (max-width: 1100px) {
+    .wiki-editor-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.wiki-editor-main {
+    min-width: 0;
+}
+
+.wiki-article-key {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    margin-left: 0.5rem;
+}
+
+.wiki-article-key.is-unset {
+    color: var(--text-faint);
+    font-style: italic;
+}
+
+/* ── Coverage panel ──────────────────────────────────────────────────────── */
+
+.wiki-coverage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 12rem);
+    padding: 1rem 1.1rem;
+}
+
+.wiki-coverage__title {
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.wiki-coverage__count {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin: 0.3rem 0 0;
+}
+
+.wiki-coverage__count strong {
+    color: var(--text);
+    font-size: 1.1rem;
+}
+
+.wiki-coverage__groups {
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    margin: 0.9rem 0;
+    padding: 0.7rem 0;
+}
+
+.wiki-coverage__group {
+    display: flex;
+    font-size: 0.8rem;
+    justify-content: space-between;
+    padding: 0.2rem 0;
+}
+
+.wiki-coverage__group-name {
+    color: var(--text-muted);
+}
+
+.wiki-coverage__group-score {
+    color: var(--text);
+    font-family: var(--font-mono);
+}
+
+.wiki-coverage__subtitle {
+    align-items: center;
+    color: var(--text);
+    display: flex;
+    font-size: 0.8rem;
+    font-weight: 700;
+    gap: 0.4rem;
+    margin: 0 0 0.5rem;
+}
+
+.wiki-coverage__subcount {
+    background: var(--surface-hover);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 400;
+    padding: 0.05rem 0.45rem;
+}
+
+/* The list scrolls inside the card, so the page still fits one screen. */
+.wiki-coverage__missing {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.wiki-coverage__list {
+    list-style: none;
+    margin: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0;
+}
+
+.wiki-coverage__row {
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+}
+
+.wiki-coverage__row:last-child {
+    border-bottom: none;
+}
+
+.wiki-coverage__row-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.wiki-coverage__key {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    overflow-wrap: anywhere;
+}
+
+.wiki-coverage__label {
+    color: var(--text);
+    font-size: 0.8rem;
+}
+
+.wiki-coverage__write {
+    flex: 0 0 auto;
+}
+
+.wiki-coverage__note {
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    margin: 0.9rem 0 0;
 }

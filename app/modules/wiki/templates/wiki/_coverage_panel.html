@@ -1,0 +1,48 @@
+{# Coverage — every registered help key, and whether an article claims it.
+   The list of unwritten keys is the fill-day to-do list, generated from the
+   app rather than from memory. #}
+<aside class="wiki-coverage">
+    <div class="wiki-coverage__head">
+        <h2 class="wiki-coverage__title">Coverage</h2>
+        <p class="wiki-coverage__count">
+            <strong>{{ coverage.written }}</strong> of {{ coverage.total }} help keys have an article
+        </p>
+    </div>
+
+    <div class="wiki-coverage__groups">
+        {% for group in coverage.groups %}
+        <div class="wiki-coverage__group">
+            <span class="wiki-coverage__group-name">{{ group.name }}</span>
+            <span class="wiki-coverage__group-score">{{ group.written }}/{{ group.total }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="wiki-coverage__missing">
+        <p class="wiki-coverage__subtitle">
+            Nothing written yet
+            <span class="wiki-coverage__subcount">{{ coverage.missing | length }}</span>
+        </p>
+
+        {% if coverage.missing %}
+        <ul class="wiki-coverage__list">
+            {% for entry in coverage.missing %}
+            <li class="wiki-coverage__row">
+                <span class="wiki-coverage__row-text">
+                    <code class="wiki-coverage__key">{{ entry.key }}</code>
+                    <span class="wiki-coverage__label">{{ entry.label }}</span>
+                </span>
+                <button type="button" class="btn-secondary btn-sm wiki-coverage__write"
+                    data-help-key="{{ entry.key }}" data-help-label="{{ entry.label }}">Write</button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="wiki-editor-empty">Every key has an article.</p>
+        {% endif %}
+    </div>
+
+    <p class="wiki-coverage__note">
+        Keys come from the pages themselves. A new page with no article shows up here before it ships.
+    </p>
+</aside>

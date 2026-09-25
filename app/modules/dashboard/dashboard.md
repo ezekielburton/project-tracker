@@ -1,5 +1,7 @@
 # dashboard
 
+> Being replaced by `dashboard_module.md` during the 2.6 rework. Read that file first.
+
 The role-based dashboard: the landing page after login, showing each role a
 tailored set of cards (next actions, decisions, clashes, what-changed, at-risk /
 overdue, stat tiles) over their own scoped view of the projects.

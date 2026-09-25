@@ -106,27 +106,6 @@
         });
     });
 
-    // ── EDITOR ────────────────────────────────────────────────────────────────────
-
-    // ── Slug auto-generate ────────────────────────────────────────────────────────
-
-    var titleInput = document.getElementById('wiki-title');
-    var slugInput = document.getElementById('wiki-slug');
-    var slugEdited = !!(slugInput && slugInput.value.length > 0);
-
-    if (titleInput && slugInput) {
-        slugInput.addEventListener('input', function () { slugEdited = true; });
-        titleInput.addEventListener('input', function () {
-            if (!slugEdited) {
-                slugInput.value = this.value.toLowerCase().trim()
-                    .replace(/[^\w\s-]/g, '')
-                    .replace(/[\s_]+/g, '-')
-                    .replace(/-+/g, '-')
-                    .replace(/^-|-$/g, '');
-            }
-        });
-    }
-
     // ── Delete article ────────────────────────────────────────────────────────────
 
     var deleteArticleBtn = document.getElementById('wiki-delete-article-btn');

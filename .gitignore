@@ -12,3 +12,4 @@ ROADMAP.MD
 routes/projects_old.py
 app/static/wiki-uploads/
 app/static/blog-uploads/
+refactor/_dashboard_snapshot/

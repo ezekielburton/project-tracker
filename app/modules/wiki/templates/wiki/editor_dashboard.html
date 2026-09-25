@@ -1,65 +1,95 @@
 {% extends "base.html" %}
 
-
 {% block content %}
 <div class="page-header">
     <h1>Wiki Editor</h1>
     <div style="display:flex;gap:0.5rem;">
         <a href="{{ url_for('wiki.index') }}" class="btn-secondary">View Wiki</a>
-        <a href="{{ url_for('wiki.new_section') }}" class="btn-primary">+ New Section</a>
+        <button type="button" class="btn-primary" id="wiki-new-section-btn">+ New Section</button>
     </div>
 </div>
 
+<div class="wiki-editor-layout">
+<div class="wiki-editor-main">
 {% if sections %}
-{% for section in sections %}
-<div class="wiki-editor-section-card">
+<p class="wiki-editor-hint">Drag a section or an article to reorder.</p>
 
-    <div class="wiki-editor-section-card-header">
-        <div>
-            <strong>{{ section.title }}</strong>
-            {% if section.relevant_roles %}
-            {% for role in section.relevant_roles.split(',') %}
-            <span class="wiki-role-badge">{{ role.strip() }}</span>
+<div id="wiki-section-list">
+    {% for section in sections %}
+    <div class="wiki-editor-section-card" data-section-id="{{ section.id }}" data-title="{{ section.title }}"
+        data-roles="{{ section.relevant_roles or '' }}" data-published="{{ '1' if section.is_published else '0' }}">
+
+        <div class="wiki-editor-section-card-header">
+            <div class="wiki-editor-heading">
+                <span class="wiki-drag-handle wiki-section-drag-handle" title="Drag to reorder">⠿</span>
+                <div>
+                    <strong>{{ section.title }}</strong>
+                    {% if section.relevant_roles %}
+                    {% for role in section.relevant_roles.split(',') %}
+                    <span class="wiki-role-badge">{{ role.strip() }}</span>
+                    {% endfor %}
+                    {% endif %}
+                    {% if not section.is_published %}
+                    <span class="wiki-draft-badge">Draft</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+                <button type="button" class="btn-secondary btn-sm wiki-edit-section-btn">Edit</button>
+                <button class="btn-secondary btn-sm wiki-section-publish-btn" data-section-id="{{ section.id }}">
+                    {{ 'Unpublish' if section.is_published else 'Publish' }}
+                </button>
+                <button type="button" class="btn-primary btn-sm wiki-new-article-btn"
+                    data-section-id="{{ section.id }}">+ Article</button>
+                <button class="btn-sm wiki-section-delete-btn" data-section-id="{{ section.id }}"
+                    style="background:var(--rose);color:white;border:none;">Delete</button>
+            </div>
+        </div>
+
+        {% if section.articles %}
+        <div class="wiki-editor-article-list" data-section-id="{{ section.id }}">
+            {% for article in section.articles %}
+            <div class="wiki-editor-article-row" data-article-id="{{ article.id }}">
+                <span class="wiki-editor-heading">
+                    <span class="wiki-drag-handle wiki-article-drag-handle" title="Drag to reorder">⠿</span>
+                    <span>
+                        {{ article.title }}
+                        {% if not article.is_published %}
+                        <span class="wiki-draft-badge">Draft</span>
+                        {% endif %}
+                        <span class="wiki-article-key{{ ' is-unset' if not article.help_key else '' }}">
+                            {{ article.help_key or 'no help key' }}
+                        </span>
+                    </span>
+                </span>
+                <a href="{{ url_for('wiki.edit_article', article_id=article.id) }}"
+                    class="btn-secondary btn-sm">Edit</a>
+            </div>
             {% endfor %}
-            {% endif %}
-            {% if not section.is_published %}
-            <span class="wiki-draft-badge">Draft</span>
-            {% endif %}
         </div>
-        <div style="display:flex;gap:0.5rem;align-items:center;">
-            <a href="{{ url_for('wiki.edit_section', section_id=section.id) }}" class="btn-secondary btn-sm">Edit</a>
-            <button class="btn-secondary btn-sm wiki-section-publish-btn" data-section-id="{{ section.id }}">
-                {{ 'Unpublish' if section.is_published else 'Publish' }}
-            </button>
-            <a href="{{ url_for('wiki.new_article', section_id=section.id) }}" class="btn-primary btn-sm">+ Article</a>
-            <button class="btn-sm wiki-section-delete-btn" data-section-id="{{ section.id }}"
-                style="background:var(--rose);color:white;border:none;">Delete</button>
-        </div>
-    </div>
+        {% else %}
+        <p class="wiki-editor-empty">No articles yet.</p>
+        {% endif %}
 
-    {% if section.articles %}
-    <div class="wiki-editor-article-list">
-        {% for article in section.articles %}
-        <div class="wiki-editor-article-row">
-            <span>
-                {{ article.title }}
-                {% if not article.is_published %}
-                <span class="wiki-draft-badge">Draft</span>
-                {% endif %}
-            </span>
-            <a href="{{ url_for('wiki.edit_article', article_id=article.id) }}" class="btn-secondary btn-sm">Edit</a>
-        </div>
-        {% endfor %}
     </div>
-    {% else %}
-    <p class="wiki-editor-empty">No articles yet.</p>
-    {% endif %}
-
+    {% endfor %}
 </div>
-{% endfor %}
 
 {% else %}
 <p class="wiki-editor-empty">No sections yet. Create your first one above.</p>
 {% endif %}
+</div>
+
+{% include 'wiki/_coverage_panel.html' %}
+</div>
+
+{% include 'wiki/_section_modal.html' %}
+{% include 'wiki/_article_modal.html' %}
+
+<script>
+    var WIKI_REORDER_SECTIONS_URL = {{ url_for('wiki.reorder_sections') | tojson }};
+    var WIKI_REORDER_ARTICLES_URL = {{ url_for('wiki.reorder_articles') | tojson }};
+</script>
 <script src="{{ url_for('wiki_assets.static', filename='js/wiki.js') }}"></script>
+<script src="{{ url_for('wiki_assets.static', filename='js/editor_dashboard.js') }}"></script>
 {% endblock %}

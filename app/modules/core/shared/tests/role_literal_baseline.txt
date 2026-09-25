@@ -9,13 +9,13 @@ modules/auth/templates/auth/account.html :: {% if current_user.role in ['project
 modules/core/shared/routes/api.py :: if actor.role == 'admin':
 modules/dashboard/lib/dashboard_logic.py :: if last_author.role in cs_roles:
 modules/dashboard/lib/dashboard_logic.py :: if viewer.role in ('designer', 'team_lead') and owner_info['role'] == 'cs':
+modules/dashboard/lib/project_loader.py :: if user.role == 'cs':
+modules/dashboard/lib/project_loader.py :: if user.role == 'project_owner':
+modules/dashboard/lib/project_loader.py :: if user.role in ('admin', 'management'):
+modules/dashboard/lib/project_loader.py :: if user.role in ('designer', 'team_lead'):
 modules/dashboard/routes/dashboard.py :: elif u.role == 'cs' and any(needs_client_approval(p) for p in scoped):
 modules/dashboard/routes/dashboard.py :: flaggable_projects=_compute_flaggable_projects(user) if user.role in ('cs', 'designer', 'team_lead') else [],
 modules/dashboard/routes/dashboard.py :: if u.role == 'cs':
-modules/dashboard/routes/dashboard.py :: if user.role == 'cs':
-modules/dashboard/routes/dashboard.py :: if user.role == 'project_owner':
-modules/dashboard/routes/dashboard.py :: if user.role in ('admin', 'management'):
-modules/dashboard/routes/dashboard.py :: if user.role in ('designer', 'team_lead'):
 modules/dashboard/templates/dashboard/_decision_flag_modal.html :: flag (current_user.role in ('admin','management') — see get_decision_
 modules/projects/routes/project_notes.py :: return actor.role in ('designer', 'team_lead') and actor.team == 'Technical'
 modules/projects/routes/project_notes.py :: return user.role in ('designer', 'team_lead')

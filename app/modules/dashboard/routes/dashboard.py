@@ -2,9 +2,13 @@ from flask import Blueprint, render_template, jsonify, request, abort
 from flask_login import login_required
 from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import nullslast
-from app.modules.core.shared.extensions import db
-from app.modules.core.shared.models import Project, ProjectSecondaryCS, ProjectDesigner, ActivityLog, User, Deliverable, DecisionFlag, DeliverableAssignment
+from sqlalchemy.orm import contains_eager, joinedload, selectinload
+from app.modules.core.shared.models import Project, ActivityLog, User, Deliverable, DecisionFlag, DeliverableAssignment
 from app.modules.core.shared.lib.utils import get_actor
+from app.modules.dashboard.lib.project_loader import (
+    load_active_projects, load_projects, load_scoped_project_names, load_scoped_projects,
+    open_decision_flags, request_memo, scope_query,
+)
 from app.modules.dashboard.lib.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer, needs_client_approval
 from app.modules.core.shared.lib.status_vocabulary import derive_project_status
 from app.modules.core.shared.lib.users import active_users_query
@@ -79,12 +83,12 @@ CARD_ORDER = {
 # WRITE actions get logged/notified as the person they're emulating). This
 # is read-only, doesn't touch the session, and never changes who a write
 # action is attributed to — get_actor and effective_role are completely
-# untouched by it. It only changes what _scoped_projects considers "my
+# untouched by it. It only changes what scope_query considers "my
 # projects" for the DATA this page queries. Conflating the two would be a
 # mistake — don't reach for session['emulating_user_id'] here.
 class _ScopeUser:
     """
-    Duck-types a real User for _scoped_projects()'s .id/.role checks (and
+    Duck-types a real User for scope_query()'s .id/.role checks (and
     _is_owner()'s .id check) ONLY — nothing else on this page ever looks at
     it. Lets _resolve_dashboard_scope() hand back "pretend you're CS lead
     X" without constructing (or worse, actually querying-as) a real
@@ -101,7 +105,7 @@ def _resolve_dashboard_scope(user):
     dashboard's data through. Only ever branches for holders of the
     switch_dashboard_scope capability (management and admin) — every other role
     gets scope_mode=None and the real `user` object back unchanged, so
-    _scoped_projects() and everything downstream behaves EXACTLY as it did
+    scope_query() and everything downstream behaves EXACTLY as it did
     before this feature existed for them.
 
     Modes:
@@ -110,7 +114,7 @@ def _resolve_dashboard_scope(user):
              project is being CS Lead or secondary CS on it (see
              the project docs "Management role in CS pickers" — management AND
              admin users are both valid CS Lead picks), so this reuses
-             _scoped_projects()'s existing 'cs' branch with the real
+             scope_query()'s existing 'cs' branch with the real
              viewer's own id. Decisions Needed is the one exception,
              widened to EVERY flagged project company-wide by the
              all_flags=True path on _compute_decisions() below — per spec
@@ -131,11 +135,11 @@ def _resolve_dashboard_scope(user):
              target.role) — target.role is whichever of 'designer'/
              'team_lead' this particular user actually has, NOT a
              hardcoded 'designer' (that would have been harmless today,
-             since _scoped_projects() lumps both into one shared "designer
+             since scope_query() lumps both into one shared "designer
              / team_lead" branch by exclusion, and CARD_ORDER's 'designer'
              and 'team_lead' entries are currently identical lists — but
              hardcoding it was still a latent footgun for the day either
-             of those two things stops being true) — so _scoped_projects()
+             of those two things stops being true) — so scope_query()
              falls into its designer/team_lead branch (ProjectDesigner
              assignment) instead of the CS one. Decisions stays normally
              scoped here too, same reasoning as 'cs_<id>'.
@@ -326,6 +330,7 @@ def index():
     if layout_role in ('management', 'admin'):
         decisions = _compute_decisions(scope_user, all_flags=True)
         risk_overdue = _compute_risk_overdue(scope_user)
+        waiting_on_others = _compute_leadership_waiting_on_others(scope_user)
         return render_template(
             'dashboard_leadership.html',
             effective_role=user.role,
@@ -341,9 +346,9 @@ def index():
             # docstring for why this one isn't). Takes no scope argument at
             # all.
             escalation_history=_compute_escalation_history(),
-            waiting_on_others=_compute_leadership_waiting_on_others(scope_user),
+            waiting_on_others=waiting_on_others,
             role_snapshot=_compute_role_snapshot(),
-            leadership_focus=_compute_leadership_focus(scope_user, len(decisions), risk_overdue),
+            leadership_focus=_compute_leadership_focus(scope_user, len(decisions), risk_overdue, waiting_on_others),
             # Plain {id, name, team} dicts (not raw User objects — those
             # aren't JSON-serializable via Jinja's |tojson) for the Assign
             # Designer modal's client-side team-filter, embedded as a
@@ -436,7 +441,7 @@ def index():
         # _compute_project_stats's docstring for the scoping rules.
         project_stats=_compute_project_stats(scope_user),
         # Row-list BODIES for the two simple stat cards — each is
-        # the exact same _scoped_projects query _compute_project_stats
+        # the same load_scoped_projects list _compute_project_stats
         # counts for that number, just serialized into full rows instead
         # of a bare count. (The old total_active_projects tile was removed.)
         your_active_projects=_compute_your_active_projects(scope_user),
@@ -480,63 +485,6 @@ def index():
         # ability to submit a flag as that person.
         flaggable_projects=_compute_flaggable_projects(user) if user.role in ('cs', 'designer', 'team_lead') else [],
     )
-
-
-# ── Role scoping ─────────────────────────────────────────────────────────
-# Every compute function below needs "which projects can this user see", so
-# it's factored out once here rather than repeated five times. Mirrors the
-# same filters already used by main.cs_dashboard / designer_dashboard /
-# team_lead_dashboard (app/routes/__init__.py) — management/admin see
-# everything, CS sees projects they lead or are secondary CS on, designer/
-# team_lead see projects they're assigned to via ProjectDesigner.
-
-def _scoped_projects(user, active_only=True):
-    """
-    Drafts are always excluded. Approved AND Handed to Production projects
-    are excluded too when active_only=True (matches the existing
-    dashboards' "active work" lists) — some endpoints (what-changed) want
-    the full history including completed projects, so active_only=False
-    is available for those. handed_to_production added  — it's
-    a later, more-complete stage than approved (design has actually left
-    the building), so it belongs in the same "no longer active work"
-    bucket; before this fix it fell through every active-work filter here
-    and kept showing up in Due/At Risk/Next Actions/Priority Actions as if
-    it still needed attention.
-    """
-    base = Project.query.filter(Project.project_status != 'draft')
-    if active_only:
-        base = base.filter(Project.project_status.notin_(['approved', 'handed_to_production']))
-
-    # Role literals below pick which SLICE of projects a role sees, not
-    # whether they may see the dashboard at all. Each branch is exclusive, so a
-    # capability — which admin holds through the wildcard — would match several.
-    if user.role in ('admin', 'management'):
-        return base
-
-    if user.role == 'cs':
-        secondary_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(user_id=user.id).subquery()
-        return base.filter(db.or_(Project.cs_lead_id == user.id, Project.id.in_(secondary_ids)))
-
-    if user.role == 'project_owner':
-        # Bug fix, : this branch didn't exist — a project_owner
-        # user fell through to the designer/team_lead branch below, which
-        # checks ProjectDesigner assignments a Project Owner never has, so
-        # their dashboard silently returned zero projects. Mirrors
-        # project_list.py's _base_query_for_view 'my' view, which already
-        # matches Project.project_owner_id == user.id correctly.
-        return base.filter(Project.project_owner_id == user.id)
-
-    if user.role in ('designer', 'team_lead'):
-        assigned_ids = db.session.query(ProjectDesigner.project_id).filter_by(user_id=user.id).subquery()
-        return base.filter(Project.id.in_(assigned_ids))
-
-    # Any other role. Holding view_all_projects means the whole active list;
-    # without it the dashboard is deliberately empty rather than silently
-    # falling into the designer branch, which matches on assignments these
-    # roles never have and would return nothing while looking broken.
-    if can('view_all_projects', user):
-        return base
-    return base.filter(Project.id.in_([]))
 
 
 def _is_owner(owner_user, user):
@@ -837,7 +785,7 @@ def _compute_at_risk_projects(user):
     today = date.today()
     results = []
 
-    for p in _scoped_projects(user, active_only=True).all():
+    for p in load_scoped_projects(user):
         tags = []
         has_missing_designer = bool(_missing_designer_tags(p))
 
@@ -877,7 +825,7 @@ def _compute_at_risk_projects(user):
 
 
 def _compute_summary(user):
-    active_projects = _scoped_projects(user, active_only=True).all()
+    active_projects = load_scoped_projects(user)
     today = date.today() # still needed below for what_changed's yesterday cutoff
 
     # due_today/due_week/overdue counts — FIXED (same day as the
@@ -907,14 +855,12 @@ def _compute_summary(user):
         else:
             others_actions += 1
 
-    decisions_needed = _scoped_projects(user, active_only=True).filter(
-        Project.decision_needed.is_(True)
-    ).count()
+    decisions_needed = sum(1 for p in active_projects if p.decision_needed)
 
     # what_changed intentionally looks across the FULL scope (active_only=False)
     # — an approval event happening yesterday is still something worth seeing
     # in "what changed", even though the project itself just left the active list.
-    all_scope_ids = [p.id for p in _scoped_projects(user, active_only=False).all()]
+    all_scope_ids = list(load_scoped_project_names(user))
     yesterday = today - timedelta(days=1)
     what_changed = ActivityLog.query.filter(
         ActivityLog.entity_type == 'project',
@@ -991,9 +937,9 @@ def _stat_project_rows(projects):
 
 def _compute_your_active_projects(user):
     """Body for the 'Your Active Projects' stat card — the exact same
-    _scoped_projects(user, active_only=True) query _compute_project_stats()
+    load_scoped_projects(user) list _compute_project_stats()
     counts for 'your_active', now serialized into full rows."""
-    return _stat_project_rows(_scoped_projects(user, active_only=True).all())
+    return _stat_project_rows(load_scoped_projects(user))
 
 
 def _compute_pending_approval_projects(user):
@@ -1005,7 +951,7 @@ def _compute_pending_approval_projects(user):
     needs_client_approval()'s docstring for why project_status itself
     never reaches 'submitted_to_client' for C&CM."""
     return _stat_project_rows([
-        p for p in _scoped_projects(user, active_only=True).all()
+        p for p in load_scoped_projects(user)
         if needs_client_approval(p)
     ])
 
@@ -1034,10 +980,9 @@ def _compute_project_stats(user):
     the bare numbers for each card's badge. The two simple cards' actual
     BODY content (a project list) comes from the sibling
     _compute_your_active_projects()/_compute_pending_approval_projects()
-    functions above, which deliberately re-run the same underlying
-    queries rather than reshaping this function's output, matching the
-    "each card independently re-queries _scoped_projects()" convention
-    every other card on this page already follows. Average Project Time's
+    functions above, which read the same per-request list
+    (load_scoped_projects) rather than reshaping this function's output.
+    Average Project Time's
     body (admin/management only) comes from build_time_tracking_rows() —
     NOT fetched in index() anymore ( perf fix, see the big
     comment there) — now lazy-loaded client-side via GET /dashboard/api/
@@ -1070,9 +1015,9 @@ def _compute_project_stats(user):
     the C&CM half of the check reaches across the channels/concept/kv
     relationships rather than a single column.
     """
-    your_active = _scoped_projects(user, active_only=True).count()
+    your_active = len(load_scoped_projects(user))
     pending_approval = sum(
-        1 for p in _scoped_projects(user, active_only=True).all()
+        1 for p in load_scoped_projects(user)
         if needs_client_approval(p)
     )
     total_active = Project.query.filter(
@@ -1100,7 +1045,7 @@ def _compute_project_stats(user):
     # time. Same judgment call as before, now applied to the derived value.
     from app.modules.time_tracking.logic import compute_project_hours
     tracked_hours = [
-        h for p in _scoped_projects(user, active_only=True).all()
+        h for p in load_scoped_projects(user)
         if (h := compute_project_hours(p)['overall']) > 0
     ]
     average_time = round(sum(tracked_hours) / len(tracked_hours), 1) if tracked_hours else 0.0
@@ -1151,16 +1096,15 @@ def _compute_what_changed(user):
     on the dashboard now. Still None for system-triggered entries with no
     user_id, same as before.
     """
-    projects = _scoped_projects(user, active_only=False).all()
-    project_ids = [p.id for p in projects]
-    projects_by_id = {p.id: p for p in projects}
+    names_by_id = load_scoped_project_names(user)
+    project_ids = list(names_by_id)
 
     yesterday = date.today() - timedelta(days=1)
     entries = ActivityLog.query.filter(
         ActivityLog.entity_type == 'project',
         ActivityLog.entity_id.in_(project_ids),
         ActivityLog.created_at >= yesterday
-    ).order_by(ActivityLog.created_at.desc()).all()
+    ).options(joinedload(ActivityLog.user)).order_by(ActivityLog.created_at.desc()).all()
 
     return [
         {
@@ -1168,7 +1112,7 @@ def _compute_what_changed(user):
             # Prefer the live project name over the logged snapshot
             # (entity_name) — a project can be renamed after the log entry
             # was written, and the current name is more useful to show.
-            'project_name': projects_by_id[e.entity_id].name if e.entity_id in projects_by_id else e.entity_name,
+            'project_name': names_by_id[e.entity_id] if e.entity_id in names_by_id else e.entity_name,
             'description': e.description,
             'timestamp': e.created_at.isoformat(),
             'changed_by': _serialize_person(e.user) if e.user else None
@@ -1242,7 +1186,7 @@ def _compute_due(user, filter_type):
     is_overdue_filter = filter_type in ('overdue', 'overdue_today')
 
     results = []
-    for p in _scoped_projects(user, active_only=True).all():
+    for p in load_scoped_projects(user):
         owner = get_next_action_owner(p)
         rag = get_project_rag(p)
         owner_json = _serialize_owner(owner['user'])
@@ -1367,7 +1311,7 @@ def _compute_decisions(user, all_flags=False):
     also the JS re-render after a new flag is submitted.
 
     all_flags=True (added  for the "My View" tab, see
-    _resolve_dashboard_scope()) bypasses _scoped_projects() entirely and
+    _resolve_dashboard_scope()) bypasses scope_query() entirely and
     returns EVERY flagged, non-draft project company-wide, regardless of
     `user`. Per spec, My View's Decisions Needed shows "ALL flags raised"
     — not narrowed to just the projects this particular viewer happens to
@@ -1389,28 +1333,19 @@ def _compute_decisions(user, all_flags=False):
     has an unstaffed requested team.
     """
     if all_flags:
-        base = Project.query.filter(Project.project_status != 'draft')
+        projects = (Project.query
+                    .filter(Project.project_status != 'draft', Project.decision_needed.is_(True))
+                    .options(selectinload(Project.assigned_designers))
+                    .all())
     else:
-        base = _scoped_projects(user, active_only=True)
-
-    projects = base.filter(Project.decision_needed.is_(True)).all()
+        projects = [p for p in load_scoped_projects(user) if p.decision_needed]
+    open_flags = open_decision_flags([p.id for p in projects])
 
     now = datetime.utcnow()
 
-    # Switched from ordering by the deprecated Project.decision_raised_at
-    # column to sorting on each project's active DecisionFlag.created_at
-    # instead (Decision Flag reply/resolve feature) — that
-    # column stopped being written to once flag_management started
-    # creating DecisionFlag rows instead (see that route), so ordering by
-    # it would now be sorting on a value that's always NULL for every new
-    # flag. Paired up once per project (the active_decision_flag property
-    # itself queries, so this avoids doing it twice — once to sort, once
-    # to build the row below). A decision_needed=True project with no
-    # matching flag row is defensively skipped rather than crashing on
-    # flag.note — the two are separate signals (fast boolean sentinel vs.
-    # rich row) that could in theory drift, per active_decision_flag's own
-    # docstring in app/models/__init__.py.
-    pairs = [(p, p.active_decision_flag) for p in projects]
+    # Ordered by each project's open DecisionFlag. A decision_needed project
+    # with no open flag row is skipped: the flag and the boolean can drift.
+    pairs = [(p, open_flags.get(p.id)) for p in projects]
     pairs = [(p, f) for p, f in pairs if f is not None]
     pairs.sort(key=lambda pf: pf[1].created_at or datetime.max)
 
@@ -1540,7 +1475,7 @@ def _compute_next_actions(user, filter_type):
     disagree with the red chips the row itself renders).
     """
     results = []
-    for p in _scoped_projects(user, active_only=True).all():
+    for p in load_scoped_projects(user):
         owner_info = get_next_action_owner(p)
         is_mine = _is_owner(owner_info['user'], user)
 
@@ -1683,7 +1618,7 @@ def _compute_priority_actions(user):
     week_end = today + timedelta(days=7)
 
     rows = []
-    for p in _scoped_projects(user, active_only=True).all():
+    for p in load_scoped_projects(user):
         owner_info = get_next_action_owner(p)
         if not _is_owner(owner_info['user'], user):
             continue
@@ -1802,7 +1737,7 @@ def _compute_waiting_on_others(user):
     established — see _format_waiting_date().
     """
     results = []
-    for p in _scoped_projects(user, active_only=True).all():
+    for p in load_scoped_projects(user):
         owner_info = get_next_action_owner(p)
         if _is_owner(owner_info['user'], user):
             continue
@@ -1844,13 +1779,12 @@ def _compute_my_escalated_projects(user):
     reply_count lets the row show a small "N replies" badge without the
     template needing to know anything about DecisionFlagMessage directly.
     """
-    projects = _scoped_projects(user, active_only=True).filter(
-        Project.decision_needed.is_(True)
-    ).all()
+    projects = [p for p in load_scoped_projects(user) if p.decision_needed]
+    open_flags = open_decision_flags([p.id for p in projects])
 
     rows = []
     for p in projects:
-        flag = p.active_decision_flag
+        flag = open_flags.get(p.id)
         if not flag or flag.created_by_id != user.id:
             continue
         rows.append({
@@ -1876,7 +1810,7 @@ def _compute_my_escalation_history(user):
     message history."
 
     Deliberately queried directly off DecisionFlag rather than through
-    _scoped_projects() the way every other row list on this page is built
+    scope_query() the way every other row list on this page is built
     — a resolved flag's project may since have moved out of the CS's
     active scope entirely (approved, put on hold, reassigned to a
     different CS), and none of that should make this CS's own record of
@@ -1899,6 +1833,8 @@ def _compute_my_escalation_history(user):
     flags = (
         DecisionFlag.query
         .filter_by(created_by_id=user.id, is_resolved=True)
+        .options(joinedload(DecisionFlag.project), joinedload(DecisionFlag.resolved_by),
+                 selectinload(DecisionFlag.messages))
         .order_by(DecisionFlag.resolved_at.desc())
         .limit(100)
         .all()
@@ -1949,6 +1885,8 @@ def _compute_escalation_history():
     flags = (
         DecisionFlag.query
         .filter_by(is_resolved=True)
+        .options(joinedload(DecisionFlag.project), joinedload(DecisionFlag.created_by),
+                 joinedload(DecisionFlag.resolved_by), selectinload(DecisionFlag.messages))
         .order_by(DecisionFlag.resolved_at.desc())
         .limit(100)
         .all()
@@ -1991,7 +1929,7 @@ def _compute_flaggable_projects(user):
     queue (decision_needed=True) are excluded — flagging something twice
     isn't a real action, it's already sitting in the queue.
     """
-    projects = _scoped_projects(user, active_only=True).filter(
+    projects = scope_query(user).filter(
         Project.decision_needed.isnot(True) # catches False AND NULL, not just False
     ).order_by(Project.name.asc()).all()
     return [{'id': p.id, 'name': p.name} for p in projects]
@@ -2016,13 +1954,15 @@ def _compute_clashes_response(user):
     avatar_filename so clashes.html can render it through
     dash_person_chip() instead of a plain text .dash-owner-tag pill.
     """
-    projects = _scoped_projects(user, active_only=True).all()
+    projects = load_scoped_projects(user)
     clashes = compute_clashes(projects)
+    designer_ids = {c['designer_id'] for c in clashes['by_deliverable'] + clashes['by_project']}
+    designers_by_id = {u.id: u for u in User.query.filter(User.id.in_(designer_ids))} if designer_ids else {}
 
     return {
         'by_deliverable': [
             {
-                'designer': _serialize_person(User.query.get(c['designer_id'])),
+                'designer': _serialize_person(designers_by_id.get(c['designer_id'])),
                 'date': c['date'].isoformat(),
                 # 'clash' | 'potential' — see _clash_severity in
                 # dashboard_logic.py for the exact rule. Rendered as
@@ -2059,7 +1999,7 @@ def _compute_clashes_response(user):
         ],
         'by_project': [
             {
-                'designer': _serialize_person(User.query.get(c['designer_id'])),
+                'designer': _serialize_person(designers_by_id.get(c['designer_id'])),
                 'date': c['date'].isoformat(),
                 'projects': [
                     {
@@ -2178,7 +2118,7 @@ def _compute_risk_overdue(user):
     today = date.today()
     buckets = {'overdue': [], 'at_risk': [], 'no_deadline': []}
 
-    for p in _scoped_projects(user, active_only=True).all():
+    for p in load_scoped_projects(user):
         has_no_cs_lead = not p.cs_lead_id
         missing_teams = _missing_designer_teams(p)
         requested_teams = _requested_teams_list(p)
@@ -2292,7 +2232,7 @@ def _compute_leadership_waiting_on_others(user):
     specifically.
     """
     results = []
-    for p in _scoped_projects(user, active_only=True).all():
+    for p in load_scoped_projects(user):
         missing_teams = _missing_designer_teams(p)
         if missing_teams:
             row_type = 'assign'
@@ -2362,7 +2302,7 @@ def _compute_role_snapshot():
     for 'clear' — same red/amber/green story every other urgency signal on
     this page tells).
 
-    Always company-wide (User.query, not _scoped_projects(management_user)
+    Always company-wide (User.query, not scope_query(management_user)
     — this card is inherently about OTHER people's workloads, there's no
     "viewer's own scope" to narrow it by).
 
@@ -2380,9 +2320,7 @@ def _compute_role_snapshot():
     "Designer Row" split by team, and a team lead IS on one of the three
     design teams, same as any designer.
     """
-    all_projects = Project.query.filter(
-        Project.project_status.notin_(['draft', 'approved', 'handed_to_production'])
-    ).all()
+    all_projects = load_active_projects()
     clashes = compute_clashes(all_projects)
     clash_designer_ids = set()
     for c in clashes['by_deliverable']:
@@ -2395,7 +2333,9 @@ def _compute_role_snapshot():
     tiles_unassigned = []
 
     for u in active_users_query().filter(User.role.in_(_ROLE_SNAPSHOT_ROLES)).order_by(User.name.asc()).all():
-        scoped = _scoped_projects(u, active_only=True).all()
+        # Only ids per person: the scope rule stays in scope_query, the rows come from all_projects.
+        scoped_ids = {pid for (pid,) in scope_query(u).with_entities(Project.id)}
+        scoped = [p for p in all_projects if p.id in scoped_ids]
         active_count = len(scoped)
 
         if u.id in clash_designer_ids:
@@ -2444,7 +2384,7 @@ def _compute_role_snapshot():
             # same plain project-list row shape (name/deadline/status) the
             # Your Active / Pending Approval / Total Active stat cards
             # already show via _stat_project_rows — `scoped` here is that
-            # exact same _scoped_projects(u, active_only=True) list, just
+            # same projects load_scoped_projects(u) would return, just
             # not yet serialized. Embedded into the page as a JSON blob
             # (see dashboard_leadership.html) rather than fetched via a new
             # API route, since this data is already fully computed on page
@@ -2467,17 +2407,19 @@ def _compute_role_snapshot():
     }
 
 
-def _compute_leadership_focus(user, decisions_count, risk_overdue):
+def _compute_leadership_focus(user, decisions_count, risk_overdue, waiting_on_others=None):
     """
     Leadership Focus bar's 5 pills. Reuses counts already computed
     elsewhere in index() (decisions_count from _compute_decisions(),
-    risk_overdue's own bucket lengths) rather than re-querying — the bar
-    is purely a summary of data every other card on this page already
-    fetched.
+    risk_overdue's own bucket lengths, waiting_on_others when given) rather
+    than re-querying — the bar is purely a summary of data every other card
+    on this page already fetched.
     """
-    clashes = compute_clashes(_scoped_projects(user, active_only=True).all())
+    clashes = compute_clashes(load_scoped_projects(user))
     clash_count = len(clashes['by_project']) + len(clashes['by_deliverable'])
-    waiting_count = len(_compute_leadership_waiting_on_others(user))
+    if waiting_on_others is None:
+        waiting_on_others = _compute_leadership_waiting_on_others(user)
+    waiting_count = len(waiting_on_others)
 
     return {
         'decisions_open': decisions_count,
@@ -2678,13 +2620,18 @@ def _designer_row_classification(p, user):
 
 
 def _designer_relevant_entries(user):
+    """Per-request memo of _build_designer_entries(); the designer page reads it up to three times."""
+    return list(request_memo(('designer_entries', user.id), lambda: _build_designer_entries(user)))
+
+
+def _build_designer_entries(user):
     """
      "the designer dashboard should be
     deliverable based, not project based. So if a customer or deliverable
     is due that day, all assigned people within that customer or
     deliverable should have that on their dashboard as due today. same
     applies to this week, overdue etc." Replaces the old project-level
-    ProjectDesigner scope (_scoped_projects()) as My Work Queue's
+    ProjectDesigner scope (scope_query()) as My Work Queue's
     scoping unit — querying DeliverableAssignment.designer_id == user.id
     directly (the FINE-GRAINED per-deliverable assignment table, distinct
     from ProjectDesigner's project-level "lead designer for team X") is
@@ -2694,7 +2641,7 @@ def _designer_relevant_entries(user):
     query result, so neither sees the other's deliverable/customer.
 
     Returns one dict per relevant deliverable/customer (non-draft,
-    non-approved project only, mirroring _scoped_projects()'s own
+    non-approved project only, mirroring scope_query()'s own
     draft/approved exclusion):
       {'project': Project, 'type': 'deliverable'|'customer',
        'entry_name': str, 'deadline': date|None,
@@ -2717,12 +2664,14 @@ def _designer_relevant_entries(user):
                    .join(Project, Deliverable.project_id == Project.id)
                    .filter(DeliverableAssignment.designer_id == user.id)
                    .filter(Project.project_status.notin_(['draft', 'approved', 'handed_to_production']))
+                   .options(contains_eager(DeliverableAssignment.deliverable))
                    .all())
+    projects_by_id = load_projects(a.deliverable.project_id for a in assignments)
 
     entries = {} # dedupe key -> entry dict
     for a in assignments:
         d = a.deliverable
-        p = d.project
+        p = projects_by_id[d.project_id]
         if d.project_customer_id:
             pc = d.project_customer
             # handed_to_production added alongside approved —
@@ -2979,7 +2928,7 @@ def _compute_designer_metrics(user):
     revision cycle, not just ones currently awaiting a resubmit).
 
     : Assigned/Submitted/Revisions are DELIBERATELY still
-    project-level (_scoped_projects(), via the project-level ProjectDesigner
+    project-level (scope_query(), via the project-level ProjectDesigner
     assignment) even though My Work Queue itself moved to deliverable/
     customer granularity (_designer_relevant_entries(), via
     DeliverableAssignment) — the "deliverable based, not project
@@ -2992,7 +2941,7 @@ def _compute_designer_metrics(user):
     the same classification a second time — see this function's own
     intro comment above).
     """
-    assigned = _scoped_projects(user, active_only=True).all()
+    assigned = load_scoped_projects(user)
     submitted = [p for p in assigned if (
         p.project_status in ('submitted', 'internal_review', 'submitted_to_client')
         or needs_client_approval(p)

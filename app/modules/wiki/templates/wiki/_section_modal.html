@@ -1,0 +1,42 @@
+{# Section metadata — one overlay serving both New Section and Edit.
+   Standard app modal (.modal-overlay/.modal-box), toggled with .hidden. #}
+<div class="modal-overlay hidden" id="wiki-section-modal">
+    <div class="modal-box wiki-modal">
+        <div class="modal-title" id="wiki-section-modal-title">New section</div>
+
+        <form method="POST" action="{{ url_for('wiki.save_section') }}" id="wiki-section-form">
+            <input type="hidden" name="section_id" id="wiki-section-id" value="">
+
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" name="title" id="wiki-section-title" required>
+            </div>
+
+            <div class="form-group">
+                <label>Relevant roles
+                    <span class="form-hint">Sorts the wiki for these people first. It hides nothing from anyone
+                        else.</span>
+                </label>
+                <div class="wiki-role-options">
+                    {% for role in ['Admin', 'CS', 'Designer', 'Team Lead', 'Management'] %}
+                    <label class="team-tag-toggle">
+                        <input type="checkbox" name="relevant_roles" value="{{ role }}"
+                            data-role="{{ role }}">
+                        {{ role }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <label class="wiki-publish-toggle">
+                <input type="checkbox" name="is_published" id="wiki-section-published">
+                <span>Published</span>
+            </label>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-wiki-modal-close>Cancel</button>
+                <button type="submit" class="btn-primary">Save section</button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -10,26 +10,15 @@
     var TEMPLATE_CONTRACT = ['wiki-article-form', 'wiki-editor', 'wiki-sections-json',
         'wiki-article-id', 'wiki-save-status'];
 
-    function templateDocument(key) {
-        var documents = window.WIKI_TEMPLATE_DOCUMENTS || {};
-        return documents[key] || { blocks: [] };
-    }
-
-    function selectedTemplateKey() {
-        var chosen = document.querySelector('.wiki-template-option.is-selected');
-        return chosen ? chosen.dataset.templateKey : null;
-    }
-
-    /** Existing articles open on their content; new ones open on a skeleton. */
+    /** Articles arrive already seeded with their skeleton, chosen when they were created. */
     function readDocument() {
         try {
             var parsed = window.WIKI_ARTICLE_JSON ? JSON.parse(window.WIKI_ARTICLE_JSON) : null;
             if (parsed && Array.isArray(parsed.blocks)) { return parsed; }
         } catch (error) {
-            /* fall through to a skeleton */
+            /* fall through to an empty article */
         }
-        var key = selectedTemplateKey();
-        return key ? templateDocument(key) : { blocks: [] };
+        return { blocks: [] };
     }
 
     /** Editor.js wants {success, file:{url}}; our endpoint answers {success, url}. */
@@ -82,21 +71,6 @@
         window.helixWikiEditor = null;
     }
 
-    function wirePicker(editor) {
-        var picker = document.getElementById('wiki-template-picker');
-        if (!picker) { return; }
-
-        picker.addEventListener('click', function (event) {
-            var option = event.target.closest('.wiki-template-option');
-            if (!option) { return; }
-
-            picker.querySelectorAll('.wiki-template-option').forEach(function (button) {
-                button.classList.toggle('is-selected', button === option);
-            });
-            editor.blocks.render(templateDocument(option.dataset.templateKey));
-        });
-    }
-
     function wireSubmit(form, field) {
         form.addEventListener('submit', function (event) {
             event.preventDefault();
@@ -142,7 +116,6 @@
             minHeight: 200,
             onReady: function () {
                 window.helixBlockDrag = window.HelixBlockDrag.attach(editor, holder);
-                wirePicker(editor);
                 startAutosave(editor, form, articleField, status);
             }
         });

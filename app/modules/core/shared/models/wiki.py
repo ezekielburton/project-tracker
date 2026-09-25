@@ -36,7 +36,8 @@ class WikiArticle(db.Model):
     """
     A single page within a wiki section. sections_json holds the live Editor.js
     document, draft_sections_json the autosaved working copy, and
-    legacy_sections_json the pre-Editor.js content as a fallback.
+    legacy_sections_json the pre-Editor.js content as a fallback. help_key names
+    the page this article explains — one article per key.
     """
 
     __tablename__='wiki_articles'
@@ -45,6 +46,7 @@ class WikiArticle(db.Model):
     section_id      = db.Column(db.Integer, db.ForeignKey('wiki_sections.id'), nullable=False)
     title           = db.Column(db.String(200), nullable=False)
     slug            = db.Column(db.String(200), nullable=False)
+    help_key        = db.Column(db.String(100))
     sections_json   = db.Column(db.Text)
     legacy_sections_json = db.Column(db.Text)
     draft_sections_json  = db.Column(db.Text)

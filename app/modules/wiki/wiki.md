@@ -10,15 +10,19 @@ app/modules/wiki/
   routes/wiki.py            # the `wiki` blueprint (wiki_bp)
   lib/blocks.py             # Editor.js document shape, conversion, sanitising
   lib/article_templates.py  # the How-to / Reference / Blank skeletons
+  lib/help_keys.py          # the help-key registry and coverage figures
   static/js/wiki.js         # reader, dashboard CRUD, slug, publish/delete
   static/js/wiki_editor.js  # Editor.js setup for the article editor
   static/js/blocks/         # helix_callout.js, helix_video.js — our two tools
   templates/wiki/           # index, _article_content, editor_dashboard,
-                            # editor_article, editor_section
+                            # editor_article, _section_modal, _article_modal,
+                            # _coverage_panel
   tests/test_wiki_smoke.py
   tests/test_wiki_blocks.py
   tests/test_wiki_editor.py
   tests/test_wiki_authoring.py
+  tests/test_wiki_dashboard.py
+  tests/test_wiki_help_keys.py
   wiki.md
 ```
 
@@ -35,14 +39,20 @@ app/modules/wiki/
   article's draft; creates the article first if it does not exist yet. Writes
   with raw SQL so it never bumps `updated_at`, which readers see.
 - `GET /wiki/editor` — the editor dashboard
-- section + article CRUD under `/wiki/editor/...` (new, edit, save,
-  toggle-publish, delete)
+- `POST /wiki/editor/article/create` — from the new-article overlay; seeds the
+  chosen skeleton and redirects into the editor
+- `POST /wiki/editor/sections/reorder`, `POST /wiki/editor/articles/reorder` —
+  each takes an ordered list of ids and writes `sort_order` from list position
+- article CRUD under `/wiki/editor/article/...` (edit, save, autosave,
+  toggle-publish, delete) and `POST /wiki/editor/section/save` plus the
+  section toggle-publish and delete endpoints
 
 ## Models
 `WikiSection`, `WikiArticle`, from `core/shared`. Article content lives in
 `sections_json` as an Editor.js document; `draft_sections_json` holds the
 autosaved working copy (cleared when Save makes it live) and
-`legacy_sections_json` the pre-Editor.js content as a fallback.
+`legacy_sections_json` the pre-Editor.js content as a fallback. `help_key`
+names the page an article explains.
 
 ## Content format
 `lib/blocks.py` owns the block format: `load_blocks` parses stored content for
@@ -62,10 +72,34 @@ uploads reuse the existing endpoints — the image tool goes through an
 
 ## Authoring
 New articles start from a skeleton in `lib/article_templates.py` — How-to,
-Reference or Blank — picked on the New Article page and rendered straight into
-the editor. Saving and publishing are one action: a Published tick box posts
+Reference or Blank — picked in the new-article overlay and written into the
+article when it is created. Saving and publishing are one action: a Published tick box posts
 with the form, and the save clears the draft. Slugs are derived from the title
 on create and never change afterwards, so links to an article keep working.
+
+## Editor dashboard
+Sections and their articles are reordered by dragging (Sortable.js, loaded
+globally by `base.html`), and the order saves on drop — `sort_order` is never
+typed. Section metadata and new articles are handled in overlays on the
+dashboard using the app's standard modal (`.modal-overlay` / `.modal-box`, plus
+`.wiki-modal` for the wiki's own spacing), so there are no separate form pages.
+`editor_dashboard.js` declares `TEMPLATE_CONTRACT`, the ids it binds to across
+the three templates; `tests/test_wiki_dashboard.py` reads that list and checks
+the markup.
+
+## Help keys and coverage
+`lib/help_keys.py` is the registry: every place in the app that should have an
+article, grouped, as key and label. An article claims a key through
+`help_key`, and claiming moves it — two articles on one key would make a "?"
+ambiguous. The dashboard's Coverage panel lists the registered keys nothing has
+claimed yet, each with a Write button that opens the new-article overlay with
+the key already chosen. That list is the fill-day to-do list, generated from the
+app rather than from memory.
+
+This is a declared-contract seam: nothing in Python or the test suite notices a
+page declaring a key that was never registered — it just renders a dead "?".
+`tests/test_wiki_help_keys.py` scans every template for `data-help-key="..."`
+and fails on any key missing from the registry.
 
 ## Static
 `wiki.js` (loaded by the wiki templates) and `wiki.css` (loaded globally by
@@ -91,3 +125,9 @@ dropped, unsafe media URLs refused.
 `tests/test_wiki_authoring.py` — every skeleton is a valid document that
 survives the save cleaner, autosave creates a draft article and leaves the live
 one untouched, and Save publishes and clears the draft.
+`tests/test_wiki_dashboard.py` — the markup carries every declared id,
+reordering writes list position without touching `updated_at`, creating seeds
+the chosen skeleton at the end of its section, and reorder is admin-only.
+`tests/test_wiki_help_keys.py` — every registered key is well-formed and
+unique, no template declares an unregistered key, the coverage figures add up,
+and claiming a key moves it off whichever article held it.

@@ -1,0 +1,60 @@
+{# New article — title, section and the skeleton to start from.
+   Creating goes straight into the editor with the skeleton already in place. #}
+<div class="modal-overlay hidden" id="wiki-article-modal">
+    <div class="modal-box wiki-modal">
+        <div class="modal-title">New article</div>
+
+        <form method="POST" action="{{ url_for('wiki.create_article') }}" id="wiki-article-form-new">
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" name="title" id="wiki-new-article-title" required>
+            </div>
+
+            <div class="form-group">
+                <label>Section</label>
+                <select name="section_id" id="wiki-new-article-section" required>
+                    {% for section in sections %}
+                    <option value="{{ section.id }}">{{ section.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Help key
+                    <span class="form-hint">The page this article explains. Leave blank if it explains no
+                        single page.</span>
+                </label>
+                <select name="help_key" id="wiki-new-article-help-key">
+                    <option value="">No help key</option>
+                    {% for group, pairs in help_key_groups %}
+                    <optgroup label="{{ group }}">
+                        {% for key, label in pairs %}
+                        <option value="{{ key }}">{{ key }} — {{ label }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Start from</label>
+                <input type="hidden" name="template" id="wiki-new-article-template"
+                    value="{{ templates[0].key if templates else 'blank' }}">
+                <div class="wiki-template-options" id="wiki-new-article-templates">
+                    {% for template in templates %}
+                    <button type="button" class="wiki-template-option{{ ' is-selected' if loop.first else '' }}"
+                        data-template-key="{{ template.key }}">
+                        <span class="wiki-template-option__label">{{ template.label }}</span>
+                        <span class="wiki-template-option__description">{{ template.description }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-wiki-modal-close>Cancel</button>
+                <button type="submit" class="btn-primary">Create &amp; write</button>
+            </div>
+        </form>
+    </div>
+</div>

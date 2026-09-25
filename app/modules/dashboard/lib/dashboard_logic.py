@@ -182,7 +182,7 @@ def get_next_action_owner(project):
     #
     # 'handed_to_production' is a real status (set by pre-production's
     # _cascade_handed_to_production). It is also excluded from every
-    # "active work" list (_scoped_projects et al) like 'approved', so in
+    # "active work" list (scope_query et al) like 'approved', so in
     # practice this entry only
     # matters for the active_only=False call sites (e.g. what-changed)
     # that still look a handed-off project's guidance up.
