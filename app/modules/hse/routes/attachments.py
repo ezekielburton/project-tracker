@@ -10,13 +10,16 @@ from flask_login import login_required
 from io import BytesIO
 
 from app.modules.core.shared.extensions import db
-from app.modules.core.shared.lib.capabilities import effective_user, require_api
+from app.modules.core.shared.lib.capabilities import (
+    effective_user, require, require_api,
+)
 from app.modules.core.shared.lib.utils import log_activity
 from app.modules.core.shared.services.nas import (
     delete_app_file, download_app_file, upload_app_file,
 )
 from app.modules.hse.lib.files import (
-    ALLOWED_EXTENSIONS, MAX_BYTES, extension, folder_for, is_allowed, safe_segment,
+    ALLOWED_EXTENSIONS, MAX_BYTES, MIME_TYPES, PREVIEWABLE, extension,
+    folder_for, is_allowed, safe_segment,
 )
 from app.modules.hse.models import HseAttachment, HseEntry
 from app.modules.hse.routes.blueprint import hse_bp
@@ -90,6 +93,33 @@ def download_attachment(attachment_id):
         current_app.logger.error(f'HSE attachment download failed ({attachment.nas_path}): {e}')
         abort(502)
     return send_file(BytesIO(file_bytes), as_attachment=True,
+                     download_name=attachment.original_filename)
+
+
+@hse_bp.route('/files/<int:attachment_id>/preview')
+@login_required
+@require('view_hse')
+def preview_attachment(attachment_id):
+    """The same bytes as the download route, served inline.
+
+    Shape matches the project reference-file preview routes because
+    core/shared/js/preview.js reads them the same way: a real file when it
+    can render one, JSON when it cannot, so the modal shows a reason rather
+    than a broken viewer.
+    """
+    attachment = HseAttachment.query.get_or_404(attachment_id)
+    kind = extension(attachment.original_filename)
+    if kind not in PREVIEWABLE:
+        return jsonify({'error': 'That file type has no preview.'}), 200
+
+    try:
+        file_bytes = download_app_file(attachment.nas_path)
+    except RuntimeError as e:
+        current_app.logger.error(
+            f'HSE attachment preview failed ({attachment.nas_path}): {e}')
+        return jsonify({'error': 'That file could not be read from storage.'}), 200
+
+    return send_file(BytesIO(file_bytes), mimetype=MIME_TYPES[kind],
                      download_name=attachment.original_filename)
 
 

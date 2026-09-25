@@ -6,7 +6,9 @@ from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import WikiSection, WikiArticle
 from app.modules.core.shared.lib.capabilities import can, require
 from app.modules.core.shared.lib.utils import slugify
-from app.modules.wiki.lib.blocks import load_blocks, sanitize_document
+from sqlalchemy import text
+from app.modules.wiki.lib.blocks import load_blocks, sanitize_document, empty_document
+from app.modules.wiki.lib.article_templates import ARTICLE_TEMPLATES, picker_options
 
 wiki_bp = Blueprint('wiki', __name__, template_folder='../templates')
 
@@ -102,6 +104,19 @@ def upload_video():
         'url': url_for('static', filename=f'wiki-uploads/videos/{filename}')
     })
 
+def _editor_context(article, section):
+    """Everything the article editor page needs, for both new and existing articles."""
+    content = (article.draft_sections_json or article.sections_json or '') if article else ''
+    return {
+        'article': article,
+        'section': section,
+        'templates': picker_options(),
+        'template_documents': {t['key']: t['document'] for t in ARTICLE_TEMPLATES},
+        'content_json': content,
+        'draft_restored': bool(article and article.draft_sections_json),
+    }
+
+
 # ------ Editor Sections ------
 @wiki_bp.route('/wiki/editor')
 @login_required
@@ -122,7 +137,7 @@ def new_section():
 @require('manage_wiki', real_user=True)
 def edit_article(article_id):
     article = WikiArticle.query.get_or_404(article_id)
-    return render_template('wiki/editor_article.html', article=article, section=article.section)
+    return render_template('wiki/editor_article.html', **_editor_context(article, article.section))
 
 
 @wiki_bp.route('/wiki/editor/article/save', methods=['POST'])
@@ -132,9 +147,9 @@ def save_article():
     article_id    = request.form.get('article_id', '').strip()
     section_id    = request.form.get('section_id', '').strip()
     title         = request.form.get('title', '').strip()
-    slug          = request.form.get('slug', '').strip() or slugify(title)
     sections_json = request.form.get('sections_json', '[]')
     sort_order    = int(request.form.get('sort_order', 0))
+    is_published  = request.form.get('is_published') == 'on'
 
     if not title or not section_id:
         return jsonify({'success': False, 'error': 'Title and section are required'}), 400
@@ -154,18 +169,66 @@ def save_article():
         article               = WikiArticle.query.get_or_404(int(article_id))
         article.section_id    = int(section_id)
         article.title         = title
-        article.slug          = slug
+        article.slug          = article.slug or slugify(title)
         article.sections_json = sections_json
         article.sort_order    = sort_order
+        article.is_published  = is_published
         article.updated_at    = datetime.utcnow()
     else:
         article = WikiArticle(section_id=int(section_id), title=title,
-                              slug=slug, sections_json=sections_json,
-                              sort_order=sort_order)
+                              slug=slugify(title), sections_json=sections_json,
+                              sort_order=sort_order, is_published=is_published)
         db.session.add(article)
+
+    # Saving is what makes the draft live, so the stored draft is spent.
+    article.draft_sections_json = None
+    article.draft_saved_at      = None
 
     db.session.commit()
     return redirect(url_for('wiki.edit_article', article_id=article.id))
+
+
+@wiki_bp.route('/wiki/editor/article/autosave', methods=['POST'])
+@login_required
+@require('manage_wiki', real_user=True)
+def autosave_article():
+    """Park the working copy in draft_sections_json. Save is what makes it live."""
+    article_id    = request.form.get('article_id', '').strip()
+    section_id    = request.form.get('section_id', '').strip()
+    title         = request.form.get('title', '').strip()
+    sections_json = request.form.get('sections_json', '')
+
+    try:
+        payload = json.loads(sections_json)
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid content data'}), 400
+
+    document = sanitize_document(payload)
+    if document is None:
+        return jsonify({'success': False, 'error': 'Invalid content data'}), 400
+
+    if article_id:
+        article = WikiArticle.query.get_or_404(int(article_id))
+    elif title and section_id and document['blocks']:
+        article = WikiArticle(section_id=int(section_id), title=title,
+                              slug=slugify(title),
+                              sections_json=json.dumps(empty_document()),
+                              is_published=False)
+        db.session.add(article)
+        db.session.commit()
+    else:
+        # A new article with no title or no content yet — nothing worth keeping.
+        return jsonify({'success': False, 'error': 'Nothing to save yet'})
+
+    saved_at = datetime.utcnow()
+    # Raw SQL so autosaving does not bump updated_at, which readers see.
+    db.session.execute(
+        text('UPDATE wiki_articles SET draft_sections_json = :draft, draft_saved_at = :at WHERE id = :id'),
+        {'draft': json.dumps(document), 'at': saved_at, 'id': article.id}
+    )
+    db.session.commit()
+
+    return jsonify({'success': True, 'article_id': article.id})
 
 
 @wiki_bp.route('/wiki/editor/article/<int:article_id>/toggle-publish', methods=['POST'])
@@ -193,7 +256,7 @@ def delete_article(article_id):
 def new_article():
     section_id = request.args.get('section_id')
     section = WikiSection.query.get_or_404(int(section_id)) if section_id else None
-    return render_template('wiki/editor_article.html', article=None, section=section)
+    return render_template('wiki/editor_article.html', **_editor_context(None, section))
 
 
 @wiki_bp.route('/wiki/editor/section/<int:section_id>/edit')

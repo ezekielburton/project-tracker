@@ -342,10 +342,12 @@ def save_standard_deliverables(project_id):
     data = request.get_json(silent=True) or {}
     rows = data.get('deliverables') or []
 
-    # Valid customer ids for this project — a row claiming a
-    # project_customer_id that isn't actually one of this project's
-    # customers falls back to None rather than being trusted outright.
-    valid_customer_ids = {pc.id for pc in project.project_customers}
+    # A row's project_customer_id is the link row (project_customers.id);
+    # the catalog keys on the real customer (customers.id). Map one to the
+    # other here so the two ids are never mixed up below. A row claiming a
+    # link row that isn't this project's falls back to None.
+    customer_by_pc = {pc.id: pc.customer_id for pc in project.project_customers}
+    valid_customer_ids = set(customer_by_pc)
 
     def parse_date(val):
         if not val:
@@ -370,14 +372,13 @@ def save_standard_deliverables(project_id):
             return None
         return val if val in valid_customer_ids else None
 
-    # One batched fetch covering every customer referenced anywhere in this
-    # payload — types_by_customer[customer_id] is a plain list, looked up
-    # by id or by name (case-insensitive) in memory below, never re-queried
-    # per row. Also doubles as ownership validation: a deliverable_type_id
-    # the client sends only counts as a match if it's actually in this
-    # customer's own catalog.
-    row_customer_ids = {parse_customer_id(r.get('project_customer_id')) for r in rows}
-    row_customer_ids.discard(None)
+    # One batched fetch covering every customer referenced in this payload;
+    # types_by_customer is keyed by customers.id and searched in memory
+    # below. Also ownership validation: a deliverable_type_id only counts
+    # if it is in that customer's own catalog.
+    row_pc_ids = {parse_customer_id(r.get('project_customer_id')) for r in rows}
+    row_pc_ids.discard(None)
+    row_customer_ids = {customer_by_pc[pc_id] for pc_id in row_pc_ids}
     types_by_customer = {}
     if row_customer_ids:
         for t in DeliverableType.query.filter(DeliverableType.customer_id.in_(row_customer_ids)).all():
@@ -409,6 +410,7 @@ def save_standard_deliverables(project_id):
             continue
 
         customer_id_for_row = parse_customer_id(row.get('project_customer_id'))
+        real_customer_id = customer_by_pc.get(customer_id_for_row)
         design_deadline = parse_date(row.get('design_deadline'))
         design_deadline_time = parse_time(row.get('design_deadline_time'))
         teams = ','.join(row.get('teams') or [])
@@ -421,22 +423,22 @@ def save_standard_deliverables(project_id):
             # Reuse a same-named entry if one already exists (two rows in
             # this same save typing the identical new name) instead of
             # creating a duplicate catalog entry.
-            resolved_type = lookup_type_by_name(customer_id_for_row, new_type_name)
+            resolved_type = lookup_type_by_name(real_customer_id, new_type_name)
             if not resolved_type:
                 resolved_type = DeliverableType(
                     name=new_type_name,
                     client_id=project.client_id,
-                    customer_id=customer_id_for_row,
+                    customer_id=real_customer_id,
                     is_custom=True,
                 )
                 db.session.add(resolved_type)
                 # So a second row in the same payload that types the exact
                 # same new name reuses this one instead of double-creating.
-                types_by_customer.setdefault(customer_id_for_row, []).append(resolved_type)
+                types_by_customer.setdefault(real_customer_id, []).append(resolved_type)
             name = resolved_type.name
         elif raw_type_id and customer_id_for_row:
             try:
-                resolved_type = lookup_type_by_id(customer_id_for_row, int(raw_type_id))
+                resolved_type = lookup_type_by_id(real_customer_id, int(raw_type_id))
             except (TypeError, ValueError):
                 resolved_type = None
             name = resolved_type.name if resolved_type else (row.get('name') or '').strip()

@@ -9,6 +9,7 @@ for authors to create, edit, publish, and delete sections and articles
 app/modules/wiki/
   routes/wiki.py            # the `wiki` blueprint (wiki_bp)
   lib/blocks.py             # Editor.js document shape, conversion, sanitising
+  lib/article_templates.py  # the How-to / Reference / Blank skeletons
   static/js/wiki.js         # reader, dashboard CRUD, slug, publish/delete
   static/js/wiki_editor.js  # Editor.js setup for the article editor
   static/js/blocks/         # helix_callout.js, helix_video.js — our two tools
@@ -17,6 +18,7 @@ app/modules/wiki/
   tests/test_wiki_smoke.py
   tests/test_wiki_blocks.py
   tests/test_wiki_editor.py
+  tests/test_wiki_authoring.py
   wiki.md
 ```
 
@@ -29,14 +31,18 @@ app/modules/wiki/
   `static/wiki-uploads/videos/` and backs up to `/Admin/OVP/Wiki` on a
   background thread. The editor's Video block toggles between Embed URL and
   Upload File (`block.source`).
+- `POST /wiki/editor/article/autosave` — parks the working copy in the
+  article's draft; creates the article first if it does not exist yet. Writes
+  with raw SQL so it never bumps `updated_at`, which readers see.
 - `GET /wiki/editor` — the editor dashboard
 - section + article CRUD under `/wiki/editor/...` (new, edit, save,
   toggle-publish, delete)
 
 ## Models
 `WikiSection`, `WikiArticle`, from `core/shared`. Article content lives in
-`sections_json` as an Editor.js document; `legacy_sections_json` holds the
-pre-Editor.js content as a fallback.
+`sections_json` as an Editor.js document; `draft_sections_json` holds the
+autosaved working copy (cleared when Save makes it live) and
+`legacy_sections_json` the pre-Editor.js content as a fallback.
 
 ## Content format
 `lib/blocks.py` owns the block format: `load_blocks` parses stored content for
@@ -53,6 +59,13 @@ uploads reuse the existing endpoints — the image tool goes through an
 `uploader.uploadByFile` hook so `/wiki/upload-image` keeps its response shape.
 `wiki_editor.js` declares `TEMPLATE_CONTRACT`, the template ids it binds to;
 `tests/test_wiki_editor.py` reads that list and checks the template.
+
+## Authoring
+New articles start from a skeleton in `lib/article_templates.py` — How-to,
+Reference or Blank — picked on the New Article page and rendered straight into
+the editor. Saving and publishing are one action: a Published tick box posts
+with the form, and the save clears the draft. Slugs are derived from the title
+on create and never change afterwards, so links to an article keep working.
 
 ## Static
 `wiki.js` (loaded by the wiki templates) and `wiki.css` (loaded globally by
@@ -75,3 +88,6 @@ the allowlist strips scripts.
 `tests/test_wiki_editor.py` — the template carries every declared id and every
 pinned library, and a save is cleaned: scripts stripped, unknown blocks
 dropped, unsafe media URLs refused.
+`tests/test_wiki_authoring.py` — every skeleton is a valid document that
+survives the save cleaner, autosave creates a draft article and leaves the live
+one untouched, and Save publishes and clears the draft.

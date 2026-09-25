@@ -20,26 +20,10 @@ from app.modules.hse.lib.overview import (
     expiring_panel, needs_you_now, severity_breakdown, this_week, tiles,
     waiting_on_others,
 )
-from app.modules.hse.lib.query import open_counts_by_group
+from app.modules.hse.lib.query import dashboard_entries, open_counts_by_group
 from app.modules.hse.lib.rail import rail_items
-from app.modules.hse.models import HseEntry, HseSchedule
+from app.modules.hse.models import HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
-
-
-# Entries older than this cannot be open, expiring, or this month's work.
-# A cap keeps the front page from slowing down as the registers fill.
-LOOKBACK_DAYS = 400
-
-
-def _entries(today):
-    return (HseEntry.query
-            .options(selectinload(HseEntry.asset),
-                     selectinload(HseEntry.reported_by),
-                     selectinload(HseEntry.assigned_to),
-                     selectinload(HseEntry.subject),
-                     selectinload(HseEntry.waiting_on))
-            .filter(HseEntry.entry_date >= today - timedelta(days=LOOKBACK_DAYS))
-            .all())
 
 
 @hse_bp.route('/overview')
@@ -47,7 +31,7 @@ def _entries(today):
 @require('view_hse')
 def overview():
     today = date.today()
-    entries = _entries(today)
+    entries = dashboard_entries(today)
     schedules = (HseSchedule.query
                  .options(selectinload(HseSchedule.assets))
                  .all())

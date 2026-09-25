@@ -258,3 +258,11 @@ class HseAttachment(db.Model):
 
     def __repr__(self):
         return f'<HseAttachment {self.original_filename}>'
+
+    # Asked by the entry overlay. Kept on the model rather than as a
+    # template filter so "can this be previewed" has one answer, next to the
+    # file it is about.
+    @property
+    def is_previewable(self):
+        from app.modules.hse.lib.files import is_previewable
+        return is_previewable(self.original_filename)
