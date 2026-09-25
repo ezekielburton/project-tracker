@@ -190,3 +190,69 @@ def test_save_keeps_the_original_slug(app, client, db_session):
     db_session.expire_all()
 
     assert WikiArticle.query.get(article.id).slug == 'old-title'
+
+    
+
+# ------ Moving a key says so ------
+
+def test_moving_a_key_is_flashed(app, client, db_session):
+    """Taking a key off another article is silent otherwise."""
+    _admin(app, client, db_session, 'flash-key@example.com')
+    section = _section(db_session, 's-flash')
+    first = WikiArticle(section_id=section.id, title='The old one', slug='f-first',
+                        help_key='hse.registers',
+                        sections_json=json.dumps(_document([_paragraph('Body')])))
+    second = WikiArticle(section_id=section.id, title='The new one', slug='f-second',
+                         sections_json=json.dumps(_document([_paragraph('Body')])))
+    db_session.add_all([first, second])
+    db_session.commit()
+
+    resp = client.post('/wiki/editor/article/save', data={
+        'article_id': str(second.id), 'section_id': str(section.id), 'title': 'The new one',
+        'help_key': 'hse.registers',
+        'sections_json': json.dumps(_document([_paragraph('Body')])),
+    }, follow_redirects=True)
+
+    assert b'Help key moved from &#39;The old one&#39;' in resp.data
+
+
+def test_no_flash_when_no_key_moved(app, client, db_session):
+    _admin(app, client, db_session, 'flash-none@example.com')
+    section = _section(db_session, 's-noflash')
+    article = WikiArticle(section_id=section.id, title='Only one', slug='f-only',
+                          sections_json=json.dumps(_document([_paragraph('Body')])))
+    db_session.add(article)
+    db_session.commit()
+
+    resp = client.post('/wiki/editor/article/save', data={
+        'article_id': str(article.id), 'section_id': str(section.id), 'title': 'Only one',
+        'help_key': 'hse.registers',
+        'sections_json': json.dumps(_document([_paragraph('Body')])),
+    }, follow_redirects=True)
+
+    assert b'Help key moved' not in resp.data
+
+
+# ------ Bad form ids ------
+
+def test_a_non_numeric_article_id_is_a_bad_request(app, client, db_session):
+    """Straight int() on form input made this a 500."""
+    _admin(app, client, db_session, 'badid-article@example.com')
+    section = _section(db_session, 's-badid')
+
+    resp = client.post('/wiki/editor/article/save', data={
+        'article_id': 'abc', 'section_id': str(section.id), 'title': 'T',
+        'sections_json': json.dumps(_document([_paragraph('Body')])),
+    })
+
+    assert resp.status_code == 400
+
+
+def test_a_non_numeric_section_id_is_a_bad_request(app, client, db_session):
+    _admin(app, client, db_session, 'badid-section@example.com')
+
+    resp = client.post('/wiki/editor/article/create', data={
+        'section_id': 'oops', 'title': 'T', 'template': 'blank',
+    })
+
+    assert resp.status_code == 400

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}Digital Innovation{% endblock %}
 
@@ -53,6 +54,7 @@
                    button; the other three stay gated on can_edit_board /
                    project.is_permanent below. #}
                 <div class="di-board-header-actions">
+                    {{ help_button('di.board') }}
                     {% if can_view_performance %}
                     {# Every project can carry cost history — gated on can_view_di_performance
                        (viewing/adding/deleting all share that gate), not can_edit_board. #}

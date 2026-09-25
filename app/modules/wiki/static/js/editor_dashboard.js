@@ -125,6 +125,16 @@
             });
         });
 
+        // Arriving from the Help tray's "Write this article".
+        var requested = new URLSearchParams(window.location.search).get('help_key');
+        if (requested) {
+            keySelect.value = requested;
+            if (keySelect.value === requested) {
+                titleField.value = keySelect.options[keySelect.selectedIndex].text.split(' — ').pop();
+                open(modal);
+            }
+        }
+
         options.addEventListener('click', function (event) {
             var option = event.target.closest('.wiki-template-option');
             if (!option) { return; }

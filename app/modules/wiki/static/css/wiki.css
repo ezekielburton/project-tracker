@@ -941,3 +941,110 @@ ol.wiki-block-list {
     line-height: 1.5;
     margin: 0.9rem 0 0;
 }
+
+/* ── The contextual "?" ──────────────────────────────────────────────────── */
+
+.help-button {
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    font-weight: 700;
+    height: 1.35rem;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    width: 1.35rem;
+}
+
+.help-button:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+/* ── Help tray ───────────────────────────────────────────────────────────── */
+
+.wiki-help {
+    padding: 1.5rem 1.75rem 1.75rem;
+}
+
+/* In the tray the article sits right against the panel edge, so it carries its
+   own gutter — scoped to the panel so page-level styles can't out-rank it. */
+.tray-panel__body .wiki-help {
+    padding: 1.5rem 1.75rem 1.75rem;
+}
+
+.wiki-help__key {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    margin: 0 0 0.75rem;
+}
+
+.wiki-help__loading {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 1.5rem;
+}
+
+.wiki-help__foot {
+    border-top: 1px solid var(--border);
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+}
+
+/* Empty state */
+
+.wiki-help__empty-title {
+    color: var(--text);
+    font-size: 1rem;
+    margin: 0 0 0.4rem;
+}
+
+.wiki-help__empty-text {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 0 0 0.75rem;
+}
+
+/* Browse list */
+
+.wiki-help__section {
+    margin-bottom: 1.5rem;
+}
+
+.wiki-help__section-title {
+    color: var(--text);
+    font-size: 0.9rem;
+    margin: 0 0 0.5rem;
+}
+
+.wiki-help__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.wiki-help__link {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    display: block;
+    font-size: 0.875rem;
+    padding: 0.5rem 0;
+    text-align: left;
+    width: 100%;
+}
+
+.wiki-help__link:hover {
+    color: var(--tangerine);
+}

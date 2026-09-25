@@ -1,0 +1,12 @@
+{# No article claims this key. For an admin the gap is also the way in: the
+   help button becomes the authoring entry point. #}
+<div class="wiki-help wiki-help--empty">
+    <p class="wiki-help__key"><code>{{ key }}</code></p>
+    <h3 class="wiki-help__empty-title">Nothing written yet</h3>
+    <p class="wiki-help__empty-text">No article claims this key{% if label %} — {{ label }}{% endif %}.</p>
+
+    {% if can_write %}
+    <p class="wiki-help__empty-text">Opens the editor with the key already filled in.</p>
+    <a class="btn-primary btn-sm" href="{{ url_for('wiki.editor_dashboard', help_key=key) }}">Write this article</a>
+    {% endif %}
+</div>

@@ -1,51 +1,9 @@
 /* Client Servicing page. All colours are role tokens, per theming.md —
    no hard-coded hex. */
 
-/* Module's own page/shell wrapper (Table / Invoicing / Calendar). The rail
-   itself is shared — .module-rail in shared.css, rendered by
-   _shared_macros.html's module_rail(). What stays here is the height
-   strategy, which is this module's own: the flex chain below is what lets
-   syncTableScrollHeight() solve against the real footer.
-   .client-servicing-page is unchanged; it nests inside .cs-main. */
-
-/* Fills whatever height .main-content ends up with, so the sidebar reaches
-   the footer on a short page (Closed, an empty Calendar) instead of stopping
-   at the content. It only stretches children inside the height the shell
-   already has — it never makes the page taller, so there's no new overflow. */
-.cs-page {
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-}
-
-/* Let the sidebar run flush against the global sidebar and flush to the
-   viewport's right edge — .main-content's blanket 2rem padding (meant
-   for ordinary pages) otherwise leaves a 32px gap on both sides.
-   .module-rail and .client-servicing-page re-add their own inner
-   padding, so content still isn't jammed against the edges. */
-.main-content:has(.cs-page) {
-    padding-left: 0;
-    padding-right: 0;
-    padding-bottom: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-/* Still no min-height: a viewport-derived floor is what broke the table
-   box's height sync before. This grows the row inside .main-content's own
-   height instead, which syncTableScrollHeight() doesn't read — it solves
-   from the box's top and the footer's height, neither of which this moves. */
-.cs-shell {
-    display: flex;
-    align-items: stretch;
-    flex: 1;
-}
-
-.cs-main {
-    flex: 1;
-    min-width: 0;
-}
+/* The page frame and rail are shared (.module-page / .module-shell /
+   .module-main in shared.css). .cs-page stays on the frame as the hook the
+   close-project script scopes itself to. */
 
 /* No padding-bottom: syncTableScrollHeight() (client_servicing.js) sizes
    the table box to meet the footer, so any bottom padding here is dead

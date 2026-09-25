@@ -1,15 +1,15 @@
 import json, uuid, os
 from datetime import datetime
-from flask import (Blueprint, render_template, request, jsonify, abort, redirect, url_for, current_app)
+from flask import (Blueprint, render_template, request, jsonify, abort, redirect, url_for, current_app, flash)
 from flask_login import login_required
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import WikiSection, WikiArticle
 from app.modules.core.shared.lib.capabilities import can, require
 from app.modules.core.shared.lib.utils import slugify
-from sqlalchemy import text
+from sqlalchemy import update
 from app.modules.wiki.lib.blocks import load_blocks, sanitize_document, empty_document
 from app.modules.wiki.lib.article_templates import picker_options, template_document
-from app.modules.wiki.lib.help_keys import HELP_KEY_GROUPS, coverage, is_registered
+from app.modules.wiki.lib.help_keys import HELP_KEY_GROUPS, coverage, is_registered, label_for
 
 wiki_bp = Blueprint('wiki', __name__, template_folder='../templates')
 
@@ -33,6 +33,47 @@ def get_article(article_id):
     blocks = load_blocks(article.sections_json)
     return render_template('wiki/_article_content.html', article=article, blocks=blocks)
 
+# ------ Contextual help (the "?" tray) ------
+
+@wiki_bp.route('/wiki/help')
+@login_required
+def help_browse():
+    """Everything there is to read — the Help pill opened with no key."""
+    if can('manage_wiki'):
+        sections = WikiSection.query.order_by(WikiSection.sort_order).all()
+    else:
+        sections = (WikiSection.query.filter_by(is_published=True)
+                    .order_by(WikiSection.sort_order).all())
+    return render_template('wiki/_help_browse.html', sections=sections)
+
+
+@wiki_bp.route('/wiki/help/<key>')
+@login_required
+def help_article(key):
+    """The article claiming this key, or the gap plus a way to fill it."""
+    if not is_registered(key):
+        abort(404)
+
+    article = WikiArticle.query.filter_by(help_key=key).first()
+    if not article or (not article.is_published and not can('manage_wiki')):
+        return render_template('wiki/_help_empty.html', key=key, label=label_for(key),
+                               can_write=can('manage_wiki'))
+
+    return render_template('wiki/_help_article.html', article=article,
+                           blocks=load_blocks(article.sections_json))
+
+
+@wiki_bp.route('/wiki/help/article/<int:article_id>')
+@login_required
+def help_article_by_id(article_id):
+    """An article picked from the tray's browse list — same wrapper as the key path."""
+    article = WikiArticle.query.get_or_404(article_id)
+    if not article.is_published and not can('manage_wiki'):
+        abort(403)
+    return render_template('wiki/_help_article.html', article=article,
+                           blocks=load_blocks(article.sections_json))
+
+
 #------ Image upload & serve ------
 
 @wiki_bp.route('/wiki/upload-image', methods=['POST'])
@@ -44,7 +85,8 @@ def upload_image():
         return jsonify({'success': False, 'error': 'No file provided'}), 400
     
     ext = file.filename.rsplit ('.', 1)[-1].lower() if '.' in file.filename else ''
-    if ext not in {'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'}:
+    # No svg: it can carry script and is served from our own origin.
+    if ext not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
         return jsonify({'success': False, 'error': 'File type not allowed'}), 400
     
     filename = f"{uuid.uuid4().hex}.{ext}"
@@ -105,6 +147,16 @@ def upload_video():
         'url': url_for('static', filename=f'wiki-uploads/videos/{filename}')
     })
 
+def _int_or_none(value):
+    """Form ids arrive as text. Blank means 'not given'; anything else non-numeric is a bad request."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    if not value.isdigit():
+        abort(400)
+    return int(value)
+
+
 def _next_sort_order(model, **filters):
     """One past the current highest, so new rows land at the end of their list."""
     query = model.query
@@ -125,24 +177,40 @@ def _unique_section_slug(title):
 
 
 def _claim_help_key(article, key):
-    """One article per key, so a "?" can never be ambiguous."""
+    """One article per key, so a "?" can never be ambiguous. Returns the titles it cleared."""
     key = (key or '').strip()
     if key and not is_registered(key):
         key = ''
 
+    cleared = []
     if key:
-        WikiArticle.query.filter(WikiArticle.help_key == key,
-                                 WikiArticle.id != article.id).update({'help_key': None})
+        others = WikiArticle.query.filter(WikiArticle.help_key == key,
+                                          WikiArticle.id != article.id).all()
+        cleared = [other.title for other in others]
+        if cleared:
+            db.session.execute(
+                update(WikiArticle)
+                .where(WikiArticle.help_key == key, WikiArticle.id != article.id)
+                # Assigning updated_at to itself is what stops onupdate firing.
+                .values(help_key=None, updated_at=WikiArticle.updated_at)
+                .execution_options(synchronize_session=False)
+            )
+
     article.help_key = key or None
+    return cleared
 
 
-def _apply_order(table, ids):
-    """Write sort_order from list position. Raw SQL so articles keep their updated_at."""
+def _apply_order(model, ids):
+    """Write sort_order from list position, leaving updated_at untouched."""
     for position, row_id in enumerate(ids):
-        db.session.execute(
-            text(f'UPDATE {table} SET sort_order = :position WHERE id = :id'),
-            {'position': position, 'id': int(row_id)}
-        )
+        row_id = _int_or_none(str(row_id))
+        if row_id is None:
+            continue
+        values = {'sort_order': position}
+        if hasattr(model, 'updated_at'):
+            # Assigning the column to itself is what stops onupdate firing.
+            values['updated_at'] = model.updated_at
+        db.session.execute(update(model).where(model.id == row_id).values(**values))
     db.session.commit()
 
 
@@ -174,7 +242,7 @@ def editor_dashboard():
 @login_required
 @require('manage_wiki', real_user=True)
 def reorder_sections():
-    _apply_order('wiki_sections', (request.get_json(silent=True) or {}).get('section_ids') or [])
+    _apply_order(WikiSection, (request.get_json(silent=True) or {}).get('section_ids') or [])
     return jsonify({'success': True})
 
 
@@ -182,7 +250,7 @@ def reorder_sections():
 @login_required
 @require('manage_wiki', real_user=True)
 def reorder_articles():
-    _apply_order('wiki_articles', (request.get_json(silent=True) or {}).get('article_ids') or [])
+    _apply_order(WikiArticle, (request.get_json(silent=True) or {}).get('article_ids') or [])
     return jsonify({'success': True})
 
 
@@ -191,7 +259,7 @@ def reorder_articles():
 @require('manage_wiki', real_user=True)
 def create_article():
     """From the new-article overlay: seed the chosen skeleton, then open the editor."""
-    section_id = request.form.get('section_id', '').strip()
+    section_id = _int_or_none(request.form.get('section_id'))
     title      = request.form.get('title', '').strip()
     template   = request.form.get('template', 'blank').strip()
     help_key   = request.form.get('help_key', '').strip()
@@ -199,7 +267,7 @@ def create_article():
     if not title or not section_id:
         return redirect(url_for('wiki.editor_dashboard'))
 
-    section = WikiSection.query.get_or_404(int(section_id))
+    section = WikiSection.query.get_or_404(section_id)
     article = WikiArticle(
         section_id=section.id,
         title=title,
@@ -209,8 +277,7 @@ def create_article():
         is_published=False
     )
     db.session.add(article)
-    db.session.commit()
-
+    db.session.flush()
     _claim_help_key(article, help_key)
     db.session.commit()
 
@@ -229,8 +296,8 @@ def edit_article(article_id):
 @login_required
 @require('manage_wiki', real_user=True)
 def save_article():
-    article_id    = request.form.get('article_id', '').strip()
-    section_id    = request.form.get('section_id', '').strip()
+    article_id    = _int_or_none(request.form.get('article_id'))
+    section_id    = _int_or_none(request.form.get('section_id'))
     title         = request.form.get('title', '').strip()
     sections_json = request.form.get('sections_json', '[]')
     is_published  = request.form.get('is_published') == 'on'
@@ -251,17 +318,17 @@ def save_article():
     sections_json = json.dumps(document)
 
     if article_id:
-        article               = WikiArticle.query.get_or_404(int(article_id))
-        article.section_id    = int(section_id)
+        article               = WikiArticle.query.get_or_404(article_id)
+        article.section_id    = section_id
         article.title         = title
         article.slug          = article.slug or slugify(title)
         article.sections_json = sections_json
         article.is_published  = is_published
         article.updated_at    = datetime.utcnow()
     else:
-        article = WikiArticle(section_id=int(section_id), title=title,
+        article = WikiArticle(section_id=section_id, title=title,
                               slug=slugify(title), sections_json=sections_json,
-                              sort_order=_next_sort_order(WikiArticle, section_id=int(section_id)),
+                              sort_order=_next_sort_order(WikiArticle, section_id=section_id),
                               is_published=is_published)
         db.session.add(article)
 
@@ -270,9 +337,11 @@ def save_article():
     article.draft_saved_at      = None
 
     db.session.flush()
-    _claim_help_key(article, help_key)
+    cleared = _claim_help_key(article, help_key)
 
     db.session.commit()
+    if cleared:
+        flash("Help key moved from '%s'" % "', '".join(cleared), 'info')
     return redirect(url_for('wiki.edit_article', article_id=article.id))
 
 
@@ -281,8 +350,8 @@ def save_article():
 @require('manage_wiki', real_user=True)
 def autosave_article():
     """Park the working copy in draft_sections_json. Save is what makes it live."""
-    article_id    = request.form.get('article_id', '').strip()
-    section_id    = request.form.get('section_id', '').strip()
+    article_id    = _int_or_none(request.form.get('article_id'))
+    section_id    = _int_or_none(request.form.get('section_id'))
     title         = request.form.get('title', '').strip()
     sections_json = request.form.get('sections_json', '')
 
@@ -296,12 +365,12 @@ def autosave_article():
         return jsonify({'success': False, 'error': 'Invalid content data'}), 400
 
     if article_id:
-        article = WikiArticle.query.get_or_404(int(article_id))
+        article = WikiArticle.query.get_or_404(article_id)
     elif title and section_id and document['blocks']:
-        article = WikiArticle(section_id=int(section_id), title=title,
+        article = WikiArticle(section_id=section_id, title=title,
                               slug=slugify(title),
                               sections_json=json.dumps(empty_document()),
-                              sort_order=_next_sort_order(WikiArticle, section_id=int(section_id)),
+                              sort_order=_next_sort_order(WikiArticle, section_id=section_id),
                               is_published=False)
         db.session.add(article)
         db.session.commit()
@@ -310,10 +379,12 @@ def autosave_article():
         return jsonify({'success': False, 'error': 'Nothing to save yet'})
 
     saved_at = datetime.utcnow()
-    # Raw SQL so autosaving does not bump updated_at, which readers see.
     db.session.execute(
-        text('UPDATE wiki_articles SET draft_sections_json = :draft, draft_saved_at = :at WHERE id = :id'),
-        {'draft': json.dumps(document), 'at': saved_at, 'id': article.id}
+        update(WikiArticle)
+        .where(WikiArticle.id == article.id)
+        # Assigning updated_at to itself is what stops onupdate firing — readers see that date.
+        .values(draft_sections_json=json.dumps(document), draft_saved_at=saved_at,
+                updated_at=WikiArticle.updated_at)
     )
     db.session.commit()
 
@@ -354,7 +425,7 @@ def save_section():
         return redirect(url_for('wiki.editor_dashboard'))
 
     if section_id:
-        section                = WikiSection.query.get_or_404(int(section_id))
+        section                = WikiSection.query.get_or_404(_int_or_none(section_id))
         section.title          = title
         section.relevant_roles = relevant_roles or None
         section.is_published   = is_published

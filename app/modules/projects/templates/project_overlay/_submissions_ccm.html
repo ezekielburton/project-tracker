@@ -1,8 +1,8 @@
-{% from '_shared_macros.html' import card %}
+{% from '_shared_macros.html' import card, help_button %}
 
 <div class="overlay-details-grid">
     <div class="overlay-card-full">
-        {% call card('Submissions') %}
+        {% call card('Submissions', help_button('projects.submissions')) %}
         {% if has_any_scope %}
         <div class="overlay-card-controls-row">
             <div class="overlay-submissions-view-toggle-slot" id="overlay-submissions-toggle-slot"></div>

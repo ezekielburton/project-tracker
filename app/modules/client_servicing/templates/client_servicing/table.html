@@ -3,17 +3,14 @@
 {% block title %}Client Servicing{% endblock %}
 
 {% block content %}
-{# The module's own page/shell wrapper (Table / Invoicing / Calendar) —
-   see _sidebar.html, which renders the shared .module-rail. .cs-page /
-   .cs-shell / .cs-main are this module's own height chain; the table under
-   .cs-main keeps its sticky-header/height-sync JS (client_servicing.js) —
-   see client_servicing.css. #}
-<div class="cs-page">
-    <div class="cs-shell">
+{# The shared page frame, with the rail from _sidebar.html. The table keeps
+   its own sticky-header/height-sync JS (client_servicing.js). #}
+<div class="module-page cs-page">
+    <div class="module-shell">
         {% with active_nav = 'table' %}
         {% include "client_servicing/_sidebar.html" %}
         {% endwith %}
-        <div class="cs-main">
+        <div class="module-main">
             <div class="client-servicing-page">
                 {# Cancelled projects waiting on the invoicing question —
                    see _close_strip.html. #}
@@ -56,7 +53,7 @@
 </div>
 {% include 'client_servicing/_close_modals.html' %}
 {# Page-specific JS, inside the content block with the modals it wires.
-   The shell above is a <div class="cs-main">, not a nested <main> — the SPA
+   The shell above is a <div class="module-main">, not a nested <main> — the SPA
    slice in spa_strip_response() stops at the first </main>, so a nested one
    would cut everything below it out of the swapped fragment. #}
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_close.js') }}?v={{ config.STATIC_VERSION }}"></script>

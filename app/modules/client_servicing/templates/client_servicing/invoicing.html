@@ -3,12 +3,12 @@
 {% block title %}Client Servicing — Invoicing{% endblock %}
 
 {% block content %}
-<div class="cs-page">
-    <div class="cs-shell">
+<div class="module-page cs-page">
+    <div class="module-shell">
         {% with active_nav = 'invoicing' %}
         {% include "client_servicing/_sidebar.html" %}
         {% endwith %}
-        <div class="cs-main">
+        <div class="module-main">
             <div class="client-servicing-page">
                 {% with active_tab = 'by_project' %}
                 {% include "client_servicing/_invoicing_tabs.html" %}

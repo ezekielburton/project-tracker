@@ -3,14 +3,12 @@
 {% block title %}HSE — {{ reg.label }}{% endblock %}
 
 {% block content %}
-{# The module's own page/shell wrapper. The rail is the shared
-   .module-rail; .hse-page / .hse-shell / .hse-main are this module's own
-   height chain. Deliberately not a nested <main> — spa_strip_response()
-   slices at the first </main>. #}
-<div class="hse-page">
-    <div class="hse-shell">
+{# The shared page frame and rail. Deliberately not a nested <main> —
+   spa_strip_response() slices at the first </main>. #}
+<div class="module-page">
+    <div class="module-shell">
         {% include 'hse/_rail.html' %}
-        <div class="hse-main">
+        <div class="module-main hse-main">
             <div class="hse-inner hse-inner--fill">
 
                 <div class="hse-header">

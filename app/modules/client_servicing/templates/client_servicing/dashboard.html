@@ -3,12 +3,12 @@
 {% block title %}Client Servicing — Dashboard{% endblock %}
 
 {% block content %}
-<div class="cs-page">
-  <div class="cs-shell">
+<div class="module-page cs-page">
+  <div class="module-shell">
     {% with active_nav = 'dashboard' %}
     {% include "client_servicing/_sidebar.html" %}
     {% endwith %}
-    <div class="cs-main">
+    <div class="module-main">
       {# .cs-dash is the live-refresh marker polling.js looks for; #cs-dash-panels
          is what the SSE refresh swaps (client_servicing_dashboard.js). #}
       <div class="cs-dash">

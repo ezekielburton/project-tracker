@@ -11,7 +11,9 @@ from app.modules.wiki.lib.help_keys import (
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 KEY_PATTERN = re.compile(r'^[a-z][a-z0-9_]*(\.[a-z0-9_-]+)+$')
-USED_IN_TEMPLATE = re.compile(r'data-help-key="([^"{}]+)"')
+# Both ways a page can name a key: the macro call, and a hand-written attribute.
+# Values built from a variable are skipped — there is no literal to check.
+USED_IN_TEMPLATE = re.compile(r'''help_button\(\s*['"]([^'"]+)['"]|data-help-key="([^"{}]+)"''')
 
 
 def _user(app, client, db_session, email, role='admin'):
@@ -65,7 +67,8 @@ def test_every_help_key_used_in_a_template_is_registered():
             if not name.endswith('.html'):
                 continue
             path = os.path.join(root, name)
-            for key in USED_IN_TEMPLATE.findall(open(path, encoding='utf-8').read()):
+            for found in USED_IN_TEMPLATE.findall(open(path, encoding='utf-8').read()):
+                key = next(group for group in found if group)
                 if not is_registered(key):
                     unregistered.append(f'{key} (in {os.path.relpath(path, APP_DIR)})')
 
@@ -143,3 +146,27 @@ def test_a_key_moves_rather_than_being_shared(app, client, db_session):
 
     assert WikiArticle.query.get(second.id).help_key == 'cs.invoicing'
     assert WikiArticle.query.get(first.id).help_key is None
+
+def test_the_article_losing_a_key_keeps_its_updated_at(app, client, db_session):
+    """Losing a key is not an edit, so the reader's Last Updated must not move."""
+    _user(app, client, db_session, 'key-move-date@example.com')
+    section = WikiSection(title='S', slug='k-move-date')
+    db_session.add(section)
+    db_session.commit()
+    first = _article(db_session, section, 'k-date-first', help_key='cs_closed', title='First')
+    second = _article(db_session, section, 'k-date-second', title='Second')
+    was_updated_at = first.updated_at
+
+    client.post('/wiki/editor/article/save', data={
+        'article_id': str(second.id), 'section_id': str(section.id), 'title': 'Second',
+        'help_key': 'cs_closed',
+        'sections_json': json.dumps({'time': 0, 'version': '2.30.7', 'blocks': []}),
+    })
+    db_session.expire_all()
+
+    assert WikiArticle.query.get(first.id).help_key is None
+    assert WikiArticle.query.get(first.id).updated_at == was_updated_at
+
+
+
+

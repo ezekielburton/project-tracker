@@ -11,11 +11,88 @@
 
 .tray-dock {
     position: fixed;
-    right: 26px;
+    right: 0;
     bottom: var(--tray-dock-bottom);
     display: flex;
-    gap: 12px;
+    align-items: center;
     z-index: 10010;
+}
+
+/* The launchers collapse to nothing behind the tab. The padding gives their
+   shadows room to draw; the matching negative margin keeps the strip sitting
+   where it looks like it should. */
+.tray-dock__launchers {
+    display: flex;
+    gap: 12px;
+    max-width: 0;
+    padding: 16px 0;
+    margin: -16px -10px -16px 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-width 0.3s ease, padding 0.3s ease, opacity 0.2s ease;
+}
+
+.tray-dock.is-revealed .tray-dock__launchers {
+    max-width: 720px;
+    padding: 16px 26px;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.tray-dock__tab {
+    position: relative;
+    width: 30px;
+    height: 54px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-right: none;
+    border-radius: 14px 0 0 14px;
+    background: var(--surface-raised);
+    color: var(--text-muted);
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    transition: background 0.15s, color 0.15s;
+}
+
+.tray-dock__tab:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.tray-dock__chev {
+    transition: transform 0.3s ease;
+}
+
+.tray-dock.is-revealed .tray-dock__chev {
+    transform: rotate(180deg);
+}
+
+/* One combined count on the tab. It steps aside once the launchers are out,
+   because each of them carries its own. */
+.tray-dock__bubble {
+    position: absolute;
+    top: -7px;
+    left: -9px;
+    min-width: 19px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--tray-unread);
+    color: rgba(255, 255, 255, 0.95);
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 17px;
+    text-align: center;
+    transition: opacity 0.2s ease;
+}
+
+.tray-dock.is-revealed .tray-dock__bubble {
+    opacity: 0;
 }
 
 .tray-launcher {
@@ -180,4 +257,29 @@
 
 :root[data-theme="dark"] .tray-panel {
     box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+/* Dark: the tab floats over dark page chrome, same treatment as the launchers. */
+:root[data-theme="dark"] .tray-dock__tab {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="dark"] .tray-dock__tab:hover {
+    background: var(--surface-raised);
+}
+
+:root[data-theme="dark"] .tray-dock__bubble {
+    color: var(--tray-on-accent);
+}
+
+/* Snap instead of slide for anyone who asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+    .tray-dock__launchers,
+    .tray-dock__chev,
+    .tray-dock__bubble {
+        transition: none;
+    }
 }

@@ -18,6 +18,72 @@
         launchers[btn.dataset.tray] = btn;
     });
 
+    // ── Reveal / collapse ────────────────────────────────
+    // The dock is a tab at the edge; the launchers slide out on hover and go
+    // back 5s after you leave, unless something is holding them out.
+    var REVEAL_HOLD_MS = 5000;
+    var tab = document.getElementById('tray-dock-tab');
+    var tabBubble = document.getElementById('tray-dock-bubble');
+    var unreadCounts = {};
+    var collapseTimer = null;
+    var pinned = false;
+
+    // An open tray, or a click on the tab, holds the launchers out.
+    function isHeldOut() { return pinned || openTray !== null; }
+
+    function clearCollapse() {
+        if (collapseTimer) {
+            clearTimeout(collapseTimer);
+            collapseTimer = null;
+        }
+    }
+
+    function reveal() {
+        clearCollapse();
+        dock.classList.add('is-revealed');
+        if (tab) tab.setAttribute('aria-expanded', 'true');
+    }
+
+    function collapse() {
+        clearCollapse();
+        if (isHeldOut()) return;
+        dock.classList.remove('is-revealed');
+        if (tab) tab.setAttribute('aria-expanded', 'false');
+    }
+
+    function scheduleCollapse() {
+        clearCollapse();
+        if (isHeldOut()) return;
+        collapseTimer = setTimeout(collapse, REVEAL_HOLD_MS);
+    }
+
+    // The tab shows what all the trays add up to, so a shut dock still says
+    // something is waiting. New arrivals never slide it open on their own.
+    function paintTabBubble() {
+        if (!tabBubble) return;
+        var total = 0;
+        Object.keys(unreadCounts).forEach(function (key) { total += unreadCounts[key]; });
+        tabBubble.textContent = total > 99 ? '99+' : String(total);
+        tabBubble.hidden = total <= 0;
+    }
+
+    dock.addEventListener('mouseenter', reveal);
+    dock.addEventListener('mouseleave', scheduleCollapse);
+    // Keyboard focus counts as hover, so the dock is still reachable by tabbing.
+    dock.addEventListener('focusin', reveal);
+    dock.addEventListener('focusout', function (e) {
+        if (!dock.contains(e.relatedTarget)) scheduleCollapse();
+    });
+
+    if (tab) {
+        tab.addEventListener('click', function () {
+            // The tap path — touch has no hover, so the tab toggles and holds.
+            pinned = !(pinned && dock.classList.contains('is-revealed'));
+            if (pinned) reveal();
+            else collapse();
+        });
+    }
+
     var openTray = null;
     // name -> { onOpen, onClose, onSignal } — filled by each tray's own script.
     var registry = {};
@@ -42,6 +108,8 @@
         remember(null);
         var entry = registry[previous];
         if (entry && entry.onClose) entry.onClose(bodyEl, actionsEl);
+        // Nothing holding it out any more — start the 5s countdown.
+        scheduleCollapse();
     }
 
     function open(name) {
@@ -65,6 +133,7 @@
         panel.setAttribute('aria-hidden', 'false');
         btn.classList.add('is-open');
         btn.setAttribute('aria-expanded', 'true');
+        reveal();
         remember(name);
 
         var entry = registry[name];
@@ -75,15 +144,23 @@
     function setUnread(name, count) {
         var btn = launchers[name];
         if (!btn) return;
-        var bubble = btn.querySelector('.tray-launcher__bubble');
-        if (!bubble) return;
         var n = parseInt(count, 10) || 0;
-        bubble.textContent = n > 99 ? '99+' : String(n);
-        bubble.hidden = n <= 0;
+        unreadCounts[name] = n;
+        var bubble = btn.querySelector('.tray-launcher__bubble');
+        if (bubble) {
+            bubble.textContent = n > 99 ? '99+' : String(n);
+            bubble.hidden = n <= 0;
+        }
+        paintTabBubble();
     }
 
     function register(name, options) {
         registry[name] = options || {};
+        // A tray restored on page load can register after the shell already
+        // reopened it — give it its turn rather than leaving the panel empty.
+        if (openTray === name && registry[name].onOpen) {
+            registry[name].onOpen(bodyEl, actionsEl);
+        }
     }
 
     Object.keys(launchers).forEach(function (name) {

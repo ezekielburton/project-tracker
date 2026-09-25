@@ -1,22 +1,45 @@
-{# The two always-on tray launchers and the panel shell they share. Sits
-   outside #main-content so an SPA page swap never removes or rebinds it.
-   B2 (Chat) and B3 (Signal) mount their content into #tray-panel-body. #}
+{# The tray dock: a tab pinned to the right edge, with the launchers in a strip
+   that slides out of it. Sits outside #main-content so an SPA page swap never
+   removes or rebinds it. B2 (Chat) and B3 (Signal) mount into #tray-panel-body. #}
 <div id="tray-dock" class="tray-dock">
-    <button type="button" class="tray-launcher" data-tray="chat" data-title="Chat" aria-expanded="false">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <div class="tray-dock__launchers" id="tray-dock-launchers">
+        <button type="button" class="tray-launcher" data-tray="chat" data-title="Chat" aria-expanded="false">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span class="tray-launcher__label">Chat</span>
+            <span class="tray-launcher__bubble" data-tray-bubble="chat" hidden>0</span>
+        </button>
+        <button type="button" class="tray-launcher" data-tray="signal" data-title="Signal" aria-expanded="false">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12h4l3 8 4-16 3 8h4" />
+            </svg>
+            <span class="tray-launcher__label">Signal</span>
+            <span class="tray-launcher__bubble" data-tray-bubble="signal" hidden>0</span>
+        </button>
+        <button type="button" class="tray-launcher" data-tray="help" data-title="Help" aria-expanded="false">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12" y2="17" />
+            </svg>
+            <span class="tray-launcher__label">Help</span>
+            <span class="tray-launcher__bubble" data-tray-bubble="help" hidden>0</span>
+        </button>
+    </div>
+
+    {# The tab itself. Carries one combined count so a shut dock still tells you
+       something is waiting; the per-tray counts stay on the launchers. #}
+    <button type="button" class="tray-dock__tab" id="tray-dock-tab"
+            aria-expanded="false" aria-controls="tray-dock-launchers" aria-label="Show trays">
+        <svg class="tray-dock__chev" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6" />
         </svg>
-        <span class="tray-launcher__label">Chat</span>
-        <span class="tray-launcher__bubble" data-tray-bubble="chat" hidden>0</span>
-    </button>
-    <button type="button" class="tray-launcher" data-tray="signal" data-title="Signal" aria-expanded="false">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 12h4l3 8 4-16 3 8h4" />
-        </svg>
-        <span class="tray-launcher__label">Signal</span>
-        <span class="tray-launcher__bubble" data-tray-bubble="signal" hidden>0</span>
+        <span class="tray-dock__bubble" id="tray-dock-bubble" hidden>0</span>
     </button>
 </div>
 

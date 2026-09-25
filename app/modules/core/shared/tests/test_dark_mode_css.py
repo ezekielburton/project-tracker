@@ -16,6 +16,14 @@ SWEPT_FILES = [
 HEX_RE = re.compile(r'#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\b')
 
 
+COMMENT_RE = re.compile(r'/\*.*?\*/', re.S)
+
+
+def _without_comments(text):
+    """Blank out comments, keeping offsets so the :root ranges still line up."""
+    return COMMENT_RE.sub(lambda m: ' ' * len(m.group(0)), text)
+
+
 def _root_block_ranges(text):
     """Token *definitions* (:root and :root[data-theme="dark"]) are allowed
     to contain literal hex — only usages outside them are checked."""
@@ -46,8 +54,8 @@ def test_no_hardcoded_hex_outside_tokens(app):
     offenders = {}
     for fn in SWEPT_FILES:
         path = _swept_path(app, fn)
-        text = open(path, encoding='utf-8').read()
-        roots = _root_block_ranges(text) if fn == "main.css" else []
+        text = _without_comments(open(path, encoding='utf-8').read())
+        roots = _root_block_ranges(text)
         hits = [m.group(0) for m in HEX_RE.finditer(text)
                 if not any(s <= m.start() < e for s, e in roots)]
         if hits:

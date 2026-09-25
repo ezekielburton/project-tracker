@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block content %}
 <div class="page-header">
     <h1>Wiki Editor</h1>
     <div style="display:flex;gap:0.5rem;">
+        {{ help_button('wiki.editor') }}
         <a href="{{ url_for('wiki.index') }}" class="btn-secondary">View Wiki</a>
         <button type="button" class="btn-primary" id="wiki-new-section-btn">+ New Section</button>
     </div>

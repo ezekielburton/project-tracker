@@ -1,17 +1,19 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}HSE — Overview{% endblock %}
 
 {% block content %}
-<div class="hse-page">
-    <div class="hse-shell">
+<div class="module-page">
+    <div class="module-shell">
         {% include 'hse/_rail.html' %}
-        <div class="hse-main">
+        <div class="module-main hse-main">
             <div class="hse-inner hse-inner--fill">
 
                 <div class="hse-header">
                     <h1 class="hse-title">Overview</h1>
                     <div class="hse-header-actions">
+                        {{ help_button('hse.overview') }}
                         <span class="hse-month-chip">Week of {{ week_label }} {{ year_label }}</span>
                         <a class="hse-btn hse-tab"
                            href="{{ url_for('hse.calendar_month') }}">Calendar</a>

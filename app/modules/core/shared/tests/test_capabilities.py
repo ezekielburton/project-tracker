@@ -20,7 +20,7 @@ from app.modules.core.shared.lib.capabilities import (
     require,
     require_api,
 )
-from app.modules.dashboard.routes.dashboard import _scoped_projects
+from app.modules.dashboard.lib.project_loader import scope_query
 
 
 def _user(db_session, tag, role):
@@ -246,7 +246,7 @@ def test_a_read_only_role_sees_every_active_project(app, db_session):
     _project(db_session, 'two', cs)
     hr = _user(db_session, 'scope-hr', 'hr')
 
-    assert _scoped_projects(hr).count() >= 2
+    assert scope_query(hr).count() >= 2
 
 
 def test_a_role_without_project_visibility_sees_none(app, db_session):
@@ -254,4 +254,4 @@ def test_a_role_without_project_visibility_sees_none(app, db_session):
     _project(db_session, 'three', cs)
     finance = _user(db_session, 'scope-finance', 'finance')
 
-    assert _scoped_projects(finance).count() == 0
+    assert scope_query(finance).count() == 0

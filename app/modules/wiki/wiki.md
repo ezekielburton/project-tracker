@@ -16,13 +16,15 @@ app/modules/wiki/
   static/js/blocks/         # helix_callout.js, helix_video.js — our two tools
   templates/wiki/           # index, _article_content, editor_dashboard,
                             # editor_article, _section_modal, _article_modal,
-                            # _coverage_panel
+                            # _coverage_panel, _help_article, _help_empty,
+                            # _help_browse
   tests/test_wiki_smoke.py
   tests/test_wiki_blocks.py
   tests/test_wiki_editor.py
   tests/test_wiki_authoring.py
   tests/test_wiki_dashboard.py
   tests/test_wiki_help_keys.py
+  tests/test_wiki_help_tray.py
   wiki.md
 ```
 
@@ -38,7 +40,11 @@ app/modules/wiki/
 - `POST /wiki/editor/article/autosave` — parks the working copy in the
   article's draft; creates the article first if it does not exist yet. Writes
   with raw SQL so it never bumps `updated_at`, which readers see.
-- `GET /wiki/editor` — the editor dashboard
+- `GET /wiki/help` — every readable article, for the Help pill
+- `GET /wiki/help/<key>` — the article claiming that key, or the gap plus a
+  "Write this article" shortcut for admins
+- `GET /wiki/editor` — the editor dashboard; `?help_key=` opens the
+  new-article overlay with that key already chosen
 - `POST /wiki/editor/article/create` — from the new-article overlay; seeds the
   chosen skeleton and redirects into the editor
 - `POST /wiki/editor/sections/reorder`, `POST /wiki/editor/articles/reorder` —
@@ -101,6 +107,19 @@ page declaring a key that was never registered — it just renders a dead "?".
 `tests/test_wiki_help_keys.py` scans every template for `data-help-key="..."`
 and fails on any key missing from the registry.
 
+## The contextual "?"
+`help_button(key)` in `core/shared/templates/_shared_macros.html` puts a "?"
+next to anything. `help_tray.js` loads from `base.html` and handles every click
+by delegation, so it binds once and survives SPA swaps. The tray is the
+`HelixTrays` shell from 2.5 with a third launcher — `HelixTrays.open()` needs a
+pill for the panel's title, icon and open state, so the pill is load-bearing,
+not decoration. Articles render through `_article_content.html`, the same
+partial the reader uses.
+
+Stacking was measured, not assumed: the tray panel is `z-index: 10000` against
+the project overlay's 1000, and the dock sits at body level outside the
+overlay's `backdrop-filter`, so the "?" works inside a project.
+
 ## Static
 `wiki.js` (loaded by the wiki templates) and `wiki.css` (loaded globally by
 `base.html`) are deferred to the shared-static pass and remain in `app/static`.
@@ -129,5 +148,9 @@ one untouched, and Save publishes and clears the draft.
 reordering writes list position without touching `updated_at`, creating seeds
 the chosen skeleton at the end of its section, and reorder is admin-only.
 `tests/test_wiki_help_keys.py` — every registered key is well-formed and
-unique, no template declares an unregistered key, the coverage figures add up,
-and claiming a key moves it off whichever article held it.
+unique, no template names an unregistered key (it scans both `help_button('…')`
+calls and literal `data-help-key` attributes), the coverage figures add up, and
+claiming a key moves it off whichever article held it.
+`tests/test_wiki_help_tray.py` — the dock offers a Help launcher, the help
+routes render an article or the gap, drafts read as a gap to a non-admin, and
+only an admin is offered the write shortcut.

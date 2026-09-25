@@ -17,15 +17,30 @@ APP_ROOT = Path(app_package.__file__).parent
 # forking the component again.
 RETIRED_CLASSES = ('cs-sidebar', 'cs-nav-item', 'di-sidebar-nav', 'di-nav-item')
 
+# What the shared page frame replaced (.module-page / .module-shell).
+RETIRED_SHELL_CLASSES = ('cs-shell', 'hse-shell')
 
-def _render(app, items, active='', body=None):
+
+def _render(app, items, active='', body=None, title=None):
     source = "{% from '_shared_macros.html' import module_rail %}"
     if body is None:
-        source += '{{ module_rail(items, active) }}'
+        source += '{{ module_rail(items, active, title) }}'
     else:
-        source += '{% call module_rail(items, active) %}' + body + '{% endcall %}'
+        source += '{% call module_rail(items, active, title) %}' + body + '{% endcall %}'
     with app.app_context():
-        return app.jinja_env.from_string(source).render(items=items, active=active)
+        return app.jinja_env.from_string(source).render(items=items, active=active, title=title)
+
+
+def _source_hits(names):
+    hits = []
+    for path in APP_ROOT.rglob('*'):
+        if path.suffix not in ('.css', '.html', '.js', '.py'):
+            continue
+        if 'tests' in path.parts or '__pycache__' in path.parts:
+            continue
+        text = path.read_text(encoding='utf-8', errors='ignore')
+        hits += [f'{path.relative_to(APP_ROOT)}: {n}' for n in names if n in text]
+    return hits
 
 
 def test_only_the_active_item_is_marked(app):
@@ -79,14 +94,30 @@ def test_the_call_body_lands_inside_the_rail(app):
 def test_no_module_redefines_the_retired_rail_classes():
     """One rail, one definition. If this fails, a module has grown its own
     rail again — point it at module_rail() instead of restoring the class."""
-    offenders = []
-    for path in APP_ROOT.rglob('*'):
-        if path.suffix not in ('.css', '.html', '.js', '.py'):
-            continue
-        if 'tests' in path.parts or '__pycache__' in path.parts:
-            continue
-        text = path.read_text(encoding='utf-8', errors='ignore')
-        for name in RETIRED_CLASSES:
-            if name in text:
-                offenders.append(f'{path.relative_to(APP_ROOT)}: {name}')
+    offenders = _source_hits(RETIRED_CLASSES)
     assert not offenders, 'Retired rail classes are back: ' + ', '.join(offenders)
+
+
+def test_no_module_redefines_the_page_frame():
+    """One page frame. A module needing a variation adds a class beside
+    .module-main rather than growing its own shell."""
+    offenders = _source_hits(RETIRED_SHELL_CLASSES)
+    assert not offenders, 'Retired shell classes are back: ' + ', '.join(offenders)
+
+
+def test_title_heads_the_rail(app):
+    html = _render(app, [{'key': 'o', 'label': 'Overview', 'url': '/o'}], title='Dashboard')
+    assert '<aside class="module-rail"><div class="module-rail-title">Dashboard</div>' in html
+
+
+def test_no_title_renders_no_title(app):
+    html = _render(app, [{'key': 'o', 'label': 'Overview', 'url': '/o'}])
+    assert 'module-rail-title' not in html
+
+
+def test_a_soon_item_is_greyed_and_tagged(app):
+    html = _render(app, [{'key': 'hub', 'label': 'My hub', 'url': None, 'soon': True}])
+    assert 'module-rail-item--rich' in html
+    assert 'module-rail-item--disabled' in html
+    assert '<span class="module-rail-soon">Soon</span>' in html
+    assert '<a ' not in html

@@ -1,0 +1,15 @@
+{# One article inside the Help tray. Renders through _article_content.html,
+   the same partial the reader uses — one article view, not two. #}
+<div class="wiki-help">
+    {% if article.help_key %}
+    <p class="wiki-help__key"><code>{{ article.help_key }}</code></p>
+    {% endif %}
+
+    {% include 'wiki/_article_content.html' %}
+
+    <div class="wiki-help__foot">
+        <a class="btn-secondary btn-sm" href="{{ url_for('wiki.index') }}#article-{{ article.id }}">
+            Open full article
+        </a>
+    </div>
+</div>

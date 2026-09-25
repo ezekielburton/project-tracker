@@ -1,37 +1,10 @@
 /* HSE & Compliance module. Role tokens only, per theming.md — no
    hard-coded hex (hse.css is in test_dark_mode_css.py's SWEPT_FILES). */
 
-/* Module's own page/shell wrapper. The rail is shared (.module-rail in
-   shared.css); what lives here is the height chain, copied from
-   client_servicing.css's — a flex chain that reaches the real footer
-   rather than a viewport-derived guess. */
-.hse-page {
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-}
-
-/* Let the rail run flush against the global sidebar and the viewport's
-   right edge — .main-content's blanket padding otherwise leaves a gap on
-   both sides. .module-rail and .hse-inner re-add their own inner padding. */
-.main-content:has(.hse-page) {
-    padding-left: 0;
-    padding-right: 0;
-    padding-bottom: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.hse-shell {
-    display: flex;
-    align-items: stretch;
-    flex: 1;
-}
-
+/* The page frame and rail are shared (.module-page / .module-shell /
+   .module-main in shared.css). HSE's main column is a flex column so a
+   filled page (.hse-inner--fill) can stretch its panels. */
 .hse-main {
-    flex: 1;
-    min-width: 0;
     display: flex;
     flex-direction: column;
 }

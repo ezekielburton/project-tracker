@@ -3,12 +3,12 @@
 {% block title %}Client Servicing — Calendar{% endblock %}
 
 {% block content %}
-<div class="cs-page">
-    <div class="cs-shell">
+<div class="module-page cs-page">
+    <div class="module-shell">
         {% with active_nav = 'calendar' %}
         {% include "client_servicing/_sidebar.html" %}
         {% endwith %}
-        <div class="cs-main">
+        <div class="module-main">
             <div class="client-servicing-page cs-cal-page">
                 {{ cal_header('agenda', kpis) }}
 

@@ -1,0 +1,25 @@
+{# The Help pill with no key: everything there is to read. #}
+<div class="wiki-help wiki-help--browse">
+    {% if sections %}
+    {% for section in sections %}
+    {% set articles = section.articles | selectattr('is_published') | list if not can('manage_wiki') else section.articles %}
+    {% if articles %}
+    <div class="wiki-help__section">
+        <h3 class="wiki-help__section-title">{{ section.title }}</h3>
+        <ul class="wiki-help__list">
+            {% for article in articles %}
+            <li>
+                <button type="button" class="wiki-help__link" data-article-id="{{ article.id }}">
+                    {{ article.title }}
+                    {% if not article.is_published %}<span class="wiki-draft-badge">Draft</span>{% endif %}
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% else %}
+    <p class="wiki-editor-empty">Nothing in the wiki yet.</p>
+    {% endif %}
+</div>

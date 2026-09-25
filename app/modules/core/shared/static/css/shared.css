@@ -526,11 +526,54 @@ the backend already handles fine. */
     background: var(--surface-hover);
 }
 
+/*  ---- Module shell
+    The frame a module with an inner rail sits in: rail on the left, content
+    on the right, flush to the global sidebar and running to the footer.
+    Markup: .module-page > .module-shell > (.module-rail + .module-main).
+    The flex chain grows with .main-content's own height; a panel that must
+    fill to the footer measures it with watchFillHeight (fill_height.js). */
+
+.module-page {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+/* .main-content's blanket padding would leave a gap beside the rail and at
+   the right edge. The rail and the page content add their own padding back. */
+.main-content:has(.module-page) {
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.module-shell {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+}
+
+.module-main {
+    flex: 1;
+    min-width: 0;
+}
+
+/*  ---- Scroll panel
+    A card or list that scrolls inside itself, so the page does not. It needs
+    a height to scroll within: this max-height, or a parent that sets one. */
+.scroll-panel {
+    max-height: var(--scroll-panel-max, 60vh);
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
 /*  ---- Module rail
     The inner left nav a module's own screens share (Client Servicing,
-    Digital Innovation, HSE). Markup comes from _shared_macros.html's
-    module_rail(). Each module still owns its page/shell wrapper and its
-    height strategy — only the rail itself lives here. */
+    Digital Innovation, HSE, Dashboard). Markup comes from
+    _shared_macros.html's module_rail(). */
 
 .module-rail {
     width: 220px;
@@ -552,6 +595,15 @@ the backend already handles fine. */
    switcher belongs directly under the nav, not floated away from it. */
 .module-rail-foot {
     margin-top: auto;
+}
+
+.module-rail-title {
+    font-family: var(--font-headline);
+    font-size: var(--text-med);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0 var(--space-3) var(--space-4);
 }
 
 .module-rail-nav {
@@ -611,4 +663,21 @@ the backend already handles fine. */
     border-radius: 999px;
     background: var(--surface-hover);
     color: var(--text-muted);
+}
+
+.module-rail-item--active .module-rail-count {
+    background: rgba(242, 127, 85, 0.18);
+    color: var(--tangerine);
+}
+
+/* A page that is planned but not built yet. */
+.module-rail-soon {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0 var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
 }
