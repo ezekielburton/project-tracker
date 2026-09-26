@@ -359,8 +359,15 @@ ol.wiki-block-list {
     color: var(--text-faint);
 }
 
+/* Editor.js renders an <h3>, which main.css uppercases app-wide. Match the
+   reader's .wiki-block-h3 so what you type is what you get. */
 .wiki-editor-shell .ce-header {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 700;
     color: var(--tangerine);
+    text-transform: none;
+    letter-spacing: normal;
 }
 
 .wiki-editor-shell .ce-toolbar__plus,
