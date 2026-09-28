@@ -1,7 +1,6 @@
-{# Installation Calendar — shared render macros (KPI header, drawer job
-   card, agenda row). Editable cells carry data-field/data-value and the
-   job's data-project-id; client_servicing_calendar.js wires the inline
-   edits through the same CS writeback the table uses. #}
+{# Installation Calendar macros: KPI header, drawer job card, agenda row.
+   Editable cells carry data-field/data-value plus data-project-id, which
+   client_servicing_calendar.js uses to save through the table's writeback. #}
 {% from '_shared_macros.html' import status_pill %}
 
 {% macro cal_header(active_view, kpis, month_label=None) %}
@@ -24,8 +23,8 @@
 {% endmacro %}
 
 {% macro job_card(it) %}
-{# A closed job is history: `ed` empties the cs-editable class everywhere
-   below, so the inline-edit JS finds nothing to hook. #}
+{# Closed jobs are read-only: `ed` is empty, so the edit JS finds no
+   cs-editable cells. #}
 {% set ed = '' if it.closed else ' cs-editable' %}
 <div class="cs-cal-job cs-cal-job--{{ it.risk_class }}{{ ' cs-cal-job--closed' if it.closed else '' }}" data-project-id="{{ it.id }}" data-risk-class="{{ it.risk_class }}">
     <div class="cs-cal-job-top">

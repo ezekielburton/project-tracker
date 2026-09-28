@@ -1,7 +1,6 @@
-/* Achievement card styling (Phase 4). Sits inside .profile-achievements-card
-   (defined in profile.css) — this file only styles what's INSIDE that card:
-   the tab toggle, tile rows, individual tiles, the show more/less button,
-   and the expandable category checklist with progress bars. */
+/* Achievements: the profile card's contents (the card itself is in
+   profile.css), the Customize modal, and the admin panel's Achievements
+   section. */
 
 /* ── Unlock count tag (next to "Achievements" heading) ───────────────── */
 .achievement-unlock-count {
@@ -24,9 +23,6 @@
     margin: 0.75rem 0 1rem;
 }
 
-/* Reuses the same visual language as .team-tag-btn (the documented
-   JS-toggled pill pattern) rather than inventing a new tab style — quiet
-   background when inactive, filled when active. */
 .achievement-tab-btn {
     font-family: var(--font-mono);
     font-size: 0.8rem;
@@ -86,10 +82,7 @@
     font-size: 1.75rem;
 }
 
-/* Shared "animated" treatment for badge_type == 'animated' — a subtle,
-   continuous shine/pulse rather than a per-achievement custom animation.
-   Keeps the admin panel (Phase 7) to a simple toggle instead of requiring
-   a bespoke animation asset per achievement. */
+/* badge_type == 'animated': one shared pulse for every animated badge. */
 .achievement-badge-img--animated {
     animation: achievement-badge-pulse 1.8s ease-in-out infinite;
 }
@@ -149,8 +142,7 @@
     gap: 0.4rem;
     font-size: 0.9rem;
     margin: 0 0 0.6rem;
-    /* Category headings are a sub-heading inside an already-quiet card —
-       the global h1-h6 uppercase rule is too heavy here. */
+    /* Undo the global uppercase headings. */
     text-transform: none;
     letter-spacing: normal;
     font-family: var(--font-body);
@@ -173,8 +165,7 @@
     padding: 0.6rem 0.85rem;
 }
 
-/* Locked (hidden + unearned) rows are dimmed so the ??? entries read as
-   "not yet available" rather than looking like a rendering bug. */
+/* Locked (hidden + unearned) rows are dimmed. */
 .achievement-checklist-row--locked {
     opacity: 0.55;
 }
@@ -229,64 +220,9 @@
     margin-top: 0.25rem;
 }
 
-/* ── Pinned Achievements drag UI (Account page, Phase 5) ────────────────
-   Two side-by-side lists ("Earned" / "Pinned"), dragged between via
-   SortableJS. Kept in achievements.css rather than a new file since it's
-   achievement-domain styling, even though it renders on the Account page
-   rather than the profile page. */
-.achievement-pin-columns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-}
-
-.achievement-pin-column-title {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--grey-dark);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin: 0 0 0.5rem;
-}
-
-.achievement-pin-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    min-height: 60px;
-    /* so an empty list still has a droppable target area */
-    background: color-mix(in srgb, var(--sandstone) 40%, white);
-    border: 1px dashed var(--sandstone);
-    border-radius: 8px;
-    padding: 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-:root[data-theme="dark"] .achievement-pin-list {
-    background: color-mix(in srgb, var(--sandstone) 70%, transparent);
-}
-
-.achievement-pin-item {
-    background: var(--white);
-    border: 1px solid var(--sandstone);
-    border-radius: 6px;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.85rem;
-    cursor: grab;
-}
-
-/* SortableJS applies this class to the element being dragged */
-.achievement-pin-item.sortable-ghost {
-    opacity: 0.4;
-}
-
-/* ── Admin achievement management panel (Phase 7) ────────────────────────
-   Sub-tabs reuse the exact .pt-tabs/.pt-tab-btn visual treatment from the
-   Project Tools admin section, just under an ach- prefix so the two
-   sections' JS click handlers (each scoped by their own class name) never
-   collide even though they render identically. */
+/* ── Admin achievement management panel ──────────────────────────────────
+   Sub-tabs match .pt-tabs/.pt-tab-btn; the ach- prefix keeps admin.js's
+   click handlers for the two sections apart. */
 .ach-tabs {
     display: flex;
     flex-wrap: wrap;
@@ -447,33 +383,14 @@
     color: var(--grey-dark);
 }
 
-/* Border preview swatch on the Borders tab — applies the admin-typed
-   css_class to a real element so a typo (class that doesn't exist in this
-   file) is visible immediately as a plain grey box, not discovered later
-   when a user tries to select it as their active border. */
+/* Border preview on the Borders tab: carries the admin-typed css_class, so
+   a class that does not exist shows as a plain box. */
 .ach-border-preview {
     width: 36px;
     height: 36px;
     border-radius: 8px;
     background: var(--sandstone);
     flex-shrink: 0;
-}
-
-/* ── Profile page: edit achievements button ────────────────────────────── */
-.profile-edit-ach-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    color: var(--grey-dark);
-    padding: 0.1rem 0.3rem;
-    border-radius: var(--radius);
-    margin-left: auto;   /* pushes to the right inside the flex section-header */
-    transition: color 0.15s, background 0.15s;
-}
-.profile-edit-ach-btn:hover {
-    color: var(--tangerine);
-    background: var(--sandstone);
 }
 
 /* ── Customize achievements modal ──────────────────────────────────────── */
@@ -500,7 +417,7 @@
 }
 
 .achievement-customize-section-header strong {
-    font-family: var(--font-heading);
+    font-family: var(--font-headline);
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;

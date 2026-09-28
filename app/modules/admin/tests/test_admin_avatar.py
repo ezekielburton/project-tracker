@@ -1,4 +1,4 @@
-"""Admin can set/replace any user's avatar via /admin/api/users/<id>/avatar."""
+"""Admin-only /admin/api/users/<id>/avatar: set, replace and validation."""
 import io
 import os
 from app.modules.core.shared.models import User

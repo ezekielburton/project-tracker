@@ -1,7 +1,6 @@
-""" 
-Test: the app factory build cleanly, the ORM configures across the split
-model package, and the shared base templates resolve from core/shared.
-
+"""
+The app factory builds, the ORM mappers configure across the model package,
+and the shared base templates resolve.
 """
 import sqlalchemy as sa
 
@@ -9,10 +8,10 @@ def test_app_boots(app):
     assert app is not None
 
 def test_mappers_configure(app):
-    # Raises if any relationship across the split model package is misconfigured
+    # Raises if any relationship across the model package is misconfigured
     sa.orm.configure_mappers()
 
 def test_shared_templates_resolve(app):
-    for name in ('base.html', 'base_fragment.html', '_macros.html', '_shared_macros.html',
+    for name in ('base.html', '_macros.html', '_shared_macros.html',
                  'partials/avatar_crop_modal.html'):
         assert app.jinja_env.get_template(name) is not None

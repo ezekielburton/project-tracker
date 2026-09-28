@@ -10,32 +10,23 @@
         {% include "digital_innovation/_sidebar.html" %}
         {% endwith %}
 
-        {# di-board is deliberately a <div>, not a <main> — base.html's
-           #main-content is already the page's one <main> landmark, and
-           spa_strip_response's regex (app/__init__.py) extracts its
-           content by matching up to the FIRST literal "</main>" it finds.
-           A nested <main>...</main> here would close that match early on an SPA
-           nav, dropping everything below it (the DI modals) until a full refresh. #}
+        {# Must stay a <div>, not <main>: spa_strip_response (app/__init__.py)
+           cuts #main-content at the first "</main>", so a nested one drops
+           everything after it on SPA nav. #}
         <div class="di-board" data-di-project-id="{{ project.id }}">
             <div class="di-board-header">
                 <div class="di-board-heading">
                     <h1 class="di-board-title">{{ project.name }}</h1>
-                    {# Internal/External track (models.py's DiProject.track) -
-                       board-level, decides whether this board's Management
-                       Review column reads as 'Client Review' everywhere
-                       (stage_label(), routes/board.py). Click-to-toggle for
-                       editors, same read-only-vs-editable split as the linked-
-                       project badge just below. #}
+                    {# Internal/External track (DiProject.track). External shows
+                       Management Review as 'Client Review' (stage_label()).
+                       Editors can click to toggle. #}
                     <span class="di-track-badge{% if can_edit_board %} di-track-badge--editable{% endif %}"
                           {% if can_edit_board %}id="di-track-badge" role="button" tabindex="0" data-project-id="{{ project.id }}" data-track="{{ project.track }}"{% endif %}>
                         {{ 'External' if project.track == 'external' else 'Internal' }}
                     </span>
                     {% if not project.is_permanent %}
                         {% if project.linked_project %}
-                        {# Read-only for viewers; editors get a click/Enter
-                           target that opens #di-link-project-modal to
-                           change or clear it — same modal either way, see
-                           digital_innovation_board.js. #}
+                        {# Read-only for viewers; editors click it to change or clear the link. #}
                         <span class="di-linked-badge{% if can_edit_board %} di-linked-badge--editable{% endif %}"
                               {% if can_edit_board %}id="di-linked-badge" role="button" tabindex="0"{% endif %}>
                             part of &rarr; {{ project.linked_project.name }}
@@ -47,32 +38,22 @@
                     <p class="di-board-subtitle">Project board · {{ open_feature_count }} active feature{{ 's' if open_feature_count != 1 else '' }}</p>
                 </div>
                 {% if can_edit_board or can_view_performance %}
-                {# All header buttons wrapped together so space-between pushes the group to
-                   the right as one unit, keeping Incoming and + New project adjacent.
-                   The wrapper renders for can_view_performance too (not just
-                   can_edit_board) so a management user still gets the Cost breakdown
-                   button; the other three stay gated on can_edit_board /
-                   project.is_permanent below. #}
+                {# One wrapper so the buttons sit together on the right. Rendered
+                   for can_view_performance too, so management gets Cost breakdown. #}
                 <div class="di-board-header-actions">
                     {{ help_button('di.board') }}
                     {% if can_view_performance %}
-                    {# Every project can carry cost history — gated on can_view_di_performance
-                       (viewing/adding/deleting all share that gate), not can_edit_board. #}
+                    {# View, add and delete costs all share the can_view_di_performance gate. #}
                     <button type="button" class="btn-secondary btn-sm di-cost-trigger" id="di-cost-trigger" data-di-project-id="{{ project.id }}">Cost breakdown</button>
                     {% endif %}
                     {% if can_edit_board and project.is_permanent %}
-                    {# Only the permanent OVP board has intake items — opens the Incoming
-                       overlay (#di-incoming-modal below) rather than an inline tray. #}
+                    {# Only the permanent OVP board has intake items. Opens #di-incoming-modal. #}
                     <button type="button" class="btn-secondary btn-sm di-incoming-trigger" id="di-incoming-trigger" data-di-project-id="{{ project.id }}">
                         Incoming
                         {% if pending_intake_items %}<span class="di-incoming-badge">{{ pending_intake_items | length }}</span>{% endif %}
                     </button>
                     {% endif %}
                     {% if can_edit_board %}
-                    {# Moved here from the sidebar (was next to "Archive") so the
-                       header matches the wireframe — same #di-new-project-trigger
-                       id, so digital_innovation_board.js's delegated click
-                       handler picks it up here without any JS change. #}
                     <button type="button" class="btn-primary btn-sm" id="di-new-project-trigger">+ New project</button>
                     {% endif %}
                 </div>
@@ -115,9 +96,7 @@
         </div>
         <div class="form-group">
             <label for="di-new-feature-stage">Starting stage</label>
-            {# stages/stage_labels are already track-aware here (routes/
-               board.py's _render_board), so this reads 'Client Review' too
-               when this board's track is external. #}
+            {# stage_labels is track-aware, so external boards show 'Client Review'. #}
             <select id="di-new-feature-stage">
                 {% for stage in stages %}
                 <option value="{{ stage }}">{{ stage_labels[stage] }}</option>
@@ -151,12 +130,8 @@
 {% endif %}
 
 {% if can_edit_board and not project.is_permanent %}
-{# Search-as-you-type picker (see routes/projects.py::search_projects) —
-   the shared Project table can run into the hundreds, so a plain <select>
-   the way the app does it for short lists (e.g. Clients) isn't practical
-   here. Rendered for editors only, whether or not a link is currently
-   set, since the trigger that opens it (badge or "+ Link to project")
-   changes based on that same condition. #}
+{# Search picker (routes/projects.py::search_projects): the Project table is
+   too long for a <select>. Editors only, linked or not. #}
 <div id="di-link-project-modal" class="modal-overlay hidden" data-di-project-id="{{ project.id }}">
     <div class="modal-box">
         <div class="di-link-modal-header">

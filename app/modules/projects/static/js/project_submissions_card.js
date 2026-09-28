@@ -14,13 +14,13 @@ window.ProjectSubmissionsCard = (function () {
         var currentParams = { scope: contentEl.dataset.scope || 'ckv', customer_id: contentEl.dataset.customerId || '' };
 
         function refreshDraftCard() {
-            window.ProjectSubmissionsDraftCard.init(contentEl, projectId, currentParams, function () {
-                loadContent(currentParams);
+            // afterRender is optional: runs once the toggle is in the header,
+            // so layout-dependent work (the main-deck reorder) sees final positions.
+            window.ProjectSubmissionsDraftCard.init(contentEl, projectId, currentParams, function (afterRender) {
+                loadContent(currentParams, afterRender);
             });
-            // Relocate the scope-level Current/History toggle (if this fetch
-            // rendered one) out of contentEl and into the header row next to
-            // the dropdown. This is a DOM move, not a rebuild, so the click
-            // listeners ProjectSubmissionsDraftCard.init() just bound stay attached.
+            // Move the Current/History toggle into the header row. Must run
+            // after init(): a DOM move keeps the listeners it just bound.
             if (toggleSlot) {
                 var toggle = contentEl.querySelector('.overlay-submissions-view-toggle');
                 toggleSlot.innerHTML = '';
@@ -28,7 +28,7 @@ window.ProjectSubmissionsCard = (function () {
             }
         }
 
-        function loadContent(params) {
+        function loadContent(params, afterRender) {
             currentParams = params;
             var query = new URLSearchParams(params).toString();
             fetch(`/projects/${projectId}/overlay/submissions/content?${query}`)
@@ -37,17 +37,28 @@ window.ProjectSubmissionsCard = (function () {
                     if (destroyed) return;
                     contentEl.innerHTML = html;
                     refreshDraftCard();
+                    if (afterRender) afterRender();
                 });
+        }
+
+        // Storage can throw (private windows, blocked site data); the
+        // selection still works, it just isn't remembered.
+        function saveSelection(selection) {
+            try { localStorage.setItem(storageKey, JSON.stringify(selection)); } catch (e) { /* not remembered */ }
+        }
+
+        function hasOption(value) {
+            return !!scopeSelect && Array.prototype.some.call(scopeSelect.options, function (o) { return o.value === value; });
         }
 
         function selectValue(value) {
             if (scopeSelect) scopeSelect.value = value;
             if (value === 'ckv') {
-                localStorage.setItem(storageKey, JSON.stringify({ scope: 'ckv' }));
+                saveSelection({ scope: 'ckv' });
                 loadContent({ scope: 'ckv' });
             } else if (value.indexOf('customer:') === 0) {
                 var customerId = value.slice('customer:'.length);
-                localStorage.setItem(storageKey, JSON.stringify({ scope: 'customer', customerId: customerId }));
+                saveSelection({ scope: 'customer', customerId: customerId });
                 loadContent({ scope: 'customer', customer_id: customerId });
             }
         }
@@ -57,14 +68,15 @@ window.ProjectSubmissionsCard = (function () {
                 selectValue(scopeSelect.value);
             });
 
-            // Resolve initial selection: last saved choice for this project,
-            // else the server's suggested default (first customer, else CKV).
+            // Initial selection: last saved choice for this project if it is
+            // still offered (a customer may have been removed), else the
+            // server's default (first customer, else CKV).
             var saved = null;
             try { saved = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) { saved = null; }
 
             if (saved && saved.scope === 'ckv' && contentEl.dataset.showCkv === 'true') {
                 selectValue('ckv');
-            } else if (saved && saved.scope === 'customer' && saved.customerId) {
+            } else if (saved && saved.scope === 'customer' && saved.customerId && hasOption('customer:' + saved.customerId)) {
                 selectValue('customer:' + saved.customerId);
             } else if (contentEl.dataset.defaultCustomerId) {
                 selectValue('customer:' + contentEl.dataset.defaultCustomerId);
@@ -72,7 +84,7 @@ window.ProjectSubmissionsCard = (function () {
                 selectValue('ckv');
             }
         } else {
-            // Standard Brief: no dropdown, content already server-rendered — just wire it.
+            // Standard: no dropdown; content is already server-rendered.
             refreshDraftCard();
         }
 

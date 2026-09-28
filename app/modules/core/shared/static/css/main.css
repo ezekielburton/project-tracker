@@ -48,18 +48,16 @@
     --coral: #FF8559;
     --sage: #9ed4a5;
     --lavender: #B390FF;
-    /* Toned down from #66D575 (21 Aug 2026, per Ezekiel — the old value read
-       as a jarring, dated "flat design" neon green next to the rest of this
-       softer palette, especially on the Handed to Production status pill).
-       Standard, well-worn "success green" instead of a fluorescent one —
-       still clearly distinct from --sage, just not fighting with it. */
+    /* Success green; kept clearly distinct from --sage. */
     --clover: #4CAF5A;
     --poppy: #FF4F4F;
     --salmon: #FF8989;
+    /* Red that reads as small text: an error message, an invalid field's
+       border. --poppy is too light for small text on white. */
+    --danger-text: #C0403D;
 
     --plain-white: #FFFFFF;
     --white: #fafafa;
-    --information: #fffdfa;
     --black: #1A1A1A;
     --grey-light: #E8E8E8;
     --grey-mid: #AAAAAA;
@@ -77,8 +75,7 @@
     --radius-sm: 4px;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 
-    /*  Density/sizing - change --text-base and everything else scaled.
-        Values below are sourced from what's already in heavy use */
+    /* Spacing and type scale. */
         
     --space-1: 0.25rem;
     --space-2: 0.5rem;
@@ -94,7 +91,6 @@
     --text-med: 1.1rem;
     --text-1g: 1.25rem;
     --text-xl: 1.6rem;
-    --sent-zone-text: 1.4rem;
 
     --avatar-sm: 1.5rem;
     --avatar-md: 1.875rem;
@@ -110,45 +106,39 @@
     --border-subtle: #EDE8E0;
     --surface-hover: #EDEAE4;
 
-    /* Role tokens (2.4.1 dark mode) — light values, same as current colours
-       so nothing changes yet. The sweep phase re-routes raw hexes to these. */
+    /* Role tokens — light values; dark values are in :root[data-theme="dark"]. */
     --surface-sunken: var(--background);
     --surface: var(--white);
     --surface-raised: var(--plain-white);
     --text: var(--black);
     --text-faint: var(--grey-mid);
     --border-strong: var(--grey-mid);
-    --scrim: rgba(245, 240, 232, 0.85); /* matches .modal-overlay's current backdrop */
+    --scrim: rgba(245, 240, 232, 0.85); /* .modal-overlay backdrop */
 
     /* Global trays — the unread bubble and the ink on the active launcher */
     --tray-unread: #D9534F;
     --tray-on-accent: #FFFFFF;
 
-    /* Promoted neutral greys (2.4.1 dark-mode sweep) — exact light values preserved */
+    /* Neutral greys, named by their light hex; dark values below. */
     --gray-f0f6ee: #F0F6EE;
     --gray-666666: #666666;
     --gray-444444: #444444;
     --gray-fbf8f4: #FBF8F4;
-    --gray-999999: #999999;
-    --gray-eaf0e8: #EAF0E8;
     --gray-e0e0e0: #E0E0E0;
     --gray-e8f0e8: #E8F0E8;
     --gray-f0eee8: #F0EEE8;
-    --gray-cccccc: #CCCCCC;
     --gray-bbbbbb: #BBBBBB;
     --gray-e5e5e5: #E5E5E5;
     --gray-f7f5f5: #F7F5F5;
     --gray-fefefe: #FEFEFE;
     --gray-dddddd: #DDDDDD;
-    --gray-f5f5f5: #F5F5F5;
     --gray-777777: #777777;
     --gray-f0f0f0: #F0F0F0;
     --gray-525659: #525659;
 
-    /* Promoted tinted colours (badges/tags) — exact light values preserved */
+    /* Tinted colours (badges/tags), named by their light hex; dark values below. */
     --tint-e60000: #E60000;
     --tint-c0392b: #C0392B;
-    --tint-f59e0b: #F59E0B;
     --tint-fde8eb: #FDE8EB;
     --tint-8a1a28: #8A1A28;
     --tint-e8909a: #E8909A;
@@ -156,7 +146,6 @@
     --tint-3e5e66: #3E5E66;
     --tint-f9eced: #F9ECED;
     --tint-f4e0e2: #F4E0E2;
-    --tint-e0d9d0: #E0D9D0;
     --tint-a03040: #A03040;
     --tint-fce8ea: #FCE8EA;
     --tint-b45309: #B45309;
@@ -173,22 +162,13 @@
     --tint-fdf0f2: #FDF0F2;
     --tint-f0b8c0: #F0B8C0;
     --tint-9a2535: #9A2535;
-    --tint-fef3c7: #FEF3C7;
     --tint-6ee7b7: #6EE7B7;
-    --tint-a05060: #A05060;
     --tint-3d7da6: #3D7DA6;
     --tint-8a7328: #8A7328;
     --tint-ffeb00: #FFEB00;
     --tint-ff0000: #FF0000;
     --tint-faecea: #FAECEA;
-    --tint-fdfae8: #FDFAE8;
-    --tint-a89c2a: #A89C2A;
-    --tint-faeced: #FAECED;
-    --tint-a0555d: #A0555D;
-    --tint-fdf8f4: #FDF8F4;
-    --tint-b94040: #B94040;
     --tint-e8edf5: #E8EDF5;
-    --tint-e8e2d8: #E8E2D8;
     --tint-d9cfc3: #D9CFC3;
     --tint-eef2f7: #EEF2F7;
     --tint-4a6080: #4A6080;
@@ -201,69 +181,32 @@
     --tint-fef3e2: #FEF3E2;
     --tint-92510a: #92510A;
     --tint-f5c07a: #F5C07A;
-    --tint-fdf0f1: #FDF0F1;
-    --tint-7a6a00: #7A6A00;
-    --tint-c2838a: #C2838A;
-    --tint-f3b297: #F3B297;
-    --tint-bfdbfe: #BFDBFE;
     --tint-c43d3d: #C43D3D;
     --tint-3f8f3f: #3F8F3F;
     --tint-009900: #009900;
     --tint-e06b3f: #E06B3F;
-    --tint-fef9c3: #FEF9C3;
-    --tint-78650a: #78650A;
-    --tint-f0dc6a: #F0DC6A;
-    --tint-ffe4d0: #FFE4D0;
-    --tint-9a4a1a: #9A4A1A;
-    --tint-f9c094: #F9C094;
-    --tint-d4f0d4: #D4F0D4;
-    --tint-1e6b1e: #1E6B1E;
-    --tint-a8dfa8: #A8DFA8;
-    --tint-c98a90: #C98A90;
     --tint-ebf5eb: #EBF5EB;
     --tint-fdecea: #FDECEA;
     --tint-fef9e7: #FEF9E7;
-    --tint-f5efe8: #F5EFE8;
     --tint-fef6f1: #FEF6F1;
-    --tint-f0ebe3: #F0EBE3;
-    --tint-4a6fa5: #4A6FA5;
-    --tint-fdf0f0: #FDF0F0;
     --tint-ece5d8: #ECE5D8;
-    --tint-d0c8bc: #D0C8BC;
     --tint-fdf6e3: #FDF6E3;
     --tint-8a6800: #8A6800;
     --tint-f0d878: #F0D878;
-    --tint-fdfbec: #FDFBEC;
-    --tint-dcefd8: #DCEFD8;
-    --tint-e8f0e5: #E8F0E5;
-    --tint-92400e: #92400E;
-    --tint-fde68a: #FDE68A;
-    --tint-78350f: #78350F;
-    --tint-ddd6fe: #DDD6FE;
-    --tint-4c1d95: #4C1D95;
-    --tint-1e3a5f: #1E3A5F;
-    --tint-eff6ff: #EFF6FF;
     --tint-fffbea: #FFFBEA;
     --tint-fff8e0: #FFF8E0;
-    --tint-3a5a62: #3A5A62;
     --tint-8a7a1e: #8A7A1E;
     --tint-fbe3e3: #FBE3E3;
     --tint-fbf3d9: #FBF3D9;
     --tint-dff3df: #DFF3DF;
-    --tint-ffd5d5: #FFD5D5;
-    --tint-8a2020: #8A2020;
-    --tint-f5aaaa: #F5AAAA;
-    --tint-e8f4f8: #E8F4F8;
-    --tint-1a5276: #1A5276;
-    --tint-aed6f1: #AED6F1;
 }
 
 /* ── Dark theme — set via <html data-theme="dark"> ───────────────────────
-   Redefines role tokens, neutral colour vars, and the existing semantic
-   aliases above (--text-muted etc.) so their 251 existing usages get dark
-   values for free. --tangerine and feature accents (--sage, --sky, etc.)
-   are untouched — only --coral gets a brighter dark value for buttons/pills. */
+   Redefines role tokens, neutrals and semantic aliases. --tangerine and the
+   feature accents (--sage, --sky…) keep their light values; --coral and
+   --sandstone get dark ones. */
 :root[data-theme="dark"] {
+    --danger-text: #FF7A7A;
     --background: #14110D;
     --page-background: #14110D;
     --surface-sunken: #14110D;
@@ -308,37 +251,30 @@
     --tone-lavender: #C4A8FF;
     --tone-blue: #8FC4F0;
 
-    /* --sandstone is also used as a plain panel/callout background (settings
-       nav, admin panel header, wiki callouts) — needs a dark value or those
-       stay stuck light. A bit lighter than --surface so those panels still
-       read as a distinct fill, not a bug. */
+    /* --sandstone doubles as a panel/callout fill (settings nav, admin panel
+       header, wiki callouts); a bit lighter than --surface so they stand out. */
     --sandstone: #2f281f;
 
-    /* Promoted neutral greys — dark equivalents */
+    /* Neutral greys — dark equivalents */
     --gray-f0f6ee: #211D17;
     --gray-666666: #b3a89a;
     --gray-444444: #F2EDE4;
     --gray-fbf8f4: #211D17;
-    --gray-999999: #7d7466;
-    --gray-eaf0e8: #211D17;
     --gray-e0e0e0: #2b251d;
     --gray-e8f0e8: #2b251d;
     --gray-f0eee8: #211D17;
-    --gray-cccccc: #372F26;
     --gray-bbbbbb: #372F26;
     --gray-e5e5e5: #2b251d;
     --gray-f7f5f5: #211D17;
     --gray-fefefe: #211D17;
     --gray-dddddd: #2b251d;
-    --gray-f5f5f5: #211D17;
     --gray-777777: #b3a89a;
     --gray-f0f0f0: #211D17;
     --gray-525659: #F2EDE4;
 
-    /* Promoted tinted colours — dark equivalents (auto-derived, calibrated to the brief's coral/oak/clover/poppy examples) */
+    /* Tinted colours — dark equivalents */
     --tint-e60000: #F87D7D;
     --tint-c0392b: #E39E97;
-    --tint-f59e0b: #F5D399;
     --tint-fde8eb: #311217;
     --tint-8a1a28: #D85B6B;
     --tint-e8909a: #F7DFE1;
@@ -346,7 +282,6 @@
     --tint-3e5e66: #83A7B0;
     --tint-f9eced: #2B181A;
     --tint-f4e0e2: #2B191B;
-    --tint-e0d9d0: #27231F;
     --tint-a03040: #D68994;
     --tint-fce8ea: #301316;
     --tint-b45309: #EE9C5D;
@@ -363,22 +298,13 @@
     --tint-fdf0f2: #301318;
     --tint-f0b8c0: #2F161A;
     --tint-9a2535: #D77684;
-    --tint-fef3c7: #342D10;
     --tint-6ee7b7: #DDF8ED;
-    --tint-a05060: #D2ACB4;
     --tint-3d7da6: #9CBFD6;
     --tint-8a7328: #CFB972;
     --tint-ffeb00: #F9F194;
     --tint-ff0000: #F99494;
     --tint-faecea: #2D1916;
-    --tint-fdfae8: #312D12;
-    --tint-a89c2a: #DBD386;
-    --tint-faeced: #2C1718;
-    --tint-a0555d: #D3B1B5;
-    --tint-fdf8f4: #2E2015;
-    --tint-b94040: #DEAAAA;
     --tint-e8edf5: #1A2029;
-    --tint-e8e2d8: #27241E;
     --tint-d9cfc3: #27241F;
     --tint-eef2f7: #1B2128;
     --tint-4a6080: #99A9C0;
@@ -391,141 +317,24 @@
     --tint-fef3e2: #332510;
     --tint-92510a: #E89943;
     --tint-f5c07a: #FAEDDB;
-    --tint-fdf0f1: #301316;
-    --tint-7a6a00: #F3D616;
-    --tint-c2838a: #F0E3E5;
-    --tint-f3b297: #331D14;
-    --tint-bfdbfe: #102035;
     --tint-c43d3d: #E2ADAD;
     --tint-3f8f3f: #92CB92;
     --tint-009900: #34F434;
     --tint-e06b3f: #F1CBBD;
-    --tint-fef9c3: #353210;
-    --tint-78650a: #E3C42E;
-    --tint-f0dc6a: #FAF5DC;
-    --tint-ffe4d0: #351F0F;
-    --tint-9a4a1a: #DD9265;
-    --tint-f9c094: #352112;
-    --tint-d4f0d4: #192B19;
-    --tint-1e6b1e: #52C652;
-    --tint-a8dfa8: #1A2D1A;
-    --tint-c98a90: #F1E4E5;
     --tint-ebf5eb: #1C281C;
     --tint-fdecea: #311612;
     --tint-fef9e7: #332B11;
-    --tint-f5efe8: #29221A;
     --tint-fef6f1: #311E12;
-    --tint-f0ebe3: #28231C;
-    --tint-4a6fa5: #A9BBD5;
-    --tint-fdf0f0: #301313;
     --tint-ece5d8: #29241C;
-    --tint-d0c8bc: #272420;
     --tint-fdf6e3: #322912;
     --tint-8a6800: #F4C125;
     --tint-f0d878: #F9F3DC;
-    --tint-fdfbec: #312D13;
-    --tint-dcefd8: #1D2A1A;
-    --tint-e8f0e5: #20271D;
-    --tint-92400e: #E4854A;
-    --tint-fde68a: #362F11;
-    --tint-78350f: #DC743A;
-    --tint-ddd6fe: #161034;
-    --tint-4c1d95: #9467DA;
-    --tint-1e3a5f: #4D7EBF;
-    --tint-eff6ff: #0F1F34;
     --tint-fffbea: #342D0F;
     --tint-fff8e0: #342C0F;
-    --tint-3a5a62: #7DA4AE;
     --tint-8a7a1e: #D5C462;
     --tint-fbe3e3: #301414;
     --tint-fbf3d9: #312A13;
     --tint-dff3df: #1A2B1A;
-    --tint-ffd5d5: #350F0F;
-    --tint-8a2020: #D46565;
-    --tint-f5aaaa: #321414;
-    --tint-e8f4f8: #18272C;
-    --tint-1a5276: #4F9DD0;
-    --tint-aed6f1: #152631;
-}
-
-/* =====================
-   ACCOUNT MENU
-===================== */
-
-.account-menu {
-    position: relative;
-}
-
-.account-trigger {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.25rem 0.5rem;
-    border-radius: var(--radius);
-    transition: background-color 0.2s ease;
-    color: var(--grey-dark);
-}
-
-.account-trigger:hover {
-    background-color: var(--grey-light);
-}
-
-.account-avatar {
-    width: var(--avatar-md);
-    height: var(--avatar-md);
-    border-radius: 50%;
-    background-color: var(--tangerine);
-    color: var(--white);
-    font-family: var(--font-headline);
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.account-name {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-
-.account-dropdown {
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 0;
-    background-color: var(--white);
-    border-radius: var(--radius);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-    border: 1px solid var(--grey-light);
-    min-width: 180px;
-    z-index: 200;
-    overflow: hidden;
-}
-
-.account-dropdown-item {
-    display: block;
-    padding: 0.75rem 1rem;
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--grey-dark);
-    transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.account-dropdown-item:hover {
-    background-color: var(--sandstone);
-    color: var(--black);
-}
-
-.account-dropdown-item.logout {
-    border-top: 1px solid var(--grey-light);
-    color: var(--tint-c0392b);
-}
-
-.account-dropdown-item.logout:hover {
-    background-color: var(--tint-faecea);
 }
 
 /* =====================
@@ -600,11 +409,8 @@ select,
 textarea {
     font-family: var(--font-body);
     font-size: 1rem;
-    /* Baseline fallback so a field left unstyled by its own component CSS
-       doesn't fall back to the browser's literal white/black — that was
-       invisible against the light page but is a glaring white box in dark
-       mode. Lowest specificity (bare element selector), so any existing
-       per-component background/color rule still wins over this. */
+    /* Themed fallback for fields with no component styling (else a white box
+       in dark mode). Bare element selector, so component rules still win. */
     background: var(--surface);
     color: var(--text);
 }
@@ -704,8 +510,7 @@ textarea {
     pointer-events: auto;
 }
 
-/* Pin button — completely removed from layout when minimised (display:none, not opacity:0)
-   so it doesn't consume space and crowd the V logo */
+/* Pin button — display:none when minimised so it takes no space next to the V logo */
 .sidebar-pin-btn {
     display: none;
     color: var(--grey-mid);
@@ -780,10 +585,8 @@ textarea {
 }
 
 /* ── Item grid ──
-   Minimized: single column of centered icons.
-   Expanded: 3-column grid with icons + labels.
-   justify-items: stretch forces <a> grid children to fill the cell
-   the same way <span> children do. */
+   Minimized: one column of icons. Expanded: 3 columns with labels.
+   justify-items: stretch makes <a> children fill the cell like <span>s. */
 .sidebar-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -798,8 +601,7 @@ textarea {
 }
 
 /* ── Individual item ──
-   width: 100% ensures <a> elements fill the grid cell fully,
-   matching the behaviour of <span> elements. */
+   width: 100% so <a> items fill the cell like <span>s. */
 .sidebar-item {
     display: flex;
     flex-direction: column;
@@ -872,7 +674,7 @@ textarea {
     color: var(--tangerine);
 }
 
-/* Bell badge — reused on the topbar bell button */
+/* Bell badge — unread count on the topbar bell button */
 .bell-badge {
     position: absolute;
     top: -4px;
@@ -891,20 +693,14 @@ textarea {
     padding: 0 3px;
 }
 
-.sidebar-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
 /* Toggle chevron flips direction when expanded */
 .sidebar.sidebar--expanded .sidebar-toggle-btn svg,
 .sidebar.sidebar--pinned .sidebar-toggle-btn svg {
     transform: rotate(180deg);
 }
 
-/* Hidden in minimized state — sidebar background click handles expansion instead.
-   Only appears when expanded, acting as the collapse button. */
+/* Collapse button — shown only when expanded. When minimized, the expand tab
+   or a click on the sidebar background expands it. */
 .sidebar-toggle-btn {
     display: none;
     color: var(--grey-mid);
@@ -925,11 +721,8 @@ textarea {
     color: var(--tangerine);
 }
 
-/* Expand toggle — now a normal .sidebar-item living inline at the top of
-   the rail (see base.html), not a tab protruding over the page content.
-   .sidebar-item already gives it the right size/shape/hover; this just
-   layers on visibility. Disappears once expanded/pinned — collapse lives
-   in the header's .sidebar-toggle-btn instead. */
+/* Expand tab — a .sidebar-item at the top of the rail (base.html). Hidden once
+   expanded/pinned; .sidebar-toggle-btn collapses from there. */
 .sidebar.sidebar--expanded .sidebar-expand-tab,
 .sidebar.sidebar--pinned .sidebar-expand-tab {
     display: none;
@@ -939,9 +732,8 @@ textarea {
    APP HEADER
 ===================== */
 
-/* Docked above the content column only — left edge sits at the
-   sidebar's current width, same trick already used for .main-content
-   and .footer below, so it shifts out when the sidebar expands. */
+/* Docked above the content column: left edge follows the sidebar width,
+   like .main-content and .footer below. */
 .app-header {
     position: fixed;
     top: 0;
@@ -978,22 +770,15 @@ body:has(.sidebar.sidebar--pinned) .app-header {
     gap: 0.85rem;
 }
 
-/* Header icon buttons (admin panel trigger, notification bell) were never
-   given their own color — their SVGs use stroke="currentColor", so they
-   were just inheriting the browser's default black text, which doesn't
-   flip in dark mode. */
+/* Header icon buttons: their SVGs use stroke="currentColor", so set a themed colour. */
 .topbar-btn {
     color: var(--text);
-    /* .bell-badge below is position:absolute — without this, it has no
-       positioned ancestor to anchor to and escapes up to the nearest one
-       that exists (the topbar), landing in the browser's corner instead
-       of pinned to the bell icon, and still eating clicks there since
-       it's DOM-wise still inside this button. */
+    /* Anchors the absolute .bell-badge to the bell; without it the badge
+       escapes to the topbar corner. */
     position: relative;
 }
 
-/* Dark-mode toggle — segmented sun/moon pill. Purely visual; the
-   active side flips via JS, real theming lands in Brief 2. */
+/* Dark-mode toggle — segmented sun/moon pill; sidebar.js sets the active side. */
 .theme-toggle {
     position: relative;
     display: flex;
@@ -1023,8 +808,7 @@ body:has(.sidebar.sidebar--pinned) .app-header {
     box-shadow: var(--shadow);
 }
 
-/* Same toggle, standalone on the pre-login auth pages (2.4.1 follow-up) —
-   pinned to the corner since there's no topbar there to sit in. */
+/* Same toggle on the pre-login auth pages, pinned to the corner (no topbar there). */
 .auth-theme-toggle {
     position: fixed;
     top: 1.5rem;
@@ -1065,19 +849,6 @@ body:has(.sidebar.sidebar--pinned) .app-header {
 
 .account-trigger:hover {
     background-color: var(--grey-light);
-}
-
-.account-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background-color: var(--tangerine);
-    color: var(--white);
-    font-family: var(--font-headline);
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .account-name {
@@ -1306,20 +1077,17 @@ button.account-dropdown-item {
 body.has-sidebar .main-content {
     margin-left: var(--sidebar-min);
     padding-top: 3.5rem;
-    /* clears the sticky app-header */
+    /* clears the fixed app-header */
 }
 
-/* Shared page-root wrappers — none of these carried their own spacing, so
-   their first child sat flush against the sticky header (only .project-list-page
-   has its own padding, which is why Projects never had this problem).
-   2rem matches that padding so every page gets the same top clearance. */
+/* Shared page-root wrappers get the same 2rem top clearance as .project-list-page. */
 .page-container,
 .page-header,
 .wiki-wrapper {
     padding-top: 2rem;
 }
 
-/* Sidebar expanded (hover or pinned) — shift further right */
+/* Sidebar expanded or pinned — shift further right */
 body.has-sidebar:has(.sidebar.sidebar--expanded) .footer,
 body.has-sidebar:has(.sidebar.sidebar--pinned) .footer {
     margin-left: var(--sidebar-max);
@@ -1495,8 +1263,7 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     color: var(--white);
 }
 
-/* Small inline danger button — used for secondary CS remove and similar
-   tight-space destructive actions where the full btn-danger is too large */
+/* Small inline danger button for tight spaces where .btn-danger is too large */
 .btn-danger-sm {
     display: inline-flex;
     align-items: center;
@@ -1521,17 +1288,9 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     color: var(--white);
 }
 
-/* ── Dark-mode action buttons (2.4.1) — Option A: tinted, not solid-fill.
-   Light mode above is untouched; these only apply under data-theme="dark". */
-/* .btn-primary is solid tangerine in light mode (line ~1400 above), so
-   its dark tint uses tangerine too rather than the blue used for other
-   dark accents on this page — this is the one place 'primary action'
-   button colour is decided app-wide, so every module's Save/Create/
-   Submit-type button picks this up for free (Ezekiel, 31 Aug 2026:
-   "all tangerine buttons need to be this same tinted tangerine in dark
-   mode"). --tangerine itself is untouched between light/dark (see the
-   dark-theme block above), so it doubles as its own dark label colour
-   here — no separate --tone-tangerine token needed. */
+/* ── Dark-mode action buttons — tinted, not solid-fill ── */
+/* App-wide primary button colour in dark mode. --tangerine has no dark
+   override, so it doubles as the label colour (no --tone-tangerine). */
 :root[data-theme="dark"] .btn-primary {
     background-color: rgba(242, 127, 85, 0.15);
     color: var(--tangerine);
@@ -1540,32 +1299,6 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
 :root[data-theme="dark"] .btn-primary:hover {
     background-color: rgba(242, 127, 85, 0.24);
     color: var(--tangerine);
-}
-
-/* .btn--tangerine (used by a handful of older screens) had no dark
-   override at all before this — solid tangerine fill with white text
-   reads fine in both modes on its own, but line it up with the same
-   tinted treatment .btn-primary just got, for one consistent "tangerine
-   button" look in dark mode. */
-:root[data-theme="dark"] .btn--tangerine {
-    background: rgba(242, 127, 85, 0.15);
-    color: var(--tangerine);
-    border: 1px solid rgba(242, 127, 85, 0.45);
-}
-:root[data-theme="dark"] .btn--tangerine:hover {
-    background: rgba(242, 127, 85, 0.24);
-    opacity: 1;
-}
-
-:root[data-theme="dark"] .btn-approve-customer,
-:root[data-theme="dark"] .btn-approve-direct {
-    background-color: rgba(76, 175, 90, 0.18);
-    color: var(--tone-clover);
-    border-color: rgba(111, 208, 126, 0.45);
-}
-:root[data-theme="dark"] .btn-approve-customer:hover,
-:root[data-theme="dark"] .btn-approve-direct:hover {
-    background-color: rgba(76, 175, 90, 0.27);
 }
 
 :root[data-theme="dark"] .btn-danger,
@@ -1649,23 +1382,6 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     cursor: not-allowed;
 }
 
-.form-card {
-    background-color: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 2rem;
-    max-width: 560px;
-}
-
-.form-card h2 {
-    font-family: var(--font-headline);
-    font-size: 1.4rem;
-    color: var(--black);
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--grey-light);
-}
-
 .form-group {
     display: flex;
     flex-direction: column;
@@ -1681,8 +1397,7 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     color: var(--grey-dark);
 }
 
-/* ── Shared input base — applies to .form-input standalone elements
-   AND all inputs/selects/textareas inside .form-group ───────────────── */
+/* ── Shared input base — .form-input, and any field inside .form-group ── */
 .form-input,
 .form-group input,
 .form-group select,
@@ -1717,11 +1432,7 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
     opacity: 1;
 }
 
-/* Disabled state — currently only used for the read-only Role/Fun Title
-   fields on the profile Edit Details popup, but written as a shared rule
-   (not scoped to profile.css) so any future disabled .form-input anywhere
-   in the app automatically looks non-interactive instead of indistinguishable
-   from an editable field. */
+/* Disabled fields look non-interactive app-wide. */
 .form-input:disabled,
 .form-group input:disabled,
 .form-group select:disabled,
@@ -1761,40 +1472,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     min-height: 100px;
 }
 
-.form-check-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.form-check-group label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    text-transform: none;
-    letter-spacing: 0.03em;
-    color: var(--black);
-    cursor: pointer;
-}
-
-.form-check-group input[type="checkbox"],
-.form-check-group input[type="radio"] {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--tangerine);
-    cursor: pointer;
-}
-
 /* ── Team tag pill buttons ─────────────────────────────────── */
-.team-tag-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin-top: 0.25rem;
-}
-
 /* Checkbox-based (Teams Required — submits with form) */
 .team-tag-toggle {
     display: inline-flex;
@@ -1856,115 +1534,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     color: white;
 }
 
-/* Small inline team tag chips (on deliverable rows in chip/list view) */
-.std-del-team-tag {
-    font-size: 0.7rem;
-    font-weight: 700;
-    font-family: var(--font-mono);
-    letter-spacing: 0.04em;
-    padding: 0.15rem 0.5rem;
-    border-radius: 999px;
-    background: var(--tangerine);
-    color: white;
-    white-space: nowrap;
-}
-
-/* ── Deliverable tags ──────────────────────────────────────────
-   Same checkbox-based pill mechanism as .team-tag-toggle above (hidden
-   checkbox, :has(input:checked) drives the active look) — reused here so
-   every existing script that reads `.checked` / `data-deliverable-id` off
-   these inputs keeps working untouched; only the visual wrapper changes.
-
-   Three states a deliverable can render in:
-   - default / selectable   → looks like .team-tag-toggle, fills tangerine when checked
-   - --locked   (approved)  → checked+disabled checkbox, pine fill, checkmark, not clickable
-   - --disabled (other status) → unchecked+disabled checkbox, muted grey, status label inline, not clickable
-*/
-.deliverable-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.9rem;
-    border: 2px solid var(--border);
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 0.78rem;
-    font-weight: 600;
-    font-family: var(--font-mono);
-    letter-spacing: 0.04em;
-    color: var(--text-primary);
-    background: var(--surface-hover);
-    user-select: none;
-    transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-
-.deliverable-tag input[type="checkbox"] {
-    display: none;
-}
-
-.deliverable-tag:has(input:checked) {
-    border-color: var(--tangerine);
-    background: var(--tangerine);
-    color: white;
-}
-
-.deliverable-tag:hover:not(:has(input:checked)):not(.deliverable-tag--locked):not(.deliverable-tag--disabled) {
-    border-color: var(--grey-mid);
-    background: var(--grey-light);
-}
-
-/* These two come after the :has() rule on purpose — same specificity
-   (two classes vs. one class + one pseudo-class), so source order is what
-   makes them win regardless of the checkbox's checked state. */
-.deliverable-tag--locked {
-    cursor: default;
-    border-color: var(--pine);
-    background: var(--pine);
-    color: white;
-}
-
-.deliverable-tag--disabled {
-    cursor: default;
-    border-color: var(--grey-light);
-    background: var(--grey-light);
-    color: var(--text-muted);
-}
-
-.deliverable-tag-status {
-    font-size: 0.7rem;
-    font-weight: 500;
-    opacity: 0.85;
-}
-
-/* Concept/KV rows get a pine accent when unchecked, so they read as a
-   distinct category from regular deliverables in the same picker. When
-   checked, the normal tangerine "selected" fill takes over untouched. */
-.deliverable-tag--campaign:not(:has(input:checked)) {
-    border-color: var(--pine);
-    color: var(--pine);
-    font-weight: 700;
-}
-
-.form-actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 1.75rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--grey-light);
-}
-
 .form-hint {
     font-family: var(--font-mono);
     font-size: 0.72rem;
     color: var(--grey-mid);
     letter-spacing: 0.03em;
-}
-
-.form-static-value {
-    padding: 0.5rem 0;
-    color: var(--text-primary);
-    font-size: 0.9rem;
 }
 
 /* =====================
@@ -1976,56 +1550,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     overflow-x: auto;
-    overflow-y: auto; /* auto so the wrapper itself scrolls vertically — required for position:sticky on thead th to work */
-    max-height: 65vh;  /* cap height so there's actually something to scroll; sticky only works when the scroll container scrolls */
+    overflow-y: auto; /* the wrapper must scroll for sticky thead th to work */
+    max-height: 65vh;  /* cap height so the wrapper actually scrolls */
     -webkit-overflow-scrolling: touch;
 }
 
-/* ── Single scroll container ─────────────────────────────────────
-   Wraps multiple table-wrappers in one horizontally scrollable
-   area so all tables share a single scrollbar at the bottom.
-   Individual .table-wrappers inside have overflow-x: visible
-   so they don't clip or create their own scroll tracks. */
-.view-scroll {
-    overflow-x: auto;
-    overflow-y: visible;
-    -webkit-overflow-scrolling: touch;
-    width: 100%;
-}
-
-.view-scroll .table-wrapper {
-    overflow-x: visible;
-    overflow-y: visible; /* these tables are short per-month slices; no sticky or max-height needed */
-    max-height: none;
-    box-shadow: none;
-    border-radius: 0;
-}
-
-.view-scroll .table-wrapper:first-child {
-    border-radius: var(--radius) var(--radius) 0 0;
-}
-
-.view-scroll .table-wrapper:last-child {
-    border-radius: 0 0 var(--radius) var(--radius);
-    box-shadow: var(--shadow);
-}
-
-/* ── All Projects filter bar ──────────────────────────────────────
-   Sits above the flat All Projects table. Matches the style of
-   the existing approved-filter-bar. */
-.all-projects-filter-bar {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-}
-
-.all-projects-filter-bar .form-input {
-    flex: 1;
-    min-width: 160px;
-    max-width: 240px;
-}
 .data-table {
     width: 100%;
     border-collapse: collapse;
@@ -2033,7 +1562,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 
 .data-table thead {
     background-color: var(--sandstone);
-    /* border-bottom moved to thead th so it sticks with the cells */
+    /* border-bottom is on thead th so it sticks with the cells */
 }
 
 .data-table thead th {
@@ -2097,9 +1626,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
 }
 
 /* ── Sticky columns ──────────────────────────────────────────────
-   All .data-table: first column sticks (project name, or chevron).
-   .data-table--with-chevron: second column (project name) also
-   sticks, offset by the chevron column width (2rem).
+   All .data-table: first column sticks.
    Each state needs an explicit background — transparent cells let
    scrolling content bleed through the sticky area. */
 
@@ -2110,34 +1637,19 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     z-index: 2;
 }
 
-/* Corner cell: sticky left + sticky top — must sit above both (z-index 4 for header row, 2 for sticky columns) */
+/* Corner cell: sticky left + top, so it sits above both (header row z 4, sticky columns z 2) */
 .data-table thead th:first-child { z-index: 5; background-color: var(--sandstone); }
 .data-table tbody td:first-child { background-color: var(--white); }
 .data-table tbody tr.overdue td:first-child { background-color: var(--tint-f9eced); }
 .data-table tbody tr:hover td:first-child { background-color: var(--gray-fbf8f4); }
 .data-table tbody tr.overdue:hover td:first-child { background-color: var(--tint-f4e0e2); }
 
-/* Shadow on rightmost sticky column — visual separator from scrolling content.
-   For tables without a chevron, that's the first column. */
+/* Shadow on the sticky first column. The :not() only adds specificity, which
+   also lets it beat module rules that set box-shadow: none (.hse-table). */
 .data-table:not(.data-table--with-chevron) th:first-child,
 .data-table:not(.data-table--with-chevron) td:first-child {
     box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
 }
-
-/* Second column sticky — only on tables that have a chevron first column */
-.data-table--with-chevron th:nth-child(2),
-.data-table--with-chevron td:nth-child(2) {
-    position: sticky;
-    left: 2rem; /* matches .chevron-cell width */
-    z-index: 2;
-    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.06);
-}
-
-.data-table--with-chevron thead th:nth-child(2) { z-index: 5; background-color: var(--sandstone); }
-.data-table--with-chevron tbody td:nth-child(2) { background-color: var(--white); }
-.data-table--with-chevron tbody tr.overdue td:nth-child(2) { background-color: var(--tint-f9eced); }
-.data-table--with-chevron tbody tr:hover td:nth-child(2) { background-color: var(--gray-fbf8f4); }
-.data-table--with-chevron tbody tr.overdue:hover td:nth-child(2) { background-color: var(--tint-f4e0e2); }
 
 /* =====================
    BADGES & TAGS
@@ -2155,140 +1667,6 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     padding: 0.25rem 0.65rem;
     border-radius: 999px;
     white-space: nowrap;
-}
-
-.badge-tangerine {
-    background-color: var(--tint-fdeee7);
-    color: var(--tangerine);
-}
-
-.badge-pine {
-    background-color: var(--gray-eaf0e8);
-    color: var(--pine);
-}
-
-.badge-ashen {
-    background-color: var(--tint-eaf3f5);
-    color: var(--ashen);
-}
-
-.badge-canary {
-    background-color: var(--tint-fdfae8);
-    color: var(--tint-a89c2a);
-}
-
-.badge-rose {
-    background-color: var(--tint-faeced);
-    color: var(--tint-a0555d);
-}
-
-.badge-oak {
-    background-color: var(--tint-f5efe8);
-    color: var(--oak);
-}
-
-.badge-grey {
-    background-color: var(--grey-light);
-    color: var(--grey-dark);
-}
-
-.team-tag {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 0.2rem 0.55rem;
-    border-radius: var(--radius);
-    white-space: nowrap;
-    margin-bottom:0.25rem;
-
-}
-
-.team-3d {
-    background-color: var(--tint-eaf3f5);
-    color: var(--ashen);
-}
-
-.team-2d {
-    background-color: var(--tint-fdeee7);
-    color: var(--tangerine);
-}
-
-.team-technical {
-    background-color: var(--gray-eaf0e8);
-    color: var(--pine);
-}
-
-.importance-low {
-    background-color: var(--gray-eaf0e8);
-    color: var(--pine);
-}
-
-.importance-medium {
-    background-color: var(--tint-fdfae8);
-    color: var(--tint-a89c2a);
-}
-
-.importance-urgent {
-    background-color: var(--tint-faeced);
-    color: var(--tint-a0555d);
-}
-
-.customer-pill {
-    padding: 8px 18px;
-    border: 2px solid var(--tint-e0d9d0);
-    border-radius: 99px;
-    background: white;
-    cursor: pointer;
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--gray-666666);
-    transition: all 0.2s ease;
-    user-select: none;
-}
-
-.customer-pill:hover {
-    border-color: var(--pine);
-    color: var(--pine);
-}
-
-.customer-pill.selected {
-    border-color: var(--pine);
-    background: var(--pine);
-    color: white;
-}
-
-.customer-list-header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
-}
-
-.customer-list-header .form-label {
-    margin-bottom: 0;
-}
-
-.gulf-country-label {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--ashen);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.5rem;
-}
-
-.gulf-country-block {
-    margin-bottom: 1.25rem;
-}
-
-.gulf-country-block .btn--sm {
-    margin-bottom: 0.5rem;
 }
 
 /* =====================
@@ -2394,12 +1772,8 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator,
     background-color: rgba(99, 119, 91, 0.1);
 }
 
-/* Inline Approve/Deny (26 Aug 2026, per Ezekiel) — Request Editing Access
-is the first notification type with an action beyond mark-read/navigate,
-so unlike .notification-mark-read-btn these are always visible (not
-hover-revealed) — a pending request sitting unnoticed until someone
-happens to hover it would defeat the point of a request that needs a
-decision. */
+/* Inline Approve/Deny (Request Editing Access). Always visible, unlike the
+hover-revealed mark-read button, so a pending request isn't missed. */
 .notification-inline-actions {
     display: flex;
     gap: 0.4rem;
@@ -2547,7 +1921,7 @@ decision. */
 }
 
 /* =====================
-   DASHBOARDS & STAT BLOCKS
+   DASHBOARDS
 ===================== */
 
 .dashboard-header {
@@ -2567,71 +1941,6 @@ decision. */
 
 .dashboard-greeting span {
     color: var(--tangerine);
-}
-
-.dashboard-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 1rem;
-    margin-bottom: 0.75rem;
-}
-
-.stat-block {
-    background-color: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 1.25rem 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
-
-.stat-block-label {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--grey-mid);
-}
-
-.stat-block-value {
-    font-family: var(--font-headline);
-    font-size: 2.4rem;
-    line-height: 1;
-    color: var(--black);
-}
-
-.stat-block-value.tangerine {
-    color: var(--tangerine);
-}
-
-.stat-block-value.pine {
-    color: var(--pine);
-}
-
-.stat-block-value.ashen {
-    color: var(--ashen);
-}
-
-.stat-block-value.rose {
-    color: var(--rose);
-}
-
-.stat-block-sub {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--grey-mid);
-    letter-spacing: 0.03em;
-}
-
-.dashboard-section-title {
-    font-family: var(--font-headline);
-    font-size: 1.3rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--black);
-    margin-top: 0.75rem;
-    margin-bottom: 0.75rem;
 }
 
 .dashboard-toggle {
@@ -2750,33 +2059,6 @@ decision. */
    DETAIL PAGE
 ===================== */
 
-.detail-grid {
-    display: grid;
-    grid-template-columns: 1fr 1.5fr;
-    gap: 1.5rem;
-    align-items: start;
-}
-
-.detail-card {
-    background-color: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 1.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-}
-
-.detail-card-title {
-    font-family: var(--font-headline);
-    font-size: 1.1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--black);
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--grey-light);
-}
-
 .detail-fields {
     display: flex;
     flex-direction: column;
@@ -2813,66 +2095,9 @@ decision. */
     font-size: 0.85rem;
 }
 
-.inline-form {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.inline-form select {
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    padding: 0.4rem 0.65rem;
-    border: 1.5px solid var(--grey-light);
-    border-radius: var(--radius);
-    color: var(--black);
-    background-color: var(--white);
-    transition: border-color 0.2s ease;
-}
-
-.inline-form select:focus {
-    outline: none;
-    border-color: var(--tangerine);
-}
-
 /* =====================
    MISCELLANEOUS
 ===================== */
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.workload-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 0.75rem;
-}
-
-.workload-card {
-    background-color: var(--sandstone);
-    border-radius: var(--radius);
-    padding: 1rem 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    border: 1px solid var(--grey-light);
-}
-
-.workload-name {
-    font-family: var(--font-body);
-    font-size: 0.9rem;
-    color: var(--black);
-}
-
-.workload-count {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--tangerine);
-    letter-spacing: 0.05em;
-}
 
 .empty-state {
     font-family: var(--font-mono);
@@ -2891,568 +2116,15 @@ decision. */
     font-size: 0.85rem;
 }
 
-.back-link {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--grey-mid);
-    transition: color 0.2s ease;
-}
-
-.back-link:hover {
-    color: var(--tangerine);
-}
-
-/* ============================================================
-   SECTION 15 — DRAFTS PAGE
-   ============================================================ */
-
-.drafts-page {
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 0 24px 60px;
-}
-
-.drafts-subheader {
-    position: sticky;
-    top: 0;
-    z-index: 90;
-    background: var(--sandstone);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 0;
-    margin-bottom: 32px;
-    border-bottom: 2px solid var(--tangerine);
-}
-
-.drafts-title {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.8rem;
-    color: var(--ink);
-    margin: 0;
-}
-
-.drafts-container {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-}
-
-.drafts-new {
-    display: flex;
-    justify-content: flex-end;
-}
-
-.drafts-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.draft-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: white;
-    border-radius: 10px;
-    padding: 18px 24px;
-    cursor: pointer;
-    transition: background 0.2s ease, box-shadow 0.2s ease;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-    overflow: hidden;
-    gap: 16px;
-}
-
-.draft-item:hover {
-    background: var(--tint-fdf8f4);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.draft-item.active {
-    background: var(--tint-fdf8f4);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.draft-main {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    flex: 1;
-    min-width: 0;
-    transition: all 0.3s ease;
-}
-
-.draft-index {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--tangerine);
-    white-space: nowrap;
-    min-width: 52px;
-}
-
-.draft-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-}
-
-.draft-name {
-    font-family: 'Public Sans', sans-serif;
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--ink);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.draft-meta {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
-    color: var(--gray-999999);
-}
-
-.draft-actions {
-    display: flex;
-    gap: 10px;
-    max-width: 0;
-    opacity: 0;
-    overflow: hidden;
-    transition: max-width 0.35s ease, opacity 0.25s ease;
-    white-space: nowrap;
-}
-
-.draft-item.active .draft-actions {
-    max-width: 320px;
-    opacity: 1;
-}
-
-.btn--success {
-    background: var(--pine);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 700;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-    transition: opacity 0.2s ease;
-}
-
-.btn--success:hover {
-    opacity: 0.85;
-}
-
-.btn--danger {
-    background: var(--tint-b94040);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 700;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-    transition: opacity 0.2s ease;
-}
-
-.btn--danger:hover {
-    opacity: 0.85;
-}
-
-.btn--tangerine {
-    background: var(--tangerine);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 700;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-    transition: opacity 0.2s ease;
-}
-
-.btn--tangerine:hover {
-    opacity: 0.85;
-}
-
-/* --- Delete Confirmation Overlay --- */
-
-.draft-confirm-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    z-index: 500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.draft-confirm-overlay.hidden {
-    display: none !important;
-}
-
-.draft-confirm-box {
-    background: white;
-    border-radius: 12px;
-    padding: 32px 40px;
-    max-width: 400px;
-    width: 90%;
-    text-align: center;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-}
-
-.draft-confirm-text {
-    font-family: 'Public Sans', sans-serif;
-    font-size: 1rem;
-    color: var(--ink);
-    margin-bottom: 24px;
-}
-
-.draft-confirm-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-}
-
-/*============================================================SECTION 16 — PROJECT CREATE PAGE============================================================*/
-
-.create-page {
-    max-width: 860px;
-    margin: 0 auto;
-    padding: 0 24px 80px;
-}
-
-.create-subheader {
-    position: sticky;
-    top: 0;
-    z-index: 90;
-    background: var(--sandstone);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    padding: 16px 24px;
-    margin-bottom: 40px;
-    border-bottom: 2px solid var(--tangerine);
-
-}
-
-.create-subheader-left {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    min-width: 120px;
-}
-
-.create-subheader-center {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.create-subheader-right {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    min-width: 120px;
-}
-
-.completion-bar-track {
-    width: 100%;
-    height: 8px;
-    background: var(--tint-e0d9d0);
-    border-radius: 99px;
-    overflow: hidden;
-    align-items: center;
-}
-
-.completion-bar-fill {
-
-    height: 100%;
-    width: 0%;
-    background: var(--tangerine);
-    border-radius: 99px;
-    transition: width 0.4s ease;
-}
-
-.completion-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    color: var(--gray-999999);
-}
-
-.autosave-status {
-
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
-    color: var(--grey-mid);
-}
-
-.create-body {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.create-section-title {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.6rem;
-    color: var(--ink);
-    margin: 0 0 8px;
-}
-
-.create-section {
-    background: white;
-    border-radius: 12px;
-    padding: 28px 32px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-}
-
-.create-section-heading {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.3rem;
-    color: var(--ink);
-    margin: 0 0 20px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-subtle);
-}
-
-.create-subsection-heading {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.3rem;
-    color: var(--ink);
-    margin: 24px 0 14px;
-}
-
-.create-section-hint {
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.85rem;
-    color: var(--gray-999999);
-    margin: -12px 0 2px;
-}
-
-.brief-type-selector {
-    display: flex;
-    background: var(--tint-f0ebe3);
-    border-radius: 8px;
-    padding: 4px;
-    gap: 4px;
-}
-
-.brief-type-btn {
-    flex: 1;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--gray-999999);
-}
-
-.brief-type-btn.active {
-    background: white;
-    color: var(--tangerine);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.brief-type-btn:hover:not(.active) {
-    color: var(--gray-666666);
-}
-
-.customer-pill {
-    padding: 8px 18px;
-    border: 2px solid var(--tint-e0d9d0);
-    border-radius: 99px;
-    background: white;
-    cursor: pointer;
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--gray-666666);
-    transition: all 0.2s ease;
-    user-select: none;
-}
-
-.customer-pill:hover {
-    border-color: var(--pine);
-    color: var(--pine);
-}
-
-.customer-pill.selected {
-    border-color: var(--pine);
-    background: var(--pine);
-    color: white;
-}
-
-/* --- Deliverables Section --- */
-
-.deliverables-customer-block {
-    margin-bottom: 28px;
-    padding-bottom: 28px;
-    border-bottom: 1px solid var(--border-subtle);
-}
-
-.deliverables-customer-block:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
-}
-
-.deliverables-customer-heading {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1.1rem;
-    color: var(--ink);
-    margin: 0 0 14px;
-}
-
-.deliverable-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    background: var(--white);
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    margin-bottom: 8px;
-}
-
-.deliverable-row-name {
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.9rem;
-    color: var(--ink);
-}
-
-.deliverable-row-disciplines {
-    display: flex;
-    gap: 6px;
-}
-
-.discipline-tag {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.68rem;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: var(--border-subtle);
-    color: var(--gray-666666);
-}
-
-.discipline-tag.tag--2d {
-    background: var(--gray-e8f0e8);
-    color: var(--pine);
-}
-
-.discipline-tag.tag--3d {
-    background: var(--tint-e8edf5);
-    color: var(--tint-4a6fa5);
-}
-
-.discipline-tag.tag--technical {
-    background: var(--gray-f0eee8);
-    color: var(--oak);
-}
-
-.btn-remove-deliverable {
-    background: none;
-    border: none;
-    color: var(--gray-cccccc);
-    font-size: 1.1rem;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: color 0.15s ease, background 0.15s ease;
-}
-
-.btn-remove-deliverable:hover {
-    color: var(--tint-b94040);
-    background: var(--tint-fdf0f0);
-}
-
-
-/* --- Form Actions --- */
-
-.form-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 8px;
-}
-
-.region-btn-group {
-    display: flex;
-    gap: 10px;
-    margin-top: 8px;
-    flex-wrap: wrap;
-}
-
-.region-btn {
-    padding: 8px 28px;
-    border: 2px solid var(--tint-e0d9d0);
-    border-radius: 99px;
-    background: white;
-    cursor: pointer;
-    font-family: 'Public Sans', sans-serif;
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--text-muted);
-    transition: all 0.2s ease;
-}
-
-.region-btn.active {
-    border-color: var(--tangerine);
-    background: var(--tangerine);
-    color: white;
-}
-
-.region-btn:hover:not(.active) {
-    border-color: var(--gray-cccccc);
-    color: var(--grey-dark);
-}
-
-.deliverables-region-section {
-    margin-bottom: 28px;
-}
-
-.deliverables-region-section:last-child {
-    margin-bottom: 0;
-}
-
-.deliverables-region-heading {
-    font-family: 'DM Mono', monospace;
-    font-size: 1.44rem;
-    color: var(--tangerine);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 14px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-subtle);
-}
-
-/* ── Section 17: Review Modal ─────────────────────────── */
+/* ── Modals ─────────────────────────── */
 
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(245, 240, 232, 0.85);
-    backdrop-filter: blur(4px);
+    /* --scrim: sandstone in light mode, near-black in dark mode. */
+    background: var(--scrim);
+    /* No backdrop blur: it repaints on every scroll and keystroke and makes
+       forms lag. The tint hides the page. */
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -3469,27 +2141,8 @@ decision. */
     z-index: 5500;
 }
 
-.modal--review {
-    background: var(--plain-white);
-    border-radius: 10px;
-    width: 100%;
-    max-width: 560px;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-    display: flex;
-    flex-direction: column;
-}
-
-.modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px 16px;
-}
-
 .modal-title {
-    font-family: var(--font-heading);
+    font-family: var(--font-headline);
     font-size: 1.4rem;
     color: var(--ink);
     margin: 0;
@@ -3511,136 +2164,10 @@ decision. */
     opacity: 1;
 }
 
-.modal-section {
-    padding: 16px 24px;
-}
-
-.modal-divider {
-    height: 1px;
-    background: rgba(0, 0, 0, 0.08);
-    margin: 0 24px;
-}
-
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding: 16px 24px 20px;
-}
-
-.review-meta-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 24px;
-}
-
-.review-meta-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.review-meta-label {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--ink);
-    opacity: 0.5;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.review-meta-value {
-    font-family: var(--font-sans);
-    font-size: 0.95rem;
-    color: var(--ink);
-}
-
-.review-region-heading {
-    font-family: var(--font-heading);
-    font-size: 1rem;
-    color: var(--tangerine);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin: 0 0 8px 0;
-}
-
-.review-customer-item {
-    margin-bottom: 12px;
-    padding-left: 12px;
-    border-left: 2px solid var(--sandstone);
-}
-
-.review-customer-name {
-    font-family: var(--font-sans);
-    font-size: 0.9rem;
-    font-weight: bold;
-    color: var(--ink);
-    margin-bottom: 4px;
-}
-
-.review-deliverable-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 3px 0;
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--ink);
-    opacity: 0.8;
-}
-
-/* ── Section 18: Brief Detail View ── */
-
-.detail-card--full {
-    grid-column: 1 / -1;
-    margin-top: 1.5rem;
-}
-
-.brief-notes {
-    margin-top: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.brief-notes-text {
-    font-family: var(--font-body);
-    font-size: 0.95rem;
-    color: var(--color-text);
-    line-height: 1.6;
-    background: var(--sandstone);
-    border-left: 3px solid var(--tangerine);
-    padding: 0.75rem 1rem;
-    border-radius: 4px;
-    margin: 0;
-    white-space: pre-wrap;
-}
-
-.brief-region-block {
-    margin-top: 2rem;
-}
-
-.brief-region-heading {
-    font-family: var(--font-heading);
-    font-size: 1rem;
-    letter-spacing: 0.08em;
-    color: var(--tangerine);
-    text-transform: uppercase;
-    border-bottom: 1px solid var(--tangerine);
-    padding-bottom: 0.4rem;
-    margin-bottom: 1rem;
-}
+/* ── Customer summary bar (File Templates) ── */
 
 .brief-customer-block {
     margin-bottom: 1.25rem;
-}
-
-.brief-customer-name {
-    font-family: var(--font-body);
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--color-text);
-    margin-bottom: 0.5rem;
 }
 
 .brief-customer-summary {
@@ -3666,15 +2193,12 @@ decision. */
     color: var(--black);
 }
 
-.brief-customer-summary-deadline,
-.brief-customer-summary-installation,
 .brief-customer-summary-count {
     font-size: 0.8rem;
     color: var(--grey-dark);
 }
 
-/* Pushes the chevron to the far right regardless of how much text
-   is in the name/deadline/count spans before it. */
+/* Pushes the chevron to the far right. */
 
 .brief-customer-summary-chevron {
     margin-left: auto;
@@ -3683,73 +2207,7 @@ decision. */
     transition: transform 0.15s ease;
 }
 
-/* toggleCustomerBlock() (detail.html) adds/removes this class on the
-   summary bar itself when it collapses/expands the body below it. */
-.brief-customer-summary.collapsed .brief-customer-summary-chevron {
-    transform: rotate(-90deg);
-}
-
-.brief-deliverables {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.brief-deliverable-row {
-    display: flex;
-    flex-wrap: wrap;
-    /* NEW — lets the assignments group drop to its own line instead of squeezing the name */
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.4rem 0.75rem;
-    background: white;
-    border-radius: 4px;
-    border: 1px solid var(--tint-e8e2d8);
-}
-
-.brief-deliverable-name {
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    color: var(--color-text);
-    flex: 1;
-    display: flex;
-    /* NEW — puts the image and text on one line together */
-    align-items: center;
-    gap: 0.5rem;
-    /* NEW — spacing between image and text */
-    min-width: 200px;
-    /* NEW — stops the name from being crushed to near-zero width before it wraps */
-}
-
-.brief-deliverable-tags {
-    display: flex;
-    gap: 0.4rem;
-    flex-shrink: 0;
-}
-
-.brief-deliverable-assignments {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-    flex-shrink: 0;
-}
-
-/* Groups the assignment chips together with the flag button, Files link,
-   and status dropdown that follow them in the template, so all of it stays
-   together and right-aligned as one unit — whether it fits on the name's
-   line or wraps to its own line below. Without this shared wrapper, only
-   whichever element happened to carry margin-left: auto stayed pinned
-   right, and anything wrapping past it (like the status dropdown) fell
-   back to the left edge on its own line. */
-.brief-deliverable-right-group {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    margin-left: auto;
-}
-
+/* Deliverable image in the project overlay's deliverable rows. */
 .deliverable-row-thumb {
     width: 64px;
     height: 64px;
@@ -3760,343 +2218,8 @@ decision. */
     /* never let the image itself get squeezed by a long name */
 }
 
-/* ── Deliverable image hover overlay ── */
-#deliv-img-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;   /* backdrop is click-through */
-}
-#deliv-img-overlay.visible {
-    display: flex;
-}
-.deliv-img-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(26, 26, 26, 0.62);
-    pointer-events: none;
-}
-.deliv-img-large {
-    position: relative;     /* sits above the backdrop */
-    max-width: 80vw;
-    max-height: 80vh;
-    object-fit: contain;
-    border-radius: 12px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
-    pointer-events: auto;   /* only the image is interactive */
-}
-
-.brief-assignment-chip {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    background: white;
-    border: 1px solid var(--tint-e8e2d8);
-    border-radius: 4px;
-    padding: 0.2rem 0.5rem;
-}
-
-.assign-designer-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.assign-designer-row select {
-    width: auto;
-    min-width: 120px;
-}
-
-/* margin-left: auto used to live on the .chip-assign-form wrapper (removed
-   12 Jul 2026 along with the per-row submit button — see the bulk-assign
-   flow further down) so the chip's select stays pinned right; now that the
-   select isn't wrapped in a form, it needs that rule directly. */
-.chip-assign-select {
-    font-family: var(--font-body);
-    font-size: 0.72rem;
-    padding: 0.15rem 0.3rem;
-    border: 1px solid var(--tint-d0c8bc);
-    border-radius: 4px;
-    background: var(--sandstone);
-    color: var(--color-text);
-    cursor: pointer;
-    max-width: 120px;
-    margin-left: auto;
-}
-
-.chip-assign-select:focus {
-    outline: none;
-    border-color: var(--tangerine);
-}
-
-/* ── Bulk deliverable-assignment flow (added 12 Jul 2026) ─────────────────
-   Replaces the old immediate-submit "pick a designer, click ✓" pattern
-   (.chip-assign-form/.chip-assign-btn, removed) — every assignment chip is
-   now a bare .chip-assign-select with no per-row button; a designer can
-   change several, then apply them all at once via one .bulk-assign-apply-btn
-   per section (Standard Brief Deliverables) / per customer-region block
-   (C&CM By Customer). See the bulk-assign JS near the bottom of detail.html. */
-.bulk-assign-select--dirty {
-    border-color: var(--tangerine);
-    background: rgba(242, 127, 85, 0.08);
-}
-
-.bulk-assign-bar {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 0.75rem;
-}
-
-.bulk-assign-apply-btn:disabled {
-    opacity: 0.45;
-    cursor: default;
-}
-
-.brief-assignment-name {
-    font-family: var(--font-body);
-    font-size: 0.8rem;
-    color: var(--color-text);
-}
-
-.brief-assignment-name.muted {
-    color: var(--grey-mid);
-    font-style: italic;
-}
-
-/* --- Per-customer date row --- */
-.brief-customer-header {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-    margin-bottom: 0.5rem;
-    justify-content: flex-end;
-}
-
-.brief-customer-dates {
-    display: flex;
-    gap: 1.25rem;
-    flex-wrap: wrap;
-}
-
-/* Push right-side controls to the far right */
-.brief-customer-header .posm-customer-revisions {
-    margin-left: auto;
-}
-
-/* If no POSM badge, the approve button/badge acts as rightmost and gets pushed right */
-.brief-customer-header .posm-customer-revisions~.btn-approve-customer,
-.brief-customer-header .posm-customer-revisions~.customer-approved-badge {
-    margin-left: 0;
-}
-
-.brief-customer-header:not(:has(.posm-customer-revisions)) .btn-approve-customer,
-.brief-customer-header:not(:has(.posm-customer-revisions)) .customer-approved-badge {
-    margin-left: auto;
-}
-
-.brief-date-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-}
-
-.brief-date-label {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-text-muted);
-}
-
-.brief-date-value {
-    font-size: 0.85rem;
-    color: var(--color-text);
-}
-
-/* --- Concept subsection --- */
-.brief-concept-block {
-    margin-top: 1.5rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--color-border);
-}
-
-/* --- KV subsection --- */
-.brief-kv-block {
-    margin-top: 1.5rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--color-border);
-}
-
-.brief-section-heading {
-    font-family: var(--font-condensed);
-    font-size: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--tangerine);
-    margin: 0 0 0.75rem 0;
-}
-
-/* --- Per-customer date inputs (create page) --- */
-.deliverables-customer-dates {
-    display: flex;
-    gap: 1rem;
-    margin: 0.5rem 0 0.75rem 0;
-    flex-wrap: wrap;
-}
-
-.customer-date-field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    flex: 1;
-    min-width: 160px;
-}
-
-.customer-date-label {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-text-muted);
-}
-
-.apply-dates-btn {
-    margin-top: 0.5rem;
-    margin-bottom: 1rem;
-    font-size: 0.8rem;
-}
-
-/* --- Expandable customer rows --- */
-.chevron-cell {
-    width: 2rem;
-    text-align: center;
-}
-
-.chevron-icon {
-    display: inline-block;
-    font-size: 0.6rem;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    transition: transform 0.2s ease;
-    user-select: none;
-}
-
-.chevron-icon.rotated {
-    transform: rotate(90deg);
-}
-
-.expansion-row td {
-    padding: 0.45 !important;
-    background: var(--white);
-}
-
-.customer-sub-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.customer-sub-table th,
-.customer-sub-table td {
-    padding: 0.45rem 1.25rem;
-    font-size: 0.8rem;
-    border-bottom: 1px solid var(--color-border);
-}
-
-.customer-sub-table thead th {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-text-muted);
-    background: transparent;
-    padding: 0.45rem 1.25rem;
-}
-
-.expandable-row {
-    cursor: pointer;
-}
-
-/* ── Status Select ───────────────────────────────── */
-.status-select {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    width: 155px;
-    padding: 0.3rem 0.6rem 0.3rem 0.5rem;
-    border-radius: 6px;
-    border: 1.5px solid transparent;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.4rem center;
-    padding-right: 1.4rem;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.status-select:focus {
-    outline: none;
-    border-color: var(--tangerine);
-}
-
-.status-select.s-briefed {
-    background-color: var(--tint-f0ece5);
-    color: var(--tint-7a6a55);
-    border-color: var(--tint-d9cfc3);
-}
-
-.status-select.s-in_queue {
-    background-color: var(--tint-eef2f7);
-    color: var(--tint-4a6080);
-    border-color: var(--tint-c5d3e0);
-}
-
-.status-select.s-in_progress {
-    background-color: var(--tint-fff8ec);
-    color: var(--tint-a06020);
-    border-color: var(--tint-f5d89a);
-}
-
-.status-select.s-submitted {
-    background-color: var(--tint-edf7f1);
-    color: var(--tint-2e7a50);
-    border-color: var(--tint-a8d9bc);
-}
-
-.status-select.s-revision_in_queue {
-    background-color: var(--tint-fdf0f2);
-    color: var(--tint-a03040);
-    border-color: var(--tint-f0b8c0);
-}
-
-.status-select.s-revision_in_progress {
-    background-color: var(--tint-fde8eb);
-    color: var(--tint-8a1a28);
-    border-color: var(--tint-e8909a);
-}
-
-.status-select.s-approved {
-    background-color: var(--gray-f0f6ee);
-    color: var(--tint-3a6b30);
-    border-color: var(--tint-9ecb90);
-}
-
-.status-select.s-on_hold {
-    background-color: var(--tint-fce8ea);
-    color: var(--tint-9a2535);
-    border-color: var(--rose);
-}
-
 /* ── Status Badge (read-only pill) ──────────────────────────────────────────
-   Used wherever project_status is shown as static text (non-admin views).
-   Shares the same s-* colour values as .status-select but without the
-   dropdown arrow or cursor — it is purely a display element.              */
+   Static project_status display, coloured by its s-<status> modifier. */
 .status-badge {
     display: inline-block;
     font-family: var(--font-mono);
@@ -4182,746 +2305,7 @@ decision. */
     border-color: var(--tint-f5c07a);
 }
 
-/* ── Hold / Resume buttons ───────────────────────────── */
-.btn-hold {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background-color: transparent;
-    color: var(--oak);
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 0.65rem 1.5rem;
-    border-radius: var(--radius);
-    border: 2px solid var(--oak);
-    cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.btn-hold:hover {
-    background-color: var(--oak);
-    color: var(--white);
-}
-
-.btn-resume {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--pine);
-    color: var(--white);
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 0.65rem 1.5rem;
-    border-radius: var(--radius);
-    border: 2px solid var(--pine);
-    cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.btn-resume:hover {
-    background-color: transparent;
-    color: var(--pine);
-}
-
-/* ── Approve customer button + badge ─────────────────── */
-.btn-approve-customer {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 0.3rem 0.85rem;
-    border-radius: var(--radius);
-    border: 1.5px solid var(--pine);
-    background-color: transparent;
-    color: var(--pine);
-    cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
-    white-space: nowrap;
-}
-
-.btn-approve-customer:hover {
-    background-color: var(--pine);
-    color: var(--white);
-}
-
-.btn-approve-customer:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.customer-approved-badge {
-    display: inline-flex;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 0.3rem 0.85rem;
-    border-radius: var(--radius);
-    border: 1.5px solid var(--pine);
-    background-color: var(--gray-f0f6ee);
-    color: var(--pine);
-    white-space: nowrap;
-}
-
-.customer-cancelled-badge {
-    display: inline-flex;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 0.3rem 0.85rem;
-    border-radius: var(--radius);
-    border: 1.5px solid var(--rose);
-    background-color: var(--tint-fdf0f1);
-    color: var(--rose);
-    white-space: nowrap;
-}
-
-.brief-customer-block.customer-cancelled {
-    opacity: 0.65;
-    border-left: 3px solid var(--rose);
-    pointer-events: none;
-}
-
-.brief-customer-block.customer-cancelled .customer-cancelled-badge {
-    pointer-events: auto;
-}
-
-.btn-customer-action {
-    display: inline-flex;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    font-weight: 700;
-    padding: 0.3rem 0.85rem;
-    border-radius: var(--radius);
-    border: 1.5px solid transparent;
-    cursor:pointer;
-    white-space: nowrap;
-    transition: opacity 0.15s;
-}
-
-.btn-customer-cancel {
-    border-color: var(--canary);
-    background-color: var(--tint-fdfbec);
-    color: var(--tint-7a6a00);
-}
-
-.btn-customer-cancel:hover {
-    opacity: 0.8;
-}
-
-.btn-customer-remove {
-    border-color: var(--rose);
-    background-color: var(--tint-fdf0f1);
-    color: var(--rose);
-}
-
-.btn-customer-remove:hover {
-    opacity: 0.8;
-}
-
-/* ── POSM ────────────────────────────────────────────── */
-.posm-begin-row {
-    display: flex;
-    align-items: center;
-    padding: 1rem 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    margin: 1.25rem 0;
-}
-
-
-.posm-active-banner {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    background: var(--gray-f0f6ee);
-    border: 1.5px solid var(--pine);
-    border-radius: var(--radius);
-    padding: 0.65rem 1rem;
-    margin: 0.75rem 0 1.25rem;
-}
-
-.posm-active-label {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--pine);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-
-.posm-active-meta {
-    font-size: 0.82rem;
-    color: var(--grey-dark);
-}
-
-.posm-customer-revisions {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--pine);
-    background: var(--gray-f0f6ee);
-    border: 1px solid var(--pine);
-    border-radius: var(--radius);
-    padding: 0.2rem 0.6rem;
-    white-space: nowrap;
-    margin-right: 0.5rem;
-}
-
-.posm-customer-history {
-    margin-bottom: 0.75rem;
-}
-
-.posm-history-toggle {
-    display: block;
-    width: 100%;
-    text-align: left;
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--pine);
-    background: var(--gray-f0f6ee);
-    border: 1px solid var(--pine);
-    border-radius: var(--radius);
-    padding: 0.5rem 0.85rem;
-    cursor: pointer;
-    margin-bottom: 0.4rem;
-    transition: background 0.12s;
-}
-
-.posm-history-toggle:hover {
-    background: var(--tint-dcefd8);
-}
-
-.posm-history-body {
-    padding: 0 0.25rem;
-}
-
-.posm-customer-select-wrap {
-    margin-bottom: 0.9rem;
-    padding: 0.75rem;
-    background: var(--gray-f0f6ee);
-    border: 1.5px solid var(--pine);
-    border-radius: var(--radius);
-}
-
-/* ── POSM Parallel Channel Pills ─────────────────────── */
-.posm-channel-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1.25rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border);
-}
-
-/* Wrapper lets the reset button sit beside the pill without nesting
-   a <button> inside a <button> (invalid HTML). */
-.posm-pill-wrapper {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
-}
-
-/* Revert ↩ / Reset ↺ buttons shown beneath each C&CM pill (admin/CS only) */
-.pill-reset-btn {
-    align-self: center;
-    padding: 0.1rem 0.4rem;
-    font-size: 0.72rem;
-    font-family: var(--font-mono);
-    background: transparent;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius);
-    color: var(--text-muted);
-    cursor: pointer;
-    line-height: 1.4;
-    transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.pill-reset-btn:hover {
-    background: var(--rose);
-    border-color: var(--rose);
-    color: var(--plain-white);
-}
-
-/* Danger variant (Reset ↺) — always rose, not just on hover */
-.pill-reset-btn--danger {
-    background: var(--rose);
-    border-color: var(--rose);
-    color: var(--plain-white);
-}
-
-.pill-reset-btn--danger:hover {
-    background: var(--tint-c2838a);
-    border-color: var(--tint-c2838a);
-    color: var(--plain-white);
-}
-
-.posm-channel-pill {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.5rem 0.85rem;
-    background: var(--grey-light);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-align: left;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-    line-height: 1.3;
-}
-
-.posm-channel-pill:hover {
-    background: var(--tint-e8f0e5);
-    border-color: var(--pine);
-    color: var(--grey-dark);
-}
-
-.posm-channel-pill--active {
-    background: var(--pine);
-    border-color: var(--pine);
-    color: var(--plain-white);
-}
-
-.posm-pill-label {
-    font-size: 0.82rem;
-    font-weight: 600;
-}
-
-.posm-pill-status {
-    font-size: 0.72rem;
-    font-weight: 500;
-    opacity: 0.85;
-}
-
-.posm-channel-pill--active .posm-pill-status {
-    opacity: 0.9;
-}
-
-/* Status colour accents on inactive pills */
-.posm-pill-status--internal_review {
-    color: var(--tangerine);
-}
-
-.posm-pill-status--submitted_to_client {
-    color: var(--pine);
-}
-
-.posm-pill-status--internal_revision {
-    color: var(--tint-c0392b);
-}
-
-.posm-pill-status--revision_in_queue,
-.posm-pill-status--revision_in_progress {
-    color: var(--oak);
-}
-
-/* Active pill overrides — all white */
-.posm-channel-pill--active .posm-pill-status--internal_review,
-.posm-channel-pill--active .posm-pill-status--submitted_to_client,
-.posm-channel-pill--active .posm-pill-status--internal_revision,
-.posm-channel-pill--active .posm-pill-status--revision_in_queue,
-.posm-channel-pill--active .posm-pill-status--revision_in_progress {
-    color: var(--plain-white);
-}
-
-.posm-channel-pill--cancelled {
-    border-color: var(--rose);
-    background: var(--tint-fce8ea);
-    opacity: 0.75;
-}
-
-.posm-channel-pill--cancelled .posm-pill-label {
-    color: var(--rose);
-}
-
-.posm-pill-approved-at {
-    font-size: 0.65rem;
-    font-family: var(--font-mono);
-    opacity: 0.75;
-    margin-top: 0.1rem;
-    letter-spacing: 0;
-    text-transform: none;
-}
-
-.posm-channel-section {
-    /* sections are block-level; hidden class removes display */
-}
-
-/* ── Card-row table variant (Deliverable View) ────────────── */
-.table-wrapper--card {
-    background: transparent;
-    box-shadow: none;
-}
-
-.data-table--card-rows {
-    border-collapse: separate;
-    border-spacing: 0 6px;
-}
-
-/* Remove the default tr bottom-border */
-.data-table--card-rows tbody tr {
-    border-bottom: none;
-}
-
-/* Header — faded tangerine.
-   var(--tint-f3b297) = rgba(242,127,85,0.55) pre-composited over sandstone (var(--sandstone)).
-   Using an opaque value on every th (not rgba) so sticky and non-sticky cells
-   look identical regardless of what parent background sits behind the table. */
-.data-table--card-rows thead {
-    border-bottom: none;
-    border-radius: 8px;
-}
-
-.data-table--card-rows thead th,
-.data-table--card-rows thead th:first-child {
-    background-color: var(--tint-f3b297) !important;
-    color: var(--white);
-    border-bottom: none; /* card-rows have no header separator line */
-}
-
-/* Each cell: white background, no borders, no per-cell shadow.
-   Row separation comes from border-spacing: 0 6px — the gap shows the page background.
-   Per-cell shadows were removed because they bled between adjacent cells, creating
-   visible column seams within each row. */
-.data-table--card-rows tbody td {
-    background: var(--white);
-    border: none;
-}
-
-/* Override the base sticky-cell white background */
-.data-table--card-rows tbody td:first-child {
-    background: var(--white);
-    border-radius: 10px 0 0 10px;
-}
-
-.data-table--card-rows tbody td:last-child {
-    border-radius: 0 10px 10px 0;
-}
-
-/* Expansion rows — transparent, no shadow; they hang below their parent card */
-.data-table--card-rows tbody tr.expansion-row td {
-    background: transparent;
-    box-shadow: none;
-    border-radius: 0;
-}
-
-/* Overdue */
-.data-table--card-rows tbody tr.overdue td,
-.data-table--card-rows tbody tr.overdue td:first-child {
-    background: var(--tint-f9eced);
-}
-.data-table--card-rows tbody tr.overdue:hover td,
-.data-table--card-rows tbody tr.overdue:hover td:first-child {
-    background: var(--tint-f4e0e2);
-}
-
-/* ── Section header row (title + set-default button) ─────── */
-.section-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.75rem;
-}
-
-.btn-set-default {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--tangerine);
-    background: rgba(242, 127, 85, 0.08);
-    border: 1.5px solid rgba(242, 127, 85, 0.4);
-    border-radius: 20px;
-    padding: 0.3rem 0.85rem;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.btn-set-default:hover {
-    background: rgba(242, 127, 85, 0.18);
-    border-color: var(--tangerine);
-}
-
-.btn-set-default.is-default {
-    background: var(--tangerine);
-    color: var(--white);
-    border-color: var(--tangerine);
-}
-
-/* ── On Hold banner ──────────────────────────────────── */
-.on-hold-banner {
-    background-color: var(--tint-fce8ea);
-    border: 2px solid var(--rose);
-    border-radius: var(--radius);
-    color: var(--tint-9a2535);
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    letter-spacing: 0.03em;
-    padding: 0.85rem 1.25rem;
-}
-
-/* ── Revision System ─────────────────────────────── */
-
-.revision-count-badge {
-    display: inline-block;
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    font-weight: 700;
-    background: var(--tint-fde8eb);
-    color: var(--tint-8a1a28);
-    border: 1.5px solid var(--tint-e8909a);
-    border-radius: 4px;
-    padding: 0.1rem 0.35rem;
-    margin-left: 0.4rem;
-    vertical-align: middle;
-}
-
-.revision-flagged-badge {
-    display: inline-flex;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    font-weight: 700;
-    background: var(--tint-fde8eb);
-    color: var(--tint-8a1a28);
-    border: 1.5px solid var(--tint-e8909a);
-    border-radius: 6px;
-    padding: 0.25rem 0.5rem;
-    white-space: nowrap;
-}
-
-.btn-flag-revision {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    font-weight: 700;
-    background: transparent;
-    color: var(--tint-a03040);
-    border: 1.5px solid var(--tint-e8909a);
-    border-radius: 6px;
-    padding: 0.25rem 0.55rem;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.15s, color 0.15s;
-}
-
-.btn-flag-revision:hover {
-    background: var(--tint-fde8eb);
-    color: var(--tint-8a1a28);
-}
-
-/* ── Brief Flag System ────────────────────────────── */
-
-.btn-brief-flag {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    padding: 0.25rem 0.6rem;
-    border: 1px solid var(--tint-f59e0b);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--tint-b45309);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.15s;
-}
-
-.btn-brief-flag:hover {
-    background: var(--tint-fef3c7);
-}
-
-.btn-nas-folder {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    padding: 0.25rem 0.6rem;
-    border: 1px solid var(--ashen);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--ashen);
-    cursor: pointer;
-    white-space: nowrap;
-    text-decoration: none;
-    transition: background 0.15s, color 0.15s;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.btn-nas-folder:hover {
-    background: color-mix(in srgb, var(--ashen) 15%, white);
-    color: var(--ashen);
-}
-
-:root[data-theme="dark"] .btn-nas-folder:hover {
-    background: color-mix(in srgb, var(--ashen) 20%, transparent);
-}
-
-.brief-flag-indicator {
-    font-size: 0.72rem;
-    font-family: var(--font-mono);
-    color: var(--tint-b45309);
-    background: var(--tint-fef3c7);
-    border: 1px solid var(--tint-f59e0b);
-    border-radius: 4px;
-    padding: 0.18rem 0.5rem;
-    cursor: default;
-    white-space: nowrap;
-}
-
-/* Open flags panel */
-.flag-panel {
-    margin: 1.5rem 0;
-    padding: 1.25rem 1.5rem;
-    background: var(--card-bg);
-    border: 1px solid var(--tint-f59e0b);
-    border-radius: 8px;
-}
-
-.flag-panel-title {
-    font-family: var(--font-heading);
-    font-size: 1.1rem;
-    color: var(--tint-92400e);
-    margin: 0 0 1rem;
-    letter-spacing: 0.04em;
-}
-
-.flag-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-}
-
-.flag-card:last-child {
-    margin-bottom: 0;
-}
-
-.flag-card-header {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-    margin-bottom: 0.75rem;
-}
-
-.flag-type-badge {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    padding: 0.15rem 0.45rem;
-    border-radius: 3px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-
-.flag-type-project {
-    background: var(--tint-fde68a);
-    color: var(--tint-78350f);
-}
-
-.flag-type-concept {
-    background: var(--tint-ddd6fe);
-    color: var(--tint-4c1d95);
-}
-
-.flag-type-kv {
-    background: var(--tint-bfdbfe);
-    color: var(--tint-1e3a5f);
-}
-
-.flag-type-deliverable {
-    background: var(--tint-d1fae5);
-    color: var(--tint-065f46);
-}
-
-.flag-subject {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.flag-meta {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-left: auto;
-}
-
-.flag-open-badge {
-    font-size: 0.68rem;
-    font-family: var(--font-mono);
-    background: var(--tint-fef3c7);
-    color: var(--tint-b45309);
-    border: 1px solid var(--tint-f59e0b);
-    border-radius: 3px;
-    padding: 0.1rem 0.4rem;
-}
-
-.flag-resolved-badge {
-    font-size: 0.68rem;
-    font-family: var(--font-mono);
-    background: var(--tint-d1fae5);
-    color: var(--tint-065f46);
-    border: 1px solid var(--tint-6ee7b7);
-    border-radius: 3px;
-    padding: 0.1rem 0.4rem;
-}
-
-/* Thread */
-.flag-thread {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-}
-
-.flag-thread--compact {
-    padding-top: 0.5rem;
-}
-
-.flag-message {
-    background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    padding: 0.65rem 0.85rem;
-}
-
-.flag-message--mine {
-    background: var(--tint-eff6ff);
-    border-color: var(--tint-bfdbfe);
-}
-
-.flag-message-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 0.3rem;
-    gap: 0.5rem;
-}
-
-.flag-message-author {
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.flag-message-time {
-    font-size: 0.68rem;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-}
-
+/* Event message in a submission draft card's history. */
 .flag-message-text {
     font-size: 0.82rem;
     line-height: 1.5;
@@ -4930,169 +2314,7 @@ decision. */
     white-space: pre-wrap;
 }
 
-/* Reply form */
-.flag-reply-form {
-    margin-top: 0.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.flag-reply-input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 0.55rem 0.75rem;
-    font-family: var(--font-body);
-    font-size: 0.82rem;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    resize: vertical;
-    min-height: 60px;
-}
-
-.flag-reply-input:focus {
-    outline: none;
-    border-color: var(--tint-f59e0b);
-}
-
-.flag-reply-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.flag-section-btn-row {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    margin-top: 1rem;
-}
-
-.btn-flag-resolve {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    padding: 0.28rem 0.65rem;
-    border: 1px solid var(--tint-6ee7b7);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--tint-065f46);
-    cursor: pointer;
-    transition: background 0.15s;
-}
-
-.btn-flag-resolve:hover {
-    background: var(--tint-d1fae5);
-}
-
-.btn-flag-reply-submit {
-    font-family: var(--font-body);
-    font-size: 0.8rem;
-    padding: 0.3rem 0.85rem;
-    border: none;
-    border-radius: 4px;
-    background: var(--tangerine);
-    color: var(--plain-white);
-    cursor: pointer;
-    font-weight: 600;
-    transition: opacity 0.15s;
-}
-
-.btn-flag-reply-submit:hover {
-    opacity: 0.85;
-}
-
-/* Flag divider in history */
-.flag-divider {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 1rem 0;
-}
-
-/* Flag history section */
-.flag-history-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 0;
-}
-
-.flag-history-toggle {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    user-select: none;
-}
-
-.flag-history-entry {
-    padding: 0.75rem 0;
-}
-
-.flag-resolved {
-    opacity: 0.65;
-}
-
-/* Creation modal */
-.flag-modal-context {
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    margin: 0 0 0.75rem;
-}
-
-.flag-create-textarea {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 0.65rem 0.85rem;
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    resize: vertical;
-    min-height: 90px;
-}
-
-.flag-create-textarea:focus {
-    outline: none;
-    border-color: var(--tint-f59e0b);
-}
-
-.btn-brief-flag-submit {
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    padding: 0.4rem 1rem;
-    border: none;
-    border-radius: 4px;
-    background: var(--tint-f59e0b);
-    color: var(--plain-white);
-    cursor: pointer;
-    font-weight: 600;
-    transition: opacity 0.15s;
-}
-
-.btn-brief-flag-submit:hover {
-    opacity: 0.85;
-}
-
 /* ── Admin Panel ─────────────────────────────────── */
-
-.nav-admin-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    padding: 0.25rem;
-    opacity: 0.6;
-    transition: opacity 0.15s;
-}
-
-.nav-admin-btn:hover {
-    opacity: 1;
-}
 
 .admin-panel {
     position: fixed;
@@ -5485,12 +2707,6 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     background: none;
     border: 1px solid var(--border-subtle);
     padding: 0.75rem;
-}
-
-.account-user-info-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
 }
 
 .account-user-info {
@@ -5923,35 +3139,24 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     color: var(--grey-mid);
 }
 
-/* ── Standard Brief Form ───────────────────────────────────── */
-
-.standard-brief-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2rem;
-    align-items: start;
-}
-
 /*============================================================
   SECTION — TOAST NOTIFICATIONS
-  Stacking slide-in alerts that replace browser alert().
-  Rendered into #toast-container, which is created by JS on
-  first use so we don't need any HTML changes.
+  Stacking slide-in alerts (showToast in main.js), rendered into
+  #toast-container in base.html.
 ============================================================*/
 
 /* Fixed container — sits bottom-right above everything */
 #toast-container {
     position: fixed;
-    /* Clears the global tray dock, and layers above it — a toast must never
-       be hidden behind an open tray. Follows the dock when it lifts off a footer. */
+    /* Sits above the global tray dock (and over any open tray); follows
+       the dock when it lifts off a footer. */
     bottom: calc(var(--tray-dock-bottom, 20px) + 68px);
     right: 1.5rem;
     z-index: 10020;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    /* pointer-events: none on the container so it doesn't
-       block clicks on the page behind it */
+    /* container doesn't block clicks on the page behind it */
     pointer-events: none;
 }
 
@@ -5998,8 +3203,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 }
 
 /* ── Achievement Toast ──────────────────────────────────────────────────────
-   Separate container sits above the regular toast container.
-   Styled in gold/tangerine to feel distinct and celebratory.
+   Own container above #toast-container; gold/tangerine styling.
    ─────────────────────────────────────────────────────────────────────────── */
 #achievement-toast-container {
     position: fixed;
@@ -6046,7 +3250,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 }
 
 .achievement-toast__label {
-    font-family: var(--font-heading);
+    font-family: var(--font-headline);
     font-size: 0.7rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -6082,11 +3286,10 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 
 /*============================================================
   SECTION — CONFIRM MODAL
-  Single reusable modal for all "are you sure?" actions.
-  Replaces browser confirm(). Content set dynamically by JS.
+  One reusable "are you sure?" modal; JS sets its content.
 ============================================================*/
 
-/* Overlay — same pattern as existing modals in the app */
+/* Overlay */
 #confirm-modal {
     position: fixed;
     inset: 0;
@@ -6094,7 +3297,8 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9000;
+    /* Above the tray dock (10010) so confirms raised from a tray show; below toasts. */
+    z-index: 10015;
 }
 
 #confirm-modal.hidden {
@@ -6140,58 +3344,6 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     justify-content: flex-end;
 }
 
-@media (max-width: 900px) {
-    .standard-brief-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.standard-brief-left,
-.standard-brief-right {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-}
-
-.standard-brief-right {
-    height: 100%;
-}
-
-.standard-brief-right .form-group {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    height: 100%;
-}
-
-.form-inline-add-row {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-.form-inline-add-row .form-select {
-    flex: 1;
-}
-
-.btn-add-inline-sm {
-    white-space: nowrap;
-    font-size: 0.78rem;
-    padding: 0.3rem 0.7rem;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.btn-add-inline-sm:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-    border-color: var(--border-active);
-}
-
 .form-label-sub {
     font-size: 0.72rem;
     color: var(--text-muted);
@@ -6199,124 +3351,15 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     margin-left: 0.4rem;
 }
 
-.form-textarea--tall {
-    flex: 1;
-    min-height: 260px;
-    resize: vertical;
-}
-
-/* Standard deliverable chips (create/edit form) — layout via brief-deliverable-row */
-.std-del-chip {
-    /* JS selector hook only — visual styles come from brief-deliverable-row */
-}
-
-.std-del-chip-deadline {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-/* Right-aligned action buttons (Edit + Remove) */
-.std-del-chip-actions {
-    display: flex;
-    gap: 0.4rem;
-    margin-left: auto;
-    flex-shrink: 0;
-}
-
-/* Inline edit state — full-width row with editable inputs */
-.std-del-chip--editing {
-    width: 100%;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    padding: 0.6rem 0.75rem;
-    gap: 0.5rem;
-    border-color: var(--tangerine) !important;
-    background: var(--sandstone) !important;
-}
-
-/* Team picker in edit mode — wrap the group in a visible pill container */
-.std-del-chip--editing .std-del-edit-teams {
-    background: var(--white);
-    border: 1.5px solid var(--border);
-    border-radius: 999px;
-    padding: 0.15rem 0.3rem;
-    gap: 0.2rem;
-    margin-top: 0;
-}
-
-.std-del-edit-name {
-    max-width: 200px !important;
-    font-size: 0.85rem !important;
-    padding: 0.35rem 0.6rem !important;
-}
-
-.std-del-edit-deadline {
-    max-width: 148px !important;
-    font-size: 0.85rem !important;
-    padding: 0.35rem 0.6rem !important;
-}
-
-.std-del-edit-time {
-    max-width: 108px !important;
-    font-size: 0.85rem !important;
-    padding: 0.35rem 0.6rem !important;
-}
-
-.std-del-chip-teams {
-    display: inline-flex;
-    gap: 0.25rem;
-    flex-shrink: 0;
-}
-
-.std-deadline-label {
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-}
-
-.std-deadline-col {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-}
-
-.std-deadline-heading {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    white-space: nowrap;
-}
-
-/* Standard deliverable add row */
-.standard-deliverable-add-row {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    margin-top: 1rem;
-}
-
 /* Quick-add modal */
 .modal-box {
-    /* --surface is undefined in :root — resolves to
-       transparent, letting .modal-overlay's translucent sandstone tint
-       show through instead of a solid white popup. --white is the
-       actual solid background token. */
     background: var(--white);
     border-radius: var(--radius);
     padding: 1.5rem;
     min-width: 320px;
     max-width: 420px;
-    /* Some forms using this shared modal (e.g. the Achievement admin
-       add/edit popup) are taller than the viewport on smaller screens.
-       Without this, .modal-overlay's align-items:center centers a modal
-       that overflows top and bottom with no way to reach the cut-off
-       parts — there's no scroll container anywhere in the stack.
-       max-height + overflow-y here turns the modal itself into that
-       scroll container. Harmless for shorter modals since max-height
-       only kicks in once content actually exceeds it. */
+    /* The modal is its own scroll container: .modal-overlay centres it, so a
+       modal taller than the viewport would otherwise be cut off top and bottom. */
     max-height: 85vh;
     overflow-y: auto;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
@@ -6355,373 +3398,18 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     color: var(--pine);
 }
 
-/* ── Reference Files ───────────────────────────────────────── */
-.reference-file-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
-    background: var(--surface);
-}
-
-/* Supplementary file rows attached to a submission — same layout as the main
-   reference-file-item but slightly inset with a dashed border so it reads as
-   "secondary" relative to the primary submission deck above it. */
-:root[data-theme="dark"] .submission-extra-file {
-    background: color-mix(in srgb, var(--sandstone) 60%, transparent);
-}
-
-.submission-extra-file {
-    border-style: dashed;
-    background: color-mix(in srgb, var(--sandstone) 30%, white);
-    margin-left: 1rem;
-}
-
-.reference-file-icon {
-    font-size: 1.2rem;
-    flex-shrink: 0;
-}
-
-.reference-file-name {
-    flex: 1;
-    font-size: 0.875rem;
-    color: var(--text-primary);
-    word-break: break-all;
-}
-
-.reference-file-meta {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    flex-shrink: 0;
-}
-
-.reference-file-actions {
-    display: flex;
-    gap: 0.4rem;
-    flex-shrink: 0;
-}
-
-/* was: .reference-file-upload { display:flex; align-items:center; gap:0.75rem; } */
-
-.reference-file-upload,
-.attach-file-upload {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 1.25rem;
-    margin-top: 0.5rem;
-    border: 2px dashed var(--grey-light);
-    border-radius: 8px;
-    background: var(--sandstone);
-    cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.reference-file-upload:hover,
-.attach-file-upload:hover {
-    border-color: var(--tangerine);
-}
-
-.reference-file-upload-status {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-.reference-file-upload button,
-.attach-file-upload button {
-    background: none;
-    border: none;
-    box-shadow: none;
-    font-size: 0.95rem;
-    color: var(--grey-dark);
-    cursor: pointer;
-}
-
+/* File Templates: shown when no templates are configured. */
 .no-files-msg {
     font-size: 0.875rem;
     color: var(--text-muted);
     margin: 0;
 }
 
-/* ── Small button modifier for reference file actions ──────── */
-/* Used on Download and Remove buttons inside file rows        */
+/* ── Small button modifier ──────────────────────────────────── */
 .btn-sm {
     padding: 0.3rem 0.7rem !important;
     font-size: 0.75rem !important;
     border-radius: 4px;
-}
-
-/* ── Client Submission Card ──────────────────────────────── */
-
-/* Status banner shown below the deck row */
-.submission-status {
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    font-size: 0.875rem;
-    font-weight: 500;
-}
-
-/* Green — deck has been submitted to client */
-.submission-status--sent {
-    background: color-mix(in srgb, var(--pine) 12%, transparent);
-    color: var(--pine);
-    border: 1px solid var(--pine);
-}
-
-/* Rose — CS has flagged an issue with the deck */
-.submission-status--flagged {
-    background: color-mix(in srgb, var(--rose) 15%, transparent);
-    color: var(--tint-a05060);
-    border: 1px solid var(--rose);
-}
-
-/* Amber — deck is in internal review, awaiting CS action */
-.submission-status--review {
-    background: color-mix(in srgb, var(--canary) 18%, transparent);
-    color: var(--tint-7a6a00);
-    border: 1px solid color-mix(in srgb, var(--canary) 70%, transparent);
-}
-
-/* Status dropdown colour for submitted_to_client */
-select.s-submitted_to_client {
-    background-color: color-mix(in srgb, var(--ashen) 18%, transparent);
-    border-color: var(--ashen);
-    color: var(--ashen);
-}
-
-/* Status dropdown colours for the new internal review / revision statuses */
-select.s-internal_review {
-    background-color: color-mix(in srgb, var(--gold) 15%, transparent);
-    border-color: var(--gold);
-    color: var(--gold);
-}
-
-select.s-internal_revision {
-    background-color: color-mix(in srgb, var(--rose) 15%, transparent);
-    border-color: var(--rose);
-    color: var(--tint-a05060);
-}
-
-select.s-awaiting_posm_details {
-    background-color: var(--tint-fef3e2);
-    color: var(--tint-92510a);
-    border-color: var(--tint-f5c07a);
-}
-
-/* Badge in the submission card title to show current state at a glance */
-.submission-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 20px;
-    margin-left: 0.5rem;
-    vertical-align: middle;
-}
-
-.submission-badge--review {
-    background: color-mix(in srgb, var(--gold) 15%, transparent);
-    color: var(--gold);
-    border: 1px solid var(--gold);
-}
-
-.submission-badge--revision {
-    background: color-mix(in srgb, var(--rose) 15%, transparent);
-    color: var(--tint-a05060);
-    border: 1px solid var(--rose);
-}
-
-.submission-badge--sent {
-    background: color-mix(in srgb, var(--pine) 12%, transparent);
-    color: var(--pine);
-    border: 1px solid var(--pine);
-}
-
-.submission-badge--approved {
-    background: color-mix(in srgb, var(--pine) 20%, transparent);
-    color: var(--pine);
-    border: 1px solid var(--pine);
-}
-
-/* ── Direct-approve button (submission card header, right side) ─────────── */
-/* Intentionally quiet — sits far right so it's not accidentally clicked,
-   pine-colored so it reads clearly as an approval action, not an error. */
-.btn-approve-direct {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 0.35rem 0.85rem;
-    border: 1.5px solid var(--pine);
-    border-radius: 999px;
-    background: transparent;
-    color: var(--pine);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.15s, color 0.15s;
-    margin-left: auto;
-}
-
-.btn-approve-direct:hover {
-    background: color-mix(in srgb, var(--pine) 12%, transparent);
-}
-
-/* ── Approved Projects — year/month grouping in dashboards ───────────────── */
-
-/* Outer wrapper for each calendar year */
-.approved-year-group {
-    margin-bottom: 1.25rem;
-}
-
-/* Year header button */
-.approved-year-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    padding: 0.4rem 0;
-    width: 100%;
-    text-align: left;
-    border-bottom: 2px solid var(--border);
-    margin-bottom: 0.75rem;
-    user-select: none;
-}
-
-.approved-year-toggle:hover {
-    color: var(--pine);
-}
-
-.approved-chevron {
-    font-size: 0.75rem;
-    transition: transform 0.15s ease;
-}
-
-/* Month sub-label within a year */
-.approved-month-label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    margin: 0.75rem 0 0.4rem;
-}
-
-/* ── Confirmation modal (used for approval actions) ──────────────────────── */
-
-.approval-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.approval-modal-box {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.75rem 2rem;
-    max-width: 420px;
-    width: 90%;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-}
-
-.approval-modal-title {
-    font-size: 1.05rem;
-    font-weight: 700;
-    font-family: var(--font-body);
-    text-transform: none;
-    letter-spacing: normal;
-    color: var(--text-primary);
-    margin: 0 0 0.6rem;
-}
-
-.approval-modal-message {
-    font-size: 0.88rem;
-    font-weight: 400;
-    color: var(--text-muted);
-    line-height: 1.5;
-    margin: 0 0 1.25rem;
-}
-
-.approval-modal-box .btn-secondary,
-.approval-modal-box .btn-primary {
-    text-transform: none;
-    letter-spacing: normal;
-}
-
-/* submission-status variant for approved state */
-.submission-status--approved {
-    color: var(--pine);
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-/* Deliverable picker inside the submission card */
-.submission-picker {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.85rem 1rem;
-    background: var(--bg-subtle, color-mix(in srgb, var(--surface) 60%, transparent));
-}
-
-/* Individual checkbox row in the deliverable picker */
-.picker-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.3rem 0;
-    font-size: 0.9rem;
-    cursor: pointer;
-    user-select: none;
-}
-
-.picker-row input[type="checkbox"] {
-    width: 15px;
-    height: 15px;
-    cursor: pointer;
-    accent-color: var(--accent);
-    flex-shrink: 0;
-}
-
-/* Small tag used to list included deliverables in the Internal Review view */
-.submission-deliverable-tag {
-    display: inline-block;
-    background: color-mix(in srgb, var(--ashen) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--ashen) 50%, transparent);
-    color: var(--tint-3a5a62);
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    margin: 2px 3px 2px 0;
-}
-
-/* Campaign asset tag variant (Concept / KV) — pine-coloured border */
-.submission-deliverable-tag--campaign {
-    background: var(--gray-f0f6ee);
-    border-color: var(--pine);
-    color: var(--pine);
-    font-weight: 600;
-}
-
-/* Campaign asset picker row */
-.picker-row--campaign {
-    font-weight: 600;
-    color: var(--pine);
 }
 
 /* Revision card — shown to designer when a revision has been sent */
@@ -6771,66 +3459,18 @@ select.s-awaiting_posm_details {
         padding: 1.5rem;
         transition: opacity 0.25s ease;
     }
-
-    .navbar {
-        padding: 0 1.5rem;
-    }
-
-    .nav-links {
-        gap: 1.25rem;
-    }
 }
 
-/* ── 960px: collapse 2-col layouts, wrap nav ──────────────── */
+/* ── 960px: tighten padding, let the dashboard header wrap ─── */
 @media (max-width: 960px) {
     .main-content {
         padding: 1.25rem;
-    }
-
-    .navbar {
-        padding: 0 1rem;
-    }
-
-    .nav-links {
-        gap: 0.85rem;
-    }
-
-    .nav-links a,
-    .nav-actions a {
-        font-size: 0.72rem;
-    }
-
-    /* Detail page: single column */
-    .detail-grid {
-        grid-template-columns: 1fr;
     }
 
     /* Dashboard header: wrap to two lines if needed */
     .dashboard-header {
         flex-wrap: wrap;
         gap: 0.75rem;
-    }
-
-    .dashboard-actions {
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-
-    /* Two-col form rows: stack */
-    .form-row {
-        grid-template-columns: 1fr;
-    }
-
-    /* Review modal meta grid: stack */
-    .review-meta-grid {
-        grid-template-columns: 1fr;
-    }
-
-    /* Create page: tighten */
-    .create-page,
-    .drafts-page {
-        padding-left: 0;
-        padding-right: 0;
     }
 }
 
@@ -6840,51 +3480,16 @@ select.s-awaiting_posm_details {
         padding: 1rem;
     }
 
-    .navbar {
-        padding: 0 0.75rem;
-        gap: 0.5rem;
-    }
-
-    /* Hide secondary nav links to prevent overflow */
-    .nav-links {
-        display: none;
-    }
-
-    /* Dashboard stats: 2 per row */
-    .dashboard-stats {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
     /* Dashboard greeting: smaller */
     .dashboard-greeting {
         font-size: 1.5rem;
     }
 
-    /* Table headers: reduce padding */
+    /* Table cells: reduce padding */
     .data-table thead th,
     .data-table td {
         padding: 0.65rem 0.85rem;
         font-size: 0.82rem;
-    }
-
-    /* Account page card flex: stack */
-    .detail-card {
-        padding: 1.25rem;
-    }
-
-    /* Stat blocks: single column on very small */
-    .workload-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    /* Brief section heading reduce */
-    .brief-section-heading {
-        font-size: 0.9rem;
-    }
-
-    /* Create page section padding */
-    .create-section {
-        padding: 20px 18px;
     }
 }
 
@@ -6894,30 +3499,11 @@ select.s-awaiting_posm_details {
         padding: 0.75rem;
     }
 
-    .navbar {
-        padding: 0 0.75rem;
-    }
-
-    /* Stats: 1 column */
-    .dashboard-stats {
-        grid-template-columns: 1fr;
-    }
-
-    .workload-grid {
-        grid-template-columns: 1fr;
-    }
-
     /* Table cells: compact */
     .data-table thead th,
     .data-table td {
         padding: 0.5rem 0.65rem;
         font-size: 0.78rem;
-    }
-
-    /* Buttons: full-width where stacked */
-    .form-actions {
-        flex-direction: column;
-        align-items: stretch;
     }
 
     .btn-primary,
@@ -6941,35 +3527,10 @@ select.s-awaiting_posm_details {
     .admin-panel {
         width: 100%;
     }
-
-    /* Modal: full width */
-    .modal--review {
-        max-width: 100%;
-        margin: 0 0.75rem;
-    }
-}
-
-/* -- Approved projects filter bar -- */
-.approved-filter-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    padding: 1rem;
-    background: var(--white);
-    border-radius: 8px;
-    border: 1px solid var(--border);
-}
-
-.approved-filter-bar .form-input {
-    flex: 1;
-    min-width: 140px;
 }
 
 /* ── Clickable user avatars with optional achievement badge overlay ─────
-   Used via the user_avatar() macro in _macros.html — topbar, comment
-   threads, and (at xs size, no badge) dashboard/table designer pills. */
+   Rendered by the user_avatar() macro in _macros.html. */
 .user-avatar-link {
     position: relative;
     display: inline-flex;
@@ -7032,15 +3593,3 @@ select.s-awaiting_posm_details {
     background: var(--white);
 }
 
-/* CS Lead table cells (cs.html, team_lead.html) — stacks avatar above
-   name/secondary-CS line instead of the default inline layout, and
-   centers the whole group in the column. Kept as a standalone class
-   (rather than a table-wide rule) since other columns in these same
-   tables — e.g. assigned designers — intentionally stay inline. */
-.cs-lead-stack {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 0.25rem;
-}

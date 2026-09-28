@@ -1,10 +1,8 @@
 """
-My performance — the view model behind the page and the PDF.
+My performance: the view model for the page and its PDF report.
 
-Every figure comes from lib/metrics.py; nothing is counted twice here. The
-page's job is to arrange them and to say, in each case, what "better" means:
-a falling average time to close is an improvement, and an arrow that does not
-know that is worse than no arrow.
+Figures come from lib/metrics.py; this module arranges them and records,
+per figure, whether higher or lower is better.
 """
 
 from calendar import monthrange
@@ -21,7 +19,7 @@ from app.modules.hse.lib.vocab import OPEN_STATUSES
 VIEWS = ('month', 'year')
 TREND_MONTHS = 12
 
-# Open actions, bucketed by how long they have been open. The edges are days.
+# Age buckets for open actions: (label, from day, to day exclusive, tone).
 AGE_BUCKETS = (
     ('Under a week', 0, 7, 'good'),
     ('One to four weeks', 7, 28, 'warn'),
@@ -46,12 +44,9 @@ def _shift_months(day, months):
 
 
 def period(view, anchor):
-    """The window the tiles measure, and the one before it to compare with.
-
-    Month is the calendar month. Year is the trailing twelve months ending
-    with the anchor's month — not January to December, because a review in
-    September should read the twelve months he actually worked.
-    """
+    """The window the tiles measure, plus the previous one to compare with.
+    Month is the calendar month; Year is the trailing twelve months ending
+    with the anchor's month (not the calendar year)."""
     view = view if view in VIEWS else 'month'
     end = _month_end(anchor)
     if view == 'month':
@@ -68,10 +63,25 @@ def period(view, anchor):
             'prev_start': prev_start, 'prev_end': prev_end}
 
 
+def navigation(window, today):
+    """Prev/next targets and whether the current period is shown. Both views
+    anchor on the window's end month; Month steps 1, Year steps 12. Forward
+    never passes the current month."""
+    step = 1 if window['view'] == 'month' else TREND_MONTHS
+    current = _month_start(today)
+    shown = _month_start(window['end'])
+    forward = min(_shift_months(shown, step), current) if shown < current else None
+    return {
+        'month': shown.strftime('%Y-%m'),
+        'prev': _shift_months(shown, -step).strftime('%Y-%m'),
+        'next': forward.strftime('%Y-%m') if forward else None,
+        'is_current': shown == current,
+    }
+
+
 def trend_months(end, count=TREND_MONTHS):
-    """The months the two charts run over — always the trailing twelve,
-    whichever view the tiles are showing. The tiles are the period; the
-    charts are the context around it."""
+    """The months the charts cover: always the trailing twelve, whatever
+    view the tiles show."""
     out = []
     for offset in range(count - 1, -1, -1):
         first = _month_start(_shift_months(_month_start(end), -offset))
@@ -83,12 +93,8 @@ def trend_months(end, count=TREND_MONTHS):
 # --- the four tiles -------------------------------------------------------
 
 def _delta(now, before, better):
-    """The comparison line under a tile.
-
-    `better` is 'higher' or 'lower', so a falling average time to close reads
-    as the improvement it is. None when there is nothing to compare against —
-    a first period gets no arrow rather than a fake one.
-    """
+    """The comparison under a tile. `better` is 'higher' or 'lower'. None
+    when either value is missing, so no arrow is drawn."""
     if now is None or before is None:
         return None
     if now == before:
@@ -99,8 +105,8 @@ def _delta(now, before, better):
 
 def tiles(schedules, entries, window, today=None):
     """Actions closed on time · Average time to close · Inspection coverage ·
-    Training delivered. Compliance health is a panel, not a tile — it needs
-    the lapse named beside it to mean anything."""
+    Training delivered. Compliance health is a separate panel, since it
+    names the lapsed items."""
     start, end = window['start'], window['end']
     prev = (window['prev_start'], window['prev_end'])
 
@@ -116,8 +122,7 @@ def tiles(schedules, entries, window, today=None):
     taught = training_delivered(entries, start, end)
     taught_prev = training_delivered(entries, *prev)
 
-    # Days the closed work spent parked with someone else — the honest
-    # footnote under an average that would otherwise look like his alone.
+    # Closed entries that spent time waiting on others; footnote under the average.
     closed = [e for e in entries
               if e.closed_at is not None and start <= e.closed_at <= end]
     parked = sum(1 for e in closed if days_waiting(e, today) > 0)
@@ -160,8 +165,7 @@ def tiles(schedules, entries, window, today=None):
 # --- the two charts -------------------------------------------------------
 
 def coverage_series(schedules, entries, months, today=None):
-    """Planned against completed, month by month. Both bars come from the
-    calendar's own coverage, so the chart and the tile cannot disagree."""
+    """Planned vs completed, per month, from the same coverage as the tile."""
     out = []
     for month in months:
         cover = done_vs_due(schedules, entries, month['start'], month['end'], today)
@@ -171,8 +175,8 @@ def coverage_series(schedules, entries, months, today=None):
 
 
 def age_series(entries, months):
-    """Average days to close, month by month. A month with no closures is a
-    gap in the line rather than a zero — nothing closed is not instant."""
+    """Average days to close, per month. A month with no closures is None
+    (a gap in the line, not zero)."""
     return [{'label': m['label'],
              'days': average_days_to_close(entries, m['start'], m['end'])['days']}
             for m in months]
@@ -181,11 +185,8 @@ def age_series(entries, months):
 # --- the three panels -----------------------------------------------------
 
 def reporting(entries, window):
-    """Near misses per incident, with the warning that makes it readable.
-
-    The note is not decoration. A manager reading a rising number as a worse
-    site punishes the exact behaviour the officer is building.
-    """
+    """Near misses per incident for the period, with its delta. Higher is
+    better (more hazards reported before harm)."""
     now = near_miss_ratio(entries, window['start'], window['end'])
     before = near_miss_ratio(entries, window['prev_start'], window['prev_end'])
     return {
@@ -198,13 +199,9 @@ def reporting(entries, window):
 
 
 def _renewals(entries, start, end):
-    """Renewals in the period, and how many landed before the old one ran out.
-
-    A renewal is a later entry in Compliance & renewals for the same
-    certificate. Certificates are identified by compliance_item_id — a
-    reference row — so renaming one keeps its history rather than splitting
-    it. An entry with no certificate set is skipped.
-    """
+    """Renewals in the period, and how many landed before the previous one
+    expired. A renewal is a later compliance_renewal entry with the same
+    compliance_item_id; entries without one are skipped."""
     rows = [e for e in entries
             if e.register == 'compliance_renewal' and e.entry_date is not None]
     by_item = {}
@@ -226,11 +223,8 @@ def _renewals(entries, start, end):
 
 
 def compliance_panel(entries, window, today=None):
-    """Valid today, renewed before expiry, and what lapsed — named.
-
-    The page shows the lapse. A compliance number with the failure hidden
-    underneath it is worth nothing in the room.
-    """
+    """Compliance panel: valid today, renewals, and the items that lapsed in
+    the period (first three named)."""
     today = today or date.today()
     health = compliance_health(entries, today)
     lapsed = [e for e in health['lapsed']
@@ -249,19 +243,15 @@ def compliance_panel(entries, window, today=None):
 
 
 def open_by_age(entries, today=None):
-    """Open actions bucketed by age, oldest named underneath.
-
-    Age is days open, not days owned: the question here is how long the site
-    has been living with it, which is true whoever is holding it up.
-    """
+    """Open actions bucketed by age, plus the oldest one. Age is days open,
+    including time waiting on others."""
     today = today or date.today()
     open_rows = []
     for entry in entries:
         register = BY_KEY.get(entry.register)
         if register is None or register.status_source != 'stored':
             continue
-        # The same open set the rail badges count, so the two can never
-        # disagree — and so a completed induction is not an open action.
+        # Same open set as the rail badges (OPEN_STATUSES).
         if entry.closed_at is not None or entry.status not in OPEN_STATUSES:
             continue
         age = days_open(entry, today)
@@ -295,16 +285,15 @@ def open_by_age(entries, today=None):
 # --- the report's extra sections ------------------------------------------
 
 def sla_table():
-    """The service levels, worst first, so the report can show the rule it is
-    judging against instead of asking the reader to take it on trust."""
+    """(severity, SLA days) pairs, worst severity first, for the report."""
     from app.modules.hse.lib.computed import SEVERITY_SCORE, SLA_DAYS
     return [(label, SLA_DAYS[label])
             for label in sorted(SLA_DAYS, key=lambda s: -SEVERITY_SCORE[s])]
 
 
 def schedule_coverage(schedules, entries, window, today=None):
-    """Coverage per schedule, so a single failing round is visible instead of
-    being averaged away by eleven that went fine."""
+    """Coverage per schedule, worst first, so one failing schedule is not
+    hidden by the average."""
     from app.modules.hse.lib.schedule import coverage
 
     rows = []
@@ -319,7 +308,7 @@ def schedule_coverage(schedules, entries, window, today=None):
 
 
 def expiring_next(entries, today=None, days=30):
-    """Compliance items falling due inside the window, soonest first."""
+    """Compliance items falling due within `days`, soonest first."""
     from app.modules.hse.lib.computed import days_to_expiry
 
     today = today or date.today()
@@ -339,10 +328,8 @@ def expiring_next(entries, today=None, days=30):
 
 
 def read_outs(tile_rows, reporting_row, compliance_row, ageing_row):
-    """The report's closing notes, written from the figures rather than about
-    them. Each one only appears when its number exists, so the page never
-    claims something the data cannot support.
-    """
+    """The report's closing notes (up to four), generated from the figures.
+    A note appears only when its figure exists."""
     by_key = {t['key']: t for t in tile_rows}
     out = []
 
@@ -397,11 +384,8 @@ def read_outs(tile_rows, reporting_row, compliance_row, ageing_row):
 
 
 def closed_by_severity(entries, window, today=None):
-    """What closed in the period and how much of it met its service level,
-    split by severity — the breakdown behind the on-time percentage.
-
-    A severity with nothing closed is left out rather than shown as 0%.
-    """
+    """Closed and closed-on-time counts per severity for the period. A
+    severity with nothing closed is left out."""
     from app.modules.hse.lib.computed import SEVERITY_SCORE, closed_on_time
 
     start, end = window['start'], window['end']

@@ -1,8 +1,5 @@
-"""Coverage for lib/feature_detail.py's context assembly - the data behind
-the read-only feature detail modal, including the move-to-stage
-picker's options (stage_options) added alongside the free-movement model
-(step_engine.move_to_stage) - next_stage_label doesn't exist any more,
-since movement is no longer "the next stage" but "any stage"."""
+"""Tests for lib/feature_detail.py's modal context, including the
+move-to-stage options (stage_options)."""
 from app.modules.digital_innovation.models import DiProject, DiCostEntry, DI_STAGES
 from app.modules.digital_innovation.lib import step_engine as engine
 from app.modules.digital_innovation.lib.feature_detail import build_feature_detail_context
@@ -99,11 +96,8 @@ def test_stage_options_lists_every_stage_regardless_of_current_stage(db_session)
 
 
 def test_stage_options_are_offered_even_on_the_last_stage(db_session):
-    # Free movement (step_engine.move_to_stage) has no completion gate, so
-    # the picker still offers every stage - including backward moves -
-    # even once the feature is on the last one. is_last_stage still
-    # flags this (it drives the Implementation "add step or close" banner
-    # in the template), but it no longer implies "no more options".
+    # Movement has no gate, so every stage is still offered on the last one.
+    # is_last_stage only drives the "add step or close" banner.
     project = _project(db_session, 'e')
     feature = engine.create_feature(project, 'New thing')
     feature.status = DI_STAGES[-1]
@@ -136,7 +130,7 @@ def test_closed_feature_shows_every_stage_done_and_no_current_steps(db_session):
     assert all(row['state'] == 'done' for row in ctx['stage_rows'])
     assert ctx['step_rows'] == []
     assert ctx['current_stage_label'] is None
-    # Nowhere left to move a closed feature to.
+    # A closed feature has no move options.
     assert ctx['stage_options'] == []
 
 

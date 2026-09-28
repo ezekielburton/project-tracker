@@ -1,8 +1,7 @@
-// Live refresh for the CS Dashboard. polling.js opens the /sse/dashboard
-// doorbell when this page is showing and calls window.helixRefreshCSDashboard()
-// on each ping — this file owns the "how": re-fetch the panels fragment and
-// swap it in. IIFE with no DOMContentLoaded so it re-runs on SPA nav; the
-// global is reassigned (never accumulated) and re-resolves its mount each call.
+// Live refresh for the CS Dashboard. polling.js calls
+// window.helixRefreshCSDashboard() on each SSE ping; this re-fetches the
+// panels fragment and swaps it in. No DOMContentLoaded: the SPA router re-runs
+// this on every visit, reassigning the global, which looks up its mount per call.
 (function () {
     var PANELS_URL = '/client-servicing/dashboard-panels';
 
@@ -14,6 +13,6 @@
                 var mount = document.getElementById('cs-dash-panels');
                 if (mount) mount.innerHTML = html;
             })
-            .catch(function () { /* network blip — skip; the next ping retries */ });
+            .catch(function () { /* network blip: the next ping retries */ });
     };
 })();

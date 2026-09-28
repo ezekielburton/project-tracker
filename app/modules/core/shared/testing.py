@@ -32,18 +32,15 @@ def app():
     application = create_app(TestingConfig)
     with application.app_context():
         _db.create_all()
-    # Do NOT hold the app context open across `yield`: Flask reuses an
-    # already-pushed app context for the same app instead of pushing a new
-    # one per request, so an ambient context here would make every test
-    # request in the whole run share one `flask.g` — and Flask-Login caches
-    # the resolved user on `g._login_user`, so the first login anywhere in
-    # the session would silently authenticate every request after it.
+    # Do NOT hold an app context open across `yield`: Flask would reuse it
+    # for every test request, so all requests would share one `g`. Flask-Login
+    # caches the user on g._login_user, so the first login would then
+    # authenticate every later request.
     yield application
     with application.app_context():
         _db.session.remove()
-        # Intentionally does NOT drop tables. The test database is dedicated and
-        # per-test rollback already isolates data; dropping risks real data loss
-        # if the URL were ever misconfigured.
+        # No drop_all: per-test rollback already isolates data, and dropping
+        # risks real data loss if the URL is ever misconfigured.
 
 
 @pytest.fixture()
@@ -53,24 +50,13 @@ def client(app):
 
 @pytest.fixture()
 def db_session(app):
-    # Flask-SQLAlchemy's scoped session keys itself on the current app
-    # context's identity, so every db_session.add()/.query() call — not
-    # just the initial engine lookup — needs one active. Held open across
-    # the whole test here is safe: this pushes a brand-new AppContext (and
-    # g) per test function, unlike the `app` fixture's context above, which
-    # would have been the SAME context for the entire session.
+    # The scoped session is keyed on the app context, so every call needs one
+    # active. A fresh context per test is safe to hold open (unlike `app`'s).
     #
-    # session.configure(bind=connection, join_transaction_mode=...) alone
-    # does NOT work here: Flask-SQLAlchemy's Session subclass overrides
-    # get_bind() to resolve connections through its own engine registry,
-    # which silently ignores that setting for actual query/commit traffic —
-    # confirmed by writes becoming visible to a separate connection right
-    # after a plain session.commit(), even though session_factory.kw showed
-    # the right bind. Forcing get_bind() itself on the instance is what
-    # actually pins every query to our connection; from there the standard
-    # begin_nested()-plus-restart-listener recipe correctly contains each
-    # commit() to a SAVEPOINT until the outer `transaction.rollback()` below
-    # undoes everything at once.
+    # session.configure(bind=connection) alone is NOT enough: Flask-SQLAlchemy's
+    # get_bind() ignores it, so get_bind is overridden on the instance to pin
+    # every query to this connection. Each commit() then lands in a SAVEPOINT
+    # (restarted by the listener) and the outer rollback undoes it all.
     with app.app_context():
         connection = _db.engine.connect()
         transaction = connection.begin()
@@ -78,11 +64,13 @@ def db_session(app):
         _db.session.configure(bind=connection)
         session = _db.session()
         session.get_bind = lambda *a, **kw: connection
-        session.begin_nested()
+        fixture_savepoint = [session.begin_nested()]
 
+        # Restart only the fixture's own SAVEPOINT: restarting one the app
+        # opened (`with db.session.begin_nested():`) breaks its context manager.
         def _restart_savepoint(sess, trans):
-            if trans.nested and not trans._parent.nested:
-                sess.begin_nested()
+            if trans is fixture_savepoint[0]:
+                fixture_savepoint[0] = sess.begin_nested()
 
         event.listen(session, 'after_transaction_end', _restart_savepoint)
         try:
@@ -96,9 +84,8 @@ def db_session(app):
 
 
 def login_as(client, app, user, password):
-    """Logs the test client in as `user` via the real /login route (not a
-    session shortcut), so tests exercise actual auth. Returns the response
-    of the login POST."""
+    """Log the test client in as `user` via the real /login route. Returns
+    the login POST response."""
     with app.test_request_context():
         login_url = url_for('auth.login')
     return client.post(
@@ -110,15 +97,9 @@ def login_as(client, app, user, password):
 
 @contextmanager
 def count_queries():
-    """Counts SQL statements executed against the test database while the
-    block runs. Used for N+1 regression tests: seed a fixture at two
-    different sizes and assert the query count doesn't grow with the
-    fixture size, rather than asserting a fragile exact number.
-
-    Listens on _db.session's current bind rather than _db.engine directly —
-    the latter needs an app context to look up; callers always use this
-    after the db_session fixture has already bound the session explicitly,
-    so no app context is needed here either."""
+    """Count SQL statements run while the block executes. For N+1 tests:
+    compare counts at two fixture sizes instead of asserting an exact number.
+    Needs the db_session fixture (it listens on the session's bound connection)."""
     count = [0]
 
     def _before_cursor_execute(*args, **kwargs):

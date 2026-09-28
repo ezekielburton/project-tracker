@@ -1,11 +1,7 @@
 """
-Per-user column widths (and order, once reorder writes to it) for the
-Client Servicing table. Silent, personal, auto-saved as the user drags,
-debounced client-side. Uses the shared UserTableLayout model and the
-one-row-per-(user, table_key) pattern the Projects page uses; TABLE_KEY
-(table.py) is this module's key. Kept in this module rather than the
-Projects generic /layout route because UserTableLayout is a core/shared
-model — writing to it belongs with the table that owns the layout.
+Saves per-user column widths and order for the Client Servicing table,
+auto-saved (debounced client-side) as the user resizes or reorders. One
+UserTableLayout row per (user, TABLE_KEY from table.py).
 """
 from flask import request, jsonify
 from flask_login import login_required
@@ -23,8 +19,7 @@ from app.modules.client_servicing.routes.table import TABLE_KEY
 @login_required
 @require_cs
 def save_layout():
-    # An admin previewing as someone else saves (and later sees) that
-    # person's column layout, not the admin's.
+    # Emulation-aware: an admin previewing as someone saves that person's layout.
     actor = effective_user()
 
     data = request.get_json(silent=True) or {}

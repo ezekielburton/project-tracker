@@ -1,28 +1,19 @@
-// app/static/js/project_overlay.js
+// app/modules/projects/static/js/project_overlay.js
 //
-// Detail + Briefing overlay — sidebar section/sub-tab switching (rebuilt
-// 13 Aug 2026 as a vertical sidebar, replacing the horizontal collapse-
-// in-place rail), plus the three close affordances (X, backdrop click,
-// Esc). Same separation of concerns as before: this file only knows
-// about the overlay's own markup once it exists in the DOM — project_
-// list.js still owns fetching/injecting/tearing down the overlay itself.
+// Project overlay shell: sidebar switching, the chat drawer toggle, and the
+// three close paths (X, backdrop click, Esc). Works only on markup already
+// in the DOM; project_list.js fetches, injects and tears down the overlay.
 
 window.ProjectOverlay = (function () {
-    // onBeforeNavigate(proceed) — task #37's unsaved-edit guard, injected
-    // from project_list.js (only it knows about activeOverlayEdit). Optional:
-    // when omitted, every navigation just proceeds immediately, same as
-    // before this existed. Wraps close (X/backdrop/Esc) and sub-tab clicks
-    // only — switching top-level sections doesn't touch #project-overlay-
-    // content today (see enterSection below), so there's nothing to lose yet.
+    // onBeforeNavigate(proceed) is the unsaved-edit guard from project_list.js.
+    // Optional. It wraps close and every sidebar click.
     function init(onCloseRequested, onSubTabSelected, onSectionSelected, onBeforeNavigate, onChatOpened) {
         var backdrop = document.getElementById('project-overlay-backdrop');
         var closeBtn = document.getElementById('project-overlay-close');
 
         if (!backdrop) return null;
 
-        // Projects table sits behind the overlay in normal page flow — lock
-        // body scroll for as long as the overlay is open so wheel/scroll
-        // can't reach it (e.g. scroll-chaining past a popover's own list).
+        // Lock body scroll so wheel events can't chain through to the table behind.
         document.body.classList.add('project-overlay-locked');
 
         function requestClose() {
@@ -33,17 +24,14 @@ window.ProjectOverlay = (function () {
             closeBtn.addEventListener('click', requestClose);
         }
 
-        // ---- Chat drawer (M10 chat redesign) ----
-        // Persistent, reachable from any rail tab — not a section switch,
-        // so it lives here alongside close/backdrop/esc rather than in the
-        // section-switching block below. Opening both slides the drawer
-        // out AND widens the sheet (project_overlay.css's .chat-open) —
-        // two classes toggled together, one CSS transition each.
+        // ---- Chat drawer ----
+        // Reachable from any sidebar page. Opening adds .chat-open to the
+        // sheet (widens it) and .is-open to the drawer (slides it out).
         var sheet = document.getElementById('project-overlay-sheet');
         var chatBtn = document.getElementById('project-overlay-chat-btn');
         var chatDrawer = document.getElementById('project-overlay-chat-drawer');
         var chatCloseBtn = document.getElementById('project-overlay-chat-close');
-        var chatLoaded = false;   // content is fetched once, on first open — not on every toggle
+        var chatLoaded = false;   // content is fetched on first open only
 
         function openChat() {
             if (!sheet || !chatDrawer) return;
@@ -85,19 +73,10 @@ window.ProjectOverlay = (function () {
         }
         document.addEventListener('keydown', escHandler);
 
-        // ---- Sidebar: section + sub-tab switching ----
-        // No squeeze-for-room problem a vertical list, unlike the old
-        // horizontal rail — every section just stays visible all the
-        // time. Switching is only ever: toggle .active, show/hide
-        // whichever section's own sub-tab group applies (today, only
-        // Design has one).
-
-        var SECTION_COLORS = {
-            design: 'var(--tangerine)',
-            finance: 'var(--ashen)',
-            production: 'var(--oak)',
-            logistics: 'var(--pine)'
-        };
+        // ---- Sidebar: one flat list ----
+        // The four Design pages (sub-tab buttons, data-sub-tab) and Site
+        // Visits (a section button, data-main-tab="notes"). Exactly one
+        // button is active at a time across both kinds.
 
         var header = document.getElementById('project-overlay-header');
         var sidebar = document.getElementById('project-overlay-sidebar');
@@ -107,89 +86,58 @@ window.ProjectOverlay = (function () {
 
         if (header && sidebar) {
             var mainItems = Array.prototype.slice.call(sidebar.querySelectorAll('.project-overlay-sidebar-item[data-main-tab]'));
+            var subItems = subgroup
+                ? Array.prototype.slice.call(subgroup.querySelectorAll('.project-overlay-sidebar-subitem'))
+                : [];
 
-            function enterSection(sectionKey, clickedBtn) {
-                mainItems.forEach(function (btn) {
-                    btn.classList.toggle('active', btn === clickedBtn);
+            // Marks one button active and clears every other.
+            function markActive(activeBtn) {
+                mainItems.concat(subItems).forEach(function (b) {
+                    b.classList.toggle('active', b === activeBtn);
                 });
-                header.style.setProperty('--section-color', SECTION_COLORS[sectionKey] || 'var(--tangerine)');
-                if (subgroup) {
-                    subgroup.classList.toggle('is-hidden', sectionKey !== 'design');
-                }
             }
 
             mainItems.forEach(function (btn) {
                 btn.addEventListener('click', function () {
-                    if (btn.classList.contains('active')) return;  // already here
-                    enterSection(btn.dataset.mainTab, btn);
-
-                    // Any section with its own sub-tab strip (today: only
-                    // Design, via #project-overlay-subrail) should land on
-                    // its FIRST sub-category automatically, per Ezekiel (20
-                    // Aug 2026) — not on whatever subitem happened to be
-                    // left marked .active from a PREVIOUS visit. That was a
-                    // real bug: re-entering Design after visiting Notes &
-                    // Visits left "Details" still marked .active from
-                    // before, so clicking Details again hit the early-
-                    // return guard above (already .active = treated as a
-                    // no-op) and silently did nothing, while the content
-                    // pane kept showing stale Notes markup — the fix had to
-                    // be "clicking Deliverables instead" to get anything to
-                    // load at all. Clearing every subitem's .active state
-                    // and re-marking only the first one keeps the sidebar's
-                    // visible state and the content pane in sync every
-                    // time. Deliberately not Design-specific — this same
-                    // code path covers Finance/Production/Logistics for
-                    // free once they grow their own sub-tab strips.
-                    var defaultSubTabKey = null;
-                    if (subgroup && !subgroup.classList.contains('is-hidden')) {
-                        var subItems = subgroup.querySelectorAll('.project-overlay-sidebar-subitem');
-                        subItems.forEach(function (b, i) {
-                            b.classList.toggle('active', i === 0);
-                        });
-                        if (subItems.length) defaultSubTabKey = subItems[0].dataset.subTab;
-                    }
-
-                    if (onSectionSelected) onSectionSelected(btn.dataset.mainTab, defaultSubTabKey);
+                    if (btn.classList.contains('active')) return;
+                    // Same guard as the sub-tabs: switching away discards Details edits.
+                    var proceed = function () {
+                        markActive(btn);
+                        if (onSectionSelected) onSectionSelected(btn.dataset.mainTab, null);
+                    };
+                    if (onBeforeNavigate) { onBeforeNavigate(proceed); } else { proceed(); }
                 });
             });
 
-            if (subgroup) {
-                subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (btn) {
-                    btn.addEventListener('click', function () {
-                        if (btn.classList.contains('active')) return;
-                        // The .active flip and the actual content swap both
-                        // live inside proceed() — gated behind the guard so a
-                        // cancelled switch never leaves the sidebar pointing
-                        // at a tab whose content didn't actually load.
-                        var proceed = function () {
-                            subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (b) {
-                                b.classList.toggle('active', b === btn);
-                            });
-                            if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
-                        };
-                        if (onBeforeNavigate) { onBeforeNavigate(proceed); } else { proceed(); }
-                    });
+            subItems.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    if (btn.classList.contains('active')) return;
+                    // The active flip and the content swap both wait for the
+                    // unsaved-edit guard, so a cancelled switch leaves the
+                    // sidebar pointing at what is actually showing.
+                    var proceed = function () {
+                        markActive(btn);
+                        if (onSubTabSelected) onSubTabSelected(btn.dataset.subTab);
+                    };
+                    if (onBeforeNavigate) { onBeforeNavigate(proceed); } else { proceed(); }
                 });
-            }
+            });
 
-            // Programmatic equivalent of a real click — puts the sidebar
-            // back where the user last left it, called from outside on
-            // open rather than from a click event.
+            // Puts the sidebar back where the user last left it. A saved view
+            // for a section that no longer exists changes nothing, so the
+            // default (Details) stays marked.
             restoreView = function (sectionKey, subTabKey) {
-                var targetBtn = null;
-                mainItems.forEach(function (btn) {
-                    if (btn.dataset.mainTab === sectionKey) targetBtn = btn;
-                });
-                if (!targetBtn) return;
-
-                enterSection(sectionKey, targetBtn);
-
-                if (subTabKey && subgroup) {
-                    subgroup.querySelectorAll('.project-overlay-sidebar-subitem').forEach(function (b) {
-                        b.classList.toggle('active', b.dataset.subTab === subTabKey);
+                var target = null;
+                if (sectionKey === 'design') {
+                    subItems.forEach(function (b) {
+                        if (b.dataset.subTab === subTabKey) target = b;
+                    });
+                } else {
+                    mainItems.forEach(function (b) {
+                        if (b.dataset.mainTab === sectionKey) target = b;
                     });
                 }
+                if (target) markActive(target);
             };
         }
 
@@ -200,10 +148,7 @@ window.ProjectOverlay = (function () {
             },
             restoreView: restoreView,
             isChatOpen: isChatOpen,
-            // Exposed so callers outside this module (project_list.js's
-            // openProjectOverlay, for a deep link that wants the chat
-            // drawer open on arrival — e.g. a chat-mention notification)
-            // can open the drawer without simulating a click on chatBtn.
+            // Used by project_list.js for ?chat=1 deep links (chat-mention notifications).
             openChat: openChat
         };
     }

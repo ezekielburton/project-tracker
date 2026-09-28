@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from flask_login import login_required, current_user
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment
@@ -9,6 +9,26 @@ from app.modules.core.shared.services.achievements import check_achievements
 feedback_bp = Blueprint('feedback', __name__, template_folder='../templates')
 
 VALID_STATUSES = {'requested', 'in_progress', 'testing', 'implemented'}
+
+
+def _signal_link(board, item_id=None):
+    """A page URL that opens the Signal tray on a board, or on one item
+    (signal_tray.js reads ?signal=<board>[:<id>] on load)."""
+    return url_for('projects.index', signal=f'{board}:{item_id}' if item_id else board)
+
+
+# Older notifications link to /feature-requests#fr-<id> and /bug-reports#br-<id>.
+# The browser keeps the #fragment across the redirect, and the tray reads it.
+@feedback_bp.route('/feature-requests', methods=['GET'])
+@login_required
+def legacy_feature_link():
+    return redirect(_signal_link('feature'))
+
+
+@feedback_bp.route('/bug-reports', methods=['GET'])
+@login_required
+def legacy_bug_link():
+    return redirect(_signal_link('bug'))
 
 
 def _feature_dict(f):
@@ -24,7 +44,6 @@ def _feature_dict(f):
     }
 
 
-# ── Index ─────────────────────────────────────────────────────────────────────
 # ── Load single feature (AJAX) ────────────────────────────────────────────────
 @feedback_bp.route('/feature-requests/<int:feature_id>')
 @login_required
@@ -69,7 +88,7 @@ def submit_feature():
         item_type='Feature Request',
         title=feature.title,
         submitted_by=actor,
-        url_path='/#signal-feature'
+        url_path=_signal_link('feature', feature.id)
     )
 
     admin_user = UserModel.query.filter_by(role='admin').first()
@@ -79,7 +98,7 @@ def submit_feature():
             message=f'{actor.name} submitted a feature request: "{feature.title}"',
             notification_type='feature_request',
             triggered_by=actor,
-            link=f'/feature-requests#fr-{feature.id}',
+            link=_signal_link('feature', feature.id),
             send_email=False  # notify_admin_of_new_feedback() already sent a direct email above
         )
 
@@ -109,9 +128,7 @@ def toggle_upvote(feature_id):
 
     db.session.commit()
 
-    # Only fires on actually GIVING an upvote, not removing one — this is a
-    # toggle route, so without this guard, upvote-then-un-upvote would count
-    # as two events toward an "upvote 10 times" achievement.
+    # Count only new upvotes, so toggling off and on cannot farm the achievement.
     if voted:
         check_achievements(actor, 'upvote_given')
 
@@ -235,7 +252,6 @@ def _bug_dict(b):
     }
 
 
-# ── Index ─────────────────────────────────────────────────────────────────────
 # ── Load single bug (AJAX) ────────────────────────────────────────────────────
 @feedback_bp.route('/bug-reports/<int:bug_id>')
 @login_required
@@ -279,7 +295,7 @@ def submit_bug():
         item_type='Bug Report',
         title=bug.title,
         submitted_by=actor,
-        url_path='/#signal-bug'
+        url_path=_signal_link('bug', bug.id)
     )
 
     admin_user = UserModel.query.filter_by(role='admin').first()
@@ -289,7 +305,7 @@ def submit_bug():
             message=f'{actor.name} reported a bug: "{bug.title}"',
             notification_type='bug_report',
             triggered_by=actor,
-            link=f'/bug-reports#br-{bug.id}',
+            link=_signal_link('bug', bug.id),
             send_email=False  # notify_admin_of_new_feedback() already sent a direct email above
         )
 

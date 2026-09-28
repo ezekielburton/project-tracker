@@ -1,11 +1,9 @@
 """
-HSE — My performance.
+HSE My performance, plus its printable review report.
 
-Gated view_hse, so management and admin read it too: this page is written to
-be taken into a review, and a page only its subject can see is no use there.
-
-Nothing is defined here. Every number comes from lib/performance.py, which
-reads lib/metrics.py, which the Overview and the calendar read as well.
+Gated view_hse so management can read it in a review. No metric is defined
+here: numbers come from lib/performance.py, built on lib/metrics.py (shared
+with the Overview).
 """
 from datetime import date
 
@@ -18,35 +16,35 @@ from app.modules.hse.lib import charts
 from app.modules.hse.lib.metrics import training_delivered
 from app.modules.hse.lib.performance import (
     age_series, closed_by_severity, compliance_panel, coverage_series,
-    expiring_next, open_by_age, period, read_outs, reporting,
+    expiring_next, navigation, open_by_age, period, read_outs, reporting,
     schedule_coverage, sla_table, tiles, trend_months,
 )
-from app.modules.hse.lib.query import dashboard_entries, open_counts_by_group
+from app.modules.hse.lib.query import dashboard_entries, open_counts_by_register
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.models import HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
 
 
-# The charts run over the trailing twelve months and the tiles compare
-# against the twelve before that, so two years plus a margin is the window.
+# Charts cover 12 trailing months and tiles compare with the 12 before,
+# so load two years plus a margin.
 LOOKBACK_DAYS = 800
 
 
-def _anchor():
-    """The month the page is showing. A bad or missing date lands on today
-    rather than erroring — a mistyped URL should not be a 500."""
+def _anchor(today):
+    """The month shown, from ?month=YYYY-MM. Missing or invalid means today;
+    a future month is clamped to today."""
     raw = request.args.get('month')
     if raw:
         try:
-            return date.fromisoformat(raw + '-01')
+            return min(date.fromisoformat(raw + '-01'), today)
         except ValueError:
             pass
-    return date.today()
+    return today
 
 
 def _view_model(today=None):
     today = today or date.today()
-    window = period(request.args.get('view'), _anchor())
+    window = period(request.args.get('view'), _anchor(today))
 
     entries = dashboard_entries(today, LOOKBACK_DAYS)
     schedules = (HseSchedule.query
@@ -58,6 +56,7 @@ def _view_model(today=None):
     ageing = age_series(entries, months)
     return {
         'window': window,
+        'nav': navigation(window, today),
         'tiles': tiles(schedules, entries, window, today),
         'bars': charts.grouped_bars(cover),
         'line': charts.line(ageing),
@@ -65,9 +64,8 @@ def _view_model(today=None):
         'compliance': compliance_panel(entries, window, today),
         'ageing': open_by_age(entries, today),
         'today': today,
-        # The report needs these again for its own sections and to redraw
-        # the charts at print width. The page drops them; nothing renders
-        # from them directly.
+        # Report-only inputs (extra sections, print-width charts); the page
+        # pops them before rendering.
         '_entries': entries,
         '_schedules': schedules,
         '_cover': cover,
@@ -84,7 +82,7 @@ def performance():
         model.pop(key)
     return render_template(
         'hse/performance.html',
-        rail=rail_items(open_counts_by_group(model['today']), active_group='performance'),
+        rail=rail_items(open_counts_by_register(model['today']), active_group='performance'),
         active_group='performance',
         **model)
 
@@ -93,19 +91,16 @@ def performance():
 @login_required
 @require('view_hse')
 def performance_report():
-    """The four-page A4 report, printed from the browser.
-
-    Same view model as the page — the report cannot quote a different number
-    from the screen it was exported off. `auto` opens the print dialog on
-    load, which is what "Export for review" does.
+    """Four-page A4 report, printed from the browser. Shares the page's view
+    model so the numbers always match. `auto=1` ("Export for review") opens
+    the print dialog on load.
     """
     model = _view_model()
     entries = model.pop('_entries')
     schedules = model.pop('_schedules')
     window = model['window']
 
-    # Redrawn narrower: an A4 column is about half the width of the page's,
-    # and a chart sized for the screen would print its labels at half size.
+    # Redraw at print width so labels print at a readable size on A4.
     model['bars'] = charts.grouped_bars(model.pop('_cover'),
                                         width=charts.PRINT_WIDTH, height=230)
     model['line'] = charts.line(model.pop('_ageing'),

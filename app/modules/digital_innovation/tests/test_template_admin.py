@@ -1,6 +1,4 @@
-"""Coverage for lib/template_admin.py — the department-wide step template
-CRUD/reordering behind the admin-only Edit Templates screen. No routes/
-HTTP here, same split as test_step_engine.py vs test_features_routes.py."""
+"""Tests for lib/template_admin.py, called directly (no HTTP)."""
 from app.modules.digital_innovation.models import DiStepTemplate, DI_STAGES
 from app.modules.digital_innovation.lib import template_admin
 

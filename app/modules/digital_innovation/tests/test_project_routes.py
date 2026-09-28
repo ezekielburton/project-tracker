@@ -1,7 +1,6 @@
-"""Route-level coverage for Digital Innovation project creation
-(routes/projects.py). Covers the plain happy-path/validation behaviour and the admin-only
-write-access gate (can_edit_di_board). Also
-covers search_projects/link_project (the system-project link picker) since they live in the same routes file."""
+"""Route tests for routes/projects.py: create, track, close/archive/reopen,
+and the Project link picker (search_projects, link_project), including the
+admin-only write gate."""
 from flask import url_for
 
 from app.modules.core.shared.models import User, Project
@@ -11,9 +10,7 @@ from app.modules.digital_innovation.tests.test_features_routes import _user
 
 
 def _shared_project(db_session, tag, client=None):
-    """A minimal row in the real (shared) projects table — the link
-    target, distinct from DiProject. Mirrors the minimal-fields pattern
-    test_overlay_deliverables.py already uses for this model."""
+    """A minimal shared Project row to link a DiProject to."""
     lead = User(name=f'CS Lead {tag}', email=f'di-link-test-{tag}@example.com', role='cs')
     lead.set_password('password123')
     db_session.add(lead)
@@ -72,9 +69,7 @@ def test_create_project_403s_for_a_designer(app, client, db_session):
 
 
 def test_create_project_403s_for_management(app, client, db_session):
-    # can_edit_di_board is admin-only for now ("me and my future team") —
-    # unlike the Performance/cost-footer gate, management doesn't get a
-    # pass here.
+    # can_edit_di_board is admin-only; management does not get it.
     user = _user(db_session, 'pd', role='management')
     login_as(client, app, user, 'password123')
 
@@ -101,8 +96,7 @@ def test_create_project_403s_for_an_admin_emulating_a_designer(app, client, db_s
 
 
 def test_create_project_works_for_an_admin_emulating_another_admin(app, client, db_session):
-    # Emulation only ever swaps in the emulated role — emulating a fellow
-    # admin should behave exactly like not emulating at all.
+    # Emulating another admin behaves like not emulating.
     admin = _user(db_session, 'pf', role='admin')
     other_admin = _user(db_session, 'pf2', role='admin')
     login_as(client, app, admin, 'password123')
@@ -317,8 +311,7 @@ def test_archive_project_happy_path(app, client, db_session):
 
 
 def test_archive_project_404s_for_an_active_project(app, client, db_session):
-    # An active project has to be closed first — archiving is only
-    # reachable from the Archive screen's Closed list.
+    # An active project must be closed before it can be archived.
     project = _lifecycle_project(db_session, 'ch')
     user = _user(db_session, 'ch', role='admin')
     login_as(client, app, user, 'password123')
@@ -527,3 +520,32 @@ def test_link_project_404s_for_an_unknown_di_project(app, client, db_session):
         url = url_for('digital_innovation.link_project', project_id=999999)
     resp = client.patch(url, json={'linked_project_id': None})
     assert resp.status_code == 404
+
+
+def test_update_track_rejects_a_null_or_non_string_track(app, client, db_session):
+    user = _user(db_session, 'trk-bad', role='admin')
+    project = DiProject(name='Track validation board', lifecycle='active', track='internal')
+    db_session.add(project)
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.update_project_track', project_id=project.id)
+    for body in ({'track': None}, {'track': 5}, {'track': ['external']}, {}):
+        resp = client.patch(url, json=body)
+        assert resp.status_code == 400, body
+    assert project.track == 'internal'
+
+
+def test_update_track_accepts_a_padded_track(app, client, db_session):
+    user = _user(db_session, 'trk-pad', role='admin')
+    project = DiProject(name='Track padding board', lifecycle='active', track='internal')
+    db_session.add(project)
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.update_project_track', project_id=project.id)
+    resp = client.patch(url, json={'track': ' external '})
+    assert resp.status_code == 200
+    assert project.track == 'external'

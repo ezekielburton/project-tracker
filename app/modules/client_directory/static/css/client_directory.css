@@ -1,24 +1,7 @@
-/* app/static/css/client_directory.css
- *
- * Client Directory page - two-column master-detail layout, plus the
- * brief-form-side tweaks needed for the shared "add new company/contact"
- * dropdown options. Built entirely from tokens already defined in
- * main.css's :root (--tangerine, --sandstone, --pine, --white, --black,
- * --font-body, --font-mono, --radius, --grey-*) - no new colors, fonts, or
- * radii introduced here, per the "feel like existing Helix UI" instruction.
- *
- * Loaded globally via base.html's <head>, same as every other feature
- * stylesheet (blog.css, wiki.css, achievements.css, etc.) - not
- * conditionally included per-page.
- */
+/* Client Directory page: two-column master-detail layout.
+ * Loaded globally from base.html, so selectors must stay page-scoped. */
 
-/* ── Page header row ──────────────────────────────────────────────────────
-   NOTE: wiki/editor_dashboard.html uses a class called .page-header for
-   this same "title + action button" row, but that class has no actual CSS
-   backing anywhere in the currently-loaded stylesheets (it only exists in
-   main_backup.css, which isn't linked from base.html) - so reusing it here
-   would silently inherit nothing. Defining a real, working class instead
-   rather than copying a pattern that turns out to already be broken. */
+/* ── Page header row ────────────────────────────────────────────────────── */
 .directory-page-header {
     display: flex;
     align-items: center;
@@ -28,17 +11,13 @@
 }
 
 /* ── Two-column layout ────────────────────────────────────────────────────
-   Left panel: fixed width, its own scroll region (so a long company list
-   scrolls independently of the right panel detail view). Right panel:
-   fills whatever space is left. */
+   Each panel scrolls on its own; the page itself does not. */
 .directory-layout {
     display: flex;
     gap: 1.5rem;
     align-items: flex-start;
     height: calc(100vh - 180px);
-    /* 180px roughly clears the sidebar header + page title above this
-       layout - matches the "fixed width, scrollable" left panel spec
-       without the whole page itself needing to scroll. */
+    /* 180px roughly clears the header above this layout. */
 }
 
 .directory-left-panel {
@@ -93,12 +72,7 @@
     font-size: 0.9rem;
 }
 
-/* ── Left panel rows: company (expandable) + contact (nested) ───────────
-   Same expand/collapse mechanic as the project table's expansion-row
-   (this.nextElementSibling toggle, the "Expandable rows"
-   pattern) - .directory-contact-list is the sibling that gets toggled,
-   never looked up by ID, so there's no risk of duplicate-ID collisions
-   between company blocks the way there would be with getElementById. */
+/* ── Left panel rows: company (expandable) + contact (nested) ─────────── */
 .directory-company-row {
     display: flex;
     align-items: center;
@@ -122,8 +96,6 @@
     border-left: 3px solid var(--tangerine);
 }
 
-/* Chevron rotates open/closed - same rotated-class toggle used by
-   detail.js elsewhere in this app, just scoped to this page's own icon. */
 .directory-chevron {
     font-family: var(--font-mono);
     font-size: 0.7rem;
@@ -137,9 +109,6 @@
 }
 
 .directory-contact-list {
-    /* This is the "expansion-row"-equivalent sibling that gets its
-       .hidden class toggled - collapsed by default so the list doesn't
-       start fully expanded for every company on page load. */
     padding-left: 1.5rem;
 }
 
@@ -153,8 +122,7 @@
     color: var(--grey-dark);
 }
 
-/* Search highlight - wraps the matched substring in the rendered name,
-   not a separate overlay, so it reflows naturally with the text. */
+/* Search highlight around the matched substring. */
 .directory-highlight {
     background: color-mix(in srgb, var(--canary) 45%, transparent);
     border-radius: 2px;
@@ -169,9 +137,7 @@
 }
 
 .directory-detail-header h2 {
-    /* Global h1-h6 { text-transform: uppercase } is overridden here -
-       a company/contact name should render exactly
-       as typed, not shouted in caps. */
+    /* Undo the global uppercase headings: names show as typed. */
     text-transform: none;
     letter-spacing: normal;
     font-family: var(--font-body);
@@ -204,9 +170,7 @@
     font-style: italic;
 }
 
-/* ── Projects-linked list ────────────────────────────────────────────────
-   Read-only for every role, per the spec - no edit affordance, no delete,
-   just a name + status badge + link. */
+/* ── Projects-linked list (read-only) ──────────────────────────────────── */
 .directory-projects-section {
     margin-top: 2rem;
     padding-top: 1.5rem;
@@ -251,16 +215,13 @@
 }
 
 /* ── Add Contact button inside an expanded company block ─────────────────
-   Sits below the contact rows, indented to match them. */
+   Sits below the contact rows. */
 .directory-add-contact-btn {
     margin-left: 1.5rem;
     margin-top: 0.25rem;
 }
 
-/* ── Responsive: stack the two panels on narrow screens ──────────────────
-   Matches the existing .form-row breakpoint further down in main.css
-   (grid-template-columns: 1fr on narrow viewports) rather than inventing a
-   different breakpoint value for this one layout. */
+/* ── Responsive: stack the two panels on narrow screens ────────────────── */
 @media (max-width: 768px) {
     .directory-layout {
         flex-direction: column;

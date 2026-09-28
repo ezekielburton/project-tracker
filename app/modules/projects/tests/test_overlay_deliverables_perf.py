@@ -1,14 +1,7 @@
-"""Regression test: the Deliverables sub-tab used to lazy-load each row's
-assignment tags (and the designer behind each) one at a time, so opening
-the tab got slower as a project grew — the cause of the "slow switching to
-Deliverables" reports. Now eager-loaded in the tab's own query (Standard
-via overlay_deliverables, C&CM via _build_ccm_deliverable_sections). These
-prove the query count no longer scales with the number of deliverables,
-for both brief types, and that the rows still render.
+"""Deliverables page: rows render and the query count stays flat as
+deliverables grow, for Standard and C&CM.
 
-Auth-required checks are ordered before any login-using test on purpose —
-same file-order quirk noted in the Group A pass (a prior login_as in the
-file made an unauthenticated check 404 instead of redirecting)."""
+The auth test stays first: after a login_as it would 404 instead of redirect."""
 from app.modules.core.shared.models import (
     User, Project, ProjectCustomer, Customer, Deliverable, DeliverableAssignment,
 )

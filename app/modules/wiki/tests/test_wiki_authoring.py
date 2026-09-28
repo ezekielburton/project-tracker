@@ -40,7 +40,7 @@ def test_every_template_is_a_valid_document():
 
 
 def test_templates_survive_the_save_cleaner():
-    """A skeleton must not lose blocks the moment it is saved."""
+    """Every template skeleton survives sanitize_document with all its blocks."""
     for template in ARTICLE_TEMPLATES:
         cleaned = sanitize_document(template['document'])
         assert len(cleaned['blocks']) == len(template['document']['blocks']), template['key']
@@ -56,30 +56,13 @@ def test_unknown_template_key_is_empty_not_an_error():
 
 # ------ Autosave ------
 
-def test_autosave_creates_a_draft_article(app, client, db_session):
-    _admin(app, client, db_session, 'autosave-new@example.com')
-    section = _section(db_session, 's-autosave-new')
-
-    resp = client.post('/wiki/editor/article/autosave', data={
-        'section_id': str(section.id),
-        'title': 'Fresh article',
-        'sections_json': json.dumps(_document([_paragraph('Some words')])),
-    })
-
-    assert resp.status_code == 200
-    article = WikiArticle.query.get(resp.get_json()['article_id'])
-    assert article.is_published is False
-    assert 'Some words' in article.draft_sections_json
-    assert json.loads(article.sections_json)['blocks'] == []
-
-
-def test_autosave_without_a_title_creates_nothing(app, client, db_session):
+def test_autosave_without_an_article_creates_nothing(app, client, db_session):
     _admin(app, client, db_session, 'autosave-empty@example.com')
     section = _section(db_session, 's-autosave-empty')
 
     resp = client.post('/wiki/editor/article/autosave', data={
         'section_id': str(section.id),
-        'title': '',
+        'title': 'Fresh article',
         'sections_json': json.dumps(_document([_paragraph('Some words')])),
     })
 
@@ -114,14 +97,18 @@ def test_autosave_leaves_the_live_article_alone(app, client, db_session):
 def test_autosave_cleans_what_it_stores(app, client, db_session):
     _admin(app, client, db_session, 'autosave-clean@example.com')
     section = _section(db_session, 's-autosave-clean')
+    article = WikiArticle(section_id=section.id, title='Fresh', slug='fresh-clean',
+                          sections_json=json.dumps(_document([])))
+    db_session.add(article)
+    db_session.commit()
 
-    resp = client.post('/wiki/editor/article/autosave', data={
-        'section_id': str(section.id),
-        'title': 'Fresh',
+    client.post('/wiki/editor/article/autosave', data={
+        'article_id': str(article.id),
         'sections_json': json.dumps(_document([_paragraph('Hi <b>you</b><script>bad()</script>')])),
     })
+    db_session.expire_all()
 
-    article = WikiArticle.query.get(resp.get_json()['article_id'])
+    article = WikiArticle.query.get(article.id)
     assert 'script' not in article.draft_sections_json
     assert '<b>you</b>' in article.draft_sections_json
 
@@ -196,7 +183,7 @@ def test_save_keeps_the_original_slug(app, client, db_session):
 # ------ Moving a key says so ------
 
 def test_moving_a_key_is_flashed(app, client, db_session):
-    """Taking a key off another article is silent otherwise."""
+    """Moving a key off another article flashes that article's title."""
     _admin(app, client, db_session, 'flash-key@example.com')
     section = _section(db_session, 's-flash')
     first = WikiArticle(section_id=section.id, title='The old one', slug='f-first',
@@ -236,7 +223,7 @@ def test_no_flash_when_no_key_moved(app, client, db_session):
 # ------ Bad form ids ------
 
 def test_a_non_numeric_article_id_is_a_bad_request(app, client, db_session):
-    """Straight int() on form input made this a 500."""
+    """A non-numeric article_id is a 400, not a 500."""
     _admin(app, client, db_session, 'badid-article@example.com')
     section = _section(db_session, 's-badid')
 

@@ -63,11 +63,12 @@ is purely organizational.
   click analytics
 - `sse` — the `sse` blueprint: SSE stream endpoints (doorbells that tell the
   browser to re-fetch)
-- `api` — the `api` blueprint: JSON polling endpoints for live updates
+- `api` — the `api` blueprint: zip downloads, version stamp, Client Directory
+  lookups
 
 ### templates/
-`base.html` (the site layout every page extends), `base_fragment.html`,
-`_macros.html`, `_shared_macros.html`, and shared `partials/`. Placed on
+`base.html` (the site layout every page extends), `_macros.html`,
+`_shared_macros.html`, and shared `partials/`. Placed on
 Jinja's search path by the `core` blueprint, so any module can
 `{% extends 'base.html' %}` and import the shared macros.
 

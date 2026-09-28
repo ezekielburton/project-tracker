@@ -1,10 +1,6 @@
-"""The inner module rail is one component, not one per module.
-
-Client Servicing and Digital Innovation carried byte-identical rail CSS
-before this was extracted, and HSE would have been the third copy. These
-assertions keep it that way, and pin the plain-item markup to exactly what
-those two modules rendered before the move — a rail with no icon and no
-count must still be a bare link, or their pages shift.
+"""The shared module_rail() macro: its markup, and that no module forks its
+own rail or page frame. A plain item (no icon, no count) must stay a bare link,
+or the text-only rails shift.
 """
 from pathlib import Path
 
@@ -13,11 +9,10 @@ import app as app_package
 
 APP_ROOT = Path(app_package.__file__).parent
 
-# What the shared rail replaced. A module reintroducing one of these is
-# forking the component again.
+# Per-module rail classes. A module using one is forking the shared rail.
 RETIRED_CLASSES = ('cs-sidebar', 'cs-nav-item', 'di-sidebar-nav', 'di-nav-item')
 
-# What the shared page frame replaced (.module-page / .module-shell).
+# Per-module shell classes; use .module-page / .module-shell instead.
 RETIRED_SHELL_CLASSES = ('cs-shell', 'hse-shell')
 
 
@@ -54,8 +49,7 @@ def test_only_the_active_item_is_marked(app):
 
 
 def test_a_plain_item_is_a_bare_link(app):
-    """Client Servicing and DI rails are text-only. Their markup must not
-    gain wrapper elements, or their spacing changes."""
+    """A text-only item renders with no wrapper elements."""
     html = _render(app, [{'key': 'x', 'label': 'Invoicing', 'url': '/inv'}])
     assert '<a href="/inv" class="module-rail-item">Invoicing</a>' in html
     assert 'module-rail-item--rich' not in html
@@ -92,22 +86,38 @@ def test_the_call_body_lands_inside_the_rail(app):
 
 
 def test_no_module_redefines_the_retired_rail_classes():
-    """One rail, one definition. If this fails, a module has grown its own
-    rail again — point it at module_rail() instead of restoring the class."""
+    """No source outside tests uses a per-module rail class; use module_rail()."""
     offenders = _source_hits(RETIRED_CLASSES)
     assert not offenders, 'Retired rail classes are back: ' + ', '.join(offenders)
 
 
 def test_no_module_redefines_the_page_frame():
-    """One page frame. A module needing a variation adds a class beside
-    .module-main rather than growing its own shell."""
+    """No source outside tests uses a per-module shell class. Add a class
+    beside .module-main for a variation."""
     offenders = _source_hits(RETIRED_SHELL_CLASSES)
     assert not offenders, 'Retired shell classes are back: ' + ', '.join(offenders)
 
 
 def test_title_heads_the_rail(app):
+    """The title sits above the nav, after only the phone menu's top row."""
     html = _render(app, [{'key': 'o', 'label': 'Overview', 'url': '/o'}], title='Dashboard')
-    assert '<aside class="module-rail"><div class="module-rail-title">Dashboard</div>' in html
+    assert '<div class="module-rail-title">Dashboard</div>' in html
+    assert html.index('module-rail-mobile') < html.index('module-rail-title') < html.index('module-rail-nav')
+
+
+def test_the_phone_menu_names_its_module_and_switches_to_the_app_menu(app):
+    source = ("{% from '_shared_macros.html' import module_rail %}"
+              "{{ module_rail(items, '', module='HSE & Compliance') }}")
+    with app.app_context():
+        html = app.jinja_env.from_string(source).render(items=[{'key': 'o', 'label': 'Overview', 'url': '/o'}])
+    assert 'HSE &amp; Compliance' in html
+    assert 'data-mobile-menu="app"' in html
+    assert 'data-mobile-menu="close"' in html
+
+
+def test_a_rail_with_no_module_name_offers_all_modules(app):
+    html = _render(app, [{'key': 'o', 'label': 'Overview', 'url': '/o'}])
+    assert 'All modules' in html
 
 
 def test_no_title_renders_no_title(app):

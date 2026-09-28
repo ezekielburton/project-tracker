@@ -1,6 +1,6 @@
 // Chat tray — the conversation list, and the thread pane that reuses the
-// overlay's chat drawer. Registers with HelixTrays (the B1 dock shell) and
-// binds once, outside #main-content, so SPA nav never touches it.
+// overlay's chat panel (ProjectChatPanel). Registers with HelixTrays and
+// loads once from base.html, outside #main-content, so SPA nav never re-runs it.
 (function () {
     if (!window.HelixTrays) return;
 
@@ -285,9 +285,8 @@
         onSignal: loadConversations
     });
 
-    // A new message anywhere fires the project-changes doorbell. Its own
-    // connection, so the bubble stays live on every page whether or not the
-    // tray is open.
+    // Any project change pings /sse/dashboard. This is its own connection,
+    // so the unread bubble stays live on every page, tray open or not.
     if (typeof EventSource !== 'undefined') {
         var stream = new EventSource('/sse/dashboard');
         stream.onmessage = function () {

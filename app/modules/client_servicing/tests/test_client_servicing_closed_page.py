@@ -53,7 +53,7 @@ def test_closed_page_forbidden_for_a_disallowed_role(app, client, db_session):
 
 
 def test_closed_page_opens_for_a_project_owner(app, client, db_session):
-    """Page access is the wide gate — project owners can read the history."""
+    """Project owners can open the closed-projects page."""
     user = _user(db_session, 'b', role='project_owner')
     login_as(client, app, user, 'password123')
     assert _page(app, client).status_code == 200
@@ -90,8 +90,7 @@ def test_kpis_count_by_period(app, db_session):
     user = _user(db_session, 'e')
     _closed(db_session, user, 'Closed Today', datetime.combine(today, datetime.min.time()),
             value=Decimal('200'))
-    # Same year, but far enough back to be outside this week and month:
-    # January 1st is in every year-to-date window and no other.
+    # January 1st is always in the year window, and usually outside week and month.
     _closed(db_session, user, 'Closed In January', datetime(today.year, 1, 1),
             value=Decimal('300'))
 
@@ -99,8 +98,7 @@ def test_kpis_count_by_period(app, db_session):
     assert cards['year']['count'] == 2
     assert cards['year']['value'] == Decimal('500')
 
-    # In the first week of January both fall inside the week window, so
-    # derive the expectation instead of pinning it to a season.
+    # In January's first week both fall in the week window, so derive the count.
     week_start = today - timedelta(days=today.weekday())
     in_week = 2 if date(today.year, 1, 1) >= week_start else 1
     assert cards['week']['count'] == in_week
@@ -135,8 +133,7 @@ def test_mark_invoiced_is_offered_to_finance_editors_only(app, client, db_sessio
 
 
 def test_marking_invoiced_flips_the_state(app, client, db_session):
-    """The action reuses edit.py's field endpoint, so no new permission
-    logic — this guards the round trip the page relies on."""
+    """Setting invoice_date via the update_field endpoint moves the project to 'invoiced'."""
     year = date.today().year
     user = _user(db_session, 'i')
     project = _closed(db_session, user, 'Now Invoiced', datetime(year, 4, 2),

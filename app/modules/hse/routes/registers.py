@@ -1,12 +1,9 @@
 """
-HSE — the one register surface, for all twenty-one.
+HSE register pages: one route and template serves every register.
 
-Columns, filter chips and the empty state all render from HSE_REGISTERS, so
-adding a register stays one entry in that declaration rather than a new
-route, template and form.
-
-Every filter is a URL parameter, so a filtered view survives a refresh and
-can be pasted to someone else. Nothing is held in JavaScript.
+Columns, filter chips and the empty state render from HSE_REGISTERS, so a
+new register is one entry there. All filters live in the URL, so a view
+survives refresh and can be shared.
 """
 from datetime import date
 
@@ -15,10 +12,11 @@ from flask_login import login_required
 
 from app.modules.core.shared.lib.capabilities import require
 from app.modules.hse.lib.query import (
-    empty_filters, open_counts_by_group, page_of, years_for,
+    empty_filters, open_counts_by_register, page_of, spend_entries, years_for,
 )
 from app.modules.hse.lib.rail import rail_items
-from app.modules.hse.lib.registers import register, registers_in_group
+from app.modules.hse.lib.registers import money_fields, register, registers_in_group
+from app.modules.hse.lib.spend import spend_strip
 from app.modules.hse.lib.table import columns, status_chips, table_rows
 from app.modules.hse.models import SEVERITIES
 from app.modules.hse.routes.blueprint import hse_bp
@@ -28,8 +26,7 @@ from app.modules.hse.routes.blueprint import hse_bp
 @login_required
 @require('view_hse')
 def index():
-    """The module's front door. The Overview answers "what needs me today",
-    which is why he opened it — a register is where he goes next."""
+    """Module root; redirects to the Overview."""
     return redirect(url_for('hse.overview'))
 
 
@@ -45,9 +42,8 @@ def group_page(group_key):
 
 
 def _read_filters(reg, years):
-    """Filters off the query string, each one validated against what this
-    register can actually show. A junk parameter falls back to no filter
-    rather than an empty table nobody can explain."""
+    """Filters from the query string, validated against this register.
+    An invalid value means no filter, so a bad URL never shows an empty table."""
     filters = empty_filters()
 
     severity = request.args.get('severity')
@@ -79,8 +75,7 @@ def register_page(group_key, register_key):
     years = years_for(register_key)
     filters = _read_filters(reg, years)
 
-    # Read after the others, because a status that this register cannot show
-    # has to fall back before the page is built rather than after.
+    # A status this register cannot show is dropped and the page rebuilt.
     status = request.args.get('status') or None
     filters['status'] = status
 
@@ -89,9 +84,8 @@ def register_page(group_key, register_key):
         filters['status'] = None
         page = page_of(register_key, filters, 1, today)
 
-    # Every link on the page is this view with one thing changed, so the
-    # URLs are built here rather than reassembled in six places in the
-    # template — a new filter is then one entry in `carried`.
+    # Every link on the page is this view with one thing changed; a new
+    # filter only needs an entry in `carried`.
     carried = {k: v for k, v in (
         ('status', filters['status']), ('severity', filters['severity']),
         ('year', filters['year']), ('q', filters['search'])) if v}
@@ -102,18 +96,24 @@ def register_page(group_key, register_key):
         return url_for('hse.register_page',
                        **{k: v for k, v in args.items() if v is not None})
 
+    # Cost registers only. Same filters as the table except year, which picks
+    # the month-by-month year instead.
+    spend = None
+    if money_fields(reg):
+        spend = spend_strip(spend_entries((reg.key,), filters, today),
+                            filters['year'] or today.year, today)
+
     chips = status_chips(reg, page['counts'], page['total_all'], today)
     for chip in chips:
-        # A chip clears the page number: filtering to eleven rows while
-        # sitting on page 3 shows an empty table and looks broken.
+        # Reset to page 1, or a narrower filter can land on an empty page.
         chip['url'] = link(status=chip['value'], page=None)
 
     return render_template(
         'hse/registers.html',
         reg=reg,
-        tabs=registers_in_group(group_key),
-        rail=rail_items(open_counts_by_group(today), active_group=group_key),
+        rail=rail_items(open_counts_by_register(today), active_group=group_key),
         active_group=group_key,
+        active_sub=reg.key,
         columns=columns(reg),
         rows=table_rows(page['rows'], reg, today),
         chips=chips,
@@ -124,6 +124,7 @@ def register_page(group_key, register_key):
         severities=SEVERITIES if _has_severity(reg) else (),
         years=years,
         page=page,
+        spend=spend,
     )
 
 

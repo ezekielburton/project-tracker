@@ -1,30 +1,27 @@
-// avatar-cropper.js — Vitamin-E
-// Shared Cropper.js wiring for any "pick a photo, crop it, upload it" flow.
-// Extracted from profile.js so the wizard's photo step can reuse the exact
-// same crop-and-upload mechanics instead of duplicating them.
+// avatar-cropper.js — shared "pick a photo, crop it, upload it" flow on
+// Cropper.js (profile page, wizard, admin panel).
 //
-// Loaded before {% block content %} in base.html, so it runs before any
-// page-specific script (like profile.js) that depends on it. Needs the
-// crop-modal markup from partials/avatar_crop_modal.html already in the DOM
-// (also included right before this script tag) and showToast()/btnLoading()/
-// btnDone() from main.js (called later, inside event handlers, by which
-// point main.js has always finished loading).
+// Included inside #main-content in base.html, right after
+// partials/avatar_crop_modal.html and before {% block content %}, so it
+// re-runs on every SPA swap. Needs that modal markup in the DOM, which the
+// partial only renders for logged-in users; without it HelixAvatarCropper
+// is null. Uses showToast()/btnLoading()/
+// btnDone() from main.js, inside handlers only.
 //
 // Public API: HelixAvatarCropper.wireFileInput(inputEl, mode, onSuccess, options)
 //   inputEl:   the <input type="file"> to watch
 //   mode:      'avatar' or 'banner' — controls aspect ratio, output size,
 //              and modal title
-//   onSuccess: called with the parsed JSON response after a successful
-//              upload — the caller decides what happens next (profile.js
-//              reloads the page; the wizard just updates its own preview)
-//   options:   optional. { uploadUrl } overrides where the crop POSTs — a
-//              string, or a function resolved per open for a per-row target;
-//              defaults to /profile/<mode>. Used by the admin panel.
+//   onSuccess: called with the parsed JSON response after a successful upload
+//   options:   optional { uploadUrl }: a string, or a function resolved on
+//              each open (admin panel, per-user target). Default /profile/<mode>.
 
 window.HelixAvatarCropper = (function () {
     var cropModal = document.getElementById('crop-modal');
     var cropModalTitle = document.getElementById('crop-modal-title');
     var cropImage = document.getElementById('crop-image');
+    // Logged-out pages (login, register) render no modal: nothing to wire.
+    if (!cropModal || !cropImage) return null;
     var cropContainer = cropImage.parentElement;
     var cropZoomSlider = document.getElementById('crop-zoom-slider');
     var cropSizeHint = document.getElementById('crop-size-hint');
@@ -33,9 +30,9 @@ window.HelixAvatarCropper = (function () {
 
     var cropper = null;
     var currentMode = null;
-    var currentInput = null;     // whichever file input triggered this open — reset on close
-    var currentOnSuccess = null; // this open's caller-supplied callback
-    var currentUploadUrl = null; // where this open POSTs — default /profile/<mode>
+    var currentInput = null;     // the file input that opened the modal; cleared on close
+    var currentOnSuccess = null;
+    var currentUploadUrl = null;
 
     var MODE_CONFIG = {
         avatar: { aspectRatio: 1, outputWidth: 512, outputHeight: 512, title: 'Adjust Photo' },
@@ -144,9 +141,6 @@ window.HelixAvatarCropper = (function () {
 
             currentInput = input;
             currentOnSuccess = onSuccess;
-            // uploadUrl may be a string or a function (resolved per open, so one
-            // wiring can target a different user each time); defaults to the
-            // self-service /profile/<mode> endpoint.
             var uu = options.uploadUrl;
             currentUploadUrl = (typeof uu === 'function') ? uu() : (uu || ('/profile/' + mode));
 

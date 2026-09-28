@@ -1,9 +1,7 @@
 window.ProjectDetailsCard = (function () {
-    // Tracks the cleanup/backdrop handlers from the last bespoke #confirm-modal
-    // customization this file made (see the "last active customer" branch of
-    // the Cancel Customer confirm below), same pattern project_submissions_
-    // draft_card.js uses — so re-opening the shared modal a second time
-    // doesn't stack a duplicate listener on top of the previous one.
+    // Cleanup handlers from the last custom #confirm-modal this file built,
+    // kept module-level so re-opening it doesn't stack listeners on the
+    // shared modal (same pattern as project_submissions_draft_card.js).
     var _lastCancelCleanup = null;
     var _lastBackdropCleanup = null;
 
@@ -32,9 +30,8 @@ window.ProjectDetailsCard = (function () {
             }));
         });
 
-        // Admin-only project status picker. On select it bulk-writes the
-        // status to every deliverable + C&CM channel on the project (see
-        // override_project_status()); onChanged() then re-fetches the tab.
+        // Admin-only project status picker. Bulk-writes the status to every
+        // deliverable and C&CM channel (override_project_status()).
         var projectStatusPicker = rootEl.querySelector('#project-status-picker');
         if (projectStatusPicker && window.StatusPicker) {
             var projectStatusHandle = window.StatusPicker.init(projectStatusPicker, function (statusValue, el) {
@@ -143,10 +140,9 @@ window.ProjectDetailsCard = (function () {
             });
         }
 
-        // Cancel / Reactivate and Put on Hold / Resume now live in the
-        // overlay sidebar, wired once per overlay-open in project_list.js
-        // (see wireProjectLifecycleActions) — not here, since this init()
-        // reruns on every Details sub-tab load and the sidebar isn't.
+        // Cancel/Reactivate and Hold/Resume are sidebar actions, wired once
+        // per overlay open in project_list.js (wireProjectLifecycleActions).
+        // This init() reruns on every Details load, so don't wire them here.
 
         var downloadAllBtn = rootEl.querySelector('#overlay-download-all-files');
         if (downloadAllBtn) {
@@ -170,14 +166,10 @@ window.ProjectDetailsCard = (function () {
             });
         }
 
-        // Flags (task #42) — Details' Flags card (project/concept/kv scope).
-        // Reruns every load same as everything else in this file, since
-        // project_flags.js just re-wires whatever .overlay-flag-section
-        // elements are in the fresh HTML.
+        // Details' Flags card (project/concept/kv scope).
         if (window.ProjectFlags) window.ProjectFlags.init(rootEl, projectId, onChanged);
 
-        // ── Add Customer: adds a customer to a C&CM project. A toggle
-        // button reveals/hides an inline form with its own error box.
+        // ── Add Customer (C&CM): toggle button reveals an inline form.
         var addCustomerToggleBtn = rootEl.querySelector('#overlay-customer-add-toggle-btn');
         var addCustomerForm = rootEl.querySelector('#overlay-customer-add-form');
         if (addCustomerToggleBtn && addCustomerForm) {
@@ -228,9 +220,8 @@ window.ProjectDetailsCard = (function () {
             });
         }
 
-        // ── Cancel Customer panel toggle: swaps the Properties/Design
-        // Leads/Reference Files body for the Customers card in place,
-        // toggling is-hidden on both views and label-swapping the button.
+        // ── Manage Customers toggle: swaps the main Details view for the
+        // Customers card and swaps the button label.
         var cancelCustomerToggleBtn = rootEl.querySelector('#overlay-cancel-customer-toggle-btn');
         var detailsMainView = rootEl.querySelector('#overlay-details-main-view');
         var detailsCancelView = rootEl.querySelector('#overlay-details-cancel-view');
@@ -245,9 +236,8 @@ window.ProjectDetailsCard = (function () {
             });
         }
 
-        // ── Cancel/Reactivate Customer: C&CM only, one row per
-        // .overlay-customer-item in the Customers card. Each row carries
-        // its own project-customer-id and its own reveal-form/error box.
+        // ── Cancel/Reactivate Customer (C&CM): each .overlay-customer-item
+        // has its own id, reveal form and error box.
         rootEl.querySelectorAll('.overlay-customer-cancel-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var item = btn.closest('.overlay-customer-item');
@@ -301,10 +291,8 @@ window.ProjectDetailsCard = (function () {
                                 return;
                             }
                             if (!alsoCancelProject) { onChanged(); return; }
-                            // Best-effort follow-up — the customer cancel already
-                            // succeeded either way, so a failure here just falls
-                            // back to the normal sidebar Cancel Project action
-                            // rather than losing the customer cancel too.
+                            // Best-effort: the customer cancel already succeeded;
+                            // on failure the user finishes via the sidebar.
                             fetch(`/projects/${projectId}/overlay/cancel`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -320,9 +308,7 @@ window.ProjectDetailsCard = (function () {
                         });
                 }
 
-                // Is any OTHER customer on this project still active? If not,
-                // this cancel would leave the project with zero active
-                // customers.
+                // Zero other active customers means this is the last one.
                 var otherActiveCustomers = 0;
                 rootEl.querySelectorAll('.overlay-customer-item').forEach(function (el) {
                     if (el !== item && !el.classList.contains('is-cancelled')) otherActiveCustomers++;
@@ -333,18 +319,10 @@ window.ProjectDetailsCard = (function () {
                     return;
                 }
 
-                // Last active customer — bespoke wider confirm with a third
-                // button, following project_submissions_draft_card.js's
-                // established pattern for one-off #confirm-modal content:
-                // hide the shared OK button entirely and provide bespoke
-                // buttons instead (rather than layering an extra click
-                // handler onto the shared OK button — that button is a
-                // singleton reused by every confirm dialog in the app, so a
-                // handler left attached past this one dialog's lifetime
-                // would fire doCancel() again on some later, unrelated
-                // confirm; every bespoke button below owns its own full
-                // cleanup instead, exactly like showResolveStep/
-                // showEditReasonStep do).
+                // Last active customer: custom confirm with two buttons.
+                // Hide the shared OK button; never add a handler to it, since
+                // it is reused by every confirm in the app and a leftover
+                // handler would fire doCancel() on an unrelated confirm.
                 window.showConfirm('', function () { }, 'Cancel Customer');
                 var modal = document.getElementById('confirm-modal');
                 var modalBody = document.getElementById('confirm-modal-body');

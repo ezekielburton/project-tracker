@@ -1,11 +1,7 @@
-"""Details edit mode — 'Teams Required' (design_teams_requested) can be added
-to and removed from after the brief. Dropping a team that has a Design Lead
-also clears that lead (per Ezekiel). These cover the server side of that:
-add persists (canonically ordered), remove persists and deletes the dropped
-team's ProjectDesigner, and an unknown team is rejected.
+"""Details edit: Teams Required. Adds are stored in canonical order, a removed
+team loses its Design Lead, and unknown teams are rejected.
 
-Auth check is ordered first — same file-order quirk noted in the Group A perf
-pass (a prior login_as made an unauthenticated check 404 instead of redirect).
+The auth test stays first: after a login_as it would 404 instead of redirect.
 """
 from app.modules.core.shared.models import (
     User, Project, ProjectDesigner,
@@ -59,7 +55,7 @@ def test_add_team_persists_canonically_ordered(app, client, db_session):
     pid = project.id
 
     login_as(client, app, actor, 'password123')
-    # Deliberately out of order — should be stored canonically (2D,3D,Technical).
+    # Sent out of order; stored in canonical order (2D,3D,Technical).
     resp = _save(client, app, pid, 'Technical,2D')
     assert resp.status_code == 200
     assert resp.get_json()['success'] is True
@@ -82,7 +78,7 @@ def test_remove_team_clears_its_lead(app, client, db_session):
     assert resp.get_json()['success'] is True
 
     assert db_session.get(Project, pid).design_teams_requested == '2D'
-    # Dropped team's Design Lead is gone; the kept team is untouched.
+    # Dropped team's Design Lead is gone.
     assert ProjectDesigner.query.filter_by(project_id=pid, team='3D').first() is None
 
 

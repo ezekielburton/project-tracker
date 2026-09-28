@@ -1,7 +1,6 @@
-{# Dashboard panels — included by dashboard.html and re-rendered on its own by
-   the dashboard-panels fragment route (SSE live refresh). Self-contained (its
-   own macros) so it renders standalone. Everything here is recomputed from
-   dashboard_context on each refresh. #}
+{# Dashboard panels. Included by dashboard.html and also rendered alone by the
+   dashboard-panels fragment route for SSE refresh, so it defines its own
+   macros. #}
 {% set FAMILY_MOD = {
     'In Design': 'coral', 'Pending Approval': 'sage', 'Pre-Production': 'oak',
     'In Production': 'clover', 'Post-Install': 'lavender', 'Invoicing': 'canary',
@@ -141,8 +140,7 @@
     </div>
     {% if invoicing_health.stuck %}
     <div class="cs-dash-stuck"><span class="cs-dash-stuck-icon">!</span>{{ invoicing_health.stuck }} stuck · AED {{ money(invoicing_health.stuck_amount) }} awaiting LPO / overdue</div>
-    {# Which ones. Capped so a bad month can't stretch this card past the
-       one beside it; the rest are a click away on Invoicing. #}
+    {# Capped at 4 so the card stays level with its neighbour. #}
     <div class="cs-dash-stucklist">
       {% for row in stuck_projects[:4] %}
       <a class="cs-dash-stuckrow" href="{{ row.link }}">

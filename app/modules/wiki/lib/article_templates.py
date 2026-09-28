@@ -1,6 +1,5 @@
 """
 Skeletons offered when creating a wiki article, as Editor.js documents.
-Kept in code rather than the database — only admins write articles.
 """
 
 from app.modules.wiki.lib.blocks import EDITORJS_VERSION
@@ -68,8 +67,6 @@ ARTICLE_TEMPLATES = [
     },
 ]
 
-TEMPLATE_KEYS = {template['key'] for template in ARTICLE_TEMPLATES}
-
 
 def template_document(key):
     """The document for a template key; an empty document for anything else."""
@@ -80,7 +77,7 @@ def template_document(key):
 
 
 def picker_options():
-    """The templates as the picker needs them — no documents, which the page sends separately."""
+    """The templates for the picker, without documents; create_article seeds the document server-side."""
     return [
         {'key': t['key'], 'label': t['label'], 'description': t['description']}
         for t in ARTICLE_TEMPLATES

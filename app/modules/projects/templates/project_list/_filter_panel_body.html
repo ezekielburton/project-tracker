@@ -1,15 +1,11 @@
 {#
    app/modules/projects/templates/project_list/_filter_panel_body.html
    ─────────────────────────────────────────────────────────────────
-   Inner content of #filter-panel (the count summary, cap warning, every
-   filter-chip column, and the two date-range buttons). Extracted out of
-   index.html (28 Aug 2026, per Ezekiel — "can we have this spa injected
-   too?") so the AJAX page-state endpoint in project_list.py can re-render
-   just this and the client can swap it into #filter-panel's innerHTML —
-   #filter-panel itself is never replaced, so the delegated click listener
-   project_list.js binds directly on it (chip clicks, #filter-clear-all)
-   survives every filter/sort/search/view change. index.html includes this
-   the same way for a normal page load.
+   Inner content of #filter-panel (count, cap warning, chip columns, date
+   buttons). Included by index.html and re-rendered by the AJAX page-state
+   endpoint in project_list.py, which swaps it into #filter-panel's
+   innerHTML. #filter-panel itself is never replaced: project_list.js binds
+   its delegated click listener there.
 #}
 <div class="filter-panel-header">
     <span class="filter-panel-count">Showing {{ rows|length }} of {{ view_total }} items</span>
@@ -141,15 +137,7 @@
         </div>
     </div>
 
-    {# Design Type — backend (filter_options.design_types /
-    filter_counts.design_type / _apply_row_filters's
-    design_type branch) has existed since the original
-    build of this panel; this column itself was missing
-    from the template the whole time, so the filter was
-    silently uneffective no matter what a caller sent as
-    ?design_type=... (added 22 Aug 2026, per Ezekiel — "add
-    any filters that are missing"). Same Undefined-chip
-    pattern as Team above. #}
+    {# Design Type — same Undefined chip as Team above. #}
     <div class="filter-column">
         <div class="filter-column-label">Design Type</div>
         <div class="filter-column-list">

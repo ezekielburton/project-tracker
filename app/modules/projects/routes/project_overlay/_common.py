@@ -1,10 +1,8 @@
 """
-project_overlay package — the shared blueprint object plus the helpers used
-by two or more of the split route files. Route-specific helpers live in their
-own file.
+The shared overlay blueprint plus helpers used by two or more route files.
+Route-specific helpers live in their own file.
 
-template_folder is '../../templates' (the package sits one level deeper than
-the old file) so it still resolves to app/modules/projects/templates.
+template_folder '../../templates' resolves to app/modules/projects/templates.
 """
 
 from flask import Blueprint
@@ -15,17 +13,15 @@ project_overlay_bp = Blueprint('project_overlay', __name__, template_folder='../
 
 def _get_actor():
     """Emulation-aware actor: an admin viewing-as another user acts as that
-    user; everyone else acts as themselves. Kept as the overlay's local name
-    for core/shared's effective_user()."""
+    user. The overlay's local name for effective_user()."""
     return effective_user()
 
 def submissions_blocked_reason(project):
     """Why Submissions is read-only for this project, or None when it's open.
 
-    A project at Briefed takes no draft work — Start Project comes first. The
-    exception is a project already carrying a submission from before this rule:
-    that work stays reachable. No new project can reach that state, since
-    creating the first draft is itself blocked."""
+    A Briefed project takes no draft work until Start Project. Exception: a
+    Briefed project that already has a submission stays open (legacy data;
+    new projects can't get there because the first draft is blocked)."""
     if project.project_status != 'briefed':
         return None
 
@@ -50,7 +46,6 @@ def _can_manage_deliverables(project, actor):
         or actor.id in secondary_cs_ids
         or (can('claim_ownership', actor) and actor.id == project.project_owner_id)
         or (project.project_status == 'draft' and actor.id == project.created_by_id)
-        # An assigned designer with an approved edit-access grant.
         or _has_edit_access_grant(project, actor)
     )
 
@@ -62,8 +57,8 @@ def _has_edit_access_grant(project, actor):
     ).first() is not None
 
 def _can_manage_flags(actor):
-    """Raise/reply to a Brief Flag. Role-only: any designer/CS/team_lead/
-    management can flag or reply on any project they can see."""
+    """Can raise or reply to a Brief Flag. Role-only: applies on any project
+    the actor can see."""
     return can('raise_flags', actor)
 
 def _can_resolve_flag(flag, actor):
@@ -72,12 +67,8 @@ def _can_resolve_flag(flag, actor):
 
 def _build_ccm_deliverable_sections(project, with_catalog=False):
     """Group a C&CM project's deliverables as Region -> Customer -> Deliverables.
-    Customers whose region isn't one of the five known keys go in an 'other'
-    bucket rather than being dropped.
-
-    Deliverables are fetched in one query and grouped in Python (not one query
-    per customer). with_catalog=True also loads each customer's DeliverableType
-    catalog in one query — only the Edit Deliverables view needs it.
+    Customers with no region go under 'other'. with_catalog=True also loads
+    each customer's DeliverableType catalog (Edit Deliverables needs it).
     """
     from app.modules.core.shared.models import Deliverable, DeliverableType, DeliverableAssignment
     from sqlalchemy.orm import selectinload, joinedload
@@ -90,11 +81,8 @@ def _build_ccm_deliverable_sections(project, with_catalog=False):
         all_deliverables = (
             Deliverable.query
             .filter(Deliverable.project_id == project.id, Deliverable.project_customer_id.in_(pc_ids))
-            # Eager-load what the Deliverables tab reads per row (assignment
-            # tags + their designers, the type's own team list) so it's a
-            # few bulk queries, not one-per-deliverable — see the Deliverables
-            # focus-context builder. Harmless for Edit Deliverables, which
-            # shares this query.
+            # Eager-load what the Deliverables page reads per row (assignments +
+            # designers, the type's disciplines) to avoid N+1 queries.
             .options(
                 selectinload(Deliverable.disciplines).joinedload(DeliverableAssignment.designer),
                 selectinload(Deliverable.deliverable_type).selectinload(DeliverableType.disciplines),
@@ -117,16 +105,18 @@ def _build_ccm_deliverable_sections(project, with_catalog=False):
         for t in all_types:
             catalog_by_customer.setdefault(t.customer_id, []).append(t)
 
-    by_region = {}
-    for pc in active_pcs:
-        region_key = pc.customer.region or 'other'
-        by_region.setdefault(region_key, []).append(pc)
-
     region_names = {
         'uae': 'UAE', 'kuwait': 'Kuwait', 'qatar': 'Qatar',
         'bahrain': 'Bahrain', 'oman': 'Oman', 'other': 'Other',
     }
     region_order = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman', 'other']
+
+    by_region = {}
+    for pc in active_pcs:
+        # Only region_order is rendered, so an unlisted region folds into
+        # 'other' rather than hiding the customer.
+        region_key = pc.customer.region if pc.customer.region in region_names else 'other'
+        by_region.setdefault(region_key, []).append(pc)
 
     sections = []
     for region_key in region_order:
@@ -188,19 +178,17 @@ def _parse_edit_date(raw):
     return _dt.strptime(raw, '%Y-%m-%d').date()
 
 def ensure_posm_channels(project, brief_sections):
-    """Create any ProjectPosmChannel rows the C&CM customer roster needs but
-    doesn't have yet — one per UAE and Gulf customer. Leaves Oman's legacy
-    region-level channels (posm_customer_id IS NULL) untouched. Commits if it
-    adds anything; returns True if it did. Called by submissions.py and
-    details.py's add_project_customer."""
+    """Create the missing ProjectPosmChannel rows, one per active C&CM customer.
+    Leaves Oman's legacy region-level channels (posm_customer_id NULL) alone.
+    Commits and returns True if it added any."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectPosmChannel
 
     GULF_REGION_KEYS = ['uae', 'kuwait', 'qatar', 'bahrain', 'oman']
 
-    # UAE-only orphan cleanup: a recreated ProjectCustomer leaves its old UAE
-    # channel with posm_customer_id=NULL — delete it so it's recreated below.
-    # UAE only: a NULL Gulf channel is Oman's legacy history, not an orphan.
+    # A recreated ProjectCustomer leaves its old UAE channel with a NULL
+    # customer; delete it so it's recreated below. UAE only: a NULL Gulf
+    # channel is Oman's legacy history, not an orphan.
     orphaned = [ch for ch in project.posm_channels
                 if ch.posm_country == 'uae' and ch.posm_customer_id is None]
     if orphaned:

@@ -1,8 +1,5 @@
-"""
-Profile blueprint — viewing (own and other users') and editing profile data.
-Covers the profile page and its achievement display; auth and account
-settings live in the auth module.
-"""
+"""Profile page (own and other users'), profile edits, and the achievement
+display-settings / pin routes. Login and account settings live in auth."""
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, url_for
 from flask_login import login_required, current_user
@@ -16,14 +13,9 @@ profile_bp = Blueprint('profile', __name__, template_folder='../templates')
 
 
 def _format_earned_date(earned_at):
-    """
-    Formats a UTC earned_at datetime as 'Earned 3 Jun 2026', in Dubai local
-    time. Uses the same fixed-offset timezone(timedelta(hours=4)) pattern
-    as the dubai_time filter in app/__init__.py (ZoneInfo needs tzdata on
-    Windows), and builds the "day month year" string by hand
-    rather than with %-d, which isn't portable to Windows' strftime — same
-    reason the birthday tag in profile.html does this manually.
-    """
+    """Formats a naive-UTC earned_at as 'Earned 3 Jun 2026' in Dubai time.
+    Fixed +4 offset because ZoneInfo needs tzdata on Windows; the day is
+    built by hand because %-d is not portable."""
     if not earned_at:
         return None
     from datetime import timezone, timedelta
@@ -33,18 +25,8 @@ def _format_earned_date(earned_at):
 
 
 def _build_achievement_tile(achievement, user_achievement):
-    """
-    Builds the small dict the tile macro in profile.html needs for ONE
-    earned achievement. Used for both the Recent tab and the Pinned tab
-    (own profile), and for the pinned-only view on someone else's profile.
-
-    Every achievement that reaches this function is already earned —
-    pinning only ever references earned UserAchievement rows, and "recent"
-    is filtered to earned_at IS NOT NULL before this is ever called. So
-    unlike the full checklist below, there's no locked/hidden state to
-    represent here — a hidden achievement that's been earned always fully
-    reveals, same as any other.
-    """
+    """Tile dict for one earned achievement (Pinned and Recent tabs).
+    Callers pass earned rows only, so there is no locked/hidden state."""
     return {
         'id': achievement.id,
         'name': achievement.name,
@@ -55,17 +37,9 @@ def _build_achievement_tile(achievement, user_achievement):
 
 
 def _build_achievement_context(profile_user, is_own_profile):
-    """
-    Assembles every achievement-related value the profile template needs.
-    Split out of view() since it's a meaningfully large chunk of query
-    logic on its own — mirrors how projects_detail.py factors out
-    standard_designers_by_deliverable rather than building it inline.
-
-    Always returns pinned_tiles, recent_tiles, and achievement_checklist
-    keys (empty list when not applicable) so the template never has to
-    branch on whether a key exists at all — only on whether it's empty,
-    and on is_own_profile for which sections to show in the first place.
-    """
+    """Achievement values for the profile template. Always returns every
+    key (empty lists when not applicable); visitors get pinned tiles and
+    counts only."""
     from app.modules.core.shared.models import Achievement, AchievementCategory, UserAchievement, UserPinnedAchievement
 
     # ── Pinned tiles — shown on BOTH own and other-user profiles ───────────
@@ -98,10 +72,7 @@ def _build_achievement_context(profile_user, is_own_profile):
     }
 
     if not is_own_profile:
-        # Visitors only ever see pinned tiles — no Recent tab, no expandable
-        # checklist, no progress bars. If this user hasn't pinned anything,
-        # the template shows an empty-state message rather than falling back
-        # to their recent achievements.
+        # Visitors see pinned tiles only; no fallback to recent achievements.
         return context
 
     # ── Recent tiles (own profile only) ─────────────────────────────────────
@@ -115,10 +86,7 @@ def _build_achievement_context(profile_user, is_own_profile):
     context['recent_tiles'] = [_build_achievement_tile(ua.achievement, ua) for ua in recent_rows]
 
     # ── Full checklist, grouped by category, with progress bars ────────────
-    # Bulk-fetch this user's progress rows into a dict keyed by achievement_id
-    # up front, instead of querying UserAchievement once per achievement
-    # inside the loop below — avoids an N+1 query pattern as the achievement
-    # catalogue grows.
+    # One query up front to avoid N+1 in the loop below.
     progress_by_achievement_id = {
         ua.achievement_id: ua
         for ua in UserAchievement.query.filter_by(user_id=profile_user.id).all()
@@ -134,9 +102,6 @@ def _build_achievement_context(profile_user, is_own_profile):
             .all()
         )
         if not category_achievements:
-            # Skip empty categories entirely — a category can have zero
-            # achievements in it, and a heading with nothing underneath just
-            # looks broken.
             continue
         rows = []
         for achievement in category_achievements:
@@ -144,11 +109,8 @@ def _build_achievement_context(profile_user, is_own_profile):
             progress = user_achievement.progress if user_achievement else 0
             earned_at = user_achievement.earned_at if user_achievement else None
 
-            # Hidden + not yet earned = "???" with a lock icon, and NO
-            # progress bar — showing a bar here would leak the threshold
-            # and spoil the surprise is_hidden exists to protect. Once
-            # earned, a hidden achievement is indistinguishable from any
-            # other in this list.
+            # Hidden and unearned: blank out name/badge so nothing leaks.
+            # Once earned it shows like any other.
             locked = achievement.is_hidden and earned_at is None
 
             rows.append({
@@ -172,40 +134,30 @@ def _build_achievement_context(profile_user, is_own_profile):
 @profile_bp.route('/profile/<int:user_id>')
 @login_required
 def view(user_id=None):
-    """
-    Renders the profile page. No user_id in the URL = your own profile
-    (matches the pre-split behavior exactly, so the existing sidebar link
-    and any bookmarks to plain /profile keep working). A user_id renders
-    that user's profile instead, in view-only mode.
-
-    Uses get_actor() rather than current_user directly so that an admin
-    emulating another user sees that user's own profile when they visit
-    /profile with no id — consistent with how emulation is handled
-    everywhere else in the app.
-    """
+    """Renders a profile: your own with no user_id, else that user's,
+    view-only. Uses get_actor() so an emulating admin sees the emulated
+    user's profile, without the edit controls."""
     from app.modules.core.shared.models import RoleTitle, DEFAULT_ROLE_TITLES, UserDisplaySettings, UserAchievement, AchievementBorder
     from app.modules.core.shared.lib.utils import get_actor
 
     actor = get_actor()
     profile_user = User.query.get_or_404(user_id) if user_id is not None else actor
     is_own_profile = actor.id == profile_user.id
+    # Edit routes write to current_user (personal settings, like auth's
+    # account page), so an emulating admin gets the emulated view, read-only.
+    can_edit = is_own_profile and profile_user.id == current_user.id
 
-    # Fun title is always based on the profile being VIEWED, not the viewer —
-    # visiting someone else's profile should show their title, not yours.
+    # Title, border and pins always come from the profile being viewed.
     role_title = RoleTitle.query.filter_by(role=profile_user.role).first()
     fun_title = role_title.title if role_title else DEFAULT_ROLE_TITLES.get(profile_user.role, '')
 
-    # Active Rewards override the defaults above, based on profile_user's own
-    # saved choices — NOT the viewer's. Visiting someone else's profile always
-    # shows THEIR active title/border, same as their pinned achievements do.
+    # Active Rewards override the default title.
     active_border_class = None
     display_settings = UserDisplaySettings.query.filter_by(user_id=profile_user.id).first()
     if display_settings:
         if display_settings.active_title_id:
             active_title_ua = UserAchievement.query.get(display_settings.active_title_id)
-            # Defensive re-check, same reasoning as save_display_settings'
-            # validation — an achievement could theoretically have been
-            # edited to remove its reward_title after being set as active.
+            # The achievement may have lost its reward_title since it was chosen.
             if active_title_ua and active_title_ua.achievement.reward_title:
                 fun_title = active_title_ua.achievement.reward_title
 
@@ -216,16 +168,16 @@ def view(user_id=None):
 
     achievement_context = _build_achievement_context(profile_user, is_own_profile)
 
-    # Customize context — only needed on own profile (badge picker + pin manager).
-    # Reuses _build_account_achievement_context() which already assembles this data.
+    # Badge picker + pin manager data, editable profile only.
     customize_context = {}
-    if is_own_profile:
+    if can_edit:
         customize_context = _build_account_achievement_context(profile_user)
 
     return render_template(
         'profile/profile.html',
         profile_user=profile_user,
         is_own_profile=is_own_profile,
+        can_edit=can_edit,
         fun_title=fun_title,
         active_border_class=active_border_class,
         customize_context=customize_context,
@@ -236,14 +188,9 @@ def view(user_id=None):
 @profile_bp.route('/profile/avatar', methods=['POST'])
 @login_required
 def upload_avatar():
-    """
-    Uploads always apply to current_user, never profile_user — you can
-    only ever change your OWN avatar/banner/details/bio, regardless of
-    whose profile page you happen to be looking at when you do it (in
-    practice the edit controls that call these routes are only rendered
-    at all when is_own_profile is true, but this route being current_user
-    -scoped means that's a UI nicety, not the actual security boundary).
-    """
+    """Saves current_user's avatar. This and the edit routes below always
+    write to current_user, which is the security boundary; hiding the
+    controls on other profiles is only UI."""
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
 
@@ -251,7 +198,7 @@ def upload_avatar():
     if not stored_filename:
         return jsonify({'success': False, 'error': 'Invalid file'}), 400
 
-    # Replacing a photo removes the old file so they don't pile up.
+    # Remove the old file so they don't pile up.
     delete_profile_pic(AVATAR_FOLDER, current_user.avatar_filename)
 
     current_user.avatar_filename = stored_filename
@@ -279,43 +226,26 @@ def upload_banner():
 @profile_bp.route('/profile/details', methods=['POST'])
 @login_required
 def update_profile_details():
-    """
-    Saves the three fields editable from the profile page's "Edit Details"
-    popup: name, favorite_food, birthday. Deliberately does NOT read a
-    'role' or 'fun_title' key from the request even though those two fields
-    are shown (disabled) in that same popup for context — role changes stay
-    admin-only via the existing Admin Panel, and fun_title is derived from
-    role elsewhere (RoleTitle table / DEFAULT_ROLE_TITLES fallback). Keeping
-    this route ignorant of those keys means there's no code path here that
-    could ever let a user grant themselves a different role, even if the
-    request body were tampered with.
-    """
+    """Saves name, favorite_food and birthday from the Edit Details popup.
+    Never reads role or fun_title, so a user cannot change their own role."""
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
 
-    # Name is required — an empty name would break every place it's displayed
-    # (sidebar dropdown, activity log entries, project assignment lists, etc.)
     name = (data.get('name') or '').strip()
     if not name:
         return jsonify({'success': False, 'error': 'Name cannot be empty'}), 400
     current_user.name = name
 
-    # Favourite food is optional — store None rather than an empty string so
-    # the profile template's "{% if profile_user.favorite_food %}" check
-    # correctly hides the field when it's blank, instead of showing an empty pill.
+    # None when blank, so the template hides the pill.
     current_user.favorite_food = (data.get('favorite_food') or '').strip() or None
 
-    # Birthday arrives as an HTML <input type="date"> value: 'yyyy-mm-dd', or
-    # an empty string if the user cleared the field. Convert to a real Python
-    # date for the DB column, or None to clear a previously-saved birthday.
+    # <input type="date"> value 'yyyy-mm-dd'; empty clears the birthday.
     birthday_str = data.get('birthday')
     if birthday_str:
         try:
             current_user.birthday = datetime.strptime(birthday_str, '%Y-%m-%d').date()
         except ValueError:
-            # Shouldn't happen from the date picker itself, but guards against
-            # a hand-crafted request with a malformed date string.
             return jsonify({'success': False, 'error': 'Invalid birthday format'}), 400
     else:
         current_user.birthday = None
@@ -327,49 +257,28 @@ def update_profile_details():
 @profile_bp.route('/profile/bio', methods=['POST'])
 @login_required
 def update_profile_bio():
-    """
-    Saves the free-text bio shown on the profile page. Kept as its own tiny
-    route rather than folded into update_profile_details() above, since it's
-    edited from a separate inline control (pencil icon on the Bio card
-    itself), not the combined Edit Details popup.
-    """
+    """Saves the bio from the Bio card's inline editor."""
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
 
     bio = (data.get('bio') or '').strip()
 
-    # bio is an unbounded Text column in the DB, but the profile card has a
-    # fixed layout — cap length here so a very long paste can't visually
-    # break the card. Matches the textarea's maxlength="1000" in the template,
-    # this is just the server-side backstop for that same rule.
+    # Server-side backstop for the textarea's maxlength="1000".
     if len(bio) > 1000:
         return jsonify({'success': False, 'error': 'Bio must be 1000 characters or fewer'}), 400
 
-    # Store None rather than an empty string when cleared, so the template's
-    # "{{ profile_user.bio or 'No bio yet.' }}" fallback renders correctly.
     current_user.bio = bio or None
     db.session.commit()
     return jsonify({'success': True})
 
 def _build_account_achievement_context(user):
-    """
-    Assembles everything the Account page's Active Rewards + pinning sections
-    need: the dropdown choices for Active Rewards, the user's current
-    selections (to pre-select those dropdowns), and the data the
-    drag-and-drop pinning UI needs (every earned achievement, plus which ones
-    are currently pinned and in what order).
-
-    Lives in the profile module rather than auth: every achievement-domain
-    read/write stays in one place, even though this data is rendered on the
-    Account page (the auth module's account view), not the profile page.
-    """
+    """Data for the Active Rewards pickers and the pin manager: earned
+    achievements, title/border choices, current settings and pins in order.
+    Also imported by auth's account view."""
     from app.modules.core.shared.models import UserAchievement, UserDisplaySettings, UserPinnedAchievement, AchievementBorder
 
-    # Every achievement this user has actually earned — the single source
-    # every dropdown and the pinning UI below all filter down from. Ordered
-    # by earned_at desc so "your most impressive/recent stuff" naturally
-    # floats to the top of long lists.
+    # Newest first; every choice below is filtered from this list.
     earned = (
         UserAchievement.query
         .filter(UserAchievement.user_id == user.id, UserAchievement.earned_at.isnot(None))
@@ -377,14 +286,9 @@ def _build_account_achievement_context(user):
         .all()
     )
 
-    # Title dropdown only offers achievements that actually unlock a title —
-    # selecting one with reward_title = None would have nothing to display.
     title_choices = [ua for ua in earned if ua.achievement.reward_title]
 
-    # Border dropdown: collect the distinct AchievementBorder rows unlocked
-    # by anything in `earned`. A dict keyed by border.id both de-duplicates
-    # (two earned achievements could reference the same border) and gives
-    # us a stable list to iterate for the <select> options.
+    # Keyed by id to de-duplicate borders shared by several achievements.
     border_choices = {}
     for ua in earned:
         if ua.achievement.border_id:
@@ -392,17 +296,11 @@ def _build_account_achievement_context(user):
             if border:
                 border_choices[border.id] = border
 
-    # Current selections, so the template can mark the right <option> as
-    # selected — a brand new user has no row here at all yet, hence get()
-    # returning None being a perfectly normal, expected case.
+    # None for a user who has never saved settings.
     display_settings = UserDisplaySettings.query.filter_by(user_id=user.id).first()
 
-    # Fetched once, used two ways below: pinned_ids is just the id set (so
-    # the template can filter pinned items OUT of the "Earned" column),
-    # while pinned_achievements_ordered carries the actual UserAchievement
-    # objects in pin_order — the "Pinned" column needs pin_order, not
-    # earned_at order, and Jinja has no clean way to sort a list by
-    # position in another list, so we do that sorting here in Python instead.
+    # Ids let the template exclude pinned items from the earned list; the
+    # ordered list keeps pin_order.
     pinned_rows = (
         UserPinnedAchievement.query
         .filter_by(user_id=user.id)
@@ -425,14 +323,8 @@ def _build_account_achievement_context(user):
 @profile_bp.route('/account/display-settings', methods=['POST'])
 @login_required
 def save_display_settings():
-    """
-    Saves the three Active Rewards selections (badge / title / border) as
-    one upserted UserDisplaySettings row. Each incoming id is independently
-    optional (null clears that slot back to the default) and independently
-    validated — a request setting a valid badge but an invalid title
-    shouldn't silently corrupt the badge selection too, so we validate
-    everything BEFORE writing anything.
-    """
+    """Upserts the badge / title / border selections. Each id is optional
+    (null clears it); all are validated before anything is written."""
     from app.modules.core.shared.models import UserDisplaySettings, UserAchievement, AchievementBorder
 
     data = request.get_json(silent=True)
@@ -440,14 +332,8 @@ def save_display_settings():
         return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
 
     def _validated_user_achievement_id(key, require_reward_title=False):
-        """
-        Looks up data[key] as a UserAchievement id and returns it only if
-        it's null (valid — clears the slot) OR it belongs to current_user
-        AND is actually earned. Never trusts the client's claim that an id
-        is theirs — re-checks user_id and earned_at against the DB every
-        time. Returns (True, value) on success, (False, error_message) on
-        failure, so the caller can bail out before writing anything.
-        """
+        """Returns (True, id) if data[key] is null or an earned
+        UserAchievement of this user, else (False, error message)."""
         if key not in data or data[key] is None:
             return True, None
 
@@ -468,9 +354,8 @@ def save_display_settings():
     if not ok:
         return jsonify({'success': False, 'error': title_id_or_error}), 400
 
-    # Border validation is separate: it's a direct AchievementBorder id,
-    # not a UserAchievement id, and "earned" means "some achievement I've
-    # earned references this border" rather than a direct ownership check.
+    # A border id is an AchievementBorder id; it counts as earned when any
+    # earned achievement references it.
     border_id = data.get('active_border_id')
     if border_id is not None:
         border = AchievementBorder.query.get(border_id)
@@ -484,7 +369,7 @@ def save_display_settings():
         if not border or border.id not in earned_border_ids:
             return jsonify({'success': False, 'error': 'Invalid or unearned border'}), 400
 
-    # Upsert — one row per user, per the model's unique=True on user_id.
+    # One row per user (user_id is unique).
     settings = UserDisplaySettings.query.filter_by(user_id=user_id).first()
     if settings is None:
         settings = UserDisplaySettings(user_id=user_id)
@@ -501,16 +386,8 @@ def save_display_settings():
 @profile_bp.route('/account/pinned-achievements', methods=['POST'])
 @login_required
 def save_pinned_achievements():
-    """
-    Replaces the user's entire UserPinnedAchievement set in one go, based
-    on an ordered list of user_achievement_ids sent from the drag-and-drop
-    UI. Delete-all-then-recreate rather than diffing — pinned rows carry no
-    state worth preserving beyond their order (unlike the Standard Brief
-    Deliverable upsert pattern, which exists specifically to
-    preserve per-row status through an edit), so there's nothing to lose
-    by replacing the set wholesale, and it sidesteps any need to reconcile
-    adds/removes/reorders as three separate operations.
-    """
+    """Replaces the user's pins with an ordered list of up to 5
+    user_achievement_ids. Delete-and-recreate is safe: pins hold only order."""
     from app.modules.core.shared.models import UserAchievement, UserPinnedAchievement
 
     data = request.get_json(silent=True)
@@ -525,10 +402,7 @@ def save_pinned_achievements():
     if len(pinned_ids) != len(set(pinned_ids)):
         return jsonify({'success': False, 'error': 'Duplicate achievement in pin list'}), 400
 
-    # Validate every id belongs to this user and is actually earned, same
-    # never-trust-the-client rule as the display settings route above.
-    # Collected up front so a bad id anywhere in the list rejects the
-    # whole request instead of silently dropping just that one entry.
+    # Any bad id rejects the whole request.
     for ua_id in pinned_ids:
         ua = UserAchievement.query.get(ua_id)
         if not ua or ua.user_id != current_user.id or ua.earned_at is None:

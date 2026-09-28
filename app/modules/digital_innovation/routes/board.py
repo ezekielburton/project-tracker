@@ -1,6 +1,4 @@
-# The Digital Innovation board — the Trello-style pipeline view: renders the
-# board plus the project switcher. board_columns_fragment re-renders just the
-# columns + closed-features strip for the board-wide live refresh.
+# The board page, plus the columns fragment used by the live refresh.
 
 from flask import render_template, abort
 from flask_login import login_required, current_user
@@ -10,12 +8,12 @@ from app.modules.digital_innovation.lib.board_data import sidebar_projects, defa
 from app.modules.digital_innovation.lib.access import can_view_di_performance, can_edit_di_templates, can_edit_di_board, can_view_di_project, visible_di_projects
 
 
-@digital_innovation_bp.route('')
+# strict_slashes=False so /digital-innovation/ (bookmarks, typed URLs) lands
+# on the board instead of a 404.
+@digital_innovation_bp.route('', strict_slashes=False)
 @login_required
 def index():
-    # default_project() always finds the permanent OVP board — seeded by
-    # the migration and un-deletable — so there's no "no boards at all"
-    # empty state to handle here.
+    # The permanent board is seeded by a migration, so there is always one.
     return _render_board(default_project())
 
 
@@ -25,9 +23,7 @@ def project_board(di_project_id):
     project = DiProject.query.filter_by(id=di_project_id, lifecycle='active').first()
     if not project:
         abort(404)
-    # Visibility gate (lib/access.py): every board except the permanent OVP one
-    # is restricted to admin/management/future digital_innovation — a designer
-    # hitting a non-OVP board's URL directly gets a 403.
+    # Every board except the permanent one needs view_all_di.
     if not can_view_di_project(current_user, project):
         abort(403)
     return _render_board(project)
@@ -42,15 +38,10 @@ def _render_board(project):
         can_edit_templates=can_edit_di_templates(current_user),
         can_edit_board=can_edit_di_board(current_user),
         stages=DI_STAGES,
-        # Track-aware (stage_label) so a column header reads 'Client Review'
-        # rather than 'Management Review' on an external board — computed once
-        # per render.
+        # Track-aware, so external boards show 'Client Review'.
         stage_labels={s: stage_label(s, project.track) for s in DI_STAGES},
         stage_colours=DI_STAGE_COLOURS,
-        # Only the permanent OVP board ever has intake items attached
-        # (services/intake.py always files against it), so this is an
-        # empty list on every other board — cheap enough not to bother
-        # gating the query itself on project.is_permanent.
+        # Empty on every board except the permanent one.
         pending_intake_items=pending_intake_items(project),
         **build_board_context(project),
     )
@@ -59,12 +50,9 @@ def _render_board(project):
 @digital_innovation_bp.route('/<int:project_id>/board/columns', methods=['GET'])
 @login_required
 def board_columns_fragment(project_id):
-    """Re-renders _board_columns.html fresh — called on every live SSE
-    ping (see digital_innovation_board.js::diRefreshBoard) so the board
-    reflects other users' feature moves, step ticks, new/closed features
-    without a manual reload. No can_edit_board gate — this is a read — but still
-    gated by can_view_di_project, the same visibility rule as project_board,
-    just returning a fragment instead of the full page."""
+    """The board columns fragment, re-fetched on each di_changes SSE ping
+    (digital_innovation_board.js diRefreshBoard). Same view gate as
+    project_board."""
     project = DiProject.query.filter_by(id=project_id, lifecycle='active').first()
     if not project:
         abort(404)

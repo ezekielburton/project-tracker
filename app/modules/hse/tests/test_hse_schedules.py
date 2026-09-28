@@ -1,8 +1,6 @@
-"""What a recurring obligation is allowed to say.
+"""Schedule form validation, preview and display text (lib/schedules.py).
 
-Validation in lib/schedules.py is pure on purpose — no database, no mapped
-model — so every rule here runs without the app fixture, and the preview
-the officer sees is produced by the same code that accepts the save.
+Pure code, no app fixture; the preview uses the same code that validates the save.
 """
 from datetime import date
 
@@ -50,8 +48,7 @@ def errors_from(**kw):
 # --- the declaration ------------------------------------------------------
 
 def test_the_stub_free_fields_are_real_columns():
-    """clean_payload returns a dict written straight onto HseSchedule, so a
-    renamed column must fail here rather than at the first save."""
+    """clean_payload keys are real HseSchedule columns (the dict is written straight onto it)."""
     values, _ = clean()
     columns = {c.key for c in HseSchedule.__table__.columns}
     missing = [name for name in values if name not in columns]
@@ -61,7 +58,7 @@ def test_the_stub_free_fields_are_real_columns():
 def test_only_recurring_registers_are_offered():
     offered = {r['key'] for r in form_options()['registers']}
     assert offered == {reg.key for reg in schedulable_registers()}
-    # The two the workbook says have no calendar due date.
+    # Neither has a calendar due date.
     assert 'vehicle_service' not in offered
     assert 'machine_preventive' not in offered
 
@@ -129,8 +126,7 @@ def test_a_day_of_month_only_applies_to_the_monthly_family():
 
 
 def test_an_omitted_weekday_is_allowed():
-    """The generator falls back to the start date's own weekday, so leaving
-    it blank is a real choice rather than an error."""
+    """A blank weekday is valid; the generator falls back to the start date's weekday."""
     values, _ = clean(weekday='')
     assert values['weekday'] is None
 
@@ -143,7 +139,7 @@ def test_out_of_range_weekday_and_day_are_refused():
 # --- the asset rule -------------------------------------------------------
 
 def test_a_register_that_needs_an_asset_needs_one_on_the_schedule():
-    """Otherwise "Log it" opens a form it cannot satisfy."""
+    """A register with a required asset field needs at least one asset on the schedule."""
     assert asset_field(_register('vehicle_inspection')).required is True
     assert 'asset_ids' in errors_from(asset_ids=[])
 
@@ -156,9 +152,7 @@ def test_a_register_with_no_asset_field_may_not_carry_assets():
 
 
 def test_the_preview_ignores_the_asset_rules():
-    """Which assets are picked never changes the dates, and refusing to
-    preview until the asset list is right would hide the one mistake the
-    preview exists to catch."""
+    """check_assets=False skips asset rules so the preview works before assets are picked."""
     values, _ = clean_payload(payload(asset_ids=[]), AVAILABLE, check_assets=False)
     assert values['frequency'] == 'weekly'
 
@@ -185,8 +179,7 @@ def test_a_schedule_starting_later_previews_from_its_start():
 
 
 def test_the_preview_catches_weeks_typed_where_months_were_meant():
-    """The whole reason it exists: two forms that differ by one dropdown
-    produce visibly different dates."""
+    """Weekly and monthly with the same interval preview visibly different dates."""
     weekly, _ = clean(frequency='weekly', interval=2, weekday=0, starts_on='2026-09-01')
     monthly, _ = clean(frequency='monthly', interval=2, starts_on='2026-09-01',
                        day_of_month=1)
@@ -217,8 +210,7 @@ class _Asset:
 
 
 class _Sched:
-    """Stands in for an HseSchedule. The generator and these helpers only
-    read attributes, so nothing here needs the app fixture."""
+    """Stands in for an HseSchedule; these helpers only read attributes."""
 
     def __init__(self, assets=None, **kw):
         for name in ('id', 'register', 'label', 'frequency', 'interval', 'weekday',
@@ -239,8 +231,7 @@ class _Filed:
 
 
 def vehicles():
-    """The fixture the due-date tests share: weekly on Mondays, two
-    vehicles, running since the start of September."""
+    """Shared fixture: weekly on Mondays, two vehicles, starting 1 September."""
     return _Sched(id=5, register='vehicle_inspection', label='Vehicle inspection',
                   frequency='weekly', interval=1, weekday=0,
                   starts_on=date(2026, 9, 1),
@@ -262,15 +253,13 @@ def test_cadence_reads_the_way_he_would_say_it():
 
 
 def test_cadence_falls_back_to_the_start_date_like_the_generator_does():
-    """The sentence must not claim a different day from the dates."""
+    """With no weekday, cadence_text uses the start date's weekday, as the generator does."""
     sched = _Sched(frequency='weekly', interval=1, starts_on=date(2026, 9, 2))
     assert cadence_text(sched) == 'Every Wednesday'
 
 
 def test_the_short_cadence_says_the_same_thing_in_less_room():
-    """The table uses it and the calendar cards use the sentence form. Both
-    read the same fields as the generator, so neither can claim a day the
-    other does not."""
+    """cadence_short (table) matches cadence_text (calendar cards) in compact form."""
     assert cadence_short(_Sched(frequency='weekly', interval=1, weekday=0)) == 'Weekly · Mon'
     assert cadence_short(_Sched(frequency='weekly', interval=2, weekday=2)) == \
         'Every 2 weeks · Wed'
@@ -303,7 +292,7 @@ def test_one_or_two_assets_are_named():
 
 
 def test_more_than_two_collapse_to_a_count_of_their_kind():
-    """A list of every plate is unreadable at four and useless at twelve."""
+    """More than two assets of one kind read as a count ("4 vehicles")."""
     s = _Sched(frequency='weekly', starts_on=TODAY,
                assets=[_Asset(i, 'Vehicle %d' % i, ref='D-%d' % i) for i in range(11, 15)])
     assert applies_to_text(s) == '4 vehicles'
@@ -319,21 +308,20 @@ def test_a_mixed_bag_is_counted_as_assets():
 
 
 def test_a_schedule_whose_assets_all_retired_says_so():
-    """Rather than naming things that no longer exist."""
+    """All assets retired reads as "Nothing active"."""
     s = _Sched(frequency='weekly', starts_on=TODAY,
                assets=[_Asset(13, 'Old van', active=False)])
     assert applies_to_text(s) == 'Nothing active'
 
 
-# --- what the Next due column actually means ------------------------------
+# --- the Next due column: the real next date, and what was missed --------
 
-def test_next_due_shows_what_he_owes_not_the_next_convenient_date():
-    """Monday's inspection was never done, so Monday is what the column
-    says. Showing next Monday instead would hide it behind a date that
-    looks fine."""
+def test_a_miss_is_counted_beside_the_real_next_date():
+    """due_status shows the real next date and counts missed occurrences separately."""
     status = due_status(vehicles(), [], TODAY)
-    assert status['date'] == date(2026, 9, 7)
-    assert status['label'] == '7d overdue'
+    assert status['date'] == TODAY          # today's is due, not yet missed
+    assert status['label'] == 'Today'
+    assert status['missed'] == 1            # last Monday
     assert status['overdue_days'] == 7
 
 
@@ -342,6 +330,7 @@ def test_next_due_shows_the_upcoming_date_once_nothing_is_outstanding():
     status = due_status(vehicles(), filed, TODAY)
     assert status['date'] == TODAY
     assert status['label'] == 'Today'
+    assert status['missed'] == 0
     assert status['overdue_days'] == 0
 
 
@@ -349,16 +338,17 @@ def test_next_due_counts_the_days_ahead():
     s = _Sched(id=7, frequency='weekly', weekday=0, starts_on=date(2026, 9, 21))
     status = due_status(s, [], TODAY)
     assert status['date'] == date(2026, 9, 21)
-    assert status['label'] == '7d'
+    assert status['label'] == 'in 7d'
 
 
 def test_a_retired_schedule_is_due_for_nothing():
     s = _Sched(frequency='weekly', weekday=0, starts_on=date(2026, 9, 1), active=False)
-    assert due_status(s, [], TODAY) == {'date': None, 'label': None, 'overdue_days': 0}
+    assert due_status(s, [], TODAY) == {'date': None, 'label': None, 'missed': 0,
+                                        'overdue_days': 0}
 
 
 def test_the_lookback_stops_an_abandoned_schedule_reading_as_overdue_forever():
-    """Something last due six years ago is not this week's problem."""
+    """A schedule last due years ago has no next date and is not overdue."""
     s = _Sched(id=8, frequency='annual', starts_on=date(2020, 1, 15),
                ends_on=date(2021, 1, 1))
     assert due_status(s, [], TODAY)['date'] is None

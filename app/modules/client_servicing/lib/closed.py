@@ -1,9 +1,8 @@
 """
-Closed Projects — the reading side of the Closed page. Everything is
-computed live from ClientServicing.closed_at; nothing is stored.
+Data for the Closed page, computed live from ClientServicing.closed_at.
 
-Closed projects are deliberately absent from _open_projects() but still
-present in _base_projects(), which is what this builds on.
+Builds on _base_projects(), which keeps closed projects; _open_projects()
+drops them.
 """
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -22,9 +21,8 @@ _QUARTER_MONTHS = {1: (1, 2, 3), 2: (4, 5, 6), 3: (7, 8, 9), 4: (10, 11, 12)}
 
 
 def _closed_query():
-    """Every closed project, newest close first. Built on _base_projects()
-    so drafts stay out and the row relationships come pre-loaded; closed_by
-    is added here since only this page shows it."""
+    """Every closed project, newest close first. _base_projects() excludes
+    drafts and eager-loads the rows; closed_by is loaded here as only this page shows it."""
     return (
         _base_projects()
         .join(ClientServicing, ClientServicing.project_id == Project.id)
@@ -35,8 +33,7 @@ def _closed_query():
 
 
 def closed_projects(year=None, quarter=None, month=None):
-    """Closed projects narrowed by closing date. The three filters combine,
-    so a quarter plus a month inside it narrows to that month."""
+    """Closed projects filtered by closing year, quarter and/or month (filters combine)."""
     query = _closed_query()
     if year:
         query = query.filter(extract('year', ClientServicing.closed_at) == year)
@@ -50,16 +47,15 @@ def closed_projects(year=None, quarter=None, month=None):
 
 
 def closed_row(project):
-    """One row on the Closed page. state is the derived invoice state the
-    model owns, so the pill and the tests can't drift from it."""
+    """One row on the Closed page. state comes from the model's
+    close_invoice_state so the pill and the tests share one source."""
     cs = project.client_servicing
     return {
         'id': project.id,
         'client': project.client_brand.name if project.client_brand else None,
         'name': project.name,
         'cs': project.cs_lead.name if project.cs_lead else None,
-        # Kept as None when unset so the table can show a dash; the totals
-        # below coerce it. Project.value is a Float, these sums are Decimal.
+        # None when unset so the table shows a dash; totals treat it as zero.
         'value': money(project.value) if project.value is not None else None,
         'closed_at': cs.closed_at,
         'closed_by': cs.closed_by.name if cs.closed_by else None,
@@ -69,9 +65,8 @@ def closed_row(project):
 
 
 def month_groups(projects):
-    """Rows bucketed by closing month, newest month first, each group
-    carrying its own count and value total. Relies on the query's ordering
-    rather than re-sorting."""
+    """Rows grouped by closing month, each with a count and value total.
+    Expects `projects` already sorted newest close first; it does not re-sort."""
     groups = []
     for project in projects:
         row = closed_row(project)
@@ -93,8 +88,8 @@ def month_groups(projects):
 
 
 def kpis(today=None):
-    """Closed this week / month / quarter / year — count and value, always
-    as of today and never narrowed by the page's filters."""
+    """Count and value closed this week / month / quarter / year, as of
+    today. Ignores the page's filters."""
     today = today or date.today()
     cards = [
         {'key': 'week', 'label': 'Closed · This Week',
@@ -110,8 +105,7 @@ def kpis(today=None):
         card['count'] = 0
         card['value'] = Decimal('0')
 
-    # A week can start in the previous year, so read from whichever
-    # boundary is earliest rather than assuming January.
+    # A week can start in the previous year, so query from the earliest boundary.
     since = datetime.combine(min(card['start'] for card in cards), time.min)
     for project in _closed_query().filter(ClientServicing.closed_at >= since).all():
         cs = project.client_servicing

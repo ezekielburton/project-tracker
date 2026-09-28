@@ -1,7 +1,5 @@
-"""C3 regression test: table_row()'s single-project decision must always
-match what table_rows() (the full view) would show, across the filter
-dimensions most likely to drift if reimplemented per-row (status,
-urgency, deadline range, team, designers, search)."""
+"""table_row() must agree with table_rows() (the full view) on whether a
+project shows, across status, urgency, deadline, team, designer and search filters."""
 from datetime import date, timedelta
 
 from app.modules.core.shared.models import User, Project, Deliverable, ProjectDesigner

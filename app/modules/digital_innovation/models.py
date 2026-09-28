@@ -1,23 +1,15 @@
-# Digital Innovation module — data model. Self-contained: every table lives
-# here (DI-prefixed to avoid clashing with the shared Project/Deliverable
-# tables), per the module's Vertical Slice rules. The one exception is the
-# `linked_project_id` FK below, which references the shared Project model
-# read-only (for the "part of -> [project]" link) — DI never imports the
-# projects feature module itself, only this one shared model.
+# Digital Innovation data model. Every DI table lives here, prefixed Di to
+# avoid clashing with shared tables. The only outside reference is
+# DiProject.linked_project_id, a read-only FK to the shared Project model;
+# DI never imports the projects module itself.
 
 from app.modules.core.shared.extensions import db
 from datetime import datetime
 
 
-# The 8 fixed pipeline stages a feature moves through, in order. Kept as a
-# plain tuple (not a DB enum) to match how the rest of the app stores
-# status values — see feedback.py's FeatureRequest.status for the same
-# plain-string convention. A closed feature's status is the literal string
-# 'closed', which is deliberately NOT in this tuple (closing is a
-# transition out of the stage list, not a 9th stage). 'revision' sits
-# between 'management_review' and 'implementation' — see stage_label()
-# below for how 'management_review' is displayed as 'Client Review' for
-# external-track boards.
+# The 8 pipeline stages a feature moves through, in order, stored as plain
+# strings. A closed feature's status is 'closed', which is not in this
+# tuple: closing leaves the pipeline, it is not a 9th stage.
 DI_STAGES = (
     'researching',
     'planning',
@@ -29,8 +21,7 @@ DI_STAGES = (
     'implementation',
 )
 
-# Display labels for the stages above, keyed the same way. Kept next to
-# DI_STAGES so the two can never drift out of sync.
+# Display labels for the stages. Use stage_label() when a board is in hand.
 DI_STAGE_LABELS = {
     'researching': 'Researching',
     'planning': 'Planning',
@@ -42,10 +33,8 @@ DI_STAGE_LABELS = {
     'implementation': 'Implementation',
 }
 
-# Colour for each stage's column header / status pill, keyed the same way.
-# Names match the app's existing shared .status-pill--<name> CSS classes
-# (main.css/shared.css) — reusing those instead of inventing new colours,
-# per theming.md, gets dark-mode tinting for free.
+# Colour for each stage's column header and pill. Names must match the shared
+# .status-pill--<name> classes in shared.css, which carry the dark-mode tints.
 DI_STAGE_COLOURS = {
     'researching': 'coral',
     'planning': 'sky',
@@ -60,33 +49,24 @@ DI_STAGE_COLOURS = {
 # Cost ledger entry types (DiCostEntry.type).
 DI_COST_TYPES = ('dev_time', 'claude', 'hardware', 'licensing')
 
-# A board's track decides whether its 'management_review' stage reads as
-# 'Management Review' (internal work) or 'Client Review' (external/client
-# work) everywhere a stage label is shown. Set once per board (DiProject.
-# track), not per feature — see stage_label() below.
+# A board's track decides whether 'management_review' reads as 'Management
+# Review' (internal) or 'Client Review' (external). Set per board.
 DI_PROJECT_TRACKS = ('internal', 'external')
 
 
 def stage_label(stage, track='internal'):
-    """Resolve the display label for a stage, honouring the board's
-    track. Only 'management_review' varies — every other stage falls
-    back to the plain DI_STAGE_LABELS entry. Any code that renders a
-    stage name to a user — every call site with a real DiProject in
-    hand should use this instead of indexing DI_STAGE_LABELS directly,
-    so a card never shows 'Management Review' on an external board or
-    vice versa.
-    """
+    """Display label for a stage on a board with this track. Only
+    'management_review' varies. Use this, not DI_STAGE_LABELS, whenever
+    a DiProject is in hand."""
     if stage == 'management_review' and track == 'external':
         return 'Client Review'
     return DI_STAGE_LABELS.get(stage, stage)
 
 
 class DiProject(db.Model):
-    """One Trello-style board. lifecycle drives where it shows: 'active' on
-    the module sidebar, 'closed' -> moves to Archive but keeps its data,
-    'archived' is the resting state in Archive. is_permanent marks the
-    seeded OVP board — the backend refuses to close/archive/delete any
-    row with is_permanent=True, whatever the UI does."""
+    """One board. lifecycle is 'active' (on the sidebar), 'closed' or
+    'archived' (both on the Archive screen). is_permanent marks the seeded
+    OVP board, which the backend refuses to close, archive or link."""
     __tablename__ = 'di_projects'
 
     id                = db.Column(db.Integer, primary_key=True)
@@ -95,18 +75,15 @@ class DiProject(db.Model):
     colour            = db.Column(db.String(20), nullable=True)
     client_charge     = db.Column(db.Float, nullable=True)
     lifecycle         = db.Column(db.String(20), nullable=False, default='active')
-    # 'internal' or 'external' — see DI_PROJECT_TRACKS / stage_label()
-    # above. Board-level, not per-feature: every card on a board shares
-    # its track.
+    # 'internal' or 'external'; see DI_PROJECT_TRACKS.
     track             = db.Column(db.String(10), nullable=False, default='internal')
     closed_at         = db.Column(db.DateTime, nullable=True)
     is_permanent      = db.Column(db.Boolean, nullable=False, default=False)
-    # ON DELETE SET NULL: if the linked system project is ever deleted, this
-    # DI project just becomes unlinked rather than being dragged down with it.
+    # SET NULL: deleting the linked Project just unlinks this board.
     linked_project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='SET NULL'), nullable=True)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Read-only reference to the shared Project model — see module docstring.
+    # Read-only reference to the shared Project model.
     linked_project = db.relationship('Project')
 
     features      = db.relationship('DiFeature', backref='project',
@@ -146,11 +123,8 @@ class DiFeature(db.Model):
 
 class DiFeatureStep(db.Model):
     """One checklist item on a feature, for one stage. Copied from
-    DiStepTemplate when the feature enters that stage (see step_engine.py) —
-    editing a feature's steps here never touches the
-    template, and template edits only affect features entering the stage
-    from then on. Steps from past stages are kept (all is_done=True), so a
-    feature's full history stays visible."""
+    DiStepTemplate the first time the feature enters that stage (see
+    step_engine.py). Steps from other stages are kept as they were left."""
     __tablename__ = 'di_feature_steps'
 
     id            = db.Column(db.Integer, primary_key=True)
@@ -166,10 +140,8 @@ class DiFeatureStep(db.Model):
 
 
 class DiStepTemplate(db.Model):
-    """Department-wide default step list for a stage — edited independently
-    of any feature. Copied onto a DiFeature's steps when it enters that
-    stage; editing a template afterwards never rewrites steps already
-    copied."""
+    """Department-wide default step for a stage. Copied onto a feature when
+    it first enters the stage; later edits never touch steps already copied."""
     __tablename__ = 'di_step_templates'
 
     id         = db.Column(db.Integer, primary_key=True)
@@ -183,11 +155,9 @@ class DiStepTemplate(db.Model):
 
 
 class DiCostEntry(db.Model):
-    """One dated ledger line for a project's cost breakdown. For type=
-    'dev_time', di_feature_id is set (dev hours are tracked per-feature)
-    and amount is frozen at DiSetting.dev_hourly_rate as of `date` — so a
-    later rate change never rewrites a past entry's cost. For the other
-    three types di_feature_id is left null; cost there is project-level."""
+    """One dated line in a project's cost ledger. 'dev_time' entries carry a
+    feature and hours, priced at DiSetting.dev_hourly_rate when saved (not as
+    of `date`). Other types are project-level, with di_feature_id null."""
     __tablename__ = 'di_cost_entries'
 
     id            = db.Column(db.Integer, primary_key=True)
@@ -205,15 +175,13 @@ class DiCostEntry(db.Model):
 
 
 class DiSetting(db.Model):
-    """Single-row department settings. Read/written through one row (no
-    per-user or per-project override) — a helper in lib/ will fetch-or-
-    create it, same idea as a lot of this app's singleton config rows."""
+    """Single-row department settings. Always read through
+    lib/costs.get_settings(), which creates the row if missing."""
     __tablename__ = 'di_settings'
 
     id              = db.Column(db.Integer, primary_key=True)
     dev_hourly_rate = db.Column(db.Float, nullable=False, default=0)
-    # Vitamin is Dubai-based, so AED is the sensible default — change at
-    # /digital-innovation settings if that's wrong.
+    # Set on the DI Settings screen (routes/templates.py::save_settings).
     currency        = db.Column(db.String(10), nullable=False, default='AED')
 
     def __repr__(self):
@@ -221,10 +189,9 @@ class DiSetting(db.Model):
 
 
 class DiPeriodSnapshot(db.Model):
-    """A frozen month/quarter total. Once written, Performance
-    reads a closed period from here instead of recomputing live, so
-    editing an old cost entry can never rewrite history. period_key is
-    e.g. '2026-09' for a month or '2026-Q3' for a quarter."""
+    """A frozen month or quarter rollup. Performance reads an ended period
+    from here, so later cost edits don't change it. period_key is e.g.
+    '2026-09' or '2026-Q3'."""
     __tablename__ = 'di_period_snapshots'
 
     id             = db.Column(db.Integer, primary_key=True)
@@ -240,12 +207,9 @@ class DiPeriodSnapshot(db.Model):
 
 
 class DiIntakeItem(db.Model):
-    """One approved feedback item waiting to be placed on the (permanent)
-    OVP board. Created by the intake seam (services/intake.py) —
-    this module never imports the feedback module's models, it only
-    receives plain values through that function. di_project_id will always
-    be the OVP board's id in practice, but isn't hard-pinned to it here so
-    the column stays an ordinary FK like everything else."""
+    """One item on the OVP board's Incoming tray, filed through
+    services/intake.py. Also used as a 'dismissed' marker for a
+    FeatureRequest (source_type='feature_request', source_ref=its id)."""
     __tablename__ = 'di_intake_items'
 
     id            = db.Column(db.Integer, primary_key=True)

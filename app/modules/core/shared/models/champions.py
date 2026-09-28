@@ -4,8 +4,8 @@ from app.modules.core.shared.extensions import db
 
 
 class OvpChampion(db.Model):
-    """One row per department per week naming that week's OVP champion. History
-    is kept — a new week is a new row, never an update of the previous one."""
+    """That week's OVP champion for one department. Each week is a new row, so
+    history is kept."""
     __tablename__ = 'ovp_champions'
     __table_args__ = (
         db.UniqueConstraint('week_start', 'department', name='uq_ovp_champions_week_department'),

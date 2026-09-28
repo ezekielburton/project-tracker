@@ -3,8 +3,8 @@
 {% block title %}HSE — {{ reg.label }}{% endblock %}
 
 {% block content %}
-{# The shared page frame and rail. Deliberately not a nested <main> —
-   spa_strip_response() slices at the first </main>. #}
+{# Shared page frame and rail. No nested <main>: spa_strip_response()
+   slices at the first </main>. #}
 <div class="module-page">
     <div class="module-shell">
         {% include 'hse/_rail.html' %}
@@ -14,10 +14,9 @@
                 <div class="hse-header">
                     <h1 class="hse-title">{{ reg.label }}</h1>
                     <div class="hse-header-actions">
-                        {# Filing is manage_hse. Management reads the register
-                           and gets no opener; the endpoints 403 regardless. #}
+                        {# Filing needs manage_hse; the endpoints 403 without it too. #}
                         {% if can('manage_hse', effective_user) %}
-                        <button type="button" class="hse-btn hse-btn--primary"
+                        <button type="button" class="hse-btn hse-btn--primary mobile-primary"
                                 data-hse-form-url="{{ url_for('hse.new_entry_form', register_key=reg.key) }}">
                             + New entry
                         </button>
@@ -25,19 +24,8 @@
                     </div>
                 </div>
 
-                {# The registers behind this rail entry. #}
-                {% if tabs|length > 1 %}
-                <div class="tab-strip">
-                    {% for t in tabs %}
-                    <a class="tab-strip-item hse-tab{{ ' active' if t.key == reg.key else '' }}"
-                       href="{{ url_for('hse.register_page', group_key=t.group, register_key=t.key) }}">{{ t.label }}</a>
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                {# One row: what the table is filtered to on the left, the
-                   controls that change it on the right. Every one of them is
-                   a link or a form GET, so the view survives a refresh. #}
+                {# Active filters left, controls right. All are links or GET
+                   forms, so the view survives a refresh. #}
                 <div class="hse-filterbar">
                     {% if chips %}
                     <div class="hse-chips">
@@ -55,6 +43,15 @@
                     <form class="hse-filters" method="get"
                           action="{{ url_for('hse.register_page', group_key=active_group, register_key=reg.key) }}">
                         {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+
+                        {# Phones only: severity and year fold behind this
+                           (hse_registers.js), leaving search on show. #}
+                        {% if severities or years %}
+                        {% set filters_on = [filters.severity, filters.year] | select | list | length %}
+                        <button type="button" class="hse-btn hse-filters-toggle" aria-expanded="false">
+                            Filters{% if filters_on %} · {{ filters_on }}{% endif %}
+                        </button>
+                        {% endif %}
 
                         {% if severities %}
                         <select class="hse-select" name="severity" aria-label="Filter by severity">
@@ -79,6 +76,35 @@
                         <button type="submit" class="hse-visually-hidden">Search</button>
                     </form>
                 </div>
+
+                {% if spend %}
+                {# Cost registers: follows the table's filters except year, which
+                   picks the months shown. hse_registers.js remembers it open. #}
+                <details class="hse-spend" id="hse-spend">
+                    <summary class="hse-spend-bar">
+                        <span class="hse-spend-kicker">Spend{% if filters.status or filters.severity or filters.search %}<span class="hse-spend-filtered">filtered</span>{% endif %}</span>
+                        {% for fig in spend.figures %}
+                        <span class="hse-spend-item">
+                            <span class="hse-spend-lab">{{ fig.label }}</span>
+                            <span class="hse-spend-val">{{ fig.value }}</span>
+                        </span>
+                        {% endfor %}
+                        <span class="hse-spend-toggle">By month · {{ spend.year }}</span>
+                    </summary>
+                    <div class="hse-spend-months">
+                        {% for m in spend.months %}
+                        <div class="hse-spend-month">
+                            <span class="hse-spend-lab">{{ m.label }}</span>
+                            <span class="hse-spend-mval{{ ' is-empty' if m.value is none else '' }}">{{ m.value or '—' }}</span>
+                        </div>
+                        {% endfor %}
+                        <div class="hse-spend-month hse-spend-month--total">
+                            <span class="hse-spend-lab">{{ spend.year }} total</span>
+                            <span class="hse-spend-mval">{{ spend.total }}</span>
+                        </div>
+                    </div>
+                </details>
+                {% endif %}
 
                 {% include 'hse/_table.html' %}
 

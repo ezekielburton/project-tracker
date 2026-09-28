@@ -1,12 +1,9 @@
 /*
- * HSE — the Schedule tab.
+ * HSE Schedule page: one side panel for new and edit. Its options come
+ * from window.HSE_SCHED_* globals on the page, so opening fetches nothing.
  *
- * One side panel, two modes. The options are already on the page, so unlike
- * the entry overlay this does not fetch anything to open.
- *
- * IIFE with init called at the bottom: SPA navigation runs this through
- * execScripts() after DOMContentLoaded has long gone, so waiting for that
- * event would leave the page dead.
+ * init() runs directly: SPA navigation re-runs page scripts and
+ * DOMContentLoaded never fires again.
  */
 (function () {
     'use strict';
@@ -255,15 +252,17 @@
         }
         cells[1].textContent = schedule.applies_to;
         cells[2].textContent = schedule.cadence_short;
+        // Mirrors the server-rendered cell: next date, then misses.
         cells[3].textContent = schedule.due.date_label || '—';
-        if (schedule.due.label) {
-            var badge = document.createElement('span');
-            badge.className = 'hse-sched-badge' +
-                (schedule.due.overdue_days ? ' is-overdue' : '');
-            badge.textContent = schedule.due.label;
+        function badge(text, overdue) {
+            var b = document.createElement('span');
+            b.className = 'hse-sched-badge' + (overdue ? ' is-overdue' : '');
+            b.textContent = text;
             cells[3].appendChild(document.createTextNode(' '));
-            cells[3].appendChild(badge);
+            cells[3].appendChild(b);
         }
+        if (schedule.due.label) badge(schedule.due.label, false);
+        if (schedule.due.missed) badge(schedule.due.missed + ' missed', true);
         cells[4].textContent = schedule.last_done_label || '—';
         cells[5].textContent = schedule.owner || '—';
         row.classList.toggle('is-off', !schedule.active);
@@ -288,9 +287,7 @@
         }).then(function (result) {
             button.disabled = false;
             if (!result.ok) { showErrors(result.data.errors); return; }
-            // A new schedule changes the table's shape and the header count,
-            // not just a row, so the page is re-fetched rather than
-            // half-patched by hand.
+            // A new schedule changes the table and header count; reload.
             if (!editingId) { window.location.reload(); return; }
             forms[editingId] = result.data.form;
             var row = rowFor(editingId);
@@ -337,9 +334,7 @@
         assetsLabel = el('hse-sched-assets-label');
         freqBox = el('hse-sched-freq');
 
-        // The whole row opens the panel — the wireframe has no action
-        // column, and a Retire button on every row is a row of invitations
-        // to break something.
+        // Clicking a row opens it in the panel (there is no action column).
         tableBody.addEventListener('click', function (event) {
             var row = event.target.closest('[data-schedule-id]');
             if (!row) { return; }

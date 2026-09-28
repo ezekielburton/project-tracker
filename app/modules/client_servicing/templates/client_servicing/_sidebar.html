@@ -1,15 +1,15 @@
-{# Client Servicing's own internal rail — Dashboard / Table / Invoicing /
-   Calendar / Closed, all gated by the same can_access_client_servicing
-   check (no per-section permission split today). Included by index.html,
-   table.html, invoicing.html, calendar.html and closed.html so every
-   screen shares one nav. Markup comes from the shared module_rail macro;
-   this file only declares the items. `active_nav` picks which one renders
-   active: 'dashboard' | 'table' | 'invoicing' | 'calendar' | 'closed'. #}
+{# Client Servicing's rail, shared by every CS screen. `active_nav` picks the
+   section ('dashboard' | 'table' | 'invoicing' | 'calendar' | 'closed');
+   `active_sub` picks the Invoicing page ('by_project' | 'summary'). #}
 {% from '_shared_macros.html' import module_rail %}
 {{ module_rail([
     {'key': 'dashboard', 'label': 'Dashboard', 'url': url_for('client_servicing.index')},
     {'key': 'table', 'label': 'Table', 'url': url_for('client_servicing.table')},
-    {'key': 'invoicing', 'label': 'Invoicing', 'url': url_for('client_servicing.invoicing')},
+    {'key': 'invoicing', 'label': 'Invoicing', 'url': url_for('client_servicing.invoicing'),
+     'children': [
+        {'key': 'by_project', 'label': 'By Project', 'url': url_for('client_servicing.invoicing')},
+        {'key': 'summary', 'label': 'Monthly Summary', 'url': url_for('client_servicing.invoicing_summary')},
+     ]},
     {'key': 'calendar', 'label': 'Calendar', 'url': url_for('client_servicing.calendar')},
     {'key': 'closed', 'label': 'Closed', 'url': url_for('client_servicing.closed')},
-], active_nav) }}
+], active_nav, active_sub=active_sub, module='Client Servicing') }}

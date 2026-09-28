@@ -1,8 +1,5 @@
-"""Route-level coverage for the admin-only Edit Templates screen
-(routes/templates.py). lib/template_admin.py already has full unit
-coverage for the CRUD/reorder rules themselves — these tests are about
-the HTTP layer: auth, the admin-only gate (including its emulation
-awareness), validation, and 404s."""
+"""Route tests for the admin-only Edit Templates screen: auth, the gate
+(including emulation), validation and 404s."""
 from flask import url_for
 
 from app.modules.core.shared.testing import login_as
@@ -28,10 +25,7 @@ def test_templates_screen_requires_auth(app, client, db_session):
 
 
 def test_templates_screen_is_open_to_admin(app, client, db_session):
-    # templates_screen isn't scoped to one project — its sidebar falls back
-    # to default_project(), which needs an active DiProject to find. In the
-    # real app that's always the permanent OVP board; here it needs one of
-    # its own so this test doesn't depend on what other tests left behind.
+    # The sidebar needs default_project() to find an active DiProject.
     _project(db_session, 'ta')
     user = _user(db_session, 'ta', role='admin')
     login_as(client, app, user, 'password123')
@@ -43,8 +37,7 @@ def test_templates_screen_is_open_to_admin(app, client, db_session):
 
 
 def test_templates_screen_403s_for_management(app, client, db_session):
-    # Deliberately admin-only, not admin+management — per Ezekiel, unlike
-    # the cost footer / Performance gate.
+    # Admin-only: management can see Performance but not templates.
     user = _user(db_session, 'tb', role='management')
     login_as(client, app, user, 'password123')
 
@@ -231,7 +224,7 @@ def test_move_template_step_404s_for_an_unknown_step(app, client, db_session):
     assert resp.status_code == 404
 
 
-# ── templates_body_fragment (3 Sep 2026, DI-wide live SSE refresh) ───────
+# ── templates_body_fragment (live refresh) ───────
 
 def test_templates_body_fragment_requires_auth(app, client, db_session):
     with app.test_request_context():

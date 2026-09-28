@@ -9,10 +9,7 @@ window.DeliverablePicker = (function () {
         var popover = pickerEl.querySelector('.deliverable-picker-popover');
         if (!trigger || !popover) return null;
 
-        // Seed selection state from whatever the server already rendered
-        // as .is-selected, rather than needing a second data-* payload —
-        // same "server drives initial state, JS drives interaction" split
-        // as the main-deck highlight class elsewhere in Submissions.
+        // Initial selection comes from the server-rendered .is-selected options.
         var selected = {};
         popover.querySelectorAll('.deliverable-picker-option.is-selected').forEach(function (opt) {
             selected[opt.dataset.deliverableId] = true;
@@ -32,8 +29,7 @@ window.DeliverablePicker = (function () {
         window.PopoverPosition.claim(pickerEl, popover);
 
         function closeOnScroll(e) {
-            // The popover's own option list is a scroll container too —
-            // only close for scrolling OUTSIDE it.
+            // The option list scrolls too; only close on outside scrolls.
             if (popover.contains(e.target)) return;
             close();
         }
@@ -42,10 +38,9 @@ window.DeliverablePicker = (function () {
             if (activeClose && activeClose !== close) activeClose();
             window.PopoverPosition.attach(popover);
             popover.hidden = false;   // must be in the render tree before it can be measured
-            // Opt-in via data-popover-align="above-center" on the root element
-            // (Mark Approved's and Client Revision's pickers only, set in
-            // project_submissions_draft_card.js); every other picker keeps
-            // the default below/left-aligned placement.
+            // data-popover-align="above-center" is set by
+            // project_submissions_draft_card.js on two pickers; others use
+            // the default placement.
             window.PopoverPosition.place(popover, trigger, { align: pickerEl.dataset.popoverAlign });
             activeClose = close;
             window.addEventListener('scroll', closeOnScroll, true);
@@ -64,8 +59,7 @@ window.DeliverablePicker = (function () {
         }
 
         function outsideClick(e) {
-            // While open the popover lives on <body>, so it is no longer a
-            // descendant of pickerEl — both have to count as inside.
+            // While open the popover lives on <body>, outside pickerEl.
             if (pickerEl.contains(e.target) || popover.contains(e.target)) return;
             close();
         }

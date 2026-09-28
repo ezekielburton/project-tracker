@@ -1,6 +1,7 @@
-// app/static/js/project_chat_panel.js
-// Persistent chat drawer controller — messages, replies, pins, attachments,
-// reactions, emoji picker, and @-mentions. Wires #project-overlay-chat-content.
+// app/modules/projects/static/js/project_chat_panel.js
+// Project chat controller: messages, replies, pins, attachments, reactions,
+// emoji picker and @-mentions. Used by the overlay's chat drawer
+// (project_list.js) and the chat tray (chat_tray.js).
 
 window.ProjectChatPanel = (function () {
 
@@ -13,7 +14,7 @@ window.ProjectChatPanel = (function () {
         // is an object URL for the preview bar, revoked when replaced/cleared.
         var stagedAttachment = null; // { blob, filename, type, previewUrl } | null
 
-        // mentionableUsers: this project's roster, fetched once per drawer-open.
+        // mentionableUsers: this project's roster, fetched once per init().
         // mentionQuery: the in-progress "@word" being typed.
         var mentionableUsers = []; // [{id, name}]
         var mentionedUsers = [];   // [{id, name}]
@@ -581,7 +582,8 @@ window.ProjectChatPanel = (function () {
             }
         }
 
-        // Outside-click closes any open dropdown/popover — added once, not in wire().
+        // Outside-click closes any open popover. Added once per init(), not in
+        // wire(); the chat tray reuses one contentEl, so these stack there.
         contentEl.addEventListener('click', closeAllPopups);
 
         wire();
@@ -590,10 +592,10 @@ window.ProjectChatPanel = (function () {
         if (contentEl.querySelector('#overlay-chat-input')) fetchMentionableUsers();
 
         return {
-            // Nothing to tear down; contentEl is discarded when the overlay closes.
+            // Removes nothing, including the contentEl click listener above.
             destroy: function () { },
-            // SSE hook — project_list.js calls this on a live update; {live: true}
-            // preserves the draft and scroll position.
+            // SSE hook, called by project_list.js and chat_tray.js; keeps the
+            // draft and scroll position.
             liveRefresh: function () { return reload(null, { live: true }); }
         };
     }

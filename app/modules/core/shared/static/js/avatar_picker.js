@@ -11,9 +11,7 @@ window.AvatarPicker = (function () {
         window.PopoverPosition.claim(pickerEl, popover);
 
         function closeOnScroll(e) {
-            // Scrolling the popover's own option list also fires a scroll
-            // event (it captures up through window same as any other) —
-            // only close for scrolling OUTSIDE the popover.
+            // The popover's own list scrolling is caught too; ignore it.
             if (popover.contains(e.target)) return;
             close();
         }
@@ -26,11 +24,8 @@ window.AvatarPicker = (function () {
             popover.hidden = false;   // must be in the render tree before it can be measured
             window.PopoverPosition.place(popover, trigger);
             activeClose = close;
-            // A fixed-position popover doesn't move if an ancestor (e.g.
-            // a card's own scrollable list) scrolls underneath it — close
-            // on any scroll so it never visually detaches from the button
-            // that opened it. Capture phase catches inner-container
-            // scrolling too, not just the window itself.
+            // A fixed popover would drift from its trigger on scroll, so
+            // any scroll closes it. Capture phase catches inner containers.
             window.addEventListener('scroll', closeOnScroll, true);
         }
 
@@ -51,8 +46,7 @@ window.AvatarPicker = (function () {
         }
 
         function outsideClick(e) {
-            // While open the popover lives on <body>, so it is no longer a
-            // descendant of pickerEl — both have to count as inside.
+            // While open the popover lives on <body>, outside pickerEl.
             if (pickerEl.contains(e.target) || popover.contains(e.target)) return;
             close();
         }
@@ -74,6 +68,9 @@ window.AvatarPicker = (function () {
 
         return {
             destroy: function () {
+                // Hide first: release() puts an open popover back at home,
+                // where it would show inline if the picker is still on the page.
+                popover.hidden = true;
                 window.PopoverPosition.release(popover);
                 window.removeEventListener('scroll', closeOnScroll, true);
                 if (activeClose === close) activeClose = null;

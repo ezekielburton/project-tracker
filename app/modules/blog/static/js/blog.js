@@ -33,13 +33,26 @@
         }, 180);
     }
 
+    // The list is off-screen while a post is open, so a publish toggle
+    // patches the saved copy that goBack restores.
+    function markSavedListItem(postId, isPublished, publishedDate) {
+        if (!_savedList) return;
+        var holder = document.createElement('div');
+        holder.innerHTML = _savedList;
+        var item = holder.querySelector('.blog-post-item[data-post-id="' + postId + '"]');
+        if (!item) return;
+        item.classList.toggle('blog-post-item--draft', !isPublished);
+        var pill = item.querySelector('.blog-post-item-date-pill');
+        if (pill) pill.textContent = isPublished ? publishedDate : 'Draft';
+        _savedList = holder.innerHTML;
+    }
+
     // ── Load a post ──────────────────────────────────────
     function loadPost(postId, updateHash) {
         if (updateHash !== false) {
             history.replaceState(null, '', '/blog#post-' + postId);
         }
 
-        // Capture the post list before first swap
         if (!_savedList) {
             _savedList = listPanel.innerHTML;
         }
@@ -73,7 +86,7 @@
                     document.getElementById('blog-back-btn').addEventListener('click', goBack);
 
                     // Init scrollspy & interactions — nav items are now in the DOM
-                    initPostContent(postId);
+                    initPostContent(postId, markSavedListItem);
                 }, 180);
             })
             .catch(function () {
@@ -101,7 +114,25 @@
 }());
 
 // ── Post content: scrollspy, comments, admin buttons ──
-function initPostContent(postId) {
+function initPostContent(postId, onPublishChange) {
+
+    function esc(str) {
+        return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Mirrors a comment block in _post_content.html.
+    function commentMeta(c) {
+        return '<div class="blog-comment-meta">' +
+            c.avatar_html +
+            '<div class="blog-comment-author-info">' +
+            '<span class="blog-comment-author-name">' + esc(c.author) + '</span>' +
+            '<span class="blog-comment-date">' + esc(c.created_at) + '</span>' +
+            '</div>' +
+            (c.can_delete ? '<button class="blog-comment-delete" data-comment-id="' + c.id + '">Delete</button>' : '') +
+            '</div>' +
+            '<p class="blog-comment-body">' + esc(c.body) + '</p>';
+    }
 
     // Scrollspy
     var scrollArea = document.getElementById('blog-scroll-area');
@@ -141,7 +172,7 @@ function initPostContent(postId) {
         });
     }
 
-    // Publish toggle — updates button + post list item without refresh
+    // Publish toggle
     var publishBtn = document.querySelector('.blog-publish-btn');
     if (publishBtn) {
         publishBtn.addEventListener('click', function () {
@@ -150,21 +181,14 @@ function initPostContent(postId) {
                 .then(function (data) {
                     if (!data.success) return;
 
-                    // Update the button text
                     publishBtn.textContent = data.is_published ? 'Unpublish' : 'Publish';
 
-                    // Update the post list item on the left
-                    var listItem = document.querySelector('.blog-post-item[data-post-id="' + postId + '"]');
-                    if (listItem) {
-                        var dateEl = listItem.querySelector('.blog-post-item-date');
-                        if (data.is_published) {
-                            listItem.classList.remove('blog-post-item--draft');
-                            if (dateEl) dateEl.innerHTML = data.published_date;
-                        } else {
-                            listItem.classList.add('blog-post-item--draft');
-                            if (dateEl) dateEl.innerHTML = '<em>Draft</em>';
-                        }
-                    }
+                    var metaDate = document.querySelector('.blog-post-meta-date');
+                    if (metaDate && data.published_date) metaDate.textContent = ' · ' + data.published_date;
+                    var metaDraft = document.querySelector('.blog-post-meta-draft');
+                    if (metaDraft) metaDraft.hidden = data.is_published;
+
+                    if (onPublishChange) onPublishChange(postId, data.is_published, data.published_date);
                 });
         });
     }
@@ -249,14 +273,7 @@ function initPostContent(postId) {
                         var div = document.createElement('div');
                         div.className = 'blog-comment blog-comment--reply';
                         div.id = 'comment-' + c.id;
-                        div.innerHTML =
-                            '<div class="blog-comment-meta">' +
-                            '<div class="blog-comment-avatar">' + c.avatar_letter + '</div>' +
-                            '<div class="blog-comment-author-info">' +
-                            '<span class="blog-comment-author-name">' + c.author + '</span>' +
-                            '<span class="blog-comment-date">' + c.created_at + '</span>' +
-                            '</div></div>' +
-                            '<p class="blog-comment-body">' + c.body + '</p>';
+                        div.innerHTML = commentMeta(c);
                         repliesEl.appendChild(div);
                     }
                     textarea.value = '';
@@ -296,13 +313,7 @@ function initPostContent(postId) {
                         div.className = 'blog-comment';
                         div.id = 'comment-' + c.id;
                         div.innerHTML =
-                            '<div class="blog-comment-meta">' +
-                            '<div class="blog-comment-avatar">' + c.avatar_letter + '</div>' +
-                            '<div class="blog-comment-author-info">' +
-                            '<span class="blog-comment-author-name">' + c.author + '</span>' +
-                            '<span class="blog-comment-date">' + c.created_at + '</span>' +
-                            '</div></div>' +
-                            '<p class="blog-comment-body">' + c.body + '</p>' +
+                            commentMeta(c) +
                             '<button class="blog-reply-btn" data-comment-id="' + c.id + '">Reply</button>' +
                             '<form class="blog-reply-form" id="reply-form-' + c.id + '" style="display:none;">' +
                             '<div class="form-group"><textarea name="body" class="form-input" rows="2" placeholder="Write a reply..."></textarea></div>' +
@@ -338,7 +349,6 @@ function initPostContent(postId) {
         sections = Array.isArray(raw) ? raw : [];
     } catch (e) { sections = []; }
 
-    // Auto-resize a textarea to fit its content
     function autoResize(el) {
         el.style.height = 'auto';
         el.style.height = el.scrollHeight + 'px';
@@ -546,11 +556,16 @@ function initPostContent(postId) {
         render();
     });
 
-    document.addEventListener('click', function (e) {
-        if (!menu.contains(e.target) && !e.target.closest('.add-block-btn')) {
-            menu.style.display = 'none';
-        }
-    });
+    // SPA nav re-runs this script; bind once and look the menu up per click.
+    if (!window._blogEditorMenuBound) {
+        window._blogEditorMenuBound = true;
+        document.addEventListener('click', function (e) {
+            var openMenu = document.getElementById('block-type-menu');
+            if (openMenu && !openMenu.contains(e.target) && !e.target.closest('.add-block-btn')) {
+                openMenu.style.display = 'none';
+            }
+        });
+    }
 
     // ── Live sync + auto-resize on input ────────────
     sectionsContainer.addEventListener('input', function (e) {
@@ -640,10 +655,12 @@ function initPostContent(postId) {
                 if (!res.success) { fail('Save failed.'); return; }
                 if (savedPostId === null) savedPostId = res.post_id;
                 if (andPublish) {
+                    // publish: true sets the state, so a live post stays live and
+                    // the server only notifies when this actually publishes it.
                     fetch('/blog/posts/' + savedPostId + '/publish', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ send_email: data.send_email })
+                        body: JSON.stringify({ publish: true, send_email: data.send_email })
                     })
                         .then(function (r) { return r.json(); })
                         .then(function () { go('Post published.'); })

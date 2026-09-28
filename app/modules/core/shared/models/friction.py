@@ -4,9 +4,8 @@ from app.modules.core.shared.extensions import db
 
 
 class FrictionLogEntry(db.Model):
-    """One post in the Friction Log — the running thread of what is not working
-    for the team, segmented by week for the Friday review. Everyone reads;
-    can_write_friction() decides who posts."""
+    """One Friction Log post (what is not working for the team), grouped by
+    week. Everyone reads; can_write_friction() decides who posts."""
     __tablename__ = 'friction_log_entries'
 
     id = db.Column(db.Integer, primary_key=True)

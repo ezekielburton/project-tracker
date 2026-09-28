@@ -14,8 +14,7 @@ def test_time_tracking_template_resolves(app):
 
 
 def test_logic_exposes_dashboard_contract(app):
-    # The dashboard's Average Time card depends on these three symbols living
-    # in the module's logic.py. This guards that boundary through the overhaul.
+    # The dashboard imports these from logic.py.
     from app.modules.time_tracking.logic import (
         build_time_tracking_rows,
         compute_project_hours,

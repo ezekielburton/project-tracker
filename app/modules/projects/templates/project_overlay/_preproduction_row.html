@@ -1,28 +1,14 @@
-{# app/templates/project_overlay/_preproduction_row.html
-One deliverable's Pre-Production card — included from both
-_preproduction_standard.html and _preproduction_ccm.html so the row
-markup can't drift between brief types. Expects `row` (see
-_build_preproduction_row() in project_preproduction.py) and `can_act`
-(whether the viewer is Project Owner/admin/management) in scope. `project`
-and, for C&CM only, `c` (the current customer dict) are inherited from the
-including template's own scope — used here to build the NAS folder link.
-
-Reworked to match Site Visits' "clean and organised" card language (23 Aug
-2026, per Ezekiel, wireframed by hand) — see _overlay_notes.html for the
-reference. The row-level status pill and the row-level read-only "Designer"
-line are both gone: the status pill was redundant here (this whole tab is
-already scoped to in-Pre-Production deliverables only, see
-_in_preproduction_scope() in project_preproduction.py), and the designer
-assignment is now folded directly into each stream's own box instead of
-living in one shared line above all three — every stream (2D/3D/Technical
-alike) gets its own picker now, scoped to that stream's own team. #}
+{# app/modules/projects/templates/project_overlay/_preproduction_row.html
+One deliverable's Pre-Production card, shared by the Standard and C&CM
+pages. Expects `row` (_build_preproduction_row() in
+project_preproduction.py) and `can_act` (viewer is Project
+Owner/admin/management). No row status pill: the page only lists
+deliverables in Pre-Production. Each stream (2D/3D/Technical) has its own
+box with a team-scoped designer picker. #}
 {% from '_shared_macros.html' import person_chip, avatar_picker %}
 
-{# Mark Done/Approve/Flag for one stream — factored out (21 Aug 2026, per
-Ezekiel) so every stream can render this block in the same spot, below its
-assignment picker, without duplicating the button markup per stream. Takes
-can_act explicitly rather than relying on it closing over the calling
-scope. #}
+{# Mark Done / Approve / Flag buttons for one stream. can_act is passed in
+because macros don't see the caller's variables. #}
 {% macro _stream_actions(stream, can_act) %}
 <span class="overlay-preprod-stream-actions">
     {% if stream.can_mark_done and stream.status not in ('uploaded', 'approved') %}
@@ -49,13 +35,8 @@ scope. #}
             row.flag_count }} flag{{ '' if row.flag_count == 1
             else 's' }}</button>
         {% endif %}
-        {# Open Project Folder (Synology Drive, M10 NAS migration, 21 Aug
-        2026) is now click-triggered — the route derives the C&CM
-        region/customer path itself from the deliverable's own
-        project_customer, so no need to pass project/c here anymore. #}
-        {# Icon swapped from a bare 📁 emoji to the real Synology Drive logo
-        (21 Aug 2026, per Ezekiel — asset dropped in static/images/drivelogo.png;
-        the earlier .jpg version was a placeholder and is being removed). #}
+        {# Folder link resolves on click; the route works out the C&CM
+        region/customer path from the deliverable. #}
         <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action overlay-preprod-nas-link"
             data-url="{{ url_for('project_preproduction.deliverable_nas_folder_link', deliverable_id=row.deliverable.id) }}"
             title="Open this deliverable's folder on the NAS">
@@ -65,9 +46,7 @@ scope. #}
     </div>
 
     {% if row.batch_note %}
-    {# CS's note from Client Approval, about the batch this deliverable was
-    part of — context from a prior step, collapsed since it's not
-    actionable here. #}
+    {# CS's Client Approval note for this deliverable's batch; read-only context. #}
     <div class="overlay-preprod-batch-note">
         <span class="overlay-field-label">CS Note</span>
         <p class="overlay-notes-text">{{ row.batch_note }}</p>
@@ -78,14 +57,8 @@ scope. #}
         {% for stream in row.streams %}
         <div class="overlay-preprod-stream{% if stream.is_flagged %} is-flagged{% endif %}"
             data-deliverable-id="{{ row.deliverable.id }}" data-stream="{{ stream.key }}">
-            {# Label + status only. Actions render below the assignment
-            picker for every stream uniformly (see _stream_actions() call
-            further down), not inline here — that inline placement was
-            2D/3D-only before this rework. No status text at all for the
-            plain not-started case any more (23 Aug 2026, per Ezekiel — "We
-            dont need 'To be done' text, mark done already implies that")
-            — Uploaded/Approved/Flagged still show, since those aren't
-            implied by the button state the way "not started yet" is. #}
+            {# Label + status. No status text when not started; the Mark
+            Done button already says that. #}
             <div class="overlay-preprod-stream-header">
                 <span class="overlay-preprod-stream-label-group">
                     <span class="overlay-field-label">{{ stream.label }}</span>
@@ -102,23 +75,14 @@ scope. #}
             </div>
 
             {% if stream.is_flagged and stream.flag_message %}
-            {# The comment left when this stream was flagged (21 Aug 2026, per
-            Ezekiel — it used to log to the flag history only, with nothing
-            shown here, so the person redoing the work had no idea why
-            without digging into History). Most recent flag on this stream
-            wins — see latest_flag_message in _build_preproduction_row(). #}
+            {# Why the stream was flagged, so whoever redoes it sees the
+            reason. Latest flag wins (latest_flag_message in
+            _build_preproduction_row()). #}
             <p class="overlay-notes-text overlay-preprod-flag-message">{{ stream.flag_message }}</p>
             {% endif %}
 
-            {# Assignment picker, folded into every stream's own box (23 Aug
-            2026, per Ezekiel — "we fold the designer pill into it... If a
-            deliverable happens to be unassigned, it can be assigned here via
-            the picker. Scoped to the relevant team that div owns"). Used to
-            be Technical-only, with 2D/3D showing a shared read-only "Designer"
-            line above all three streams instead — every stream gets its own
-            interactive picker now, scoped to that stream's own team (see
-            assign_options in _build_preproduction_row()). Gated on can_act —
-            same viewer set as Approve/Flag below. #}
+            {# Designer picker, scoped to this stream's team (assign_options
+            in _build_preproduction_row()). Read-only chip without can_act. #}
             <div class="overlay-preprod-stream-assignment">
                 {% if can_act %}
                 {{ avatar_picker('stream-picker-' ~ stream.key ~ '-' ~ row.deliverable.id,
@@ -130,13 +94,7 @@ scope. #}
                 {% endif %}
             </div>
 
-            {# Mark Done, or Approve/Flag for Reupload once uploaded — takes
-            the picker's place in the same box once there's nothing left to
-            assign (23 Aug 2026, per Ezekiel: "When marked as done the same
-            approve and flag for reupload buttons take its place, sized
-            correctly and do the same actions as they do now"). Sits below
-            the picker uniformly for every stream now, same "selector on top,
-            mark done below" layout Technical already used. #}
+            {# Below the picker: Mark Done, or Approve/Flag for Reupload once uploaded. #}
             {{ _stream_actions(stream, can_act) }}
 
             {% if can_act %}

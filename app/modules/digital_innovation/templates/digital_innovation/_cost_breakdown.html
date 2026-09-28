@@ -1,16 +1,8 @@
-{# Cost breakdown — rendered server-side and dropped into #di-cost-body by
-   digital_innovation_board.js's openDiCostBreakdown(), the same "fetch an
-   HTML fragment" pattern _feature_detail.html and _incoming_cards.html
-   use. Every mutating action (add/delete an entry) POSTs/DELETEs and
-   swaps this same fragment back in via routes/costs.py's
-   _render_cost_breakdown() choke point, so the modal always reflects the
-   project's true current ledger state.
+{# Cost breakdown fragment, loaded into #di-cost-body by openDiCostBreakdown().
+   Add/delete return it again via routes/costs.py's _render_cost_breakdown().
 
-   No read-only vs. edit split within this template — add/delete share
-   the same can_view_di_performance gate as viewing, so if you can see this fragment at all, the add row and every
-   delete button are live. Deliberately no lifecycle filter either (see
-   routes/costs.py) — this renders the same way for an active, closed or
-   archived project. #}
+   No read-only mode: add/delete share the can_view_di_performance gate with
+   viewing. Works the same for active, closed and archived projects. #}
 <div class="di-cost-header">
     <div>
         <span class="di-feature-badge">{{ project.name }} · Cost breakdown</span>
@@ -45,10 +37,9 @@
 
 <hr class="di-detail-divider">
 
-{# type=dev_time shows the feature picker + hours input and hides amount;
-   every other type is the reverse — toggled by the change handler on
-   #di-cost-add-type in digital_innovation_board.js. Starts on dev_time's
-   shape since that's the first <option>. #}
+{# dev_time shows feature + hours; other types show amount. The board JS
+   toggles this on type change. Markup starts in the dev_time shape because
+   it is the first <option>. #}
 <div class="di-cost-add-row">
     <input type="date" class="di-cost-add-date" id="di-cost-add-date" value="{{ today }}">
     <select class="di-cost-add-type" id="di-cost-add-type">

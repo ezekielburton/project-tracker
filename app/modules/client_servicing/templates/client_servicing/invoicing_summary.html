@@ -5,14 +5,11 @@
 {% block content %}
 <div class="module-page cs-page">
     <div class="module-shell">
-        {% with active_nav = 'invoicing' %}
+        {% with active_nav = 'invoicing', active_sub = 'summary' %}
         {% include "client_servicing/_sidebar.html" %}
         {% endwith %}
         <div class="module-main">
             <div class="client-servicing-page">
-                {% with active_tab = 'summary' %}
-                {% include "client_servicing/_invoicing_tabs.html" %}
-                {% endwith %}
 
                 <form class="cs-inv-selectors" method="get" action="{{ url_for('client_servicing.invoicing_summary') }}">
                     <select name="year" onchange="this.form.submit()">

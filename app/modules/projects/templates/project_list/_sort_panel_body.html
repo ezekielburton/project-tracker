@@ -1,14 +1,11 @@
 {#
    app/modules/projects/templates/project_list/_sort_panel_body.html
    ───────────────────────────────────────────────────────────────
-   Inner content of #sort-panel (Group by / Order by columns). Extracted
-   out of index.html (28 Aug 2026, per Ezekiel — "can we have this spa
-   injected too?") so the AJAX page-state endpoint in project_list.py can
-   re-render just this and the client can swap it into #sort-panel's
-   innerHTML — #sort-panel itself is never replaced, so the delegated
-   click listener project_list.js binds directly on it (sort/group option
-   clicks, #sort-clear-all) survives every filter/sort/search/view change.
-   index.html includes this the same way for a normal page load.
+   Inner content of #sort-panel (Group by / Order by). Included by
+   index.html and re-rendered by the AJAX page-state endpoint in
+   project_list.py, which swaps it into #sort-panel's innerHTML. #sort-panel
+   itself is never replaced: project_list.js binds its delegated click
+   listener there.
 #}
 <div class="sort-panel-header">
     <span class="sort-panel-title">Sort</span>

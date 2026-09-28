@@ -1,11 +1,9 @@
 {% from '_shared_macros.html' import status_pill %}
 
-{# Deck summary modal — opens when CS clicks Submit to Client. Shows the
-COMPLETE deck (architecture doc §6, locked): the files being sent, the
-deliverables going for decision, and any already-approved ones riding
-along read-only. Self-contained (.modal-overlay + .modal-box) so
-project_submissions_draft_card.js just injects + shows it. Returned by
-overlay_submissions_submit_summary; the confirm button posts to
+{# Submit to Client summary modal: files being sent, deliverables going for
+decision, and already-approved ones (read-only). Self-contained, so
+project_submissions_draft_card.js just injects and shows it. Returned by
+overlay_submissions_submit_summary; confirm posts to
 overlay_submissions_submit_to_client. #}
 <div class="modal-overlay overlay-submit-summary-modal" id="overlay-submit-summary-modal">
     <div class="modal-box overlay-submit-summary-box">
@@ -35,8 +33,7 @@ overlay_submissions_submit_to_client. #}
         </div>
 
         {% if is_ckv_toggle_scope %}
-        {# C&CM Concept & KV deck — no deliverables; the "going for decision"
-        set is whichever of Concept / KV this draft included. #}
+        {# C&CM Concept & KV deck: lists whichever of Concept/KV the draft includes. #}
         <div class="overlay-submit-summary-section">
             <span class="overlay-field-label">Deliverables</span>
             <ul class="overlay-submit-summary-deliverables">
@@ -88,11 +85,9 @@ overlay_submissions_submit_to_client. #}
         {% endif %}
 
         {% if has_sent_submission %}
-        {# Escape hatch for a CS-acknowledged resend that isn't a real content
-        revision (wrong file attached, etc.) — bypasses the name-collision
-        gate server-side by reusing the current revision label with an
-        incrementing " (N)" suffix instead of advancing to a new revision.
-        Only shown when there's an existing sent deck to resend against. #}
+        {# For a resend that isn't a real revision (e.g. wrong file). The
+        server keeps the current revision label and adds a " (N)" suffix,
+        which bypasses the name-collision check. #}
         <label class="overlay-submit-summary-keep-revision">
             <input type="checkbox" id="overlay-submit-summary-keep-revision">
             Do not increase revision counter

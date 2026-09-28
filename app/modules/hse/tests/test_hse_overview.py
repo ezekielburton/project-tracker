@@ -1,8 +1,6 @@
-"""The front page's numbers, and the one rule they all hang off:
-a metric is defined once and read, never recomputed.
+"""Overview page metrics and panels; each metric is defined once in lib/metrics.py and reused.
 
-Plain stubs again — lib/metrics.py and lib/overview.py read attributes and
-never query, so none of this needs the app fixture.
+Plain stubs: lib/metrics.py and lib/overview.py never query, so no app fixture.
 """
 from datetime import date, timedelta
 
@@ -13,7 +11,7 @@ from app.modules.hse.lib.metrics import (
     expiry_registers, sla_pressure,
 )
 from app.modules.hse.lib.overview import (
-    expiring_panel, needs_you_now, open_incident_count, tiles,
+    entry_title, expiring_panel, needs_you_now, open_incident_count, tiles,
     waiting_on_others,
 )
 from app.modules.hse.models import HseEntry
@@ -56,8 +54,8 @@ def entry(**kw):
 
 
 def cert(days_left, **kw):
-    """A compliance item expiring in `days_left` days — negative for gone.
-    The certificate name lives on the reference now, not in the blob."""
+    """A compliance entry expiring in `days_left` days (negative = lapsed).
+    The item name is on the compliance_item reference, not in data."""
     kw.setdefault('id', 100 + days_left)
     kw.setdefault('ref', f'COM-{abs(days_left):04d}')
     name = kw.pop('item', f'Item {days_left}')
@@ -76,7 +74,7 @@ def test_the_stub_only_uses_real_columns():
 # --- compliance health ----------------------------------------------------
 
 def test_health_is_items_valid_today_over_items_tracked():
-    """The definition agreed for the performance page, used by the tile."""
+    """Compliance health is items valid today over items tracked."""
     health = compliance_health([cert(100), cert(10), cert(-5)], TODAY)
     assert health['total'] == 3
     assert health['valid'] == 2
@@ -84,7 +82,7 @@ def test_health_is_items_valid_today_over_items_tracked():
 
 
 def test_health_names_what_lapsed_rather_than_hiding_it():
-    """A page that only flatters is worth nothing in the room."""
+    """Compliance health lists the lapsed items by name."""
     health = compliance_health([cert(100), cert(-5, item='Fire certificate')], TODAY)
     assert [e.compliance_item.label for e in health['lapsed']] == ['Fire certificate']
 
@@ -101,7 +99,7 @@ def test_nothing_tracked_reads_as_unknown_not_as_zero():
 
 
 def test_health_only_counts_registers_whose_status_is_an_expiry():
-    """An incident has no expiry date and must not drag the percentage."""
+    """Only expiry-status registers count toward compliance health."""
     assert 'incidents' not in expiry_registers()
     health = compliance_health([entry(status='Open'), cert(30)], TODAY)
     assert health['total'] == 1
@@ -114,16 +112,14 @@ def test_expiring_soon_uses_the_workbooks_own_window():
 # --- the SLA clock --------------------------------------------------------
 
 def test_sla_pressure_excludes_time_parked_with_someone_else():
-    """Twelve days open on a seven-day SLA. Six of them were spent waiting
-    on the production manager, so only six are his — he has a day left,
-    where the raw age would have said he was five days over."""
+    """Days waiting on someone else are excluded from SLA pressure."""
     e = entry(entry_date=date(2026, 9, 2), severity='High', status='Open',
               waiting_since=date(2026, 9, 8))
     assert sla_pressure(e, TODAY) == -1
 
 
 def test_the_same_entry_is_over_its_sla_without_the_waiting():
-    """The pair matters: the only difference is who was holding it."""
+    """Control for the test above: same entry with no waiting is over its SLA."""
     e = entry(entry_date=date(2026, 9, 2), severity='High', status='Open')
     assert sla_pressure(e, TODAY) == 5
 
@@ -138,7 +134,7 @@ def test_a_closed_entry_is_under_no_pressure():
 
 
 def test_the_on_time_rate_is_unknown_when_nothing_closed():
-    """A quiet month has no rate, and 0% would read as failure."""
+    """With nothing closed, the on-time rate is None, not 0%."""
     rate = closed_on_time_rate([], date(2026, 9, 1), date(2026, 9, 30), TODAY)
     assert rate['percent'] is None
 
@@ -157,8 +153,7 @@ def test_needs_you_now_puts_the_furthest_past_its_sla_first():
 
 
 def test_work_parked_with_someone_else_is_not_on_his_list():
-    """He has already chased it. Crowding it in beside work he can do makes
-    the list useless."""
+    """Entries waiting on someone else move from "needs you now" to "waiting on others"."""
     parked = entry(id=3, ref='INC-0003', severity='High', status='Open',
                    waiting_on_id=7, waiting_since=date(2026, 9, 2),
                    waiting_on=_Person('A. Rahman'))
@@ -177,7 +172,7 @@ def test_closed_and_logged_work_is_not_outstanding():
 
 
 def test_the_panel_caps_its_rows_and_says_how_many_more():
-    """The Overview is a place to start work, not a second register."""
+    """The panel shows at most six rows and reports how many more."""
     many = [entry(id=i, ref=f'INC-{i:04d}', severity='High', status='Open',
                   entry_date=date(2026, 8, 1)) for i in range(1, 11)]
     panel = needs_you_now(many, TODAY)
@@ -208,8 +203,7 @@ def test_the_expiring_panel_puts_what_lapsed_above_what_is_about_to():
 # --- the tiles ------------------------------------------------------------
 
 def test_the_tiles_read_the_shared_definitions_rather_than_their_own():
-    """Compliance health on the tile must equal compliance health anywhere
-    else — that equality is the whole reason the definition is shared."""
+    """Tile figures equal compliance_health() exactly."""
     entries = [cert(100), cert(-5), entry(status='Open', severity='High')]
     counts, health = tiles([], entries, date(2026, 9, 1), date(2026, 9, 30), TODAY)
     assert counts['health_percent'] == health['percent']
@@ -221,3 +215,32 @@ def test_coverage_on_the_tile_is_the_calendars_coverage():
     counts, _ = tiles([], [], date(2026, 9, 1), date(2026, 9, 30), TODAY)
     assert counts['done'] == 0
     assert counts['due'] == 0
+
+
+# --- naming a row -----------------------------------------------------------
+
+class _Asset:
+    def __init__(self, label):
+        self.label = label
+
+
+def test_a_row_is_named_by_what_it_is_about_not_its_register():
+    vehicle_doc = entry(register='vehicle_reg_insurance', data={'document_type': 'Insurance'})
+    vehicle_doc.asset = _Asset('Hino C17131')
+    assert entry_title(vehicle_doc) == 'Hino C17131 — Insurance'
+
+    injury = entry(register='first_aid', data={'injury_type': 'Cut'})
+    injury.subject = _Person('S. Pillai')
+    assert entry_title(injury) == 'S. Pillai — Cut'
+
+    event = entry(data={'incident_type': 'Slip/Fall', 'description': 'Wet floor'})
+    event.location = _Ref(1, 'Warehouse B')
+    assert entry_title(event) == 'Slip/Fall — Warehouse B'
+
+    assert entry_title(cert(30, item='Trade Licence')) == 'Trade Licence'
+
+
+def test_a_long_description_is_cut_and_a_bare_entry_falls_back_to_its_register():
+    long_text = entry(data={'description': 'x ' * 80})
+    assert len(entry_title(long_text)) <= 60 and entry_title(long_text).endswith('…')
+    assert entry_title(entry()) == 'Incident & near miss'

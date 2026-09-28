@@ -1,11 +1,9 @@
-// HSE — the officer's own lists.
+// HSE lists page (people, assets, reference lists): add, deactivate and
+// reactivate entries. Each change reloads the page from the server, since
+// counts and ordering both shift.
 //
-// Adds, renames and deactivates. Every change re-renders the tab from the
-// server rather than patching the DOM: the counts and the ordering both
-// move, and a half-updated list is worse than a short reload.
-//
-// IIFE with no DOMContentLoaded gate — page scripts re-run on every SPA
-// swap and that event never fires again (spa-navigation.md, trap 1).
+// No DOMContentLoaded gate: page scripts re-run on every SPA swap and that
+// event never fires again. Document listeners are guarded against stacking.
 (function () {
     function endpointFor(section) {
         var kind = section.getAttribute('data-kind');
@@ -56,7 +54,8 @@
             return {
                 kind: section.getAttribute('data-asset-kind'),
                 label: value,
-                ref: (section.querySelector('.hse-add-ref') || {}).value || ''
+                ref: (section.querySelector('.hse-add-ref') || {}).value || '',
+                serial_no: (section.querySelector('.hse-add-serial') || {}).value || ''
             };
         }
         return { kind: kind, label: value };
@@ -97,6 +96,26 @@
             });
     }
 
+    // Saves one asset's serial in place. Nothing else on the page shifts,
+    // so there is no reload.
+    function saveSerial(input) {
+        var section = input.closest('.hse-list-section');
+        note(section, 'Saving…');
+        send(endpointFor(section) + '/' + input.getAttribute('data-row-id'),
+             'PATCH', { serial_no: input.value })
+            .then(function (result) {
+                if (!result.ok) {
+                    note(section, result.body.error || 'Could not save that serial.');
+                    return;
+                }
+                input.value = result.body.row.serial_no || '';
+                note(section, 'Serial saved.');
+            })
+            .catch(function () {
+                note(section, 'Could not reach the server.');
+            });
+    }
+
     if (window._hseListsWired) return;
     window._hseListsWired = true;
 
@@ -112,9 +131,18 @@
         }
     });
 
-    // Enter in an add field is the same as pressing Add.
+    document.addEventListener('change', function (e) {
+        if (e.target.classList.contains('hse-list-serial')) saveSerial(e.target);
+    });
+
+    // Enter in an add field acts as Add; in a serial field, it saves.
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter') return;
+        if (e.target.classList.contains('hse-list-serial')) {
+            e.preventDefault();
+            e.target.blur();
+            return;
+        }
         var field = e.target.closest('.hse-list-add input[type="text"]');
         if (!field) return;
         e.preventDefault();

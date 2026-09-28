@@ -1,17 +1,9 @@
-// digital_innovation_board.js — Digital Innovation module, board page.
-// Phase 2a: the "+ New project" modal. Phase 2b: chunk 2 added "+ New
-// feature"; chunk 3 added the read-only feature detail modal; chunk 4
-// makes it interactive (tick/add/delete steps, move stage, close). The
-// Incoming overlay (button + card modal) was added 1 Sep 2026, followed
-// same-day by a live indicator on its badge — a small, scoped piece of
-// the still-pending "frontend SSE wiring" chunk, built just for this
-// button rather than a general board-wide live refresh.
+// Digital Innovation board page: new project/feature modals, feature detail
+// modal, Incoming overlay, project link picker, cost breakdown modal, and the
+// live SSE refresh of the board.
 
-// Guard against re-registering this listener every time the SPA nav
-// re-executes this script (sidebar.js's execScripts() genuinely re-runs
-// external <script> tags on every navigation to this page) — same pattern
-// as file-templates.js. Without this, document (which is never destroyed)
-// would accumulate one extra click listener per visit.
+// SPA nav re-runs this script on every visit, so document listeners are
+// wired once behind a window flag or they would stack.
 if (!window._diDispatcherWired) {
     window._diDispatcherWired = true;
 
@@ -27,9 +19,7 @@ if (!window._diDispatcherWired) {
             closeDiFeatureDetail();
             return;
         }
-        // Step rows: click anywhere on the row to tick/untick, except the
-        // delete button — that's checked first so it doesn't also toggle
-        // the tick underneath it.
+        // Delete is checked before the step row so it does not also toggle the tick.
         var deleteBtn = e.target.closest('.di-step-delete');
         if (deleteBtn) {
             var stepToDelete = deleteBtn.closest('.di-step[data-step-id]');
@@ -54,6 +44,10 @@ if (!window._diDispatcherWired) {
             diCloseFeature();
             return;
         }
+        if (e.target.closest('.di-reopen-feature-btn')) {
+            diReopenFeature();
+            return;
+        }
         if (e.target.closest('#di-incoming-trigger')) {
             openDiIncomingModal();
             return;
@@ -65,13 +59,13 @@ if (!window._diDispatcherWired) {
         var promoteBtn = e.target.closest('.di-incoming-promote-btn');
         if (promoteBtn) {
             var promoteCard = promoteBtn.closest('.di-incoming-card[data-di-intake-id]');
-            if (promoteCard) diPromoteIntakeItem(promoteCard.getAttribute('data-di-intake-id'), promoteCard.getAttribute('data-di-kind'));
+            if (promoteCard) diPromoteIntakeItem(promoteCard.getAttribute('data-di-intake-id'));
             return;
         }
         var dismissBtn = e.target.closest('.di-incoming-dismiss-btn');
         if (dismissBtn) {
             var dismissCard = dismissBtn.closest('.di-incoming-card[data-di-intake-id]');
-            if (dismissCard) diDismissIntakeItem(dismissCard.getAttribute('data-di-intake-id'), dismissCard.getAttribute('data-di-kind'));
+            if (dismissCard) diDismissIntakeItem(dismissCard.getAttribute('data-di-intake-id'));
             return;
         }
         var trackBadge = e.target.closest('#di-track-badge');
@@ -94,11 +88,6 @@ if (!window._diDispatcherWired) {
         }
         if (e.target.closest('#di-link-clear-btn')) {
             diSetProjectLink(null);
-            return;
-        }
-        var closeProjectBtn = e.target.closest('.di-project-close-btn');
-        if (closeProjectBtn) {
-            diCloseProject(closeProjectBtn.getAttribute('data-di-project-id'));
             return;
         }
         if (e.target.closest('#di-new-project-trigger')) {
@@ -163,12 +152,6 @@ if (!window._diDispatcherWired) {
         if (document.activeElement && document.activeElement.id === 'di-track-badge') {
             diToggleProjectTrack(document.activeElement.getAttribute('data-project-id'), document.activeElement.getAttribute('data-track'));
         }
-        if (document.activeElement && document.activeElement.id === 'di-new-project-track') {
-            submitDiNewProject();
-        }
-        if (document.activeElement && document.activeElement.id === 'di-new-feature-stage') {
-            submitDiNewFeature();
-        }
         if (document.activeElement && (
             document.activeElement.id === 'di-cost-add-hours' ||
             document.activeElement.id === 'di-cost-add-amount' ||
@@ -178,23 +161,14 @@ if (!window._diDispatcherWired) {
         }
     });
 
-    // Toggles the add-row's Hours+Feature vs. Amount inputs whenever the
-    // cost type changes — delegated (not bound directly to
-    // #di-cost-add-type) for the same reason every other listener here
-    // is: this script tag re-executes on every SPA nav, so a direct
-    // addEventListener on the select itself would stack a duplicate
-    // listener per visit.
+    // Swaps the cost add-row's inputs when the cost type changes.
     document.addEventListener('change', function (e) {
         if (e.target.id === 'di-cost-add-type') {
             _diToggleCostTypeFields();
         }
     });
 
-    // Debounced type-to-search for the link-project picker. Delegated on
-    // 'input' rather than bound directly to #di-link-search-input, same
-    // reasoning as the click/keydown delegation above — this script tag
-    // re-executes on every SPA nav to a DI page, so a direct addEventListener
-    // on the input element itself would stack a duplicate listener per visit.
+    // Debounced search for the link-project picker.
     document.addEventListener('input', function (e) {
         if (e.target.id !== 'di-link-search-input') return;
         var query = e.target.value.trim();
@@ -209,53 +183,29 @@ if (!window._diDispatcherWired) {
     });
 }
 
-// Set when the "+ Add feature" trigger is clicked (it carries the current
-// board's project id via a data attribute) — read back on submit so the
-// POST goes to the right project.
+// Project id for the "+ Add feature" POST, taken from the trigger's data attribute.
 var _diNewFeatureProjectId = null;
 
-// Set whenever the feature detail modal is opened — every step/advance/
-// close action needs the feature id, and reading it off the currently
-// open feature avoids sprinkling data-feature-id across buttons inside
-// the fragment (which would collide with the board-card click delegation
-// above, since that matches on the same attribute).
+// Feature open in the detail modal. Kept here so buttons inside the
+// fragment need no data-feature-id, which the board-card click handler matches.
 var _diCurrentFeatureId = null;
 
-// True once any mutating action inside the open modal has succeeded —
-// closing the modal then does a full reload so the board reflects the
-// change, same "reload rather than hand-patch the DOM" approach already
-// used for new project/feature creation.
+// True once an action in the open detail modal succeeds; closing then reloads the board.
 var _diFeatureDetailDirty = false;
 
-// Last known Incoming count, tracked so a live update can tell "went up"
-// (worth a pulse) from "went down" (someone else promoted/dismissed) or
-// "unchanged" (an SSE ping for an unrelated DI change, e.g. a step tick —
-// di_changes is a per-project doorbell, not itemized, so every ping on
-// this project re-checks Incoming even when nothing there actually
-// moved). Reset to null by _diSyncLiveStream on every (re)connect — see
-// there for why.
+// Last known Incoming count, so a live update can pulse only when it goes up.
+// Every ping re-checks Incoming, since di_changes does not say what changed.
+// null means "just connected, do not pulse".
 var _diIncomingCount = null;
 
-// Opens (or re-opens, on project change) ONE live connection per board
-// page — read off .di-board's own data-di-project-id (present on every
-// board, not just the permanent one), so this now opens for every viewer
-// regardless of whether they can see the Incoming button. Originally
-// scoped to just the Incoming badge (1 Sep 2026); widened 2 Sep 2026 to
-// also drive the board-wide live refresh below rather than opening a
-// second connection to the same route, per the plan noted when the badge
-// shipped. Torn down and recreated on every SPA navigation via the
-// 'helix:navigated' listener below, exactly like this script's own
-// re-execution resets _diNewFeatureProjectId etc. above — except a live
-// EventSource, unlike a plain var, has to be explicitly closed or it
-// leaks a connection (and a server-side subscriber queue, see
-// sse_relay.py) for as long as the tab stays open, even after navigating
-// to a page that never touches this file again.
+// Keeps one EventSource open for the board's project, and closes it on
+// SPA nav away. An unclosed EventSource leaks a connection and a server-side
+// subscriber queue (sse_relay.py) for the life of the tab.
 function _diSyncLiveStream() {
     var board = document.querySelector('.di-board[data-di-project-id]');
     var projectId = board ? board.getAttribute('data-di-project-id') : null;
 
-    // Already watching the right thing (including "nothing to watch" on
-    // a page with no DI board) — nothing to do.
+    // Already watching the right project (or nothing, off the board).
     if (window._diLiveStreamProjectId === projectId) return;
 
     if (window._diLiveStream) {
@@ -267,33 +217,21 @@ function _diSyncLiveStream() {
 
     if (!projectId || typeof EventSource === 'undefined') return;
 
-    // Seed the baseline from what the server already rendered, so the
-    // very first live ping compares against the true starting count
-    // rather than null (which _diUpdateIncomingBadge treats as "just
-    // connected, don't pulse yet"). Only present when the Incoming
-    // overlay itself is on the page (permanent board + can_edit_board).
+    // Seed the baseline from the server-rendered cards so the first ping
+    // can pulse. The overlay only exists on the permanent board.
     var cardsContainer = document.querySelector('#di-incoming-modal .di-incoming-cards');
     if (cardsContainer) {
         _diIncomingCount = cardsContainer.querySelectorAll('.di-incoming-card[data-di-intake-id]').length;
     }
 
-    // di_changes is a plain "something changed" doorbell (see sse.py) —
-    // no per-message detail, so every ping just triggers a re-fetch of
-    // whatever this page shows rather than trying to parse what changed.
+    // Pings carry no detail (sse.py), so each one just re-fetches the page's fragments.
     var source = new EventSource('/sse/digital-innovation/' + projectId);
     source.onmessage = function () { _diHandleLivePing(); };
     window._diLiveStream = source;
 }
 
-// Fans one SSE ping out to everything on the page that needs to react.
-// diRefreshBoard always runs (every viewer, on every board, cares about
-// feature moves/step ticks/new or closed features); diRefreshIncomingTray
-// only when the Incoming button exists (permanent board + can_edit_board
-// — same gate board.html already applies to rendering it). Does NOT
-// touch an open feature-detail modal even if the ping is about that very
-// feature — re-rendering mid-interaction (e.g. while typing a new step)
-// would stomp on unsaved input; left as a known gap, same tier as the
-// FeatureRequest-SSE gap noted elsewhere in this file's history.
+// Refreshes the board, plus the Incoming tray when its button is on the page.
+// An open feature detail modal is left alone so typed input is not lost.
 function _diHandleLivePing() {
     diRefreshBoard();
     if (document.getElementById('di-incoming-trigger')) {
@@ -308,21 +246,6 @@ if (!window._diLiveStreamNavWired) {
     document.addEventListener('helix:navigated', _diSyncLiveStream);
 }
 
-function diCloseProject(projectId) {
-    fetch('/digital-innovation/projects/' + projectId + '/close', { method: 'POST' })
-        .then(function (res) {
-            if (!res.ok) throw new Error('request failed');
-            // Full navigation, same reasoning as submitDiNewProject below:
-            // a rare action, and the sidebar's project list has to reflect
-            // the closed project's absence regardless of which board is
-            // currently open — including the one that was just closed.
-            window.location.href = '/digital-innovation/';
-        })
-        .catch(function () {
-            window.location.reload();
-        });
-}
-
 function openDiIncomingModal() {
     var modal = document.getElementById('di-incoming-modal');
     if (modal) modal.classList.remove('hidden');
@@ -333,26 +256,15 @@ function closeDiIncomingModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-// kind is 'feature_request' (a live FeatureRequest card) or 'intake_item'
-// (a native DiIntakeItem, the default if a card is somehow missing the
-// attribute) — see board_data.py's IncomingCard and routes/intake.py's
-// two separate route pairs for why these aren't the same endpoint.
-function diPromoteIntakeItem(id, kind) {
-    var url = kind === 'feature_request'
-        ? '/digital-innovation/feature-requests/' + id + '/promote'
-        : '/digital-innovation/intake/' + id + '/promote';
-    _diApplyIncomingAction(fetch(url, { method: 'POST' }));
+// id is a FeatureRequest's id (routes/intake.py).
+function diPromoteIntakeItem(id) {
+    _diApplyIncomingAction(fetch('/digital-innovation/feature-requests/' + id + '/promote', { method: 'POST' }));
 }
 
-function diDismissIntakeItem(id, kind) {
-    var url = kind === 'feature_request'
-        ? '/digital-innovation/feature-requests/' + id + '/dismiss'
-        : '/digital-innovation/intake/' + id + '/dismiss';
-    // Unlike Promote, dismissing never touches the board itself (no new
-    // feature, no column/count change) — only the tray's own contents,
-    // so just refresh the card list in place rather than reloading the
-    // whole page. That also means the modal stays open, so a user
-    // clearing several items doesn't get kicked out after each one.
+function diDismissIntakeItem(id) {
+    var url = '/digital-innovation/feature-requests/' + id + '/dismiss';
+    // Dismiss does not change the board, so only the tray refreshes and
+    // the modal stays open for clearing several items.
     fetch(url, { method: 'POST' })
         .then(function (res) {
             if (!res.ok) throw new Error('request failed');
@@ -363,15 +275,12 @@ function diDismissIntakeItem(id, kind) {
         });
 }
 
-// Called on every SSE ping (see _diHandleLivePing above) — re-fetches
-// the same _board_columns.html fragment board.html itself rendered on
-// load (columns + closed-features strip, wrapped together in
-// #di-board-body) and swaps it in wholesale, so another user's feature
-// move, step tick, new feature or closed feature shows up without a
-// manual reload. The subtitle's "N active features" count is derived
-// client-side from the swapped-in DOM afterward rather than fetched
-// separately — one fragment, one request, same "cheap enough to just
-// re-render" reasoning as diRefreshIncomingTray below.
+// Scroll regions inside #di-board-body whose position survives a refresh.
+var _DI_BOARD_SCROLLERS = '.di-columns, .di-column-cards, .di-closed-strip-list';
+
+// Re-fetches _board_columns.html and swaps #di-board-body, then recounts
+// the subtitle's "N active features" from the new cards. The closed strip's
+// open state and scroll positions carry over, or every ping would reset them.
 function diRefreshBoard() {
     var container = document.getElementById('di-board-body');
     var board = document.querySelector('.di-board[data-di-project-id]');
@@ -385,14 +294,31 @@ function diRefreshBoard() {
             return res.text();
         })
         .then(function (html) {
-            // The response is itself the #di-board-body wrapper (see
-            // _board_columns.html), so replace the whole node rather
-            // than setting innerHTML on it — otherwise we'd end up with
-            // #di-board-body nested inside #di-board-body.
+            // The fragment is itself #di-board-body, so replace the node;
+            // innerHTML would nest it inside itself.
             var wrapper = document.createElement('div');
             wrapper.innerHTML = html;
             var fresh = wrapper.firstElementChild;
-            if (fresh) container.replaceWith(fresh);
+            if (fresh) {
+                var current = document.getElementById('di-board-body') || container;
+                var oldStrip = current.querySelector('.di-closed-strip');
+                // Read before the swap: a detached node reports scroll 0.
+                var positions = Array.prototype.map.call(
+                    current.querySelectorAll(_DI_BOARD_SCROLLERS),
+                    function (el) { return [el.scrollTop, el.scrollLeft]; }
+                );
+                var freshStrip = fresh.querySelector('.di-closed-strip');
+                if (oldStrip && freshStrip) freshStrip.open = oldStrip.open;
+                current.replaceWith(fresh);
+                // After the swap: a node must be in the page to take a scroll position.
+                var freshScrollers = fresh.querySelectorAll(_DI_BOARD_SCROLLERS);
+                if (freshScrollers.length === positions.length) {
+                    for (var i = 0; i < positions.length; i++) {
+                        freshScrollers[i].scrollTop = positions[i][0];
+                        freshScrollers[i].scrollLeft = positions[i][1];
+                    }
+                }
+            }
 
             var subtitle = document.querySelector('.di-board-subtitle');
             if (subtitle) {
@@ -401,18 +327,12 @@ function diRefreshBoard() {
             }
         })
         .catch(function () {
-            // Same "nice-to-have on top of a working full reload"
-            // reasoning as diRefreshIncomingTray's catch below — a
-            // network blip just leaves the board showing its last known
-            // state until the next successful ping or a manual reload.
+            // Silent: the board keeps its last state until the next ping.
         });
 }
 
-// Called on every SSE ping (see _diHandleLivePing above) — re-fetches
-// the same _incoming_cards.html fragment board.html itself rendered on
-// load, swaps it into the (possibly-hidden) overlay so it's never stale
-// by the time someone opens it, and updates the trigger's badge from the
-// fetched count.
+// Re-fetches _incoming_cards.html into the (possibly hidden) overlay and
+// updates the trigger's badge from the new count.
 function diRefreshIncomingTray() {
     var trigger = document.getElementById('di-incoming-trigger');
     var cardsContainer = document.querySelector('#di-incoming-modal .di-incoming-cards');
@@ -431,19 +351,12 @@ function diRefreshIncomingTray() {
             _diUpdateIncomingBadge(trigger, count);
         })
         .catch(function () {
-            // Live refresh is a nice-to-have on top of the button already
-            // working correctly on every full page load — if this one
-            // fetch fails (a network blip), the badge just keeps showing
-            // its last known count until the next successful ping or a
-            // manual reload; never worth surfacing an error for.
+            // Silent: the badge keeps its last count until the next ping.
         });
 }
 
-// Creates/updates/removes the badge to match `count`, and — only when
-// the count went UP since the last check, i.e. something new actually
-// arrived rather than someone else acting on an existing item — replays
-// a brief pulse animation so the arrival is genuinely noticeable, not
-// just a number that quietly changed.
+// Creates, updates or removes the badge to match count, and pulses it
+// only when the count went up.
 function _diUpdateIncomingBadge(trigger, count) {
     var badge = trigger.querySelector('.di-incoming-badge');
     var isNewArrival = _diIncomingCount !== null && count > _diIncomingCount;
@@ -462,23 +375,14 @@ function _diUpdateIncomingBadge(trigger, count) {
     }
 
     if (isNewArrival && badge) {
-        // Remove-then-reflow-then-add so the animation restarts even if
-        // it's still mid-run from a previous arrival a few seconds ago —
-        // just re-adding the same class name on an element that already
-        // has it is a no-op in CSS, the browser needs to see it actually
-        // leave and come back.
+        // Remove, force a reflow, re-add: restarts the animation if it is still running.
         badge.classList.remove('di-incoming-badge--pulse');
         void badge.offsetWidth;
         badge.classList.add('di-incoming-badge--pulse');
     }
 }
 
-// Only used by Promote now (Dismiss refreshes the tray in place instead,
-// see diDismissIntakeItem above) — promoting adds a card to a column and
-// shifts the header's "X active features" count, so a full reload is
-// simpler than patching each affected piece client-side. The reload also
-// naturally closes the Incoming modal, which is the desired behavior on
-// Promote (Ezekiel: modal should only close when you promote something).
+// Promote only: reloads so the new card and count show, which also closes the modal.
 function _diApplyIncomingAction(fetchPromise) {
     fetchPromise
         .then(function (res) {
@@ -490,28 +394,39 @@ function _diApplyIncomingAction(fetchPromise) {
         });
 }
 
-// System-project link picker — search-as-you-type against the shared
-// Project table (routes/projects.py::search_projects), gated the same as
-// the trigger/badge that opens this modal. Setting or clearing the link
-// reloads the page on success (diSetProjectLink), same "rare mutating
-// action, simpler to re-render server-side" reasoning as
-// _diApplyIncomingAction above — it also naturally closes the modal.
-
-// Click-to-toggle for the board header's Internal/External badge (see
-// #di-track-badge, board.html). A full reload is the simplest correct
-// way to reflect the new track everywhere it's shown (column headers,
-// New Feature's starting-stage picker, the badge itself) - same
-// reasoning closeDiFeatureDetail() uses for a dirty modal.
+// Flips the board's Internal/External track, then reloads: the track changes
+// stage labels in several places. The badge flips straight away and flips
+// back with an error toast if the save fails.
 function diToggleProjectTrack(projectId, currentTrack) {
     if (!projectId) return;
+    var badge = document.getElementById('di-track-badge');
+    // Ignore repeat clicks while a save is in flight.
+    if (badge && badge.getAttribute('aria-busy') === 'true') return;
     var nextTrack = currentTrack === 'external' ? 'internal' : 'external';
+    var oldLabel = badge ? badge.textContent : '';
+    if (badge) {
+        badge.setAttribute('aria-busy', 'true');
+        badge.setAttribute('data-track', nextTrack);
+        badge.textContent = nextTrack === 'external' ? 'External' : 'Internal';
+    }
+
     fetch('/digital-innovation/projects/' + projectId + '/track', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ track: nextTrack }),
-    }).then(function (res) {
-        if (res.ok) window.location.reload();
-    });
+    })
+        .then(function (res) {
+            if (!res.ok) throw new Error('request failed');
+            window.location.reload();
+        })
+        .catch(function () {
+            if (badge) {
+                badge.removeAttribute('aria-busy');
+                badge.setAttribute('data-track', currentTrack);
+                badge.textContent = oldLabel;
+            }
+            if (typeof showToast === 'function') showToast('Could not change the track — try again.', 'error');
+        });
 }
 
 function openDiLinkProjectModal() {
@@ -535,8 +450,7 @@ function _diFetchLinkResults(query) {
             return res.json();
         })
         .then(function (results) {
-            // The input may have moved on to a newer query while this
-            // request was in flight — only render if it's still current.
+            // Drop stale responses if the user has typed on since.
             var input = document.getElementById('di-link-search-input');
             if (input && input.value.trim() === query) {
                 _diRenderLinkResults(results, query);
@@ -653,9 +567,7 @@ function submitDiNewProject() {
                 if (error) { error.textContent = message; error.classList.remove('hidden'); }
                 return;
             }
-            // Full navigation (not SPA nav) — simplest way to land on the new
-            // board with a correct sidebar + column state, and this action is
-            // rare enough that the reload cost doesn't matter.
+            // Full navigation so the rail's project list includes the new project.
             window.location.href = '/digital-innovation/' + result.data.id;
         })
         .catch(function () {
@@ -713,9 +625,6 @@ function submitDiNewFeature() {
                 if (error) { error.textContent = message; error.classList.remove('hidden'); }
                 return;
             }
-            // Same reasoning as new-project creation: reload to land in a
-            // correct, consistent column state rather than hand-patching
-            // the DOM. Live SSE refresh is a later phase.
             window.location.reload();
         })
         .catch(function () {
@@ -750,18 +659,14 @@ function closeDiFeatureDetail() {
     var modal = document.getElementById('di-feature-detail-modal');
     if (modal) modal.classList.add('hidden');
     if (_diFeatureDetailDirty) {
-        // A tick/add/delete/advance/close happened while the modal was
-        // open — reload so the board's columns and counts catch up,
-        // rather than hand-patching every place a feature's state shows.
+        // Something changed in the modal; reload so columns and counts catch up.
         window.location.reload();
     }
 }
 
-// Shared by every step/advance/close action below: POSTs or DELETEs,
-// swaps the returned fragment into the modal body on success, or shows
-// the returned error message in the persistent error slot on failure.
-// That slot lives outside #di-feature-detail-body specifically so it
-// survives the innerHTML swap on the next successful action.
+// Runs a step/move/close request: on success swaps the returned fragment
+// into the modal body, on failure shows the error. The error slot sits
+// outside #di-feature-detail-body so the swap does not wipe it.
 function _diApplyFeatureDetailAction(fetchPromise) {
     var body = document.getElementById('di-feature-detail-body');
     var error = document.getElementById('di-feature-detail-error');
@@ -814,9 +719,7 @@ function diMoveFeatureStage() {
     var select = document.getElementById('di-stage-picker-select');
     var stage = select ? select.value : '';
     if (!stage) return;
-    // Any stage, forward or backward, no completion gate - the server
-    // (step_engine.move_to_stage) is the single source of truth for what's
-    // a valid target; this just forwards whatever the picker has selected.
+    // Any stage, either direction; the server (step_engine.move_to_stage) validates it.
     _diApplyFeatureDetailAction(fetch('/digital-innovation/features/' + _diCurrentFeatureId + '/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -831,8 +734,14 @@ function diCloseFeature() {
     }));
 }
 
-// Set whenever the Cost breakdown modal is opened — add/delete both need
-// the project id, same reasoning as _diCurrentFeatureId above.
+function diReopenFeature() {
+    if (!_diCurrentFeatureId) return;
+    _diApplyFeatureDetailAction(fetch('/digital-innovation/features/' + _diCurrentFeatureId + '/reopen', {
+        method: 'POST',
+    }));
+}
+
+// Project open in the cost breakdown modal, for add/delete.
 var _diCurrentCostProjectId = null;
 
 function openDiCostBreakdown(projectId) {
@@ -859,15 +768,10 @@ function openDiCostBreakdown(projectId) {
 function closeDiCostBreakdown() {
     var modal = document.getElementById('di-cost-modal');
     if (modal) modal.classList.add('hidden');
-    // No board reload on close — unlike the feature detail modal, cost
-    // entries don't affect anything the board itself displays (columns,
-    // counts), so there's nothing on the page behind the modal to catch
-    // up on.
+    // No reload: cost entries do not show on the board.
 }
 
-// Shared by add/delete below — same "swap the fragment on success, show
-// the persistent error slot on failure" shape as
-// _diApplyFeatureDetailAction, mirrored here for the cost modal.
+// Cost modal version of _diApplyFeatureDetailAction.
 function _diApplyCostBreakdownAction(fetchPromise) {
     var body = document.getElementById('di-cost-body');
     var error = document.getElementById('di-cost-error');
@@ -888,14 +792,9 @@ function _diApplyCostBreakdownAction(fetchPromise) {
         });
 }
 
-// Toggles the add-row's Hours+Feature inputs vs. its Amount input to
-// match the selected cost type — Dev Time is priced from hours × the
-// department rate (lib/costs.py computes the amount server-side), every
-// other type takes a typed-in amount instead. Delegated 'change' handler
-// below calls this on every switch; the template's own initial markup
-// already matches this shape for the default selection (Dev Time, the
-// first <option>), so there's no need to call it again right after a
-// fragment swap.
+// Dev Time shows Feature + Hours (priced server-side at the department rate);
+// other types show Amount. The fragment's markup already starts in the Dev
+// Time shape, so this is not needed after a swap.
 function _diToggleCostTypeFields() {
     var typeSelect = document.getElementById('di-cost-add-type');
     var featureSelect = document.getElementById('di-cost-add-feature');

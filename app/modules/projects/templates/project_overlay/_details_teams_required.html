@@ -1,12 +1,10 @@
-{# Teams Required — the project's design_teams_requested set (2D/3D/Technical).
-Set at brief creation; editable here in Details edit mode. View shows tags;
-edit shows a checkbox group. A team that currently has a Design Lead carries
-a data-confirm-uncheck message so unticking it warns before Save clears that
-lead (handled generically in project_overlay_edit.js). #}
+{# Teams Required (design_teams_requested: 2D/3D/Technical). Tags in view
+mode, checkboxes in edit mode. A team with a Design Lead carries
+data-confirm-uncheck, so project_overlay_edit.js warns before Save clears
+that lead. #}
 {% from '_shared_macros.html' import tag %}
 {% set requested_teams = (project.design_teams_requested or '').split(',') %}
-{# Which of the three teams currently has a Design Lead, and who — sourced from
-   designer_rows (the same list the Design Leads card renders). #}
+{# team -> current Design Lead name, from designer_rows. #}
 {% set leads_by_team = {} %}
 {% for row in designer_rows %}
 {% if row.designer %}{% set _ = leads_by_team.update({row.team: row.designer.name}) %}{% endif %}

@@ -1,11 +1,5 @@
-"""Coverage for the admin surface after the move to the capabilities map.
-
-The point of interest is not that a designer is refused — that was already
-true. It is that these routes gate on the REAL logged-in user, so an admin
-previewing the app as someone else keeps their own admin tools. That is what
-the old @admin_required and @role_required('admin') did by reading
-current_user, and what require(..., real_user=True) preserves.
-"""
+"""Admin surfaces refuse other roles and gate on the REAL logged-in user
+(real_user=True), so an admin emulating someone keeps their admin tools."""
 import pytest
 from flask import url_for
 
@@ -45,8 +39,7 @@ def test_admin_api_opens_for_an_admin(app, client, db_session):
 
 
 def test_an_emulating_admin_keeps_the_admin_api(app, client, db_session):
-    """real_user=True: previewing as a designer must not cost the admin their
-    own tools mid-preview. Same rule as CS's Scope CRUD."""
+    """An admin emulating a designer keeps the admin API."""
     admin = _user(db_session, 'api-emu-admin', 'admin')
     designer = _user(db_session, 'api-emu-designer', 'designer')
     login_as(client, app, admin, 'password123')
@@ -89,7 +82,7 @@ def test_an_emulating_admin_keeps_the_wiki_editor(app, client, db_session):
 
 
 def test_the_wiki_viewer_stays_open_to_everyone(app, client, db_session):
-    """Reading the wiki was never gated — only editing is."""
+    """Any role can read the wiki; only editing is gated."""
     login_as(client, app, _user(db_session, 'wiki-reader', 'logistics'), 'password123')
     assert client.get(_url(app, 'wiki.index')).status_code == 200
 

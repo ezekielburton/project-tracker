@@ -1,6 +1,5 @@
-# The projects list page: one role-adaptive table that renders differently for
-# each viewing role, plus the JSON endpoints that power its filtering, sorting,
-# row expansion, and saved table views.
+# The Projects list page: one role-adaptive table, plus the endpoints for its
+# filtering, sorting, row expansion and saved views.
 
 from datetime import date
 from flask import Blueprint, render_template, session, request, jsonify, url_for, redirect
@@ -17,32 +16,18 @@ from app.modules.core.shared.lib.utils import ACTIVITY_SEEN_ROLLOUT_CUTOFF
 project_list_bp = Blueprint('project_list', __name__, url_prefix='/projects-new', template_folder='../templates')
 
 def _serialize_person(u):
-    """Same architecture as dashboard.py's _serialize_person"""
+    """A user as {id, name, avatar_filename}, or None."""
     if not u:
         return None
     return {'id': u.id, 'name': u.name, 'avatar_filename': u.avatar_filename}
 
 def _effective_user():
-    """Same emulation-aware-actor lookup every other route in this app uses.
-    Local name for core/shared's effective_user()."""
+    """Emulation-aware actor (alias for effective_user())."""
     return effective_user()
 
 def _eager_load(query):
-    """
-    Bulk-loads every relationship _serialize_row() touches — cs_lead,
-    client_brand, assigned_designers (and each one's designer), and
-    project_customers — in a fixed handful of extra queries, instead of
-    the ORM's default lazy loading, which fired one fresh SELECT per
-    project per relationship every time the row list was built. That N+1
-    pattern (times however many rows are in view, times the several
-    relationships touched, times the several passes _build_filter_counts
-    makes to compute each filter's own counts) was the projects page's
-    real performance problem — this collapses each pass down to a small,
-    fixed number of queries regardless of row count.
-
-    Only applied where rows actually get serialized — not on the plain
-    .count() query, which never touches these columns.
-    """
+    """Eager-load every relationship _serialize_row() touches, avoiding an N+1
+    per row. Apply only where rows are serialized, not to .count() queries."""
     return query.options(
         joinedload(Project.cs_lead),
         joinedload(Project.project_owner),
@@ -53,15 +38,8 @@ def _eager_load(query):
 
 
 def _bulk_deliverable_aggregates(project_ids):
-    """
-    Replaces the two queries _serialize_row() used to run PER PROJECT
-    (one for the rollup count, one for the next deadline) with one query
-    per aggregate covering every project currently being serialized —
-    same N+1 fix as _eager_load, for the two things that come from
-    Deliverable rather than a direct Project relationship.
-
-    Returns (rollups, next_deadlines), each a dict keyed by project_id.
-    """
+    """Deliverable rollup ("N of M Approved") and next deadline for many
+    projects in one query each. Returns (rollups, next_deadlines) keyed by project_id."""
     if not project_ids:
         return {}, {}
 
@@ -79,15 +57,9 @@ def _bulk_deliverable_aggregates(project_ids):
     for project_id, total, approved in rollup_rows:
         rollups[project_id] = f'{int(approved or 0)} of {total} Approved'
 
-    # Next deadline: the earliest design_deadline among each project's
-    # non-Approved deliverables (Approved ones are done, nothing left to be
-    # "next" about) — deliberately not filtering out already-passed dates,
-    # an overdue deliverable is still the most urgent thing to show, not
-    # something to quietly drop. One globally-sorted query instead of one
-    # per project: within any one project's own deliverables, nullslast
-    # ordering puts them in the same relative order a per-project query
-    # would, so the first row seen for a given project_id here is that
-    # project's earliest — no per-project re-sort needed.
+    # Next deadline: earliest design_deadline among non-Approved deliverables,
+    # past dates included (overdue is the most urgent). The query is sorted
+    # globally, so the first row seen per project is its earliest.
     next_deadlines = {}
     for d in (
         Deliverable.query
@@ -103,23 +75,9 @@ def _bulk_deliverable_aggregates(project_ids):
 
 
 def _bulk_activity_and_chat_at(project_ids):
-    """
-    Unread dots (26/27 Aug 2026, per Ezekiel) — one MAX(created_at) query
-    per source, each grouped by project, same N+1-avoidance shape as
-    _bulk_deliverable_aggregates above.
-
-    "Updates" is read from ActivityLog, filtered to entity_type='project' —
-    every one of this module's ~46 log_activity() call sites already tags
-    itself that way (customer added, status override, hold/cancel, edit-
-    access decisions, etc.), so this is already a complete, uniform "last
-    time something happened on this project" signal with no new logging
-    code and no allowlist of specific action types to maintain here.
-    "Chats" is ProjectNote.created_at.
-
-    Returns (last_update_at, last_chat_at), each a dict keyed by
-    project_id — a project with no key in a given dict has never had that
-    kind of activity at all.
-    """
+    """For unread dots: latest update and chat time per project, one query each.
+    Updates are ActivityLog rows with entity_type='project'; chats are ProjectNotes.
+    Returns (last_update_at, last_chat_at) keyed by project_id; missing = none ever."""
     if not project_ids:
         return {}, {}
 
@@ -139,14 +97,8 @@ def _bulk_activity_and_chat_at(project_ids):
 
 
 def _bulk_activity_seen(project_ids, user):
-    """
-    Unread dots — this user's (last_seen_update_at, last_seen_chat_at)
-    watermark per project, from ProjectActivitySeen. One query for the
-    whole batch, same shape as every other _bulk_* helper here. Returns a
-    dict keyed by project_id -> the ProjectActivitySeen row; a project
-    with no key just means this user has no watermark for it yet — see
-    _has_unread_activity()'s rollout-cutoff fallback for what that means.
-    """
+    """This user's ProjectActivitySeen watermark rows, keyed by project_id.
+    A missing key means no watermark yet (see _has_unread_activity)."""
     if not project_ids:
         return {}
     rows = (
@@ -158,14 +110,8 @@ def _bulk_activity_seen(project_ids, user):
 
 
 def _has_unread_activity(last_activity_at, seen_at):
-    """
-    Shared truth-table behind both has_unread_update and has_unread_chat
-    on each row (see _serialize_row below): no activity of this kind has
-    ever happened -> never unread. Activity exists but this user has no
-    watermark row yet -> unread only if that activity happened after
-    ACTIVITY_SEEN_ROLLOUT_CUTOFF (pre-existing history never lights up on
-    rollout). Watermark set -> unread if the activity is newer than it.
-    """
+    """True if the activity is newer than the watermark. With no watermark,
+    ACTIVITY_SEEN_ROLLOUT_CUTOFF is the baseline; with no activity, never unread."""
     if last_activity_at is None:
         return False
     baseline = seen_at if seen_at is not None else ACTIVITY_SEEN_ROLLOUT_CUTOFF
@@ -173,12 +119,8 @@ def _has_unread_activity(last_activity_at, seen_at):
 
 
 def _urgency_for(next_deadline, today):
-    """
-    Computed Urgency - a RAG bucket from how many days away the same next_deadline value actually is.
-    Not stored anywhere, it's a pure presentation-layer computation on data we already have.
-
-    Same-day and overdue both bucket into urgent. Overdue pulses, while same day is static.
-    """
+    """Urgency bucket from days until next_deadline: overdue, urgent (today),
+    prioritize (within 2 days) or normal. None if there is no deadline."""
     if next_deadline is None:
         return None
     days_away = (next_deadline['date'] - today).days
@@ -190,30 +132,14 @@ def _urgency_for(next_deadline, today):
         return 'prioritize'
     return 'normal'
 
-# The three possible design disciplines a deliverable can call for — same
-# canonical strings used everywhere else in the app (User.team,
-# DeliverableAssignment.team, Deliverable.teams). Confirmed against
-# projects_detail.py's own team lookups before relying on them here, rather
-# than guessing at casing.
+# Design disciplines; must match the exact strings in User.team,
+# DeliverableAssignment.team and Deliverable.teams.
 TEAM_KEYS = ['2D', '3D', 'Technical']
 
 def _team_columns_for(deliverable):
-    """
-    Per-deliverable, per-team breakdown for the sublevel table's three team
-    columns. For each of 2D/3D/Technical, tells the template one of three
-    states:
-      - required=False               -> never requested for this deliverable
-                                         (template shows "Not Required")
-      - required=True, designer=None  -> requested, nobody assigned yet
-                                         (template shows "Not Assigned")
-      - required=True, designer={...} -> requested and assigned; the chip
-                                         itself renders via person_chip()
-
-    Deliverable.teams is just a comma-separated string of what was asked
-    for ("3D,Technical") — DeliverableAssignment is the separate record of
-    who's actually doing it, so a deliverable can be "requested" for a
-    team long before anyone's assigned to it.
-    """
+    """Per-team cell data for the sub-table: {'required', 'designer'} for each
+    of TEAM_KEYS. Requested teams come from Deliverable.teams (CSV); the
+    designer from DeliverableAssignment, so a team can be required but unassigned."""
     requested = {t.strip() for t in (deliverable.teams or '').split(',') if t.strip()}
     assigned_by_team = {da.team: da.designer for da in deliverable.disciplines}
 
@@ -226,12 +152,7 @@ def _team_columns_for(deliverable):
     return columns
 
 def _serialize_deliverable_row(d):
-    """
-    One row of the fixed-shape deliverable sub-table. Shared by Standard's
-    direct project-level expansion and C&CM's per-customer expansion — a
-    deliverable looks the same either way once you're this deep, so this
-    is the one function both paths call.
-    """
+    """One deliverable sub-table row. Used by both Standard and C&CM expansion."""
     status_label, status_class = derive_deliverable_status(d)
     return {
         'id': d.id,
@@ -244,10 +165,7 @@ def _serialize_deliverable_row(d):
     }
 
 def _parse_ids(param_name):
-    """
-    Reads a comma-seperated query param of integer IDs (e.g. ?cs_lead=3,7)
-    and then returns a list of ints, or an empty list if the param isn't set.
-    """
+    """Parse a comma-separated query param of int IDs (e.g. ?cs_lead=3,7); [] if unset."""
 
     raw = request.args.get(param_name, '')
     if not raw:
@@ -255,21 +173,14 @@ def _parse_ids(param_name):
     return [int(v) for v in raw.split(',') if v.strip().isdigit()]
 
 def _parse_values(param_name):
-    """
-    Same idea, but for comma-separated string values rather than IDs
-    (e.g ?urgency=overdue, urgent or ?status=Active,On Hold).
-    """
+    """Parse a comma-separated query param of strings (e.g. ?status=Briefed,On Hold)."""
     raw = request.args.get(param_name, '')
     if not raw:
         return []
     return [v for v in raw.split(',') if v]
 
 def _parse_date(param_name):
-    """
-    Reads a query param expected to be an ISO date string
-    (e.g. ?initial_deadline_from=2026-07-01) and returns a date object,
-    or None if the param isn't set or isn't a valid date.
-    """
+    """Parse an ISO date query param; None if unset or invalid."""
     raw = request.args.get(param_name, '')
     if not raw:
         return None
@@ -279,12 +190,8 @@ def _parse_date(param_name):
         return None
 
 def _row_passes_filters(row, exclude=None):
-    """
-    True if one serialized row matches every active filter dimension
-    except `exclude`. Same conditions _filter_rows applies to a list, one
-    row at a time — used directly by table_row() so a single-project
-    check can never drift from what filtering the full list would decide.
-    """
+    """True if a serialized row matches every active filter except `exclude`.
+    The single source of filter logic for _filter_rows and table_row()."""
     if exclude != 'cs_lead':
         cs_lead_ids = _parse_ids('cs_lead')
         if cs_lead_ids and not (row['cs_lead'] and row['cs_lead']['id'] in cs_lead_ids):
@@ -349,7 +256,7 @@ def _row_passes_filters(row, exclude=None):
         want_undefined = _has_undefined('team')
         if (teams or want_undefined) and not (
             any(t in teams for t in row['design_teams'])
-            or (want_undefined and not row['design_teams'])
+            or (want_undefined and not _has_known_team(row))
         ):
             return False
 
@@ -375,23 +282,13 @@ def _row_passes_filters(row, exclude=None):
 
 
 def _filter_rows(rows, exclude=None):
-    """
-    Keeps rows matching every active filter dimension except `exclude` —
-    used when computing that dimension's own option counts, so a
-    dimension's current selection doesn't shrink its own option counts to
-    just itself. See _row_passes_filters for the per-row conditions.
-    """
+    """Rows matching every active filter except `exclude`. Excluding a
+    dimension lets its own option counts ignore its current selection."""
     return [r for r in rows if _row_passes_filters(r, exclude)]
 
 def _resolve_view(view, user):
-    """
-    A saved custom view ("view-<id>") isn't itself a base query — it's a
-    name + a remembered filter selection layered on top of one of the three
-    fixed presets. Resolves it down to that preset so callers only ever have
-    to know about 'my'/'all'/'design_complete'. Idempotent: calling it again
-    on an already-resolved view ('my'/'all'/'design_complete') just returns
-    it unchanged, since those never start with 'view-'.
-    """
+    """Resolve a saved view ("view-<id>") to its base preset ('my', 'all' or
+    'design_complete'); falls back to 'my'. Presets pass through unchanged."""
     if view.startswith('view-'):
         try:
             view_id = int(view.split('-', 1)[1])
@@ -403,25 +300,14 @@ def _resolve_view(view, user):
 
 
 def _base_query_for_view(view, user):
-    """
-    Returns (query, order_by) for whichever of the three fixed views is
-    active, before any of the combinable filters are applied. Pulled out
-    of index() so the same view-scoping logic can be reused when computing
-    each filter option's count — those counts need to be scoped to "this
-    view" too, not the whole projects table.
-    """
+    """(query, order_by) for the active preset view, before filters. Also
+    scopes the filter option counts to the view."""
     order_by = Project.first_output_deadline.asc()
     view = _resolve_view(view, user)
 
-    # 'approved' (the raw status value) is a transient in-flight status
-    # (Pre-Production / Handed to Production come after it), not a finish
-    # line, so it is not excluded from My/All. Only 'handed_to_production'
-    # (the real terminal state) is excluded, matching the dashboard's
-    # scope_query(). A "Pre-Production only" list can be built as a
-    # custom view (My or All + Status = Pre-Production). The one fixed tab
-    # that hardcodes a status is 'design_complete' below; that view key was
-    # renamed from 'approved' (confusing next to the unrelated 'approved'
-    # status value).
+    # Raw 'approved' (shown as Pre-Production) is still in flight, so My/All
+    # exclude only the terminal 'handed_to_production', matching the
+    # dashboard's scope_query().
     if view == 'all':
         if can('view_all_projects', user):
             query = Project.query.filter(
@@ -438,13 +324,9 @@ def _base_query_for_view(view, user):
             query = None
 
     elif view == 'design_complete':
-        # Fixed "Design Complete" tab (view key 'design_complete'). Lists
-        # projects by when each most recently logged 'handed_to_production',
-        # most recently completed first. Project has no dedicated timestamp
-        # column for this stage, so it is derived from the status log. One
-        # unified project pill reads Handed to Production the same way for
-        # Standard and C&CM (the shared derive_project_status), so this tab
-        # is simply the projects at that raw status for both brief types.
+        # Design Complete tab: projects handed to production, plus C&CM
+        # projects with any channel approved or handed over. Newest handover
+        # first, taken from the status log (no timestamp column on Project).
         handed_at = (
             db.session.query(db.func.max(ProjectStatusLog.started_at))
             .filter(
@@ -467,11 +349,8 @@ def _base_query_for_view(view, user):
 
     else:  # 'my' - default
         if can('view_all_projects', user):
-            # "My Projects" means projects this person is actually on —
-            # cs_lead, secondary CS, or project owner — the same rule for
-            # every role in this bucket, admin included. Admin/management
-            # still see every project via the All/Team Projects tab (the
-            # 'all' branch above).
+            # My Projects: projects the user leads, is secondary CS on, or
+            # owns, for every role here, admin included. 'all' shows the rest.
             secondary_project_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(
                 user_id=user.id
             ).subquery()
@@ -494,37 +373,21 @@ def _base_query_for_view(view, user):
                 Project.project_status != 'handed_to_production'
             )
 
-    # Cancelled projects are hidden from every view by default (they still
-    # exist, still show up on refresh, just not by default) — the toolbar
-    # toggle or the Cancelled status chip (_show_cancelled()) opts back in.
-    # Applied once here rather than per-branch so all three presets, the
-    # filter-count recompute, and the view-total count can never disagree
-    # on whether cancelled projects are in scope.
+    # Cancelled projects are hidden unless the Cancelled status is selected
+    # (_show_cancelled). Applied once here so every view and count agrees.
     if query is not None and not _show_cancelled():
         query = query.filter(Project.cancelled_at.is_(None))
 
     return query, order_by
 
-# Safety cap (task #55, Group C) — an unbounded view could serialize
-# thousands of projects on every request/SSE ping. Fetched as cap+1 so
-# truncation can be detected without a separate COUNT query.
+# Safety cap so a view can't serialize thousands of projects per request or
+# SSE ping. Fetched as cap+1 to detect truncation without a COUNT query.
 _VIEW_ROW_CAP = 500
 
 def _fetch_all_view_rows(view, user):
-    """
-    The one and only DB fetch-and-serialize pass per request: every
-    project in this view (the fixed preset's own static conditions from
-    _base_query_for_view — draft/handed-to-production/cancelled
-    exclusions — already applied), with NONE of the combinable filter
-    dimensions applied yet. table_rows()/index() call this exactly once
-    and hand the same in-memory row list to both _compute_rows_and_groups
-    (the visible list) and _build_filter_counts (every filter chip's own
-    count) — see _filter_rows()'s docstring for why this replaced 9
-    separate fetches.
-
-    Capped at _VIEW_ROW_CAP. Returns (rows, truncated) so callers can warn
-    the user instead of silently showing a partial view.
-    """
+    """The single DB fetch per request: every project in the view, serialized,
+    before filters. Callers filter, sort, group and count this list in memory.
+    Capped at _VIEW_ROW_CAP; returns (rows, truncated) so callers can warn."""
     query, order_by = _base_query_for_view(view, user)
     if query is None:
         return [], False
@@ -537,13 +400,7 @@ def _fetch_all_view_rows(view, user):
     rollups, next_deadlines = _bulk_deliverable_aggregates(project_ids)
     status_started_at = bulk_project_status_started_at(project_ids)
     client_approved_at = bulk_project_client_approved_at(project_ids)
-    # Unread dots (26/27 Aug 2026, per Ezekiel) — two more batch-computed
-    # dicts, same pattern as the three above: one pair of bulk queries for
-    # the whole view regardless of row count, folded into each row's dict
-    # by _serialize_row below. Because it happens here — before
-    # _compute_rows_and_groups' filter/sort/group pass ever runs — the
-    # dots are just another field on each row dict, and survive every
-    # filter/sort/group the same way rollup/urgency/etc. already do.
+    # Unread dots.
     last_update_at, last_chat_at = _bulk_activity_and_chat_at(project_ids)
     seen_by_project = _bulk_activity_seen(project_ids, user)
     rows = [
@@ -555,19 +412,12 @@ def _fetch_all_view_rows(view, user):
 
 
 def _rows_excluding(all_rows, exclude):
-    """
-    `all_rows` with every active filter applied EXCEPT `exclude`. Used to
-    compute one filter's own option counts — a project should still count
-    toward "Client: Acme" even while Client is the very filter being
-    counted, as long as it matches every OTHER active filter. Thin wrapper
-    over _filter_rows so each call site in _build_filter_counts below
-    reads as "this dimension's rows", not a bare _filter_rows call.
-    """
+    """Rows matching every active filter except `exclude`, for that filter's
+    own option counts."""
     return _filter_rows(all_rows, exclude=exclude)
 
 def _count_by_id(rows, key):
-    """Counts rows by a single-person field (e.g. row['cs_lead']). Rows
-    with no one set for this field just don't contribute to any count."""
+    """Count rows by a single-person field (e.g. 'cs_lead'), keyed by user id."""
     counts = {}
     for r in rows:
         person = r[key]
@@ -576,8 +426,7 @@ def _count_by_id(rows, key):
     return counts
 
 def _count_by_id_list(rows, key):
-    """Same idea, but for a field that's a list of people (Designers) —
-    a project with 2 designers counts toward both of them."""
+    """Count rows by a list-of-people field; a row counts toward each person."""
     counts = {}
     for r in rows:
         for person in r[key]:
@@ -586,8 +435,7 @@ def _count_by_id_list(rows, key):
     return counts
 
 def _count_by_value(rows, key):
-    """Counts rows by a plain scalar already on the row (client_id,
-    brief_type, blanket_status, urgency)."""
+    """Count rows by a scalar field (e.g. client_id, blanket_status), skipping None."""
     counts = {}
     for r in rows:
         value = r[key]
@@ -596,45 +444,28 @@ def _count_by_value(rows, key):
     return counts
 
 def _show_cancelled():
-    """True if the Cancelled status filter is active. Cancelled projects
-    are excluded from every view by default (see the exclusion in
-    _base_query_for_view) — this is the only way back in. There's no
-    separate "show cancelled" query param: the Show Cancelled toolbar
-    button is just a shortcut that sets ?status=Cancelled (same as picking
-    the Cancelled chip in the filter panel by hand), so it composes with
-    every other filter dimension for free, and doubles as "cancelled
-    projects ONLY" rather than "cancelled mixed in with everything else" —
-    the status filter (_filter_rows) already narrows to exactly the
-    selected status value(s)."""
+    """True if ?status includes Cancelled, the only way cancelled projects
+    enter a view. The Show Cancelled button just sets that filter."""
     return 'Cancelled' in _parse_values('status')
 
 def _has_undefined(param_name):
-    """
-    True if the admin-only 'undefined' sentinel is among a filter param's
-    comma-separated values (e.g. ?client=3,undefined). Checked separately
-    from _parse_ids/_parse_values, which only ever pull out real ids/values
-    - a non-digit, non-matching string like "undefined" just gets silently
-    dropped by those. This reads the same raw param a second time, looking
-    only for that one sentinel.
-    """
+    """True if a filter param includes the admin-only 'undefined' sentinel
+    (e.g. ?client=3,undefined). _parse_ids drops it, so it's checked here."""
     raw = request.args.get(param_name, '')
     return 'undefined' in [v.strip() for v in raw.split(',') if v.strip()]
 
+def _has_known_team(row):
+    """True if the row requests at least one of TEAM_KEYS. Rows without one
+    are "Undefined" in the Team filter, its count and the team grouping."""
+    return any(t in TEAM_KEYS for t in row['design_teams'])
+
 def _count_undefined(rows, key):
-    """
-    Counts rows where this field is missing entirely - None for a
-    single-value field (Client, Type of Design), or an empty list for a
-    multi-value one (Designers, Team). Powers the Undefined chip's live
-    count - callers merge this into a normal counts dict under a None key,
-    so the template reads it with the exact same .get(None, 0) every
-    other option already uses.
-    """
+    """Count rows where the field is empty (None or []). Callers store it
+    under the None key, which the template reads for the Undefined chip."""
     return sum(1 for r in rows if not r[key])
 
 def _count_by_list_membership(rows, key):
-    """Counts rows by membership in a list-of-strings field (e.g. row['design_teams']
-    contains '2D') - same idea as _count_by_id_list, but for plain string
-    values rather than person dicts."""
+    """Count rows by each string in a list field (e.g. 'design_teams')."""
     counts = {}
     for r in rows:
         for value in r[key]:
@@ -643,13 +474,8 @@ def _count_by_list_membership(rows, key):
 
 
 def _build_filter_counts(all_rows):
-    """
-    Computes every filter option's live count, each scoped to "this view
-    plus every other currently active filter." Takes the shared
-    _fetch_all_view_rows() result now (see its docstring / _filter_rows's)
-    instead of re-fetching per dimension — the 8 _rows_excluding calls
-    below are all cheap in-memory filtering of the same list.
-    """
+    """Live count for every filter option, scoped to the view plus every
+    other active filter. All in-memory over _fetch_all_view_rows()'s list."""
     client_rows = _rows_excluding(all_rows, 'client')
     designer_rows = _rows_excluding(all_rows, 'designers')
     design_type_rows = _rows_excluding(all_rows, 'design_type')
@@ -665,8 +491,7 @@ def _build_filter_counts(all_rows):
 
     team_rows = _rows_excluding(all_rows, 'team')
     team_counts = _count_by_list_membership(team_rows, 'design_teams')
-    team_counts[None] = _count_undefined(team_rows, 'design_teams')
-
+    team_counts[None] = sum(1 for r in team_rows if not _has_known_team(r))
 
     return {
         'cs_lead': _count_by_id(_rows_excluding(all_rows, 'cs_lead'), 'cs_lead'),
@@ -676,21 +501,15 @@ def _build_filter_counts(all_rows):
         'brief_type': _count_by_value(_rows_excluding(all_rows, 'brief_type'), 'brief_type'),
         'status': _count_by_value(_rows_excluding(all_rows, 'status'), 'blanket_status'),
         'urgency': _count_by_value(_rows_excluding(all_rows, 'urgency'), 'urgency'),
-        'team': _count_by_list_membership(_rows_excluding(all_rows, 'team'), 'design_teams'),
+        'team': team_counts,
         'design_type': design_type_counts,
     }
 
 def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_approved_at=None,
                    last_update_at=None, last_chat_at=None, seen_by_project=None):
-    """Turns one Project into the flat dict the template needs. Pulled out of index(), now that there are three different queries feeding
-    in the same row shape. rollups/next_deadlines/status_started_at/client_approved_at are the batch-computed dicts from _bulk_deliverable_aggregates()/bulk_project_status_started_at()/bulk_project_client_approved_at() — a plain dict lookup here instead of each row running its own query.
-
-    last_update_at/last_chat_at/seen_by_project (26/27 Aug 2026, per
-    Ezekiel) are _bulk_activity_and_chat_at()/_bulk_activity_seen()'s
-    batch-computed dicts, same calling convention as the others — used
-    here to derive has_unread_update/has_unread_chat, the Projects table's
-    two per-row dots. All five extra params default to None so this stays
-    a valid call from anywhere that doesn't care about unread state."""
+    """Turn one Project into the flat row dict the template needs. The other
+    args are per-project dicts from the _bulk_* helpers; the optional ones
+    default to None (their fields come out None/False)."""
     next_deadline = next_deadlines.get(p.id)
     status_label, status_class = derive_project_status(p)
     seen = (seen_by_project or {}).get(p.id)
@@ -709,21 +528,16 @@ def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_ap
         'status': p.project_status,
         'blanket_status': status_label,
         'status_pill_class': status_class,
-        # When this project's raw status last changed
-        # (ProjectStatusLog), fetched in bulk by the caller. None if
-        # status_started_at wasn't passed in, or nothing's logged yet.
+        # When the raw status last changed (ProjectStatusLog); None if unknown.
         'status_started_at': (status_started_at or {}).get(p.id),
-        # The client-approval moment specifically — survives the project moving on to Handed to
-        # Production, unlike status_started_at above. None if never
-        # approved, or client_approved_at wasn't passed in.
+        # When the client approved; kept after the project moves on. None if never.
         'client_approved_at': (client_approved_at or {}).get(p.id),
         'brief_type': p.brief_type,
         'rollup': rollups.get(p.id),
         'customer_count': sum(1 for pc in p.project_customers if not pc.cancelled) if p.brief_type == 'ccm' else None,
         'next_deadline': next_deadline,
         'urgency': _urgency_for(next_deadline, date.today()),
-        # Unread dots — independent flags per _has_unread_activity's rules
-        # above, so a project can show either, both, or neither.
+        # Two independent unread dots: a row can show either, both, or neither.
         'has_unread_update': _has_unread_activity(
             (last_update_at or {}).get(p.id), seen.last_seen_update_at if seen else None),
         'has_unread_chat': _has_unread_activity(
@@ -731,31 +545,20 @@ def _serialize_row(p, rollups, next_deadlines, status_started_at=None, client_ap
     }
 
 def _compute_rows_and_groups(all_rows):
-    """
-    The rows -> filter -> sort -> group pipeline, shared by index() and
-    table_rows() so the live-refresh endpoint can't drift from a real page
-    load. Takes _fetch_all_view_rows()'s result; filtering is the only thing
-    that drops rows (sort and group only reorder/bucket).
-    """
+    """Filter, sort, then group the view's rows. Shared by the page and the
+    live-refresh endpoint so they can't drift."""
     rows = _filter_rows(all_rows)
 
-    # Sort is applied last, after every filter — it re-orders whatever
-    # subset of rows is already showing, it never changes which rows show.
     sort_field = request.args.get('sort', '')
     sort_dir = request.args.get('dir', 'asc') if sort_field else ''
     if sort_field in SORT_FIELDS:
         rows = _sort_rows(rows, sort_field, sort_dir)
     else:
-        # Unknown/garbage ?sort= value — fall back to the view's default
-        # order rather than silently sorting by a field that doesn't exist.
+        # Unknown ?sort= value: keep the view's default order.
         sort_field = ''
         sort_dir = ''
 
-    # Group by is independent of Sort - a separate `group` query param, and
-    # the two can both be active at once. Grouping buckets the already-
-    # sorted rows into named boxes; a row's position relative to its own
-    # group's other rows is untouched, since Python's sort (above) is
-    # stable and grouping never re-sorts within a group.
+    # Grouping buckets the already-sorted rows; order within a group is kept.
     group_field = request.args.get('group', '')
     if group_field in dict(GROUP_FIELDS):
         groups = _group_rows(rows, group_field)
@@ -770,13 +573,8 @@ def _compute_rows_and_groups(all_rows):
 @login_required
 @require('view_workspace')
 def table_rows():
-    """
-    The Projects table's full refresh endpoint. On an SSE ping the client
-    re-fetches this with its current view/filter/sort/group params and swaps
-    the result into #project-table, leaving the rest of the page untouched.
-    Does NOT touch session['last_project_view'] — only index() (a real
-    navigation) should change where the sidebar's Projects link lands.
-    """
+    """Full table refresh: the client re-fetches this on an SSE ping and swaps
+    it into #project-table. Must not write session['last_project_view']."""
     user = _effective_user()
     view = request.args.get('view') or session.get('last_project_view', 'my')
     all_rows, _truncated = _fetch_all_view_rows(view, user)
@@ -788,13 +586,9 @@ def table_rows():
 @login_required
 @require('view_workspace')
 def table_row(project_id):
-    """
-    Targeted single-row refresh, answered without building the whole view.
-    Membership reuses _base_query_for_view and the filter check reuses
-    _row_passes_filters — the same query and predicate the full list uses —
-    so it can't drift from a full refresh. 204 means the project isn't in the
-    current view/filter (project_list.js then removes the row).
-    """
+    """Single-row refresh, using the same view query and filter check as the
+    full list. 204 means the project is out of the view/filter, and
+    project_list.js removes the row."""
     user = _effective_user()
     view = request.args.get('view') or session.get('last_project_view', 'my')
     query, _order_by = _base_query_for_view(view, user)
@@ -819,22 +613,9 @@ def table_row(project_id):
 
 
 def _redirect_target_for_fresh_saved_view(view, user):
-    """
-    Fresh landing on a saved view (just clicked its tab, no filter params
-    yet) - the caller should redirect to replay its saved filters as real
-    query params, so every existing filter/sort/group code path (all of
-    which read from request.args) picks them up for free instead of
-    needing its own separate "saved filter" code path. `len(request.args)
-    <= 1` is the "fresh landing" check - only `view` itself is present so
-    far. Returns the dict of params to redirect to (always including
-    `view`), or None when this isn't that case.
-
-    Shared by index() and page_state() (28 Aug 2026 — see that route's
-    docstring) so both replay a saved view's filters via the exact same
-    real HTTP redirect rather than two copies of this logic — fetch()
-    follows redirects transparently, so page_state()'s caller lands on
-    the resolved URL for free, same as a real navigation does for index().
-    """
+    """On a fresh landing on a saved view (no args beyond ?view), return the params
+    to redirect to so its saved filters become real query args; else None.
+    Used by index() and page_state(); fetch() follows the redirect."""
     if not (view.startswith('view-') and len(request.args) <= 1):
         return None
     try:
@@ -850,15 +631,8 @@ def _redirect_target_for_fresh_saved_view(view, user):
 
 
 def _build_page_context(view, user):
-    """
-    Everything index.html (and, since 28 Aug 2026, page_state()'s JSON
-    fragments) needs to render the page for one resolved `view` + the
-    current request's filter/sort/group/search args. Factored out of
-    index() so page_state() — the AJAX/soft-navigation counterpart added
-    per Ezekiel's "can we have this spa injected too?" — builds the exact
-    same context a real navigation would, instead of drifting out of sync
-    with a second copy of this logic.
-    """
+    """Template context for the page: `view` plus the request's filter, sort,
+    group and search args. Shared by index() and page_state() so they match."""
     table_key = f'project_list:{view}'
 
     layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key=table_key).first()
@@ -869,10 +643,7 @@ def _build_page_context(view, user):
     customer_layout_row = UserTableLayout.query.filter_by(user_id=user.id, table_key='project_list:customer_table').first()
     saved_customer_layout = customer_layout_row.layout if customer_layout_row else None
     
-    # Single DB fetch for the whole request (see _filter_rows()'s
-    # docstring) — the visible row list and every filter chip's
-    # own count are both just Python-side filtering of this same list now,
-    # instead of each re-querying and re-serializing the view from scratch.
+    # One fetch; rows and filter counts are both computed from it in memory.
     all_rows, view_capped = _fetch_all_view_rows(view, user)
     rows, groups, sort_field, sort_dir, group_field = _compute_rows_and_groups(all_rows)
 
@@ -882,25 +653,13 @@ def _build_page_context(view, user):
     view_total = view_total_query.count() if view_total_query is not None else 0
 
     filter_options = {
-        # Deactivated people stay selectable (projects still reference them) but
-        # sort to the bottom via is_active.desc() — active first, then name.
+        # Deactivated people stay selectable (projects still reference them), sorted last.
         'cs_leads': UserModel.query.filter(UserModel.role.in_(['cs', 'admin'])).order_by(UserModel.is_active.desc(), UserModel.name).all(),
         'designers': UserModel.query.filter(UserModel.role.in_(['designer', 'team_lead'])).order_by(UserModel.is_active.desc(), UserModel.name).all(),
         'project_owners': UserModel.query.filter_by(role='project_owner').order_by(UserModel.is_active.desc(), UserModel.name).all(),
         'clients': Client.query.order_by(Client.name).all(),
         'brief_types': [('standard', 'Standard'), ('ccm', 'C&CM')],
-        # 'In Progress' removed — the C&CM aggregate's "In
-        # Progress" stage was renamed to "In Design" to match Standard's
-        # wording (status_vocabulary.py), so it's no longer a distinct
-        # blanket_status value to filter on. 'Design Completed' removed —
-        # that separate label
-        # doesn't exist anywhere anymore, a project whose pill reads
-        # Handed to Production is what lands on that tab. 'Client
-        # Approved' removed too — the project-level pill
-        # is now the same 4-stage shape as the deliverable pill (Briefed /
-        # In Design / Pre-Production / Handed to Production, plus the
-        # orthogonal On Hold/Cancelled); 'Pre-Production' replaces it as
-        # the filter value for that same raw 'approved' status.
+        # Must match derive_project_status labels (status_vocabulary.py).
         'statuses': [
             'Briefed', 'In Design', 'Pre-Production', 'Handed to Production', 'On Hold', 'Cancelled',
         ],
@@ -944,10 +703,8 @@ def _build_page_context(view, user):
         bool(active_filters['next_deadline_from'] or active_filters['next_deadline_to']),
     ])
 
-    # Saved-view tabs (rendered after the 3 fixed presets) and which fixed
-    # preset the CURRENTLY active view is built on - the latter is what the
-    # "Save as new view" popover submits as `base_view` when the user isn't
-    # already sitting on a saved view of their own.
+    # Saved-view tabs, and the preset the active view is built on (submitted
+    # as `base_view` by the "Save as new view" popover).
     saved_views = ProjectTableView.query.filter_by(user_id=user.id).order_by(ProjectTableView.created_at.asc()).all()
     if view.startswith('view-'):
         try:
@@ -960,8 +717,8 @@ def _build_page_context(view, user):
         active_saved_view = None
         current_base_view = view
 
-    # Dirty = the current filters/sort/group no longer what is active in the tab. 
-    # Column layout is not included, that preference is saved seperately and persistent across all tabs.
+    # Dirty = current filters/sort/group differ from the saved view's. Column
+    # layout is excluded; it is saved separately.
     current_params = {k: v for k, v in request.args.items() if k!= 'view' and v}
     baseline_params = dict(active_saved_view.filters) if active_saved_view and active_saved_view.filters else {}
     is_dirty = current_params != baseline_params
@@ -979,14 +736,9 @@ def _build_page_context(view, user):
 @login_required
 @require('view_workspace')
 def index():
-    """ Three fixes presets. Set now as we build it out"""
+    """The Projects list page for the requested (or last-used) view."""
     user = _effective_user()
-    # Remember which tab the user was last on —
-    # the sidebar's "Projects" link is a static href with no query string,
-    # so a plain visit here would otherwise always default to 'my' instead
-    # of wherever they left off. Session-scoped, not a DB column: meant to
-    # survive across navigations in one browsing session, not follow the
-    # user to a different device or across a logout.
+    # Remember the last tab (per session) since the sidebar link has no query string.
     view = request.args.get('view')
     if view:
         session['last_project_view'] = view
@@ -1005,27 +757,10 @@ def index():
 @login_required
 @require('view_workspace')
 def page_state():
-    """
-    AJAX/JSON counterpart to index() — same context via _build_page_context(),
-    but returns rendered fragments (tab strip / filter panel / sort panel /
-    table) plus the handful of scalar bits index.html's inline <script>
-    sets as window.__savedTableLayout etc., instead of a full HTML page.
-    Lets the client swap views/filters/sort/group/search/show-cancelled in
-    place instead of a full page navigation — see softNavigate() in
-    project_list.js. Added 28 Aug 2026, per Ezekiel: "can we have this spa
-    injected too?"
-
-    Mirrors index()'s "fresh landing on a saved view replays its saved
-    filters" behaviour via a REAL redirect to this same route (not
-    index()) rather than a second copy of that logic — fetch() follows
-    redirects transparently, landing here again with the resolved query
-    string, and response.url then tells the client what to show in the
-    address bar, exactly as a real navigation's redirect would.
-
-    Does NOT touch session['last_project_view'] — same reasoning as
-    table_rows() above: this isn't a real navigation, so it shouldn't
-    change where a plain visit to /projects-new lands next time.
-    """
+    """JSON version of index() for softNavigate() in project_list.js: rendered
+    fragments plus the scalars index.html's inline script sets. Saved views
+    redirect back here; the client reads response.url for the address bar.
+    Must not write session['last_project_view']."""
     user = _effective_user()
     view = request.args.get('view') or session.get('last_project_view', 'my')
 
@@ -1064,11 +799,7 @@ def page_state():
 @login_required
 @require('view_workspace')
 def save_layout():
-    """
-    Silently persists one user's column widths/order for one table+view.
-    Called after every resize/reorder, debounced client-side so this fires
-    once things settle rather than on every pixel of a drag.
-    """
+    """Save the user's column widths/order for one table key (debounced client-side)."""
     user = _effective_user()
     data = request.get_json(silent=True) or {}
     table_key = data.get('table_key')
@@ -1122,11 +853,7 @@ def expand(project_id):
 @login_required
 @require('view_workspace')
 def expand_customer(project_customer_id):
-    """
-    Sublevel 2, C&CM only: one customer's own deliverables. Same on-
-    demand/fetch-once principle as expand() above — built and sent down
-    the wire only once someone actually clicks that customer's toggle.
-    """
+    """C&CM second level: one customer's deliverables, fetched on expand."""
     pc = ProjectCustomer.query.get_or_404(project_customer_id)
     deliverables = Deliverable.query.filter_by(project_customer_id=pc.id).options(
         selectinload(Deliverable.disciplines).joinedload(DeliverableAssignment.designer)
@@ -1135,10 +862,7 @@ def expand_customer(project_customer_id):
     return render_template('project_list/_deliverable_table.html', rows=rows, today=date.today(), brief_type='ccm')
 
 # ---- Sorting ----
-# Every sort dimension a user can pick from the Sort popout, in display
-# order. Kept as a plain (value, label) list (not a dict) so the template
-# can render them in a fixed, deliberate order rather than whatever order
-# a dict happens to iterate in.
+# Sort popout options as (value, label), in display order.
 SORT_OPTIONS = [
     ('name', 'Project Name'),
     ('client', 'Client'),
@@ -1150,19 +874,11 @@ SORT_OPTIONS = [
     ('job', 'Job Number'),
 ]
 
-# "Most urgent first" order for the Urgency sort option — lower sorts first.
-# A project with no urgency (no next deadline at all) is deliberately last,
-# in the same spot an undated deadline would land.
+# Most urgent first. No urgency (no next deadline) gets 4, so it sorts last.
 _URGENCY_SORT_ORDER = {'overdue': 0, 'urgent': 1, 'prioritize': 2, 'normal': 3}
 
-# One key-function per sortable field, each taking (row, reverse) -> a
-# sortable value. `reverse` is only actually used by the two date fields:
-# a project with no deadline set should always sort to the END of the
-# list, in EITHER direction — without this, sorted(..., reverse=True)
-# would take a "no deadline = date.max" sentinel and flip it to the very
-# front once you switch to descending, which reads as a bug, not a
-# feature. Using date.min as the sentinel specifically when reverse=True
-# keeps undated rows pinned last regardless of which arrow was clicked.
+# Key functions (row, reverse) -> sort value. The date fields swap their
+# missing-date sentinel on reverse so undated rows stay last either way.
 SORT_FIELDS = {
     'name': lambda r, reverse: (r['name'] or '').lower(),
     'client': lambda r, reverse: (r['client'] or '').lower(),
@@ -1175,15 +891,8 @@ SORT_FIELDS = {
 }
 
 def _sort_rows(rows, field, direction):
-    """
-    Sorts the already-filtered row list in Python, not SQL. Several
-    sortable fields (urgency, next_deadline, the cs_lead person dict) are
-    computed in _serialize_row()/_urgency_for(), not real Project columns
-    — there's no SQL expression to ORDER BY for them. Sorting the final
-    row list once, here, keeps every sortable field (real column or
-    computed) going through the exact same code path instead of splitting
-    sorting between a SQL branch and a Python branch depending on the field.
-    """
+    """Sort rows in Python; several sort fields (urgency, next_deadline) are
+    computed, not SQL columns."""
     key_fn = SORT_FIELDS.get(field)
     if key_fn is None:
         return rows
@@ -1192,10 +901,7 @@ def _sort_rows(rows, field, direction):
 
 
 # ---- Grouping ----
-# Every dimension a user can group rows by, in display order. Independent
-# of Sort (`group` and `sort` are separate query params, and both can be
-# active at once) - Group by buckets rows into named boxes; whichever sort
-# is active still runs first, so a group's own rows stay in that order.
+# Group-by options as (value, label), in display order. Sort runs first.
 GROUP_FIELDS = [
     ('cs_lead', 'CS Lead'),
     ('client', 'Client'),
@@ -1206,12 +912,8 @@ GROUP_FIELDS = [
 ]
 
 def _group_key_and_label(row, field):
-    """
-    Returns (sort_key, label) for the single-value group fields. `team` is
-    handled separately in _group_rows, since it's the one multi-value field
-    here - a row can legitimately belong to more than one team's group at
-    once (a project requesting both 2D and 3D design).
-    """
+    """(sort_key, label) for single-value group fields. `team` is multi-value
+    and handled in _group_rows."""
     if field == 'cs_lead':
         person = row['cs_lead']
         return ((0, person['name'].lower()), person['name']) if person else ((1, ''), 'No CS Lead')
@@ -1224,18 +926,8 @@ def _group_key_and_label(row, field):
     if field == 'status':
         return ((row['blanket_status'].lower(),), row['blanket_status'])
     if field == 'next_deadline_month':
-        # Buckets by the month of the SAME next_deadline the Next Deadline
-        # column/sort/filter already use — the earliest design_deadline
-        # among the project's own non-Approved deliverables
-        # (_bulk_deliverable_aggregates in this file), i.e. the closest
-        # deadline deliverable assigned within it. A project with no such deliverable (everything already
-        # Approved, or nothing assigned at all) has no next_deadline and
-        # goes in a trailing "No Deadline" box rather than being dropped —
-        # same "never silently disappear a row" rule every other group
-        # field here already follows (see cs_lead/client's "No CS Lead"/
-        # "No Client" boxes above). Sort key is (0, year, month) for a real
-        # month so chronological order comes for free from the label sort
-        # below, vs. (1, ...) for the undefined box so it always sorts last.
+        # Month of next_deadline, chronological; rows without one go in a
+        # trailing "No Deadline" group.
         next_deadline = row['next_deadline']
         if next_deadline:
             d = next_deadline['date']
@@ -1244,30 +936,20 @@ def _group_key_and_label(row, field):
     return None
 
 def _group_rows(rows, field):
-    """
-    Buckets an already-filtered (and already-sorted) row list into named
-    groups for whichever field the user picked in the Group by panel. Each
-    row keeps its position relative to its own group's other rows - Group
-    by changes how rows are BOXED, not the order they're compared in.
-
-    Returns a list of {'key', 'label', 'rows'} dicts, one per group, in
-    display order (alphabetical/urgency-order by label, except `team`
-    which follows the fixed TEAM_KEYS order plus a trailing Undefined box).
-
-    `team` fans a row out into every team-group it belongs to, since
-    design_teams is a list, not a single value - a project requesting both
-    2D and 3D legitimately shows up in both boxes.
-    """
+    """Bucket sorted rows into [{'key', 'label', 'rows'}] in display order,
+    keeping row order within each group. `team` follows TEAM_KEYS order, a
+    row appears in every team it requests, and teamless rows go to Undefined."""
     if field == 'team':
         buckets = {team: [] for team in TEAM_KEYS}
         undefined_bucket = []
         for row in rows:
-            teams = row['design_teams']
+            # Only TEAM_KEYS get a group, so a row with no recognised team
+            # goes to Undefined rather than vanishing from the list.
+            teams = [t for t in row['design_teams'] if t in buckets]
             if not teams:
                 undefined_bucket.append(row)
                 continue
             for team in teams:
-                buckets.setdefault(team, [])
                 buckets[team].append(row)
         groups = [{'key': t, 'label': t, 'rows': buckets[t]} for t in TEAM_KEYS if buckets[t]]
         if undefined_bucket:
@@ -1294,13 +976,8 @@ def _group_rows(rows, field):
 @login_required
 @require('view_workspace')
 def create_view():
-    """
-    Saves the current filter selection (whatever's active right now) as a
-    new named tab, layered on top of one of the three fixed presets. The
-    frontend submits `base_view` (the preset the user is currently sitting
-    on, or already sitting on top of if they're on another saved view) and
-    `filters` (the current page's own query params, minus `view` itself).
-    """
+    """Save the current filters as a named tab on a preset. Body: name,
+    base_view (the active preset) and filters (query params minus `view`)."""
     user = _effective_user()
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()

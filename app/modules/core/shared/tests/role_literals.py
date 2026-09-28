@@ -1,16 +1,10 @@
-"""Shared definition of a "role literal" for the capabilities contract test and
-its baseline generator.
-
-One definition, imported by both the test and generate_role_literal_baseline.py,
-so the generator can never disagree with the check that reads its output — the
-route-contract baseline learned that lesson the hard way.
+"""What counts as a "role literal", shared by the capabilities contract test and
+generate_role_literal_baseline.py so the two can never disagree.
 
 A role literal is any `.role` compared or membership-tested in code
-(`actor.role == 'cs'`, `user.role in (...)`, `new_owner.role != 'project_owner'`).
-After the 2.5.1 refactor these are the checks deliberately kept OUT of the
-capabilities map — branch selectors, relationship checks, another user's-role
-validation — none of them gates. The baseline records every one so a NEW literal
-that appears without review fails the contract test.
+(`actor.role == 'cs'`, `user.role in (...)`). The ones left are branch
+selectors, relationship checks and validation, not gates. The baseline records
+each one, so a new literal fails the contract test until reviewed.
 """
 import re
 from pathlib import Path
@@ -27,8 +21,7 @@ _ROLE_LITERAL = re.compile(r'\.role\s*(?:==|!=|\bin\b|\bnot\s+in\b)')
 
 
 def _source_files():
-    """Every .py and .html under app/, excluding tests and caches — the same
-    surface the other contract assertions scan."""
+    """Every .py and .html under app/, excluding tests and caches."""
     for path in APP_ROOT.rglob('*'):
         if path.suffix not in ('.py', '.html'):
             continue
@@ -39,10 +32,9 @@ def _source_files():
 
 
 def collect_role_literals():
-    """Every role-literal line under app/, keyed by relative path + the stripped
-    line text — not the line number, so moving a line around does not churn the
-    baseline, while changing the check itself does (which is the point). Pure
-    comment lines are skipped so prose about a check never counts as one."""
+    """Every role-literal line under app/ as "path :: stripped line". No line
+    numbers, so moving a line does not churn the baseline. `#` comment lines are
+    skipped; docstrings and trailing comments are not."""
     found = set()
     for path in _source_files():
         text = path.read_text(encoding='utf-8', errors='ignore')

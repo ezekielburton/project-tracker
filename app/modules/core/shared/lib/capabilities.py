@@ -9,8 +9,8 @@ from flask import abort, jsonify, session
 from flask_login import current_user
 
 
-# Every capability the app recognises. A grant naming anything outside this set
-# is a typo, and the unit table fails on it.
+# Every capability the app recognises. A grant outside this set is a typo, and
+# test_capabilities.py fails on it.
 ALL_CAPABILITIES = frozenset({
     # Admin surfaces
     'admin_panel',
@@ -40,7 +40,6 @@ ALL_CAPABILITIES = frozenset({
     'review_submissions',
     'manage_drafts',
     'claim_work',
-    'transfer_projects',
     'edit_client_directory',
     'raise_flags',
     'manage_flags',
@@ -60,15 +59,14 @@ ALL_CAPABILITIES = frozenset({
     # HSE & Compliance
     'view_hse',
     'manage_hse',
-    # The app shell. Held by every role whose work spans the platform, so a
-    # single-module role sees only its own module plus the things everyone
-    # gets (File Storage, the Wiki).
+    # The app shell. A role without it sees only its own module plus File
+    # Storage and the Wiki.
     'view_workspace',
 })
 
 
-# Capabilities no role but admin holds today. Listed so that granting one to a
-# role is a deliberate edit in two places, not a silent widening.
+# Capabilities only admin holds. The capability tests fail if another role is
+# granted one, so widening access takes an edit here too.
 ADMIN_ONLY = frozenset({
     'admin_panel',
     'manage_users',
@@ -84,8 +82,8 @@ ADMIN_ONLY = frozenset({
 })
 
 
-# Read-only across Projects and Client Servicing. Shared by the roles whose own
-# modules do not exist yet, so their access widens in one place later.
+# Read-only access across Projects and Client Servicing, shared by the roles
+# that have no module of their own.
 _READ_ONLY_STAFF = {
     'view_workspace',
     'view_cs',
@@ -102,7 +100,7 @@ ROLE_CAPABILITIES = {
         'view_workspace',
         'view_cs', 'view_finance', 'edit_invoicing_thresholds', 'close_projects',
         'view_all_projects', 'manage_projects', 'create_projects', 'start_projects',
-        'review_submissions', 'transfer_projects', 'edit_client_directory',
+        'review_submissions', 'edit_client_directory',
         'raise_flags', 'manage_flags', 'log_site_visits', 'manage_reference_data',
         'complete_preproduction', 'manage_project_files',
         'switch_dashboard_scope', 'view_team_snapshot',
@@ -116,7 +114,7 @@ ROLE_CAPABILITIES = {
         'view_workspace',
         'view_cs', 'view_finance', 'edit_finance', 'close_projects',
         'view_all_projects', 'create_projects', 'review_submissions',
-        'transfer_projects', 'edit_client_directory', 'raise_flags',
+        'edit_client_directory', 'raise_flags',
         'manage_reference_data', 'manage_project_files',
     },
 
@@ -132,7 +130,7 @@ ROLE_CAPABILITIES = {
     },
 
     # Designer and team_lead hold the same capabilities; what separates them is
-    # the team a deliverable belongs to, which is a per-record rule, not a role.
+    # a per-record rule (the deliverable's team), not a capability.
     'designer': {
         'view_workspace',
         'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
@@ -149,9 +147,8 @@ ROLE_CAPABILITIES = {
         'view_all_di',
     },
 
-    # No view_workspace: the officer sees the HSE module, File Storage and
-    # the Wiki, and nothing else. test_hse_sidebar.py pins that decision so a
-    # new role cannot land here by accident.
+    # No view_workspace: the officer sees only HSE, File Storage and the Wiki.
+    # test_hse_sidebar.py fails if any other role lacks view_workspace.
     'hse': {
         'view_hse', 'manage_hse',
     },
@@ -179,14 +176,15 @@ ROLE_LABELS = {
 }
 
 def role_label(value):
-    """ Key to label for a badge. Anything unrecognised passes through, so sections stored before roles became keys still read correctly."""
+    """Role key to display label. Unknown values (e.g. a stored label) pass
+    through unchanged."""
     value = (value or '').strip()
     return ROLE_LABELS.get(value, value)
 
 
 def effective_user():
-    """The user whose role governs — the emulated user when an admin is viewing
-    the app as someone else, otherwise the logged-in user. Safe when logged out.
+    """The user whose role governs: the emulated user while an admin views the
+    app as someone else, otherwise the logged-in user. Safe when logged out.
     """
     from app.modules.core.shared.models import User
 
@@ -203,8 +201,7 @@ _UNSET = object()
 
 def can(capability, user=_UNSET):
     """True if `user` holds `capability`. Omit `user` for the effective user;
-    pass None (or anything without a role) and the answer is False. Admin's
-    '*' grants everything.
+    None (or anything without a role) gets False. Admin's '*' grants everything.
     """
     actor = effective_user() if user is _UNSET else user
     granted = ROLE_CAPABILITIES.get(getattr(actor, 'role', None), frozenset())
@@ -214,8 +211,8 @@ def can(capability, user=_UNSET):
 def require(capability, real_user=False):
     """Gate an HTML route: 401 when logged out, 403 page without `capability`.
 
-    real_user=True checks the logged-in user instead of the emulated one — for
-    admin-only tooling an admin should keep while previewing as someone else.
+    real_user=True checks the logged-in user, not the emulated one, so admin
+    tooling stays usable while previewing as someone else.
     """
     def decorator(f):
         @wraps(f)
@@ -230,9 +227,8 @@ def require(capability, real_user=False):
 
 
 def require_api(capability, real_user=False):
-    """Gate a JSON route: a 403 Forbidden body, the shape the admin API already
-    returns, for both logged-out and under-privileged callers. real_user as in
-    require().
+    """Gate a JSON route: a 403 {'success': False, 'error': 'Forbidden'} body for
+    logged-out and under-privileged callers alike. real_user as in require().
     """
     def decorator(f):
         @wraps(f)

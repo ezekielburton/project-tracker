@@ -1,10 +1,6 @@
-{# app/templates/project_overlay/_overlay.html
-The Detail + Briefing overlay — shell + sidebar. Rebuilt as a vertical
-sidebar (13 Aug 2026), replacing the horizontal collapse-in-place rail
-from 31 Jul — a sidebar has room to just show all four sections at once,
-so there's no more squeeze-to-make-room mechanism, and no back button.
-Design's sub-tabs nest directly under it, shown only while Design is the
-active section. See project_overlay.js. #}
+{# app/modules/projects/templates/project_overlay/_overlay.html
+The project overlay: header, side rail (one flat list of pages, then the
+lifecycle actions) and the content area. See project_overlay.js. #}
 
 <div class="project-overlay-backdrop" id="project-overlay-backdrop">
     <div class="project-overlay-sheet" id="project-overlay-sheet">
@@ -32,7 +28,7 @@ active section. See project_overlay.js. #}
         </div>
         <div class="project-overlay-body">
             <nav class="project-overlay-sidebar" id="project-overlay-sidebar">
-                <button type="button" class="project-overlay-sidebar-item active" data-main-tab="design">Design</button>
+                {# One flat list: the Design pages, then Site Visits. #}
                 <div class="project-overlay-sidebar-subgroup" id="project-overlay-subrail">
                     <button type="button" class="project-overlay-sidebar-subitem active"
                         data-sub-tab="details">Details</button>
@@ -43,38 +39,23 @@ active section. See project_overlay.js. #}
                     <button type="button" class="project-overlay-sidebar-subitem"
                         data-sub-tab="pre-production">Pre-Production</button>
                 </div>
-                <button type="button" class="project-overlay-sidebar-item" data-main-tab="finance">Finance</button>
-                <button type="button" class="project-overlay-sidebar-item"
-                    data-main-tab="production">Production</button>
-                <button type="button" class="project-overlay-sidebar-item" data-main-tab="logistics">Logistics</button>
                 <button type="button" class="project-overlay-sidebar-item" data-main-tab="notes">Site Visits</button>
 
                 {% if True %}
-                {# Open Project Folder now always renders — it's click-triggered
-                (Synology Drive needs a live API resolve per folder, see
-                app/nas.py's build_drive_folder_url()), so we can no longer know
-                at render time whether the link will actually resolve the way
-                nas_project_url() used to let us check synchronously. This {% if
-                True %} just keeps the surrounding div's original shape (it
-                still needs to render whenever the folder button OR any of the
-                three flags below is true — which is now unconditionally). #}
+                {# Always true: Open Project Folder always renders (its Drive
+                link is resolved on click, see build_drive_folder_url() in
+                app/nas.py), so this block always shows. #}
                 <div class="project-overlay-sidebar-lifecycle">
                     <button type="button" class="project-overlay-sidebar-action-btn" id="overlay-open-folder-btn"
                         data-url="{{ url_for('project_overlay.overlay_nas_folder_link', project_id=project.id) }}">Open
                         Project Folder</button>
 
                     {% if show_request_edit_access %}
-                    {# Request Editing Access (26 Aug 2026, per Ezekiel) — a
-                    designer assigned to this project but without the usual
-                    CS Lead/Secondary CS/Project Owner tier can ask for it
-                    here. Only ever shown on an already-open, non-draft
-                    project (see _build_details_context's
-                    show_request_edit_access) — never on drafts or on
-                    anything created after the feature's cutoff. Single
-                    button, state-driven by edit_access_request_status
-                    rather than a dual-button pattern like Hold/Cancel above
-                    — there's no toggle-back action here, just
-                    none/pending/denied. #}
+                    {# Request Editing Access: lets an assigned designer without
+                    CS Lead/Secondary CS/Project Owner rights ask for edit
+                    access. Gated by show_request_edit_access (non-draft
+                    projects from before the feature's cutoff). One button;
+                    state is none/pending/denied. #}
                     <button type="button" class="project-overlay-sidebar-action-btn"
                         id="overlay-request-edit-access-btn"
                         data-state="{{ edit_access_request_status or 'none' }}"
@@ -84,11 +65,8 @@ active section. See project_overlay.js. #}
                     {% endif %}
 
                     {% if can_manage_flags %}
-                    {# Flag Issue (task #42 follow-up, 18 Aug 2026) — raising a
-                    project flag moved here from the Details tab so it's
-                    reachable from anywhere, same reasoning as Cancel/Hold.
-                    Details still shows any open flag (always) plus a Flag
-                    History toggle — it just doesn't raise them anymore. #}
+                    {# Flag Issue: raises a project flag from any page. Details
+                    shows open flags and history but has no raise form. #}
                     <button type="button"
                         class="project-overlay-sidebar-action-btn project-overlay-sidebar-action-btn--danger"
                         id="overlay-flag-issue-btn">⚑ Flag Issue</button>

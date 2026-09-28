@@ -1,9 +1,8 @@
 """
-Client Servicing — Closed Projects. A read view of everything that has been
-closed: KPI cards, a month/quarter/year filter, and the closing months.
+Client Servicing — Closed Projects. Read view of closed projects: KPI cards,
+a month/quarter/year filter, and rows grouped by closing month.
 
-The only write here is marking a pending project invoiced, and that reuses
-edit.py's field endpoint rather than adding a second permission list.
+Marking a pending project invoiced goes through edit.py's PATCH endpoint.
 """
 from datetime import date
 

@@ -1,5 +1,5 @@
 """
-Wiki article content: the Editor.js document shape, conversion from the old
+Wiki article content: the Editor.js document shape, conversion from the legacy
 block array, and the inline-HTML allowlist applied on save.
 """
 
@@ -29,6 +29,8 @@ _BLOCK_TAGS = {'p', 'div', 'blockquote', 'pre'}
 _HEADER_TAGS = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}
 _LIST_TAGS = {'ul', 'ol'}
 
+_TEXT_BLOCK_TYPES = {'paragraph', 'header', 'helixCallout', 'list'}
+
 
 def clean_html(value):
     """Strip everything outside the inline allowlist from editor text."""
@@ -55,17 +57,12 @@ def _block(block_type, data):
     return {'id': _block_id(), 'type': block_type, 'data': data}
 
 
-def empty_document():
-    """An Editor.js document with no blocks."""
-    return {'time': 0, 'blocks': [], 'version': EDITORJS_VERSION}
-
-
 def is_editorjs(value):
-    """True when the parsed content is an Editor.js document rather than the old array."""
+    """True when the parsed content is an Editor.js document, not the legacy array."""
     return isinstance(value, dict) and isinstance(value.get('blocks'), list)
 
 
-# ------ Old rich text -> Editor.js blocks ------
+# ------ Legacy rich text -> Editor.js blocks ------
 
 class _RichTextSplitter(HTMLParser):
     """Splits stored rich-text HTML into paragraph, header and list blocks."""
@@ -178,7 +175,7 @@ def richtext_to_blocks(value):
     return parser.blocks
 
 
-# ------ Old block array -> Editor.js document ------
+# ------ Legacy block array -> Editor.js document ------
 
 def _plain_to_text(value):
     """Escape plain-text content and keep its line breaks."""
@@ -186,7 +183,7 @@ def _plain_to_text(value):
 
 
 def _convert_one(block):
-    """Convert one old block. Returns a list, since rich text can split into several."""
+    """Convert one legacy block. Returns a list, since rich text can split into several."""
     kind = (block or {}).get('type')
 
     if kind == 'body':
@@ -232,7 +229,7 @@ def _convert_one(block):
 
 
 def to_editorjs(legacy_blocks):
-    """Convert the old block array into an Editor.js document."""
+    """Convert the legacy block array into an Editor.js document."""
     blocks = []
     for old in legacy_blocks or []:
         blocks.extend(_convert_one(old))
@@ -260,34 +257,45 @@ def load_blocks(sections_json):
         return []
 
     if not is_editorjs(parsed):
-        # Content still in the old array shape renders until the legacy column is dropped.
+        # sections_json still in the legacy array shape is converted on read.
         parsed = to_editorjs(parsed if isinstance(parsed, list) else [])
 
+    # Cleaned on read as well as on save: the renderer marks text |safe, and content
+    # written outside the save route (the migration) never went through sanitize_document.
     blocks = []
     for block in parsed.get('blocks') or []:
         if not isinstance(block, dict):
             continue
+        kind = block.get('type')
         data = dict(block.get('data') or {})
-        if block.get('type') == 'list':
-            data['items'] = _normalise_list_items(data.get('items'))
-        if block.get('type') == 'helixVideo':
-            # Derived here so migrated content is judged too, not only what the save path let through.
+        if kind in _TEXT_BLOCK_TYPES:
+            data = _clean_block(kind, data)
+            if data is None:
+                continue
+        elif kind == 'image':
+            # Any http(s) host is kept: migrated images may be remote, which the save check refuses.
+            url = _safe_link((data.get('file') or {}).get('url'))
+            if not url:
+                continue
+            data['file'] = {'url': url}
+            data['caption'] = clean_html(data.get('caption'))
+        elif kind == 'helixVideo':
             data['url'] = _safe_link(data.get('url'))
             data['embed_src'] = '' if data.get('source') == 'upload' else embed_src(data.get('url'))
-        blocks.append({'type': block.get('type'), 'data': data})
+        blocks.append({'type': kind, 'data': data})
     return blocks
 
 
 # ------ Cleaning what the editor saves ------
 
 def _host_allowed(url):
-    """Exact host or a subdomain of one — a substring test would pass youtube.com.attacker.net."""
+    """Exact host or a subdomain of one. A substring test would pass youtube.com.attacker.net."""
     host = (urlsplit(url).hostname or '').lower()
     return any(host == allowed or host.endswith('.' + allowed) for allowed in EMBED_HOSTS)
 
 
 def embed_src(value):
-    """The player URL for an allowed video host, or '' — anything else is shown as a link."""
+    """The player URL for an allowed video host, or '' (the renderer then shows a link)."""
     url = (value or '').strip()
     if not url or not _host_allowed(url):
         return ''
@@ -315,7 +323,7 @@ def _youtube(video):
 
 
 def _safe_url(value, allow_remote=False):
-    """Keep site-relative paths, plus http(s) URLs on a host we are willing to frame."""
+    """Keep site-relative paths; with allow_remote, also http(s) URLs on a frameable host."""
     url = (value or '').strip()
     if not url or url.startswith('//'):
         return ''

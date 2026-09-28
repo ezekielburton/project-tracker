@@ -56,7 +56,7 @@
                         <span class="blog-comment-author-name">{{ comment.author.name }}</span>
                         <span class="blog-comment-date">{{ comment.created_at | dubai_time }}</span>
                     </div>
-                    {% if can('manage_feedback', actor) %}
+                    {% if can('manage_feedback', current_user) %}
                     <button class="blog-comment-delete br-comment-delete" data-comment-id="{{ comment.id }}">Delete</button>
                     {% endif %}
                 </div>
@@ -82,7 +82,7 @@
                                 <span class="blog-comment-author-name">{{ reply.author.name }}</span>
                                 <span class="blog-comment-date">{{ reply.created_at | dubai_time }}</span>
                             </div>
-                            {% if can('manage_feedback', actor) %}
+                            {% if can('manage_feedback', current_user) %}
                             <button class="blog-comment-delete br-comment-delete" data-comment-id="{{ reply.id }}">Delete</button>
                             {% endif %}
                         </div>

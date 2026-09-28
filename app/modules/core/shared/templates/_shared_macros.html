@@ -1,18 +1,12 @@
-{# app/templates/_shared_macros.html
-Shared markup for the Projects/Detail/Briefing rewrite, paired with
-app/static/css/shared.css. Mirrors the pattern _dashboard_macros.html
-already established (one macro = one component, reused everywhere)
-but generalized off dash-* naming. Dashboard's own macros are
-UNCHANGED — this is a parallel set for the three new pages. #}
+{# Shared component macros, one macro per component, styled by shared.css.
+A generic counterpart to dashboard/_dashboard_macros.html. #}
 
 {#
 card(title, header_extra_html)
 ─────────────────────────────────
-Generic white card shell (.card/.card-header). Pass title for a
-plain text heading, or leave it blank and put your own markup in
-header_extra_html (e.g. a button) if you need more than a title —
-header_extra_html is rendered |safe, same convention dash_card()
-uses for summary_html. Body content goes in the {% call %} block.
+Card shell (.card/.card-header). `title` is a plain heading;
+header_extra_html is extra header markup (e.g. a button), rendered |safe.
+Body goes in the {% call %} block.
 #}
 {% macro card(title=None, header_extra_html=None) %}
 <div class="card">
@@ -31,12 +25,8 @@ uses for summary_html. Body content goes in the {% call %} block.
 {#
 person_chip(person, missing_label, missing_class)
 ──────────────────────────────────────────────────────
-Direct rename of dash_person_chip() (_dashboard_macros.html) onto the
-generalized .person-chip/.person-avatar classes above. `person` is
-the same {id, name, avatar_filename} shape used everywhere else in
-the app. Deliberately a <span>, not a link — same reasoning as the
-    original: this is expected to sit inside rows that are themselves
-    links, and a link can't legally nest inside a link.
+Avatar + name for a {id, name, avatar_filename} person. A <span>, not a
+link: it often sits inside rows that are links, and links can't nest.
     #}
     {% macro person_chip(person, missing_label=None, missing_class='tag tag--risk') %}
     {% if person %}
@@ -57,27 +47,10 @@ the app. Deliberately a <span>, not a link — same reasoning as the
 
 
     {#
-    mini_stat(variant, value, label)
-    ───────────────────────────────────────
-    Coloured dot + big value + small label, e.g. a Projects-page rollup
-    ("4 of 7 Approved").
-    {% macro mini_stat(variant, value, label) %}
-    <span class="mini-stat">
-        <span class="mini-stat-dot mini-stat-dot--{{ variant }}"></span>
-        <span class="mini-stat-value">{{ value }}</span>
-        <span class="mini-stat-label">{{ label }}</span>
-    </span>
-    {% endmacro %}
-
-
-    {#
     tag(text, variant)
     ──────────────────────
-    Small coloured pill. variant matches a .tag--{{variant}} modifier
-    class in shared.css ('action'/'owner'/'risk' exist today; add more
-    there as Detail/Briefing need new colours — e.g. team tags,
-    revision-count tags — rather than writing a new one-off class each
-    time).
+    Small coloured pill. `variant` picks a .tag--<variant> modifier in
+    shared.css; add new colours there as modifiers.
     #}
     {% macro tag(text, variant='action') %}
     <span class="tag tag--{{ variant }}">{{ text }}</span>
@@ -89,21 +62,14 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {#
     status_override_picker(picker_id, current_label, current_class, options, target_url)
     ───────────────────────────────────────────────────────────────────────────────────
-    Admin-only "click the pill, pick a different status, it overrides"
-    control — same toggle-button + popover
-    recipe as avatar_picker() below, just swapping person rows for status
-    pills. `options` is a list of (label, css_modifier) pairs — the exact
-    shape status_vocabulary.py's own derive_*_status() functions return,
-    and what app/routes/project_overlay.py's
-    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS passes in, so the popover can
-    never offer a status that doesn't render as a real pill. `target_url`
-    is the POST endpoint status_picker.js sends { status: <label> } to on
-    selection. Used for a deliverable's own status (project_deliverables_card.js)
-    and, for the project pill itself (project_details_card.js), as a bulk
-    write — target_url there is project_overlay.override_project_status(),
-    which applies the picked status to every deliverable (and, for C&CM,
-    every ProjectPosmChannel) on the project; the pill is still a pure live
-    roll-up either way, never stored directly. #}
+    Admin-only status override: click the pill, pick another status.
+    `options` is a list of (label, css_modifier) pairs, the shape
+    status_vocabulary.py's derive_*_status() returns, so every option is a
+    real pill. On select, the card's JS (project_deliverables_card.js,
+    project_details_card.js) POSTs { status: <label> } to `target_url`.
+    For the project pill that is override_project_status(), which writes
+    every deliverable (and, for C&CM, every ProjectPosmChannel); the
+    project pill stays a live roll-up, never stored. #}
     {% macro status_override_picker(picker_id, current_label, current_class, options, target_url) %}
     <div class="status-picker" id="{{ picker_id }}" data-target-url="{{ target_url }}">
         <button type="button" class="status-picker-trigger">
@@ -123,15 +89,10 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {#
     included_summary(includes_concept, includes_kv, names)
     ──────────────────────────────────────────────────────
-    The quiet "N deliverables ▾" line shown under a sent / historical
-    submission. Collapsed by default so a deck with many deliverables
-    doesn't render a wall of tags; the toggle reveals the full list.
-    The list is the button's immediately-following sibling, so the JS
-    (project_submissions_draft_card.js) toggles it via
-    button.nextElementSibling — no ids, so this macro can appear any
-    number of times on one page (indicator + every history entry) with
-    zero id collisions. `names` is a plain list of strings; Concept/KV
-    are counted and rendered as their own tags alongside them.
+    Collapsed "N deliverables ▾" line under a sent submission; the toggle
+    reveals the tags. project_submissions_draft_card.js finds the list as
+    the button's nextElementSibling (no ids, so it can repeat on a page).
+    `names` is a list of strings; Concept/KV add their own tags.
     #}
     {% macro included_summary(includes_concept, includes_kv, names) %}
     {% set _count = (names | length) + (1 if includes_concept else 0) + (1 if includes_kv else 0) %}
@@ -153,18 +114,11 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {#
     avatar_picker(picker_id, current_person, options, missing_label)
     ──────────────────────────────────────────────────────────────
-    A button showing the current pick (person_chip, or missing_label if
-    unset) that opens a small popover list of avatar+name rows to choose
-    from — same toggle-button + absolute-positioned-popover recipe as
-    .project-filter-panel/.project-sort-panel (project_list.css), just
-    sized for a short list instead of a wide multi-column one. Generic:
-    the caller supplies `options` (a list of {id, name, avatar_filename}
-    — the same person shape person_chip() already expects). This macro
-    only renders markup — it doesn't know what picking someone should DO
-    (save a CS lead vs a Project Owner are different routes/rules), that
-    lives in avatar_picker.js's onSelect callback, wired up per instance
-    by whichever card uses it. picker_id must be unique per instance on
-    the page (becomes an element id).
+    Button showing the current pick (person_chip, or missing_label) that
+    opens a fixed-position popover of people from `options` (person_chip
+    shape). Markup only: what a pick does lives in the onSelect callback
+    each card passes to avatar_picker.js. picker_id must be unique on the
+    page (it becomes the element id).
     #}
     {% macro avatar_picker(picker_id, current_person, options, missing_label='Select…', trigger_label=None, data_team=None)
     %}
@@ -193,31 +147,19 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {#
     deliverable_assign_tag(deliverable_id, team, person, options, mode)
     ──────────────────────────────────────────────────────────────────
-    One team-tag cell in the Deliverables roster's Team column: it shows who
-    is assigned to a deliverable's team (a DeliverableAssignment), with a
-    write path in the UI. `mode` is computed server-side per
-    deliverable/team in _build_deliverable_focus_context
-    (app/routes/project_overlay.py) and picks one of three renderings:
+    One cell in the Deliverables roster's Team column: who is assigned to
+    this deliverable's team (a DeliverableAssignment). `mode` comes from
+    _build_deliverable_focus_context (project_overlay/deliverables.py):
 
-      'manage' — CS/Admin/Management/Project Owner, or this team's own
-                 team lead. Opens the standard avatar-picker popover (same
-                 AvatarPicker.js hook classes avatar_picker() above uses)
-                 to assign, reassign, or unassign anyone on the team.
-      'self'   — a plain designer on this exact team. One click claims it
-                 if empty or releases their own claim if it's already
-                 them — no popover, wired directly in
-                 project_deliverables_card.js (self_toggle), which can
-                 never touch a teammate's assignment (enforced
-                 server-side too, in assign_deliverable_team()).
-      'static' — no standing on this team and not a manager. Same
-                 non-interactive tag look it always had, plus a small
-                 avatar alongside it once someone's assigned, so a
-                 read-only viewer still sees who's on it.
+      'manage' — anyone who can manage the project, or this team's lead. The avatar-picker
+                 popover: assign, reassign or unassign anyone on the team.
+      'self'   — a designer on this team. One click claims an empty slot or
+                 releases their own (project_deliverables_card.js,
+                 self_toggle); assign_deliverable_team() also enforces this.
+      'static' — anyone else. A read-only tag, plus the avatar once assigned.
 
-    Deliberately reuses .avatar-picker-placeholder (shared.css) for the
-    "nobody yet, click to fill" dashed-pill look in both interactive
-    modes — same visual language as every other empty picker in this app,
-    not a new one invented just for this.
+    Empty interactive cells use .avatar-picker-placeholder, the app's
+    empty-picker look.
     #}
     {% macro deliverable_assign_tag(deliverable_id, team, person, options, mode) %}
     {% if mode == 'manage' %}
@@ -280,14 +222,10 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {#
     deliverable_picker(picker_id, options, selected_ids)
     ──────────────────────────────────────────────────────────────
-    A popover multi-select — same trigger-button + fixed-position-popover
-    recipe as avatar_picker() above, sized for toggling a list of
-    deliverables on/off instead of picking exactly one person. The trigger
-    label ("2 deliverables selected") and each option's .is-selected class
-    are the only state that matters — deliverable_picker.js keeps both in
-    sync after the initial render. This macro only renders markup; the
-    caller decides what a selection change should DO. picker_id must be
-    unique per instance on the page (becomes an element id).
+    Popover multi-select of deliverables. The state is the trigger label
+    and each option's .is-selected class; deliverable_picker.js keeps both
+    in sync. Markup only: the caller decides what a selection does.
+    picker_id must be unique on the page (it becomes the element id).
     #}
     {% macro deliverable_picker(picker_id, options, selected_ids=[]) %}
     <div class="deliverable-picker" id="{{ picker_id }}">
@@ -322,12 +260,33 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     {# Inner module rail — the left nav a module's own screens share. `items`
        is a list of dicts: key, label, url (falsy renders a non-link
        placeholder), plus optional count (a badge), icon (SVG path data),
-       soon (a "Soon" tag for a page not built yet) and extra_class. The item
-       whose key equals `active` renders active; `title` heads the rail.
+       soon (a "Soon" tag for a page not built yet), extra_class, and
+       children (sub-pages: key, label, url, optional count). The item whose
+       key equals `active` renders active and shows its children; the child
+       whose key equals `active_sub` renders active. `title` heads the rail.
        Anything a module needs below the nav goes in a {% call %} block.
-       The page frame around it is .module-page / .module-shell / .module-main. #}
-    {% macro module_rail(items, active, title=None) %}
+       The page frame around it is .module-page / .module-shell / .module-main.
+
+       Sub-pages go in the rail; views of the same page (Month/Agenda,
+       Week/Month/Quarter) stay as a toggle on the page.
+
+       On a phone the rail is a drawer (mobile.css). Its top row names the
+       module (`module`) and switches to the app menu, plus a close button. #}
+    {% macro module_rail(items, active, title=None, active_sub=None, module=None) %}
     <aside class="module-rail">
+        <div class="module-rail-mobile">
+            <button type="button" class="module-rail-switch" data-mobile-menu="app">
+                <span class="module-rail-switch-text">
+                    <span class="module-rail-switch-kicker">Module</span>{{ module or 'All modules' }}
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="module-rail-close" data-mobile-menu="close" aria-label="Close menu">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
         {%- if title %}<div class="module-rail-title">{{ title }}</div>{% endif %}
         <nav class="module-rail-nav">
             {%- for item in items %}
@@ -336,11 +295,18 @@ the app. Deliberately a <span>, not a link — same reasoning as the
                 ~ (' module-rail-item--rich' if rich else '')
                 ~ (' module-rail-item--active' if item.get('key') == active else '')
                 ~ ('' if item.get('url') else ' module-rail-item--disabled')
-                ~ ((' ' ~ item.get('extra_class')) if item.get('extra_class') else '') %}
+                ~ ((' ' ~ item.get('extra_class')) if item.get('extra_class') else '')
+                ~ (' module-rail-item--parent' if item.get('children') else '') %}
             {%- if item.get('url') %}
             <a href="{{ item.get('url') }}" class="{{ classes }}">{{ module_rail_body(item, rich) }}</a>
             {%- else %}
             <span class="{{ classes }}">{{ module_rail_body(item, rich) }}</span>
+            {%- endif %}
+            {#- Every section's sub-pages are in the page; only the open
+                section's show. On a phone, tapping a section opens its list
+                here instead of loading a page (module_rail.js). #}
+            {%- if item.get('children') %}
+            {{ module_rail_children(item.get('children'), active_sub, open=item.get('key') == active) }}
             {%- endif %}
             {%- endfor %}
         </nav>
@@ -348,8 +314,23 @@ the app. Deliberately a <span>, not a link — same reasoning as the
     </aside>
     {% endmacro %}
 
-    {# Row contents. A plain item emits its label as a bare text node, so a
-       text-only rail renders exactly as it did before the rail was shared. #}
+    {# A section's sub-pages. Its own macro so a module can hang children
+       off a rail item it renders itself (HSE's Lists & people). `open` is
+       false for a section that is not the current one: rendered, but hidden. #}
+    {% macro module_rail_children(children, active_sub, open=True) %}
+    <div class="module-rail-children{{ '' if open else ' module-rail-children--closed' }}">
+        {%- for child in children %}
+        <a href="{{ child.get('url') }}"
+           class="module-rail-item module-rail-subitem{{ ' module-rail-subitem--active' if child.get('key') == active_sub else '' }}">
+            {{- child.get('label') }}
+            {%- if child.get('count') %}<span class="module-rail-count">{{ child.get('count') }}</span>{% endif -%}
+        </a>
+        {%- endfor %}
+    </div>
+    {%- endmacro %}
+
+    {# Row contents. A plain item is a bare text node; icon, count or soon
+       make it a rich item. #}
     {% macro module_rail_body(item, rich) %}
     {%- if not rich %}{{ item.get('label') }}
     {%- else %}

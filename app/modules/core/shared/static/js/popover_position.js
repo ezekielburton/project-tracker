@@ -1,24 +1,16 @@
-// Shared placement for the app's fixed-position popovers (avatar, status and
-// deliverable pickers). Two jobs, and each picker previously got both wrong in
-// its own copy of this logic.
+// Shared placement for fixed-position popovers (avatar, status and
+// deliverable pickers).
 //
-// 1. Keep the popover inside the viewport, clamping on both axes. A flip above
-//    the trigger is not enough on its own: when neither side has room the
-//    popover still has to be pulled back on screen.
+// 1. Keeps the popover inside the viewport: flips above the trigger when
+//    there's no room below, then clamps on both axes.
 //
-// 2. Make `position: fixed` actually mean the viewport. An ancestor carrying
-//    backdrop-filter, filter or transform becomes the containing block for its
-//    fixed-position descendants, so viewport coordinates computed here would be
-//    applied relative to THAT element instead. The project overlay's backdrop
-//    has backdrop-filter, so every picker inside it was drawn shifted right by
-//    the sidebar's width — invisible with the sidebar collapsed, off-screen
-//    with it pinned. Parking the popover on <body> while it is open leaves no
-//    such ancestor, so the numbers mean what they say.
+// 2. Moves the popover to <body> while open. An ancestor with
+//    backdrop-filter, filter or transform becomes the containing block for
+//    position: fixed, which would offset the viewport coordinates set here.
 //
-// Popovers are moved, not cloned, so listeners bound to them survive. Anything
-// styling a popover through its picker's id must target
-// [data-popover-owner="<that id>"] rather than a descendant selector, since
-// while open the popover is no longer inside it.
+// Popovers are moved, not cloned, so their listeners survive. Style a
+// popover via [data-popover-owner="<picker id>"], not a descendant
+// selector: while open it is not inside its picker.
 window.PopoverPosition = (function () {
     var MARGIN = 8;
     var homes = new WeakMap();

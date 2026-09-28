@@ -3,8 +3,8 @@
 {% block title %}Client Servicing{% endblock %}
 
 {% block content %}
-{# The shared page frame, with the rail from _sidebar.html. The table keeps
-   its own sticky-header/height-sync JS (client_servicing.js). #}
+{# Shared page frame with the CS rail. Sticky column and height sizing live
+   in client_servicing.js. #}
 <div class="module-page cs-page">
     <div class="module-shell">
         {% with active_nav = 'table' %}
@@ -12,14 +12,10 @@
         {% endwith %}
         <div class="module-main">
             <div class="client-servicing-page">
-                {# Cancelled projects waiting on the invoicing question —
-                   see _close_strip.html. #}
+                {# Cancelled projects waiting to be closed out. #}
                 {% include 'client_servicing/_close_strip.html' %}
-                {# Search + filter toolbar — all client-side over the loaded
-                   rows (client_servicing.js). It sits outside
-                   #client-servicing-table-body so it survives the SSE row-swap;
-                   the filter chips are injected by JS from the rows themselves,
-                   so the options always match what's in the table. #}
+                {# Client-side search + filter (client_servicing.js). Kept outside
+                   #client-servicing-table-body so the SSE row swap leaves it alone. #}
                 <div class="cs-toolbar">
                     <div class="cs-search">
                         <span class="cs-search-icon" aria-hidden="true">🔍</span>
@@ -40,8 +36,7 @@
                         </div>
                     </div>
                 </div>
-                {# .cs-table-scroll is height-capped and scrolls internally on
-                   both axes — see client_servicing.css. #}
+                {# Height-capped; scrolls on both axes (client_servicing.css). #}
                 <div class="cs-table-scroll" id="cs-table-scroll">
                     <div id="client-servicing-table-body">
                         {% include 'client_servicing/_table_rows.html' %}
@@ -52,10 +47,8 @@
     </div>
 </div>
 {% include 'client_servicing/_close_modals.html' %}
-{# Page-specific JS, inside the content block with the modals it wires.
-   The shell above is a <div class="module-main">, not a nested <main> — the SPA
-   slice in spa_strip_response() stops at the first </main>, so a nested one
-   would cut everything below it out of the swapped fragment. #}
+{# Page JS stays in the content block. Never nest a <main> above it:
+   spa_strip_response() cuts at the first </main> and would drop this. #}
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_close.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {# Scrolls to and flashes the row the Dashboard linked to (?project=). #}
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_focus.js') }}?v={{ config.STATIC_VERSION }}"></script>

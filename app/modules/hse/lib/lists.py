@@ -1,14 +1,9 @@
 """
-The officer's own reference data — what the dropdowns are filled from.
+The Lists & people page: the editable reference data behind the dropdowns.
 
-Locations and Departments get a tab each because he touches them daily;
-every other reference kind shares one "Other lists" tab, so declaring a
-register with a new choice list never means editing this file.
-
-Two things are deliberately NOT here. Severity drives the SLA clock and the
-performance page, and statuses drive the filter chips and every open count —
-both are closed sets in the declaration, so adding a value has to be a
-decision rather than a text box.
+Locations and Departments get their own tabs; every other reference kind
+shares "Other lists", so a new kind needs no change here. Severity and
+statuses are closed sets in code and are not editable here.
 """
 
 from app.modules.hse.models import (
@@ -19,8 +14,7 @@ from app.modules.hse.models import (
 # Reference kinds that earn their own tab. Everything else is grouped.
 PROMINENT_KINDS = ('location', 'department')
 
-# Friendly names for the kinds. A kind with no entry here is title-cased,
-# so a new one still reads properly without a code change.
+# Display names for the kinds. Missing kinds fall back to a capitalised key.
 KIND_LABELS = {
     'location': 'Locations',
     'department': 'Departments',
@@ -43,6 +37,9 @@ KIND_LABELS = {
     'expense_category': 'Expense categories',
     'compliance_item': 'Compliance items',
 }
+
+# Asset kinds that carry a serial number on this page.
+SERIAL_ASSET_KINDS = ('machine',)
 
 ASSET_KIND_LABELS = {
     'vehicle': 'Vehicles',
@@ -84,7 +81,7 @@ def serialize_person(row):
 
 def serialize_asset(row):
     return {'id': row.id, 'label': row.label, 'ref': row.ref,
-            'kind': row.kind, 'active': row.active}
+            'serial_no': row.serial_no, 'kind': row.kind, 'active': row.active}
 
 
 def reference_rows(kind):
@@ -114,7 +111,7 @@ def panel_for(tab_key):
     if tab_key == 'assets':
         rows = [serialize_asset(r) for r in asset_rows()]
         return [{'kind': 'assets', 'label': ASSET_KIND_LABELS.get(k, k.title()),
-                 'asset_kind': k,
+                 'asset_kind': k, 'has_serial': k in SERIAL_ASSET_KINDS,
                  'rows': [r for r in rows if r['kind'] == k]}
                 for k in ASSET_KINDS]
     return [{'kind': k, 'label': kind_label(k),
@@ -123,12 +120,9 @@ def panel_for(tab_key):
 
 
 def find_or_revive_reference(kind, label):
-    """Quick-add's rule: an existing name is reused, a deactivated one comes
-    back. Typing a name that already exists must never make a duplicate the
-    dropdown shows twice.
-
-    Returns (row, created).
-    """
+    """Quick-add: reuse an existing label, reactivating it if needed, so no
+    duplicate is made. Returns (row, created); `created` is also True when
+    a deactivated row is revived."""
     existing = HseReference.query.filter_by(kind=kind, label=label).first()
     if existing:
         revived = not existing.active

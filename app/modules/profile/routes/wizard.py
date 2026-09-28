@@ -15,14 +15,12 @@ def complete():
     if data is None:
         return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
 
-    # Step 1 — display name. No-op if the field was never shown/edited.
+    # Step 1 — display name; blank leaves it unchanged.
     name = (data.get('name') or '').strip()
     if name:
         current_user.name = name
 
-    # Step 1 — password (optional). Same 8-char minimum as the auth
-    # module's /account route, checked again server-side here (never trust
-    # client-side validation alone).
+    # Step 1 — optional password. Same 8-char minimum as auth's /account route.
     password = data.get('password') or ''
     password_confirm = data.get('password_confirm') or ''
     if password:
@@ -38,36 +36,36 @@ def complete():
         try:
             current_user.birthday = date.fromisoformat(birthday)
         except ValueError:
-            pass  # malformed date — ignore rather than 500 the whole request
+            pass  # ignore a malformed date
 
     favorite_food = (data.get('favorite_food') or '').strip()
     if favorite_food:
         current_user.favorite_food = favorite_food
 
-    # Step 3 — notification preferences. Same read-modify-write pattern as
-    # the auth module's save_notification_prefs / save_sound_prefs — all
-    # three routes share the one notification_prefs JSON blob on User.
+    # Step 3 — notification preferences. Read-modify-write: the
+    # notification_prefs blob is shared with auth's pref routes.
     try:
         prefs = json.loads(current_user.notification_prefs or '{}')
     except (ValueError, TypeError):
         prefs = {}
 
-    # Mirrors the valid_keys whitelist in the auth module's
-    # save_notification_prefs. Keep the two in sync if a new pref key is added.
+    # Must match valid_keys in auth's save_notification_prefs.
     EMAIL_PREF_KEYS = {
-        'new_project', 'lead_assigned', 'concept_kv_assigned', 'revision_flag',
-        'flag_reply', 'flag_resolved', 'brief_flag', 'revision_submitted',
-        'project_started', 'lead_changed', 'deliverable_status',
-        'project_submitted_client', 'project_approved'
+        'concept_kv_assigned', 'preprod_stream_approved', 'brief_flag',
+        'preprod_stream_uploaded', 'due_date_changed', 'job_number_changed',
+        'client_spoc_changed', 'flag_reply', 'flag_resolved', 'lead_changed',
+        'project_submitted_client', 'project_approved',
     }
-    if data.get('email_enabled', True):
-        # "On" is the default — absent key already means enabled, so just
-        # clear out any explicit False a previous save might have left.
-        for key in EMAIL_PREF_KEYS:
-            prefs.pop(key, None)
-    else:
-        for key in EMAIL_PREF_KEYS:
-            prefs[key] = False
+    # Sent only when the email step was shown (not in the avatar-only
+    # wizard), so saved opt-outs are never cleared by a step the user skipped.
+    if 'email_enabled' in data:
+        if data['email_enabled']:
+            # An absent key means enabled, so clear any saved False.
+            for key in EMAIL_PREF_KEYS:
+                prefs.pop(key, None)
+        else:
+            for key in EMAIL_PREF_KEYS:
+                prefs[key] = False
 
     if 'sound_enabled' in data:
         prefs['sound_enabled'] = bool(data['sound_enabled'])

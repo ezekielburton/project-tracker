@@ -1,3 +1,5 @@
+from markupsafe import escape
+
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Notification, User, ProjectSecondaryCS, ProjectSecondaryCsRegion
 from app.modules.core.shared.lib.users import active_users_query
@@ -11,34 +13,28 @@ def _get_secondary_cs(project):
 
 
 def _secondary_cs_subscribed_to_region(project, user, region):
-    """
-    Return True if this secondary CS should receive notifications for the given region.
-    Logic: if they have NO region preferences set → receive all regions.
-            if they have preferences set → only receive for subscribed regions.
-    """
+    """True if this secondary CS gets notifications for region: every
+    region when they have no region filter, else only subscribed ones."""
     subs = ProjectSecondaryCsRegion.query.filter_by(project_id=project.id, user_id=user.id).all()
     if not subs:
-        return True  # No filter set — receive everything
+        return True
     return any(s.region == region for s in subs)
 
 
 def _deliverable_region(deliverable):
-    """Get the region of a C&CM deliverable via its project_customer → customer chain."""
+    """A C&CM deliverable's region, via project_customer -> customer."""
     if deliverable and deliverable.project_customer and deliverable.project_customer.customer:
         return deliverable.project_customer.customer.region
     return None
 
 
 def _get_project_designers(project):
-    """
-    Return all unique User objects assigned to any deliverable on this project,
-    plus the concept and KV designers if set.
-    Used by notify_of_submission_to_client and notify_of_project_approved.
-    """
+    """Unique users assigned to any deliverable, plus the project's concept
+    and KV designers."""
     seen_ids = set()
     designers = []
 
-    # Assignments made via the chip-assign system (DeliverableAssignment rows)
+    # DeliverableAssignment rows
     for deliverable in project.project_deliverables:
         for assignment in deliverable.disciplines:
             if assignment.designer_id not in seen_ids:
@@ -55,31 +51,29 @@ def _get_project_designers(project):
 
 
 def _send_notification_email(recipient, message, project=None):
-    """
-    Send an HTML email alongside an in-app notification.
-    Silently does nothing if email is disabled or misconfigured.
-    """
+    """Email an in-app notification as HTML. Does nothing if mail is
+    disabled; failures are logged."""
     from flask import current_app
-    # If email is turned off in .env, skip silently
     if str(current_app.config.get('MAIL_ENABLED', 'false')).lower() != 'true':
         return
-    # If the user has no email address, skip
     if not recipient.email:
         return
     try:
         from flask_mail import Message as MailMessage
         from app.modules.core.shared.extensions import mail
 
-        # Build the URL — link directly to the project if one is attached
+        # No /projects/<id> page exists; the Projects list opens a project
+        # from its ?project= query (project_list.index).
         app_url = 'https://app.vitamin-e.work'
         if project:
-            button_url = f'{app_url}/projects/{project.id}'
+            button_url = f'{app_url}/projects-new/?project={project.id}'
         else:
             button_url = app_url
 
-        project_line = f'<p style="margin:0 0 12px;color:#555555;font-size:14px;"><strong>Project:</strong> {project.name}</p>' if project else ''
+        # Names and messages are user-typed; escape them for the HTML body.
+        project_line = f'<p style="margin:0 0 12px;color:#555555;font-size:14px;"><strong>Project:</strong> {escape(project.name)}</p>' if project else ''
 
-        # HTML email body — inline styles required for email client compatibility
+        # Inline styles: email clients ignore <style> blocks.
         html_body = f"""
         <table width="100%" cellpadding="0" cellspacing="0" border="0"
                style="background-color:#F5F0E8;">
@@ -127,11 +121,11 @@ def _send_notification_email(recipient, message, project=None):
                                 </p>
                                 <p style="margin:0 0 20px;font-family:Arial,sans-serif;
                                           font-size:17px;font-weight:bold;color:#1A1A1A;">
-                                    Hi {recipient.name},
+                                    Hi {escape(recipient.name)},
                                 </p>
                                 <p style="margin:0 0 24px;font-family:Arial,sans-serif;
                                           font-size:15px;line-height:1.7;color:#444444;">
-                                    {message}
+                                    {escape(message)}
                                 </p>
                                 {project_line}
                                 <!-- CTA button -->
@@ -213,9 +207,7 @@ def create_notification(recipient, message, notification_type, project=None,
     db.session.add(notification)
     db.session.commit()
 
-    # Gate the email on the user's saved preference for this type.
-    # Missing pref_key (legacy callers) → always send.
-    # send_email=False → always skip (caller already sent a direct email).
+    # pref_key None -> always email; send_email=False -> caller already emailed.
     if send_email and (pref_key is None or recipient.wants_notification(pref_key)):
         _send_notification_email(recipient, message, project)
 
@@ -223,39 +215,6 @@ def create_notification(recipient, message, notification_type, project=None,
 
 
 # ── Notify functions ──────────────────────────────────────────────────────────
-
-def notify_team_leads_of_new_project(project, teams_requested, triggered_by):
-    """
-    Notify ALL members of every team requested on a new project — both team leads and designers.
-    teams_requested is a list like ['3D', '2D'].
-    Team leads get a message prompting them to assign designers.
-    Designers get a heads-up that a new project is coming in for their team.
-    """
-    for team_name in teams_requested:
-        # Notify team leads — they need to action this by assigning designers
-        team_leads = active_users_query().filter_by(role='team_lead', team=team_name).all()
-        for team_lead in team_leads:
-            create_notification(
-                recipient=team_lead,
-                message=f'A new project has come in for the {team_name} team: "{project.name}".',
-                notification_type='project_created',
-                project=project,
-                triggered_by=triggered_by,
-                pref_key='new_project'
-            )
-
-        # Notify all designers on this team — so they're aware before assignment
-        designers = active_users_query().filter_by(role='designer', team=team_name).all()
-        for designer in designers:
-            create_notification(
-                recipient=designer,
-                message=f'A new project has come in for the {team_name} team: "{project.name}".',
-                notification_type='project_created',
-                project=project,
-                triggered_by=triggered_by,
-                pref_key='new_project'
-            )
-
 
 def notify_cs_of_brief_flag(flag, project, triggered_by):
     """Notify the CS lead and secondary CS that a designer has raised a brief flag."""
@@ -283,17 +242,12 @@ def notify_cs_of_brief_flag(flag, project, triggered_by):
 
 
 def notify_flag_reply(flag, project, triggered_by):
-    """
-    Notify the relevant party that a reply has been added to a flag.
-    If CS replied → notify the original flagging designer.
-    If designer replied → notify the CS lead.
-    """
+    """Notify the other side of a flag reply: the CS lead if the flag's
+    author replied, else the author."""
     if triggered_by.id == flag.created_by_id:
-        # Designer replied — notify CS
         recipient = User.query.get(project.cs_lead_id)
         message = f'{triggered_by.name} replied to their flag on "{project.name}".'
     else:
-        # CS/admin replied — notify the original flagging designer
         recipient = flag.created_by
         message = f'{triggered_by.name} responded to your flag on "{project.name}".'
 
@@ -309,13 +263,9 @@ def notify_flag_reply(flag, project, triggered_by):
 
 
 def notify_of_chat_mention(note, project, mentioned_users, triggered_by):
-    """Notify each person @-mentioned in a chat message. mentioned_users is
-    already resolved/validated by the caller (create_note()).
-
-    Sets an explicit link (rather than falling back to the plain project
-    link in mark_read()) so clicking the notification opens the project
-    AND the chat drawer — see autoOpenFromUrl()/openChat() in
-    project_list.js / project_overlay.js."""
+    """Notify each @-mentioned user (already validated by create_note()).
+    The link opens the project AND its chat drawer (autoOpenFromUrl() /
+    openChat() in project_list.js / project_overlay.js)."""
     from flask import url_for
 
     message = f'{triggered_by.name} mentioned you in "{project.name}".'
@@ -332,43 +282,9 @@ def notify_of_chat_mention(note, project, mentioned_users, triggered_by):
         )
 
 
-def notify_designers_of_revision_flag(deliverable, project, triggered_by):
-    """
-    Notify all designers assigned to a deliverable that it has been flagged for revision.
-    Uses deliverable.disciplines (DeliverableAssignment records) to find who to notify.
-    """
-    notified_ids = set()
-    for assignment in deliverable.disciplines:
-        if assignment.designer_id not in notified_ids:
-            message = f'"{deliverable.name}" on "{project.name}" has been flagged for revision.'
-            create_notification(
-                recipient=assignment.designer,
-                message=message,
-                notification_type='revision_flagged',
-                project=project,
-                triggered_by=triggered_by,
-                pref_key='revision_flag'
-            )
-            notified_ids.add(assignment.designer_id)
-
-
-def notify_cs_of_revision_submitted(project, triggered_by):
-    """Notify the CS lead and secondary CS that all flagged revisions have been submitted."""
-    message = f'All flagged revisions on "{project.name}" have been submitted. (Revision #{project.revision_count})'
-    cs_lead = User.query.get(project.cs_lead_id)
-    if cs_lead:
-        create_notification(recipient=cs_lead, message=message, notification_type='revision_submitted',
-                            project=project, triggered_by=triggered_by,
-                            pref_key='revision_submitted')
-    for secondary in _get_secondary_cs(project):
-        create_notification(recipient=secondary, message=message, notification_type='revision_submitted',
-                            project=project, triggered_by=triggered_by,
-                            pref_key='revision_submitted')
-
-
 def notify_project_owner_of_stream_uploaded(deliverable, project, stream_label, triggered_by):
-    """Notify the Project Owner that a Pre-Production stream is ready for their
-    Approve/Flag decision. Only the owner is notified; skipped if they triggered it."""
+    """Notify the Project Owner that a Pre-Production stream is ready to
+    approve or flag. Skipped if they triggered it."""
     owner = User.query.get(project.project_owner_id) if project.project_owner_id else None
     if not owner or owner.id == triggered_by.id:
         return
@@ -385,9 +301,8 @@ def notify_project_owner_of_stream_uploaded(deliverable, project, stream_label, 
 
 
 def notify_designer_of_stream_approved(deliverable, project, stream_label, designer, triggered_by):
-    """Notify the assigned designer that their Pre-Production stream was approved.
-    The message asks them to share files with Production by email (no in-app
-    hand-off yet). No-op if there's no designer or they triggered it themselves."""
+    """Tell the designer their Pre-Production stream was approved and to
+    email the files to Production. No-op if no designer or they triggered it."""
     if not designer or designer.id == triggered_by.id:
         return
 
@@ -403,29 +318,9 @@ def notify_designer_of_stream_approved(deliverable, project, stream_label, desig
     )
 
 
-def notify_cs_lead_of_assignment(project, designer, team_name, triggered_by):
-    """
-    Notify the CS lead of a project when a designer has been assigned to a team.
-    No pref_key — this is a core operational alert that always fires.
-    """
-    cs_lead = User.query.get(project.cs_lead_id)
-    if cs_lead:
-        message = f"{designer.name} has been assigned to the {team_name} team on project: {project.name}"
-        create_notification(
-            recipient=cs_lead,
-            message=message,
-            notification_type='designer_assigned',
-            project=project,
-            triggered_by=triggered_by
-            # pref_key intentionally omitted → always sends
-        )
-
-
 def notify_designer_of_concept_kv_assignment(project, designer, role_label, triggered_by):
-    """
-    Notify a designer that they have been assigned the Concept or KV role on a project.
-    role_label: 'Concept' or 'Key Visual'
-    """
+    """Notify a designer of their Concept or KV role (role_label: 'Concept'
+    or 'Key Visual')."""
     message = f'You have been assigned as the {role_label} designer on "{project.name}".'
     create_notification(
         recipient=designer,
@@ -461,10 +356,8 @@ def notify_cs_of_flag_resolved(flag, project, triggered_by):
 
 
 def notify_cs_of_lead_change(project, new_designer, team_name, triggered_by, previous_designer=None):
-    """
-    Notify CS lead + secondary CS when a designer self-assigns or takes over as team lead.
-    If previous_designer is provided, also notify them that they've been replaced.
-    """
+    """Notify CS lead + secondary CS when a designer self-assigns or takes
+    over as team lead; also tell previous_designer they were replaced."""
     if previous_designer:
         cs_message = (f'{new_designer.name} has taken over as {team_name} lead on '
                       f'"{project.name}" (previously {previous_designer.name}).')
@@ -493,69 +386,9 @@ def notify_cs_of_lead_change(project, new_designer, team_name, triggered_by, pre
                             pref_key='lead_changed')
 
 
-def notify_secondary_cs_of_deliverable_status(deliverable, project, new_status, triggered_by):
-    """
-    Notify secondary CS of a C&CM deliverable status change, filtered by their region subscriptions.
-    Called from set_deliverable_status. Does nothing for standard briefs.
-    """
-    if project.brief_type != 'ccm':
-        return
-
-    secondary_cs = _get_secondary_cs(project)
-    if not secondary_cs:
-        return
-
-    region = _deliverable_region(deliverable)
-    status_label = new_status.replace('_', ' ').title()
-    message = f'"{deliverable.name}" in "{project.name}" is now {status_label}.'
-
-    for secondary in secondary_cs:
-        if region and not _secondary_cs_subscribed_to_region(project, secondary, region):
-            continue
-        create_notification(recipient=secondary, message=message, notification_type='status_change',
-                            project=project, triggered_by=triggered_by,
-                            pref_key='deliverable_status')
-
-
-def notify_cs_of_project_started(project, triggered_by):
-    """Notify CS lead and secondary CS when a designer starts the project."""
-    message = f'{triggered_by.name} has started work on "{project.name}".'
-    cs_lead = User.query.get(project.cs_lead_id)
-    if cs_lead:
-        create_notification(recipient=cs_lead, message=message, notification_type='project_started',
-                            project=project, triggered_by=triggered_by,
-                            pref_key='project_started')
-    for secondary in _get_secondary_cs(project):
-        create_notification(recipient=secondary, message=message, notification_type='project_started',
-                            project=project, triggered_by=triggered_by,
-                            pref_key='project_started')
-
-
-def notify_lead_designers_of_project_started(project, triggered_by):
-    """Notify other lead designers (ProjectDesigner records) when a project is started.
-    The actor who pressed Start Project is excluded — they already know.
-    CS lead is notified separately via notify_cs_of_project_started."""
-    from app.modules.core.shared.models import ProjectDesigner
-    message = f'{triggered_by.name} has started work on "{project.name}".'
-    leads = ProjectDesigner.query.filter_by(project_id=project.id).all()
-    for lead in leads:
-        if lead.user_id != triggered_by.id:
-            create_notification(
-                recipient=lead.designer,
-                message=message,
-                notification_type='project_started',
-                project=project,
-                triggered_by=triggered_by,
-                pref_key='project_started'
-            )
-
-
 def notify_of_submission_to_client(project, triggered_by):
-    """
-    Notify the project's CS lead, secondary CS, and assigned designers when CS
-    submits a deck to the client. The triggering user is excluded.
-    No blanket role broadcast — only people actually on the project receive this.
-    """
+    """Notify the project's CS lead, secondary CS and assigned designers
+    (not the actor) that a deck was submitted to the client."""
     message = f'"{project.name}" has been submitted to the client.'
 
     recipients = []
@@ -591,72 +424,9 @@ def notify_of_submission_to_client(project, triggered_by):
         )
 
 
-def notify_of_ckv_posm_pending(project, triggered_by):
-    """
-    Notify secondary CS and designers when C&KV is approved on a C&KV-only brief
-    and the CS has chosen to add POSM — project is back in progress.
-    """
-    message = f'"{project.name}" — Concept & KV approved. Project is back in progress to add POSM details.'
-
-    recipients = []
-    recipient_ids = set()
-
-    for secondary in _get_secondary_cs(project):
-        if secondary.id not in recipient_ids:
-            recipients.append(secondary)
-            recipient_ids.add(secondary.id)
-
-    for designer in _get_project_designers(project):
-        if designer.id not in recipient_ids:
-            recipients.append(designer)
-            recipient_ids.add(designer.id)
-
-    for recipient in recipients:
-        if recipient.id == triggered_by.id:
-            continue
-        create_notification(
-            recipient=recipient,
-            message=message,
-            notification_type='project_updated',
-            project=project,
-            triggered_by=triggered_by,
-            pref_key='project_updated'
-        )
-
-
-def notify_of_posm_details_added(project, triggered_by):
-    """Notify the project's assigned designers that POSM details were added and
-    work can resume. Uses project.assigned_designers (the briefed team), not
-    deliverable-based designers, since no POSM deliverables are assigned yet."""
-    message = f'"{project.name}" — POSM customer details have been added. Resume the project to continue.'
-
-    recipients = []
-    recipient_ids = set()
-    for assignment in project.assigned_designers:
-        designer = assignment.designer
-        if designer.id not in recipient_ids:
-            recipients.append(designer)
-            recipient_ids.add(designer.id)
-
-    for recipient in recipients:
-        if recipient.id == triggered_by.id:
-            continue
-        create_notification(
-            recipient=recipient,
-            message=message,
-            notification_type='project_updated',
-            project=project,
-            triggered_by=triggered_by,
-            pref_key='project_updated'
-        )
-
-
 def notify_of_project_approved(project, triggered_by):
-    """
-    Notify the project's CS lead, secondary CS, and assigned designers when a
-    project reaches full approval. The approving user is excluded.
-    No blanket role broadcast — only people actually on the project receive this.
-    """
+    """Notify the project's CS lead, secondary CS and assigned designers
+    (not the actor) that the project was approved."""
     message = f'"{project.name}" has been approved!'
 
     recipients = []
@@ -692,165 +462,9 @@ def notify_of_project_approved(project, triggered_by):
         )
 
 
-def broadcast_update_email(version, subject_line, intro_line, blog_url):
-    """
-    Send a one-off update announcement email to every active user.
-    Creates an in-app notification AND sends an HTML email to each user.
-    Called manually by an admin via /admin/broadcast-update.
-    """
-    from flask import current_app
-
-    if str(current_app.config.get('MAIL_ENABLED', 'false')).lower() != 'true':
-        current_app.logger.warning('broadcast_update_email: MAIL_ENABLED is not true, skipping.')
-        return 0
-
-    try:
-        from flask_mail import Message as MailMessage
-        from app.modules.core.shared.extensions import mail
-    except Exception as e:
-        current_app.logger.warning(f'broadcast_update_email: mail import failed: {e}')
-        return 0
-
-    app_url = 'https://app.vitamin-e.work'
-    sent = 0
-
-    users = active_users_query().all()
-
-    for user in users:
-        if not user.email:
-            continue
-
-        # ── In-app notification ──────────────────────────────────────
-        notif = Notification(
-            recipient_id=user.id,
-            message=intro_line,
-            notification_type='system_update',
-        )
-        db.session.add(notif)
-
-        # ── HTML email ───────────────────────────────────────────────
-        html_body = f"""
-        <table width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="background-color:#F5F0E8;">
-            <tr>
-                <td align="center" style="padding:48px 20px;">
-
-                    <table width="520" cellpadding="0" cellspacing="0" border="0"
-                           style="max-width:520px;width:100%;background-color:#ffffff;
-                                  border-radius:12px;overflow:hidden;">
-
-                        <!-- Wordmark -->
-                        <tr>
-                            <td style="padding:28px 36px 0 36px;">
-                                <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                                    <tr>
-                                        <td>
-                                            <span style="font-family:Arial,sans-serif;
-                                                         font-size:11px;font-weight:bold;
-                                                         letter-spacing:3px;color:#F27F55;
-                                                         text-transform:uppercase;">
-                                                VITAMIN-E
-                                            </span>
-                                        </td>
-                                        <td align="right"></td>
-                                    </tr>
-                                </table>
-                                <table width="100%" cellpadding="0" cellspacing="0" border="0"
-                                       style="margin-top:14px;">
-                                    <tr>
-                                        <td style="height:2px;background-color:#F27F55;
-                                                   font-size:0;line-height:0;">&nbsp;</td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-
-                        <!-- Body -->
-                        <tr>
-                            <td style="padding:32px 36px 28px 36px;">
-                                <p style="margin:0 0 6px;font-family:Arial,sans-serif;
-                                          font-size:11px;color:#bbb;letter-spacing:2px;
-                                          text-transform:uppercase;">
-                                    App Update &mdash; {version}
-                                </p>
-                                <p style="margin:0 0 20px;font-family:Arial,sans-serif;
-                                          font-size:17px;font-weight:bold;color:#1A1A1A;">
-                                    Hi {user.name},
-                                </p>
-                                <p style="margin:0 0 24px;font-family:Arial,sans-serif;
-                                          font-size:15px;line-height:1.7;color:#444444;">
-                                    {intro_line}
-                                </p>
-                                <p style="margin:0 0 24px;font-family:Arial,sans-serif;
-                                          font-size:15px;line-height:1.7;color:#444444;">
-                                    Read the full update post to see everything that's new.
-                                </p>
-                                <table cellpadding="0" cellspacing="0" border="0"
-                                       style="margin-top:8px;">
-                                    <tr>
-                                        <td style="background-color:#F27F55;border-radius:6px;">
-                                            <a href="{blog_url}"
-                                               style="display:inline-block;padding:12px 28px;
-                                                      color:#ffffff;text-decoration:none;
-                                                      font-family:Arial,sans-serif;
-                                                      font-size:14px;font-weight:bold;
-                                                      letter-spacing:0.5px;">
-                                                Read the Update &rarr;
-                                            </a>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-
-                        <!-- Footer -->
-                        <tr>
-                            <td style="background-color:#F5F0E8;padding:18px 36px;
-                                       border-top:1px solid #ebe5d8;">
-                                <p style="margin:0;font-family:Arial,sans-serif;
-                                          font-size:11px;color:#aaa;line-height:1.7;">
-                                    You are receiving this because you are a member of
-                                    Vitamin-E.<br>
-                                    <a href="{app_url}/account"
-                                       style="color:#F27F55;text-decoration:none;">
-                                        Manage notification preferences
-                                    </a>
-                                </p>
-                            </td>
-                        </tr>
-
-                    </table>
-                </td>
-            </tr>
-        </table>
-        """
-
-        text_body = (
-            f"Hi {user.name},\n\n{intro_line}\n\n"
-            f"Read the full update post: {blog_url}\n\n— Vitamin-E"
-        )
-
-        try:
-            msg = MailMessage(
-                subject=subject_line,
-                recipients=[user.email],
-                body=text_body,
-                html=html_body
-            )
-            mail.send(msg)
-            sent += 1
-        except Exception as e:
-            current_app.logger.warning(f'broadcast_update_email: failed for {user.email}: {e}')
-
-    db.session.commit()
-    return sent
-
 def notify_admin_of_new_feedback(item_type, title, submitted_by, url_path):
-    """
-    Send a direct email to Ezekiel when someone submits a feature request or bug report.
-    item_type: 'Feature Request' or 'Bug Report'
-    No in-app notification — this is an admin alert only.
-    """
+    """Email the hardcoded admin address about a new feature request or bug
+    report (item_type). Email only, no in-app notification."""
     from flask import current_app
     if str(current_app.config.get('MAIL_ENABLED', 'false')).lower() != 'true':
         return
@@ -881,19 +495,19 @@ def notify_admin_of_new_feedback(item_type, title, submitted_by, url_path):
                     <tr><td style="padding:32px 36px 28px 36px;">
                         <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:11px;
                                    color:#bbb;letter-spacing:2px;text-transform:uppercase;">
-                            {item_type}
+                            {escape(item_type)}
                         </p>
                         <p style="margin:0 0 20px;font-family:Arial,sans-serif;font-size:17px;
                                    font-weight:bold;color:#1A1A1A;">
-                            New {item_type}
+                            New {escape(item_type)}
                         </p>
                         <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:15px;
                                    line-height:1.7;color:#444444;">
-                            <strong>{submitted_by.name}</strong> submitted a new {item_type.lower()}:
+                            <strong>{escape(submitted_by.name)}</strong> submitted a new {escape(item_type.lower())}:
                         </p>
                         <p style="margin:0 0 24px;font-family:Arial,sans-serif;font-size:16px;
                                    font-weight:bold;color:#1A1A1A;">
-                            &ldquo;{title}&rdquo;
+                            &ldquo;{escape(title)}&rdquo;
                         </p>
                         <table cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
                             <tr>
@@ -937,12 +551,9 @@ def notify_admin_of_new_feedback(item_type, title, submitted_by, url_path):
 
 
 def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=True):
-    """
-    Notify all users of a new or updated blog post.
-    send_inapp: create in-app notifications (skips the author) — runs synchronously.
-    send_email: send HTML email to all users (skips the author) — runs in a background
-                thread so slow SMTP never blocks the request worker.
-    """
+    """Notify every user but the author of a new or updated blog post.
+    In-app notifications are written synchronously; emails go from a
+    background thread so slow SMTP never blocks the request."""
     import threading
     from flask import current_app
 
@@ -969,7 +580,7 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
 
     # ── Email notifications (slow SMTP — run in background thread) ────────────
     if send_email and email_enabled:
-        # Collect everything we need as plain values before leaving the request context.
+        # Plain values only: the thread can't touch request-bound ORM objects.
         post_title   = post.title
         post_id      = post.id
         version_tag  = post.version_tag or ''
@@ -989,7 +600,7 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
 
                 version_line = (
                     f'<p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:13px;'
-                    f'color:#F27F55;letter-spacing:2px;text-transform:uppercase;">{version_tag}</p>'
+                    f'color:#F27F55;letter-spacing:2px;text-transform:uppercase;">{escape(version_tag)}</p>'
                 ) if version_tag else ''
 
                 for name, email in email_targets:
@@ -1010,10 +621,10 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
                             <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:11px;color:#bbb;
                                        letter-spacing:2px;text-transform:uppercase;">App Update</p>
                             <p style="margin:0 0 20px;font-family:Arial,sans-serif;font-size:17px;
-                                       font-weight:bold;color:#1A1A1A;">Hi {name},</p>
+                                       font-weight:bold;color:#1A1A1A;">Hi {escape(name)},</p>
                             {version_line}
                             <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:19px;
-                                       font-weight:bold;color:#1A1A1A;">{post_title}</p>
+                                       font-weight:bold;color:#1A1A1A;">{escape(post_title)}</p>
                             <p style="margin:0 0 28px;font-family:Arial,sans-serif;font-size:15px;
                                        line-height:1.7;color:#444444;">
                                 A new update has been posted to Vitamin-E. Click below to read it.
@@ -1049,12 +660,11 @@ def notify_all_of_new_blog_post(post, triggered_by, send_inapp=True, send_email=
         threading.Thread(target=_send_emails, daemon=True).start()
 
 
-# ── Request Editing Access — backs project_overlay.py's
-# request_edit_access()/approve_edit_access()/deny_edit_access(). ───────────
+# ── Request Editing Access (project_overlay/details.py) ─────────────────────
 
 def notify_cs_of_edit_access_request(project, requester):
-    """Notify the CS Lead and every Secondary CS that a designer requested
-    editing access on their project — the tier that can approve or deny it."""
+    """Notify the CS lead and every secondary CS (who can approve or deny)
+    that a designer requested editing access."""
     message = f'{requester.name} requested editing access to "{project.name}".'
 
     cs_lead = User.query.get(project.cs_lead_id)
@@ -1070,9 +680,8 @@ def notify_cs_of_edit_access_request(project, requester):
 
 
 def notify_designer_of_edit_access_decision(edit_access_request, approved, triggered_by):
-    """Notify the requesting designer once their Request Editing Access
-    request has been approved or denied — see project_overlay.py's
-    approve_edit_access()/deny_edit_access()."""
+    """Tell the requesting designer their editing-access request was
+    approved or denied."""
     recipient = edit_access_request.user
     project = edit_access_request.project
     if not recipient or not project:

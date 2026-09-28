@@ -1,6 +1,5 @@
-# Cost-ledger Excel export: turn a project's cost_summary() (lib/costs.py) into
-# an .xlsx workbook. Kept separate from routes/costs.py, which just streams what
-# this returns.
+# Excel exports for the cost ledger and Performance. Routes stream the
+# BytesIO these return.
 
 import io
 from datetime import datetime
@@ -15,9 +14,8 @@ _HEADER_FILL = PatternFill(start_color='4A4A4A', end_color='4A4A4A', fill_type='
 
 
 def build_cost_ledger_workbook(di_project, summary):
-    """Build the workbook in memory and return a BytesIO at the start, ready for
-    send_file. `summary` is lib.costs.cost_summary(di_project)'s result, passed
-    in so this doesn't re-query."""
+    """The project's cost ledger as an .xlsx BytesIO, rewound for send_file.
+    `summary` is costs.cost_summary(di_project)."""
     wb = Workbook()
     ws = wb.active
     ws.title = 'Cost Ledger'
@@ -39,8 +37,7 @@ def build_cost_ledger_workbook(di_project, summary):
         cell.fill = _HEADER_FILL
 
     row = header_row + 1
-    # On-screen ledger is newest-first; the export reverses to oldest-first,
-    # which reads more naturally as a log.
+    # Oldest first in the export; the on-screen ledger is newest first.
     for entry in reversed(summary['entries']):
         ws.cell(row=row, column=1, value=entry.date)
         ws.cell(row=row, column=1).number_format = 'yyyy-mm-dd'
@@ -72,10 +69,8 @@ def build_cost_ledger_workbook(di_project, summary):
 
 
 def build_performance_workbook(rollup, currency):
-    """Performance export — one row per project in the period's rollup, same
-    columns as the on-screen table, plus the three summary figures. `rollup` is
-    lib.snapshots.get_period_rollup()'s result, passed in so this doesn't
-    re-query."""
+    """The Performance rollup as an .xlsx BytesIO: the three summary figures
+    and one row per project. `rollup` is snapshots.get_period_rollup()."""
     wb = Workbook()
     ws = wb.active
     ws.title = 'Performance'

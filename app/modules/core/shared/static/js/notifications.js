@@ -1,14 +1,14 @@
-// notifications.js — Vitamin-E
-// Notification sound, polling, inbox/archived DOM handlers, archive-all, delete-all.
-// Depends on: showToast(), buildArchivedItem(), buildInboxItem() — all defined here.
-// Loaded after main.js.
+// notifications.js — notification sound, desktop notifications, live inbox
+// updates, the bell panel's inbox/archived handlers, and tr[data-href] row links.
+// Needs main.js loaded first (showToast, showAchievementToast, btnLoading, btnDone).
+// Loaded once from base.html; the panel is outside #main-content, so the
+// load-time bindings below survive SPA navigation.
 
 // ── Notification Sound (Web Audio API) ──────────────────────────────────────
-// Generates a two-tone chime without needing any audio file
+// Plays the user's chosen sound file, or a synthesized two-tone chime.
 window.helixPlayNotificationSound = function (overrideUrl, overrideVolume) {
-    // Explicit test (account.html's "Test Sound" button) always plays, even
-    // if the on/off toggle is currently off — you're deliberately previewing
-    // it. The automatic poll-triggered call (no arguments) respects the toggle.
+    // Any overrideUrl, including '' for the default chime (account.html's "Test
+    // Sound"), plays even when sound is off. The no-argument poll call respects the toggle.
     var isExplicitTest = overrideUrl !== undefined;
     var prefs = window.HELIX_SOUND_PREFS || { enabled: true, volume: 1, url: null };
 
@@ -19,19 +19,15 @@ window.helixPlayNotificationSound = function (overrideUrl, overrideVolume) {
     volume = Math.max(0, Math.min(1, volume));
 
     if (url) {
-        // A real uploaded file has been chosen — play it directly.
         var audio = new Audio(url);
         audio.volume = volume;
         audio.play().catch(function () {
-            // Autoplay can be blocked before the user has interacted with the
-            // page at all — silent fail, matches the old try/catch behavior.
+            // Autoplay is blocked until the user interacts with the page; ignore.
         });
         return;
     }
 
-    // No file chosen yet (fresh install, or "Default chime" selected) —
-    // fall back to the original synthesized two-tone chime so sound still
-    // works out of the box with zero admin setup.
+    // No file chosen ("Default chime"): synthesize the chime.
     try {
         var ctx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -49,14 +45,13 @@ window.helixPlayNotificationSound = function (overrideUrl, overrideVolume) {
             osc.stop(startTime + duration);
         }
 
-        // Scale the chime's peak volume by the saved slider value too —
-        // otherwise volume would only work for uploaded files, not the fallback.
+        // Volume applies to the chime too.
         var peak = 0.25 * volume;
         var now = ctx.currentTime;
         playTone(880, now, 0.4, peak);
         playTone(1108, now + 0.18, 0.5, peak);
     } catch (e) {
-        // Audio context blocked (e.g. before first user interaction) — silent fail
+        // AudioContext blocked before first user interaction; ignore.
     }
 };
 
@@ -73,22 +68,17 @@ function helixShowBrowserNotification(message) {
 }
 
 // ── Notification Live Updates ────────────────────────────────────────────────
-// Polls /notifications/poll?since=<ISO> for new unread notifications.
-// On first load, sets the baseline timestamp so we only alert about NEW arrivals.
-//
-// SSE redesign (Stage 5): pollNotifications() itself is unchanged — what
-// triggers it now is an EventSource on /sse/notifications (pushed the
-// moment a new Notification row commits, via Stages 2-4) instead of a
-// fixed 30s timer. Falls back to the original 30s setInterval automatically
-// if SSE isn't supported or the connection drops, until it recovers.
+// Fetches /notifications/poll?since=<ISO> whenever /sse/notifications pings
+// (a new notification committed). Falls back to a 30s poll while SSE is
+// unavailable. The 'since' baseline lives in localStorage (shared by tabs).
 (function () {
-    // Initialise the "last polled" time to now so we don't re-fire existing notifications
+    // First visit: start the baseline at now so old notifications don't alert.
     if (!localStorage.getItem('helix_last_poll')) {
         localStorage.setItem('helix_last_poll', new Date().toISOString());
     }
 
     function pollNotifications() {
-        // Doorbell for anything else riding the per-user stream (the tray bubbles).
+        // Also tells trays.js to refresh its bubbles.
         document.dispatchEvent(new CustomEvent('helix:user-stream'));
         var since = localStorage.getItem('helix_last_poll') || new Date().toISOString();
 
@@ -97,16 +87,16 @@ function helixShowBrowserNotification(message) {
             .then(function (data) {
                 if (!data.notifications || data.notifications.length === 0) return;
 
-                // Update the baseline to the newest notification's timestamp
+                // Poll returns oldest first; the last one is the new baseline.
                 var latest = data.notifications[data.notifications.length - 1];
                 localStorage.setItem('helix_last_poll', latest.created_at);
 
-                // Fire once per batch (first message) — avoids a flood if many arrive
+                // One desktop notification + sound per batch, not per item.
                 var msg = data.notifications[0].message;
                 helixShowBrowserNotification(msg);
                 window.helixPlayNotificationSound();
 
-                // Per-notification toasts for types that need immediate attention
+                // Per-item toasts only for types that need attention now.
                 data.notifications.forEach(function (n) {
                     if (n.notification_type === 'achievement_earned' && typeof showAchievementToast === 'function') {
                         showAchievementToast(n.message);
@@ -116,14 +106,12 @@ function helixShowBrowserNotification(message) {
                     }
                 });
 
-                // Update the unread badge in the nav without a full page reload
                 var badge = document.getElementById('notif-unread-badge');
                 if (badge) {
-                    // Badge already exists — increment the count
                     var current = parseInt(badge.textContent, 10) || 0;
                     badge.textContent = current + data.notifications.length;
                 } else {
-                    // Badge doesn't exist yet (count was 0) — create and inject it
+                    // No badge when the count was 0: create it.
                     var bell = document.getElementById('notification-bell');
                     if (bell) {
                         var newBadge = document.createElement('span');
@@ -134,15 +122,13 @@ function helixShowBrowserNotification(message) {
                     }
                 }
 
-                // Inject new notifications into the sidebar inbox panel so they
-                // show immediately without requiring a page refresh.
+                // Prepend new items to the bell panel's inbox.
                 var inboxView = document.getElementById('notif-inbox-view');
                 if (inboxView) {
-                    // Remove the "no notifications" empty state if present
                     var emptyMsg = inboxView.querySelector('.no-notifications');
                     if (emptyMsg) emptyMsg.remove();
 
-                    // Prepend newest at the top (poll returns oldest-first, so reverse)
+                    // Reverse so the newest ends up on top.
                     data.notifications.slice().reverse().forEach(function (n) {
                         var newItem = buildInboxItem(n.id, n.message, n.time_display || 'Just now');
                         newItem.classList.add('unread');
@@ -151,11 +137,11 @@ function helixShowBrowserNotification(message) {
                 }
             })
             .catch(function () {
-                // Network error — silently skip this poll cycle
+                // Network error: skip this cycle.
             });
     }
 
-    // Fallback interval — only runs when SSE is unavailable or has dropped.
+    // 30s fallback, only while SSE is unavailable.
     var _fallbackInterval = null;
     function _startFallback() {
         if (_fallbackInterval !== null) return;
@@ -168,12 +154,12 @@ function helixShowBrowserNotification(message) {
         }
     }
 
-    // Start 5s after page load (avoid hitting server during initial render)
+    // Start 5s after load to stay off the initial render.
     setTimeout(function () {
-        pollNotifications(); // one baseline check, same as before
+        pollNotifications();
 
         if (typeof EventSource === 'undefined') {
-            _startFallback(); // no SSE support in this browser — poll like before
+            _startFallback(); // no SSE in this browser
             return;
         }
 
@@ -184,25 +170,19 @@ function helixShowBrowserNotification(message) {
             pollNotifications();
         };
         source.onerror = function () {
-            // SSE dropped or failed to (re)connect — keep notifications live
-            // via polling until it recovers.
+            // Poll until SSE recovers.
             _startFallback();
         };
     }, 5000);
 })();
 
-// Clickable row navigation — delegated to document so it survives SPA navigation.
-// The old pattern (querySelectorAll + forEach) attached listeners to specific DOM nodes
-// that get destroyed when sidebar.js swaps innerHTML on navigation. By delegating to
-// document (which is never destroyed) we catch clicks on any tr[data-href] regardless
-// of when those rows were added to the DOM.
-// _clickableRowsWired prevents stacking a second listener if helix:navigated fires again.
+// Any tr[data-href] navigates on click. Delegated on document so rows added by
+// SPA navigation or JS work too. _clickableRowsWired guards against binding twice.
 if (!window._clickableRowsWired) {
     window._clickableRowsWired = true;
     document.addEventListener('click', function (e) {
-        // Never intercept clicks inside interactive child elements (buttons, links, selects)
+        // Leave clicks on links, buttons and selects inside the row alone.
         if (e.target.closest('a, button, select')) return;
-        // Find the nearest ancestor <tr> that carries a data-href navigation target
         var row = e.target.closest('tr[data-href]');
         if (!row) return;
         if (window.navigateTo) {
@@ -213,12 +193,11 @@ if (!window._clickableRowsWired) {
     });
 }
 
-// Notification panel elements
+// Bell panel
 const bell = document.getElementById('notification-bell');
 const panel = document.getElementById('notification-panel');
 const closeBtn = document.getElementById('close-notifications');
 
-// Open and close the panel when bell is clicked
 if (bell && panel) {
     bell.addEventListener('click', function (event) {
         event.stopPropagation();
@@ -226,14 +205,13 @@ if (bell && panel) {
     });
 }
 
-// Close panel when close button is clicked
 if (closeBtn && panel) {
     closeBtn.addEventListener('click', function () {
         panel.classList.add('hidden');
     });
 }
 
-// Click anywhere outside the panel closes it
+// A click outside the panel closes it.
 document.addEventListener('click', function (event) {
     if (panel && !panel.classList.contains('hidden')) {
         if (!panel.contains(event.target) && event.target !== bell) {
@@ -242,15 +220,17 @@ document.addEventListener('click', function (event) {
     }
 });
 
-// Click a notification body — mark as read, then navigate
-document.querySelectorAll('.notification-item:not(.notification-item--archived)').forEach(function (item) {
-    item.addEventListener('click', function (e) {
+// Clicking an inbox item marks it read, then navigates. Delegated on the inbox
+// so items added later (live poll, restore) open the same way.
+var notifInboxEl = document.getElementById('notif-inbox-view');
+if (notifInboxEl) {
+    notifInboxEl.addEventListener('click', function (e) {
+        var item = e.target.closest('.notification-item');
+        if (!item || item.classList.contains('notification-item--archived')) return;
         if (e.target.closest('.notification-mark-read-btn')) return;
-        // Request Editing Access's inline Approve/Deny buttons (26 Aug
-        // 2026) — same "don't also navigate" exclusion as mark-read above.
+        // Approve/Deny buttons handle their own click.
         if (e.target.closest('.notification-inline-actions')) return;
-        var notificationId = this.dataset.id;
-        fetch('/notifications/' + notificationId + '/read', {
+        fetch('/notifications/' + item.dataset.id + '/read', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         })
@@ -259,36 +239,37 @@ document.querySelectorAll('.notification-item:not(.notification-item--archived)'
                 if (data.success) window.location.href = data.redirect_url;
             });
     });
-});
+}
 
 //-----------Notification Helpers------------------------------
 
-// Builds a new archived notification element from existing data
-// Called after archiving so the item appears in the Archived tab immediately
+// Builds an archived item client-side (after Archive All). `message` and `time`
+// go in as text, matching the autoescaped server-rendered items.
 function buildArchivedItem(id, message, time) {
     var div = document.createElement('div');
     div.className = 'notification-item notification-item--archived';
     div.dataset.id = id;
 
-    // Inner HTML matches the server rendered archived item structure
+    // Must match the server-rendered archived item in base.html.
     div.innerHTML = `
         <input type="checkbox" class="notif-checkbox hidden" value="${id}">
         <div class="notification-content">
-            <p class="notification-message">${message}</p>
-            <span class="notification-time">${time}</span>
+            <p class="notification-message"></p>
+            <span class="notification-time"></span>
         </div>
         <button type="button" class="notification-restore-btn" data-id="${id}" title="Restore to inbox">↩</button>
     `;
+    div.querySelector('.notification-message').textContent = message;
+    div.querySelector('.notification-time').textContent = time;
 
-    // Attach the restore listener on the new button immediately
-    // (querySelectorAll only runs on page load, so new elements need manual binding)
+    // Load-time bindings don't cover new nodes, so bind here.
     div.querySelector('.notification-restore-btn').addEventListener('click', handleRestore);
 
     return div;
 }
 
-// Builds a new inbox notification element from existing data
-// Called after restoring so the item appears in the Inbox tab immediately
+// Builds an inbox item client-side (after restore or a live poll). `message` and
+// `time` go in as text, matching the autoescaped server-rendered items.
 function buildInboxItem(id, message, time) {
     var div = document.createElement('div');
     div.className = 'notification-item';
@@ -296,13 +277,15 @@ function buildInboxItem(id, message, time) {
 
     div.innerHTML = `
         <div class="notification-content">
-            <p class="notification-message">${message}</p>
-            <span class="notification-time">${time}</span>
+            <p class="notification-message"></p>
+            <span class="notification-time"></span>
         </div>
         <button type="button" class="notification-mark-read-btn" data-id="${id}" title="Mark as read">✓</button>
     `;
+    div.querySelector('.notification-message').textContent = message;
+    div.querySelector('.notification-time').textContent = time;
 
-    // Attach the mark-read listener to the new button immediately
+    // The item body's click is handled by the inbox's delegated listener.
     div.querySelector('.notification-mark-read-btn').addEventListener('click', handleMarkRead);
 
     return div;
@@ -323,7 +306,7 @@ function handleMarkRead(e) {
         .then(function (data) {
             if (!data.success) return;
 
-            // Decrement the unread badge if this was unread
+            // Only an unread item lowers the badge count.
             if (item.classList.contains('unread')) {
                 var badge = document.querySelector('.bell-badge');
                 if (badge) {
@@ -335,17 +318,14 @@ function handleMarkRead(e) {
         });
 }
 
-// Attach to all existing mark-read buttons on page load
+// Bind server-rendered mark-read buttons.
 document.querySelectorAll('.notification-mark-read-btn').forEach(function (btn) {
     btn.addEventListener('click', handleMarkRead);
 })
 
-// Request Editing Access (26 Aug 2026, per Ezekiel) — the inline Approve/
-// Deny buttons on an 'edit_access_requested' notification. Posts straight
-// to project_overlay.py's approve_edit_access()/deny_edit_access(); on
-// success just removes the action row (the notification message itself
-// stays — it's still useful history once decided), on failure re-enables
-// the buttons and surfaces the error.
+// Approve/Deny buttons on an 'edit_access_requested' notification. Posts to
+// project_overlay.py's approve/deny_edit_access(). Success removes only the
+// button row (the message stays); failure re-enables the buttons.
 function handleEditAccessDecision(e) {
     e.stopPropagation();
 
@@ -365,7 +345,7 @@ function handleEditAccessDecision(e) {
             if (!data.success) {
                 buttons.forEach(function (b) { b.disabled = false; });
                 var msg = data.error || 'Could not process this request.';
-                if (window.showToast) { window.showToast(msg); } else { alert(msg); }
+                if (window.showToast) { window.showToast(msg, 'error'); } else { alert(msg); }
                 return;
             }
             if (actionsEl) actionsEl.remove();
@@ -373,7 +353,7 @@ function handleEditAccessDecision(e) {
         .catch(function () {
             buttons.forEach(function (b) { b.disabled = false; });
             var msg = 'Something went wrong. Please try again.';
-            if (window.showToast) { window.showToast(msg); } else { alert(msg); }
+            if (window.showToast) { window.showToast(msg, 'error'); } else { alert(msg); }
         });
 }
 
@@ -381,14 +361,14 @@ document.querySelectorAll('.notification-action-btn').forEach(function (btn) {
     btn.addEventListener('click', handleEditAccessDecision);
 });
 
-// Named function so dynamically created restore buttons can reuse the same logic
+// Named so buildArchivedItem() can bind it to new restore buttons.
 function handleRestore(e) {
     e.stopPropagation();
 
     var id = this.dataset.id;
     var item = this.closest('.notification-item');
 
-    // Read message and time before removing from DOM
+    // Read these before the item is removed.
     var message = item.querySelector('.notification-message').textContent;
     var time = item.querySelector('.notification-time').textContent;
 
@@ -400,19 +380,17 @@ function handleRestore(e) {
         .then(function (data) {
             if (!data.success) return;
 
-            // Remove from archived tab
             item.remove();
 
-            // Remove archived empty state if present, then add item to inbox tab
+            // Drop the inbox's empty-state message, then add the item on top.
             var inboxView = document.getElementById('notif-inbox-view');
             var emptyMsg = inboxView.querySelector('.no-notifications');
             if (emptyMsg) emptyMsg.remove();
 
-            // Insert restored item at top of inbox
             var newItem = buildInboxItem(id, message, time);
             inboxView.prepend(newItem);
 
-            // Show archived empty state if nothing left in archived tab
+            // Archived tab now empty: show its empty state.
             var archivedView = document.getElementById('notif-archived-view');
             if (archivedView && archivedView.querySelectorAll('.notification-item').length === 0) {
                 var empty = document.createElement('p');
@@ -426,13 +404,13 @@ function handleRestore(e) {
         });
 }
 
-// Attach to all existing restore buttons on page load
+// Bind server-rendered restore buttons.
 document.querySelectorAll('.notification-restore-btn').forEach(function (btn) {
     btn.addEventListener('click', handleRestore);
 });
 
 
-// Inbox / Archived Toggle
+// Inbox / Archived toggle
 var btnInbox = document.getElementById('btn-notif-inbox');
 var btnArchived = document.getElementById('btn-notif-archived');
 var inboxView = document.getElementById('notif-inbox-view');
@@ -454,7 +432,7 @@ if (btnInbox && btnArchived) {
     });
 }
 
-// Archived select / bulk delete
+// Archived: select mode + remove selected
 var archivedSelectBtn = document.getElementById('archived-select-btn');
 var archivedRemoveBtn = document.getElementById('archived-remove-btn');
 var selectModeActive = false;
@@ -468,7 +446,7 @@ if (archivedSelectBtn) {
             if (!selectModeActive) cb.checked = false;
         });
         archivedSelectBtn.textContent = selectModeActive ? 'Cancel' : 'Select';
-        archivedRemoveBtn.classList.toggle('hidden', !selectModeActive);
+        if (archivedRemoveBtn) archivedRemoveBtn.classList.toggle('hidden', !selectModeActive);
     });
 }
 
@@ -490,14 +468,12 @@ if (archivedRemoveBtn) {
                     var item = document.querySelector('#notif-archived-view .notification-item[data-id="' + id + '"]');
                     if (item) item.remove();
                 });
-                // Exit select mode
                 selectModeActive = false;
                 archivedSelectBtn.textContent = 'Select';
                 archivedRemoveBtn.classList.add('hidden');
                 document.querySelectorAll('#notif-archived-view .notif-checkbox').forEach(function (cb) {
                     cb.classList.add('hidden');
                 });
-                // Show empty state if nothing left
                 var remaining = document.querySelectorAll('#notif-archived-view .notification-item');
                 if (remaining.length === 0) {
                     var toolbar = document.getElementById('archived-select-btn').closest('.archived-toolbar');
@@ -525,12 +501,11 @@ if (inboxMarkAllReadBtn) {
             .then(function(data) {
                 if(!data.success) { btnDone(inboxMarkAllReadBtn); return; }
                 
-                // Every inbox item stays put, just strip the 'unread' class, so the highlight disappears.
+                // Items stay in the inbox; only the unread highlight goes.
                 document.querySelectorAll('#notif-inbox-view .notification-item.unread').forEach(function (el){
                     el.classList.remove('unread');
                 });
 
-                // Remove the bell badge
                 var badge = document.getElementById('notif-unread-badge');
                 if (badge) badge.remove();
 
@@ -548,7 +523,7 @@ if (inboxArchiveAllBtn) {
         var inboxView = document.getElementById('notif-inbox-view');
         var archivedView = document.getElementById('notif-archived-view');
 
-        // Snapshot inbox items before removing them
+        // Snapshot the items so they can be rebuilt in the Archived tab.
         var items = Array.from(inboxView.querySelectorAll('.notification-item'));
         var snapshots = items.map(function (el) {
             return {
@@ -567,7 +542,6 @@ if (inboxArchiveAllBtn) {
             .then(function (data) {
                 if (!data.success) { btnDone(inboxArchiveAllBtn); return; }
 
-                // Clear inbox
                 items.forEach(function (el) { el.remove(); });
                 var inboxToolbar = inboxView.querySelector('.archived-toolbar');
                 if (inboxToolbar) inboxToolbar.remove();
@@ -576,11 +550,10 @@ if (inboxArchiveAllBtn) {
                 emptyInbox.textContent = 'No notifications';
                 inboxView.appendChild(emptyInbox);
 
-                // Clear bell badge
                 var badge = document.getElementById('notif-unread-badge');
-                if (badge) badge.textContent = '0';
+                if (badge) badge.remove();
 
-                // If archived view has no toolbar yet, inject one
+                // Archived tab had no toolbar (it was empty): build one and bind it.
                 if (!archivedView.querySelector('.archived-toolbar')) {
                     var emptyMsg = archivedView.querySelector('.no-notifications');
                     if (emptyMsg) emptyMsg.remove();
@@ -594,7 +567,7 @@ if (inboxArchiveAllBtn) {
                     `;
                     archivedView.prepend(toolbar);
 
-                    // Re-bind toolbar buttons (they didn't exist at page load)
+                    // Bind the new buttons; same logic as the load-time handlers for these IDs.
                     var newSelectBtn = toolbar.querySelector('#archived-select-btn');
                     var newRemoveBtn = toolbar.querySelector('#archived-remove-btn');
                     var newDeleteAllBtn = toolbar.querySelector('#archived-delete-all-btn');
@@ -663,7 +636,7 @@ if (inboxArchiveAllBtn) {
                     }
                 }
 
-                // Prepend newly archived items to archived view (most recent first)
+                // Newest first, above any existing archived items.
                 snapshots.reverse().forEach(function (s) {
                     var newItem = buildArchivedItem(s.id, s.message, s.time);
                     var firstItem = archivedView.querySelector('.notification-item');
@@ -677,7 +650,7 @@ if (inboxArchiveAllBtn) {
     });
 }
 
-// Delete All (archived)
+// Archived: Delete All
 var archivedDeleteAllBtn = document.getElementById('archived-delete-all-btn');
 if (archivedDeleteAllBtn) {
     archivedDeleteAllBtn.addEventListener('click', function () {

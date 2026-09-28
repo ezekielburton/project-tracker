@@ -1,4 +1,4 @@
-""" Shared HTTP test via the test client - no auth or DB writes."""
+"""HTTP smoke test through the test client; no auth or DB writes."""
 
 def test_root_redirects_to_dashboard(client):
     # index() redirects to the dashboard; a 3xx proves routing + url_for resolve.

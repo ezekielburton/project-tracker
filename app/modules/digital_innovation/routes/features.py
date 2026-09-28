@@ -1,10 +1,7 @@
-# Digital Innovation - feature (card) management. Creation, the detail
-# view and every step interaction (tick/add/delete step, move stage,
-# close) live here. Every rule about how a feature actually moves lives
-# in lib/step_engine.py - this file is just the HTTP layer on
-# top of it: pull the record(s), call the engine, commit or roll back on
-# a ValueError, and hand back the same rendered fragment the initial GET
-# uses so the modal always ends up showing the feature's true state.
+# Feature routes: create, detail modal, and step actions (tick, add, delete,
+# move stage, close, reopen). The rules live in lib/step_engine.py; each route loads
+# the record, calls the engine, commits (or rolls back on ValueError) and
+# returns the detail fragment.
 
 from datetime import datetime
 
@@ -20,19 +17,9 @@ from app.modules.digital_innovation.lib.access import can_view_di_performance, c
 
 
 def _render_feature_detail(feature):
-    """The one place that turns a feature into the modal's HTML fragment -
-    used by the initial GET and by every mutating route below, so a tick,
-    an add, a delete, a stage move or a close all leave the modal showing
-    exactly what the GET route would show for that same feature.
-
-    can_view_costs gates the footer's cost/charge/profit note - reuses the
-    same admin/management choke point Performance and Cost breakdown
-    already gate through (lib/access.py), so adding a role to any of the
-    three is the one change in that one file. can_edit_board gates every
-    interactive control (tick a step, delete it, the add-step form, the
-    stage picker, the close button) - the board is view-only for anyone
-    it's False for, so the template renders those controls at all only
-    when it's True, rather than rendering-then-disabling them."""
+    """The feature-detail modal fragment. Every route here returns this.
+    can_view_costs shows the cost note; can_edit_board decides whether the
+    interactive controls are rendered at all."""
     context = build_feature_detail_context(feature)
     return render_template(
         'digital_innovation/_feature_detail.html',
@@ -90,12 +77,9 @@ def create_feature(di_project_id):
 @digital_innovation_bp.route('/features/<int:feature_id>')
 @login_required
 def feature_detail(feature_id):
-    """Returns the feature-detail modal's content as a rendered HTML
-    fragment - digital_innovation_board.js drops it straight into the
-    modal body."""
+    """The feature-detail modal fragment for digital_innovation_board.js."""
     feature = DiFeature.query.get_or_404(feature_id)
-    # Visibility gate (lib/access.py): a feature is only as visible as its
-    # project - the same rule project_board enforces, applied via feature.project.
+    # A feature is visible only if its project is.
     if not can_view_di_project(current_user, feature.project):
         abort(403)
     return _render_feature_detail(feature)
@@ -104,10 +88,7 @@ def feature_detail(feature_id):
 @digital_innovation_bp.route('/features/<int:feature_id>/steps', methods=['POST'])
 @login_required
 def add_feature_step(feature_id):
-    """Adds a step to the feature's current stage - the checklist's
-    "add a step" input, and also how the Implementation-stage "add
-    another step" choice is handled (same action, step_engine.add_step
-    doesn't distinguish the two)."""
+    """Adds a step to the feature's current stage."""
     _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 
@@ -167,9 +148,8 @@ def delete_feature_step(step_id):
 @digital_innovation_bp.route('/features/<int:feature_id>/move', methods=['POST'])
 @login_required
 def move_feature_stage(feature_id):
-    """Moves a feature to any stage the picker was given - forward or backward,
-    no completion gate. The UI offers every stage in DI_STAGES and this route
-    accepts any of them via step_engine.move_to_stage."""
+    """Moves a feature to any stage, forward or backward, with no completion
+    gate."""
     _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 
@@ -191,11 +171,8 @@ def move_feature_stage(feature_id):
 @digital_innovation_bp.route('/features/<int:feature_id>/close', methods=['POST'])
 @login_required
 def close_feature_route(feature_id):
-    """Closes an Implementation-stage feature once every step is done -
-    the "close this feature" choice offered alongside "add another step".
-    step_engine.close_feature() itself doesn't gate on stage/completeness
-    (it's a plain state-set used e.g. by tests), so that check belongs
-    here, at the HTTP boundary."""
+    """Closes a feature. Only allowed in the last stage with every step
+    done; step_engine.close_feature() does not check this itself."""
     _require_board_write_access()
     feature = DiFeature.query.get_or_404(feature_id)
 
@@ -204,6 +181,23 @@ def close_feature_route(feature_id):
 
     try:
         step_engine.close_feature(feature)
+        db.session.commit()
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+    return _render_feature_detail(feature)
+
+
+@digital_innovation_bp.route('/features/<int:feature_id>/reopen', methods=['POST'])
+@login_required
+def reopen_feature_route(feature_id):
+    """Reopens a closed feature into the last stage. Same gate as close."""
+    _require_board_write_access()
+    feature = DiFeature.query.get_or_404(feature_id)
+
+    try:
+        step_engine.reopen_feature(feature)
         db.session.commit()
     except ValueError as e:
         db.session.rollback()

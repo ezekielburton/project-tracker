@@ -1,12 +1,7 @@
-"""Details edit mode — Job Number. Editable on the overlay by the same people
-who can edit the other Details fields (admin/management everywhere; this
-project's CS lead/secondary CS; this project's owner). The save routes through
-services/mutations.save_detail_field, so it gets the same duplicate check,
-notification and history entry a job-number edit from the Client Servicing
-table does.
+"""Details edit: Job Number. Who may edit it and the duplicate check
+(both via services/mutations.save_detail_field).
 
-Auth check is ordered first — same file-order quirk noted elsewhere (a prior
-login_as can make an unauthenticated check 404 instead of redirect).
+The auth test stays first: after a login_as it would 404 instead of redirect.
 """
 from flask import url_for
 
@@ -94,3 +89,43 @@ def test_unauthorised_role_cannot_edit_job_number(app, client, db_session):
     resp = _save(client, app, pid, 'HACKED')
     assert resp.status_code == 403
     assert db_session.get(Project, pid).job_number == 'LOCKED'
+
+
+def test_job_number_not_saved_when_another_field_is_invalid(app, client, db_session):
+    # All-or-nothing: a bad field alongside a new job number saves neither.
+    admin = _make_user(db_session, 'jn-atomic-admin@example.com', 'admin')
+    project = _make_project(db_session, admin, job_number='BEFORE')
+    pid = project.id
+
+    login_as(client, app, admin, 'password123')
+    with app.test_request_context():
+        url = url_for('project_overlay.overlay_details_save', project_id=pid)
+    for bad in ({'execution_date': 'not-a-date'}, {'design_teams_requested': 'Puppetry'}):
+        resp = client.post(url, json={
+            'fields': {'job_number': 'AFTER', 'client_expectation': 'changed', **bad},
+            'edit_snapshot_at': '',
+        })
+        assert resp.status_code == 400, bad
+        db_session.expire_all()
+        saved = db_session.get(Project, pid)
+        assert saved.job_number == 'BEFORE'
+        assert saved.client_expectation is None
+
+
+def test_job_number_and_fields_save_together(app, client, db_session):
+    admin = _make_user(db_session, 'jn-both-admin@example.com', 'admin')
+    project = _make_project(db_session, admin, job_number='B-1')
+    pid = project.id
+
+    login_as(client, app, admin, 'password123')
+    with app.test_request_context():
+        url = url_for('project_overlay.overlay_details_save', project_id=pid)
+    resp = client.post(url, json={
+        'fields': {'job_number': 'B-2', 'client_expectation': 'bold'},
+        'edit_snapshot_at': '',
+    })
+    assert resp.status_code == 200
+    assert set(resp.get_json()['changes']) == {'job_number', 'client_expectation'}
+    db_session.expire_all()
+    saved = db_session.get(Project, pid)
+    assert (saved.job_number, saved.client_expectation) == ('B-2', 'bold')

@@ -7,10 +7,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}One Vitamin Platform{% endblock %}</title>
     <script>
-        // No-flash theme init — runs before any stylesheet paints. localStorage
-        // (this browser) wins over the server-rendered value (this account),
-        // since it reflects the most recent toggle even if the POST to save
-        // it account-side hasn't landed yet.
+        // No-flash theme init, before any stylesheet paints. localStorage wins
+        // over the server-rendered value: it holds the latest toggle even if
+        // the save POST hasn't landed.
         (function () {
             try {
                 var saved = localStorage.getItem('helix-theme');
@@ -20,7 +19,10 @@
             } catch (e) {}
         })();
     </script>
-    <link rel="icon" type="image/png" href="static/images/favicon.png">
+    <script>
+        var HELIX_VERSION = {{ config.STATIC_VERSION | tojson }};
+    </script>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
     <link rel="stylesheet" href="{{ url_for('core.static', filename='css/main.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('blog_assets.static', filename='css/blog.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('feedback_assets.static', filename='css/feedback.css') }}?v={{ config.STATIC_VERSION }}">
@@ -39,57 +41,24 @@
     <link rel="stylesheet" href="{{ url_for('dashboard_assets.static', filename='css/dashboard.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('time_tracking_assets.static', filename='css/time_tracking.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('client_servicing_assets.static', filename='css/client_servicing.css') }}?v={{ config.STATIC_VERSION }}">
-    {# shared.css/project_list.css/project_overlay.css load globally, same as
-    blog.css/feedback.css above and for the same reason — SPA navigation
-    (sidebar.js's navigateTo) strips everything outside <main id="main-content">
-    out of the response (see spa_strip_response in app/__init__.py), which
-    includes the whole <head>. A page-specific {% block extra_css %} only
-    ever renders on a real full page load, so a stylesheet declared there
-    silently never loads on a browser tab that reaches this page via SPA nav
-    instead — exactly what was happening on the Projects page until this. #}
+    {# Module stylesheets load globally because SPA nav (sidebar.js navigateTo,
+       spa_strip_response in app/__init__.py) keeps only <main id="main-content">.
+       A sheet in {% block extra_css %} never loads on a page reached by SPA nav. #}
     <link rel="stylesheet" href="{{ url_for('core.static', filename='css/shared.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('core.static', filename='css/trays.css') }}?v={{ config.STATIC_VERSION }}">
+    {# Phone layout for the whole app. After main.css and shared.css so it wins. #}
+    <link rel="stylesheet" href="{{ url_for('core.static', filename='css/mobile.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('project_assets.static', filename='css/project_list.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('project_assets.static', filename='css/project_overlay.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('project_assets.static', filename='css/chat_tray.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('digital_innovation_assets.static', filename='css/digital_innovation.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('hse_assets.static', filename='css/hse.css') }}?v={{ config.STATIC_VERSION }}">
     {% block extra_css %}{% endblock %}
-
-    {# Local-dev safety net: the Werkzeug reloader restarting mid-session (a
-       code edit while someone's browsing) leaves a split-second window where
-       the old process has died and the new one isn't listening yet. A
-       stylesheet <link> request that races that window fails outright, and
-       browsers don't retry a failed stylesheet load on their own — the page
-       renders with correct HTML but zero CSS, which reads as "the whole page
-       broke" even though it's just a transient timing miss. The script below
-       reloads once on such a failure. Scoped to same-origin /static/
-       stylesheets only (a flaky CDN hiccup on the Quill/Cropper <link>s above
-       shouldn't trigger a reload), and time-windowed so it protects across
-       multiple restarts in a session but won't reload-loop if a stylesheet is
-       genuinely broken rather than just racing a restart. #}
-    <script>
-        (function () {
-            var FLAG = 'helix_css_reload_at';
-            var last = parseInt(sessionStorage.getItem(FLAG) || '0', 10);
-            document.querySelectorAll('link[rel="stylesheet"][href^="/static/"]').forEach(function (link) {
-                link.addEventListener('error', function () {
-                    var now = Date.now();
-                    if (now - last < 5000) return; // already tried a reload for this in the last 5s - avoid a loop
-                    sessionStorage.setItem(FLAG, String(now));
-                    location.reload();
-                });
-            });
-        })();
-    </script>
+    <script src="{{ url_for('core.static', filename='js/fill_height.js') }}?v={{ config.STATIC_VERSION }}"></script>
 
 </head>
 
-<script>
-    var HELIX_VERSION = {{ config.STATIC_VERSION | tojson }};
-</script>
-
-{# Add has-sidebar to body when authenticated — CSS uses this to shift main content #}                      
+{# has-sidebar lets CSS shift the main content to clear the sidebar. #}                      
 
 <body class="{% if current_user.is_authenticated %}has-sidebar{% endif %}">
 
@@ -97,27 +66,26 @@
 
     {# ─────────────────────────────────────────────
     SIDEBAR
-    Default state: minimized (icon-only, ~90px).
-    Expands on hover OR when sidebar--pinned class is present.
-    Pin state is toggled by JS and saved to localStorage.
+    Minimized (icon-only) by default; a click expands it. sidebar--pinned
+    keeps it open (sidebar.js, saved to localStorage).
     ───────────────────────────────────────────── #}
     <aside class="sidebar" id="sidebar">
 
-        {# Header: logo + pin button #}
+        {# Header: logo, collapse and pin buttons #}
     <div class="sidebar-header">
         <div class="sidebar-logo">
             <span class="sidebar-logo-min">V</span>
             <span class="sidebar-logo-max">One Vitamin Platform</span>
         </div>
         <div class="sidebar-header-actions">
-            {# Expand/collapse toggle — always visible #}
+            {# Collapse toggle — shown only when expanded or pinned #}
             <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Expand sidebar">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="9 18 15 12 9 6" />
                 </svg>
             </button>
-            {# Pin button — only visible when expanded #}
+            {# Pin button — shown only when expanded or pinned #}
             <button type="button" class="sidebar-pin-btn" id="sidebar-pin-btn" title="Pin sidebar">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -131,12 +99,9 @@
 
         <nav class="sidebar-nav">
 
-            {# Expand toggle — minimized-view only. Lives inline at the top
-            of the rail, above Dashboard, so it reads as part of the
-            sidebar rather than a tab floating over the page content.
-            Hidden once expanded/pinned — the header's sidebar-toggle-btn
-            takes over as the collapse control then. Clicking it triggers
-            sidebar expansion via JS (id is what sidebar.js binds to). #}
+            {# Expand tab — minimized view only; hidden once expanded or pinned,
+               when the header's collapse toggle takes over. sidebar.js binds
+               to its id. #}
             <div class="sidebar-section">
                 <div class="sidebar-grid">
                     <button type="button" id="sidebar-expand-tab" class="sidebar-item sidebar-expand-tab" title="Expand sidebar">
@@ -153,13 +118,12 @@
                 <span class="sidebar-section-label">Internal Tools</span>
                 <div class="sidebar-grid">
 
-                            {# The general workspace. A single-module role (the HSE officer) holds no
-                               view_workspace, so everything inside this gate is hidden for them —
-                               they get their own module, File Storage and the Wiki. Hiding is
-                               cosmetic; the routes are the real boundary and 403 regardless. #}
+                            {# General workspace. Roles without view_workspace (e.g. the HSE officer)
+                               see only their module, File Storage and the Wiki. Hiding is
+                               cosmetic; the routes 403 regardless. #}
                             {% if can('view_workspace', effective_user) %}
 
-                            {# Dashboard link — every role that holds view_workspace. #}
+                            {# Dashboard #}
                             <a href="{{ url_for('projects.index') }}" class="sidebar-item sidebar-item--nav"
                                 data-link="dashboard" title="Dashboard">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
@@ -171,7 +135,7 @@
                                 <span class="sidebar-item-label">Dashboard</span>
                             </a>
 
-                            {# Projects — internal nav link, JS intercepts and loads without refresh #}
+                            {# Projects — SPA nav link #}
                             <a href="{{ url_for('project_list.index') }}" class="sidebar-item sidebar-item--nav" data-link="projects"
                                 title="Projects">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
@@ -183,10 +147,8 @@
                                 <span class="sidebar-item-label">Projects</span>
                             </a>
 
-                            {# Client Servicing — internal nav link, JS intercepts and loads without refresh.
-                               Gated on can_access_client_servicing. Without access the item stays in place
-                               but dims to a plain span with no href, the same sidebar-item--unlinked
-                               treatment Color Directory uses — the routes 403 regardless. #}
+                            {# Client Servicing — SPA nav link. Without access it dims to an unlinked
+                               span; the routes 403 regardless. #}
                             {% if can_access_client_servicing(effective_user) %}
                             <a href="{{ url_for('client_servicing.index') }}" class="sidebar-item sidebar-item--nav" data-link="client-servicing"
                                 title="Client Servicing">
@@ -214,9 +176,8 @@
                             {% endif %}
                             {% endif %}{# /view_workspace #}
 
-                            {# HSE & Compliance — internal nav link. Gated on view_hse; without
-                               it the item dims to a plain span, the same sidebar-item--unlinked
-                               treatment Client Servicing uses — the routes 403 regardless. #}
+                            {# HSE & Compliance — SPA nav link. Without view_hse it dims to an
+                               unlinked span; the routes 403 regardless. #}
                             {% if can('view_hse', effective_user) %}
                             <a href="{{ url_for('hse.index') }}" class="sidebar-item sidebar-item--nav" data-link="hse"
                                 title="HSE &amp; Compliance">
@@ -239,7 +200,7 @@
                             </span>
                             {% endif %}
 
-                            {# File Storage — external link, opens NAS in new tab #}
+                            {# File Storage — the NAS, in a new tab #}
                             <a href="http://quickconnect.to/vitaminNAS26/drive" target="_blank"
                                 class="sidebar-item sidebar-item--external" data-link="file-storage"
                                 title="File Storage">
@@ -255,7 +216,7 @@
                             </a>
 
                             {% if can('view_workspace', effective_user) %}
-                            {# Digital Innovation — internal nav link, JS intercepts and loads without refresh #}
+                            {# Digital Innovation — SPA nav link #}
                             <a href="{{ url_for('digital_innovation.index') }}" class="sidebar-item sidebar-item--nav"
                                 data-link="digital-innovation" title="Digital Innovation">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -364,7 +325,7 @@
 
             <div class="sidebar-divider"></div>
 
-            {# ── SECTION 3: Directories (all unlinked — features not yet built) ── #}
+            {# ── SECTION 3: Directories (unlinked items are not built yet) ── #}
             <div class="sidebar-section">
                 <span class="sidebar-section-label">Directories</span>
                 <div class="sidebar-grid">
@@ -383,9 +344,7 @@
                         <span class="sidebar-item-label">Color Directory</span>
                     </span>
 
-                    {# Client Directory sidebar link — an internal nav link that JS intercepts
-                       to load without a full refresh, the same pattern as the Wiki and
-                       File Templates links above. #}
+                    {# Client Directory — SPA nav link #}
                     <a href="{{ url_for('client_directory.index') }}" class="sidebar-item sidebar-item--nav"
                         data-link="client-directory" title="Client Directory">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -431,7 +390,7 @@
 
             <div class="sidebar-divider"></div>
 
-            {# ── SECTION 4: Studio (all unlinked — features built across v1.2-v1.3) ── #}
+            {# ── SECTION 4: Studio (unlinked items are not built yet) ── #}
             <div class="sidebar-section">
                 <span class="sidebar-section-label">Studio</span>
                 <div class="sidebar-grid">
@@ -471,12 +430,21 @@
 
     {# ─────────────────────────────────────────────
     STICKY HEADER
-    Docked above the content column only — sidebar keeps its own
-    column. Page name left; apps/bell/dark toggle/account right.
-    Loading bar along the bottom edge, driven by sidebar.js.
+    Spans the content column only. Page name left; admin, bell, theme
+    toggle and account right. Loading bar on the bottom edge (sidebar.js).
     ───────────────────────────────────────────── #}
     <header class="app-header" id="app-header">
-    
+
+        {# Phones only (mobile.css). Opens the menu: the page's module rail
+           when it has one, otherwise the app sidebar (mobile_menu.js). #}
+        <button type="button" class="topbar-btn mobile-menu-btn" data-mobile-menu="open"
+                aria-label="Open menu" aria-expanded="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+        </button>
+
         <span class="app-header-page-name" id="app-header-page-name"></span>
     
         <div class="app-header-actions">
@@ -504,8 +472,8 @@
                 {% endif %}
             </button>
     
-            {# Dark-mode toggle — segmented sun/moon pill, matches the wireframe.
-            Purely visual for now; the class flip + real theming land in Brief 2. #}
+            {# Dark-mode toggle — sun/moon pill, wired in sidebar.js
+               (helixSetThemeStub). #}
             <button type="button" id="dark-mode-toggle" class="theme-toggle theme-toggle--light" title="Toggle dark mode">
                 <span class="theme-toggle-icon theme-toggle-icon--sun">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -544,6 +512,9 @@
         <div class="header-loading-bar" id="header-loading-bar"></div>
     
         </header>
+
+    {# Behind an open phone menu. Tapping it closes the menu. #}
+    <div class="mobile-scrim" aria-hidden="true"></div>
 
     {% endif %}{# end current_user.is_authenticated — sidebar + topbar #}
 
@@ -593,7 +564,7 @@
                     <p class="notification-message">{{ notification.message }}</p>
                     <span class="notification-time">{{ notification.created_at | dubai_time }}</span>
                     {% if notification.notification_type == 'edit_access_requested' and notification.edit_access_request_id %}
-                    {# The only notification type with an inline action. edit_access_request_id is set server-side (inject_notifications) only while the request is pending; None once decided. #}
+                    {# The only notification type with an inline action. inject_notifications sets edit_access_request_id only while the request is pending. #}
                     <div class="notification-inline-actions">
                         <button type="button" class="notification-action-btn notification-action-btn--approve"
                             data-request-id="{{ notification.edit_access_request_id }}"
@@ -693,7 +664,6 @@
                 </svg>
                 <span>Notification Sounds</span>
             </button>
-            {# Phase 7 of the achievement system — new nav entry, same shape as every other admin-nav-btn above. #}
             <button type="button" class="admin-nav-btn" data-section="achievements">
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -752,7 +722,7 @@
                     <div id="pt-customers-list" class="accounts-user-list"></div>
                 </div>
                 <div class="pt-panel hidden" id="pt-panel-projects">
-                    {# Sends admins to the Projects list — the create flow lives there now. #}
+                    {# Projects are created from the Projects list. #}
                     <a href="{{ url_for('project_list.index') }}" class="accounts-add-btn pt-add-link">+ Add Project</a>
                     <div id="pt-projects-list" class="accounts-user-list"></div>
                 </div>
@@ -833,9 +803,8 @@
                     </form>
                     <div id="pt-design-types-list" class="accounts-user-list"></div>
                 </div>
-                {# Job Numbers panel — lists every project with a job number so admin
-                   can clear individual numbers without deleting the project.
-                   Populated by loadPTJobNumbers() in admin.js. #}
+                {# Job Numbers — every project with a job number, so admin can clear one
+                   without deleting the project. Filled by loadPTJobNumbers() in admin.js. #}
                 <div class="pt-panel hidden" id="pt-panel-job-numbers">
                     <div id="pt-job-numbers-list" class="accounts-user-list"></div>
                 </div>
@@ -851,7 +820,7 @@
                     </form>
                     <div id="pt-design-directions-list" class="accounts-user-list"></div>
                 </div>
-                {# Client Servicing's Scope dropdown — deactivate (not delete), so an inactive scope drops out of selection without breaking rows that use it; CS module's own routes. #}
+                {# Client Servicing scopes. Deactivated, never deleted, so rows that use a scope keep it. Served by the CS module's routes. #}
                 <div class="pt-panel hidden" id="pt-panel-cs-scopes">
                     <button type="button" class="accounts-add-btn" id="pt-add-cs-scope-toggle">+ Add Scope</button>
                     <form id="pt-add-cs-scope-form" class="add-user-form hidden">
@@ -866,8 +835,7 @@
                 </div>
             </div>
             <div class="admin-section hidden" id="admin-section-accounts">
-                {# The weekly OVP champion. Reuses the add-user form's classes so it
-                   needs no styling of its own and follows both themes. #}
+                {# Weekly OVP champion. Reuses the add-user form classes for its styling. #}
                 <div id="ovp-champion-block" class="add-user-form">
                     <p class="accounts-group-label">OVP Champions &mdash; week of <span id="ovp-champion-week">&mdash;</span></p>
                     {# One block per department, built by admin.js from the department list. #}
@@ -885,8 +853,8 @@
                     <input type="password" id="new-user-password" class="form-input" placeholder="Password">
                     <select id="new-user-role" class="form-input">
                         <option value="">Select role...</option>
-                        {# Options come from ROLE_CAPABILITIES via role_labels, so a new
-                           role appears here the moment it is added to the map. #}
+                        {# Options come from ROLE_LABELS (capabilities.py); add a role there
+                           to list it here. #}
                         {% for value, label in role_labels.items() %}
                         <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
@@ -944,11 +912,9 @@
                 <div id="sounds-list" class="accounts-user-list"></div>
             </div>
 
-            {# ── Phase 7: Achievement system admin panel ──────────────────────────
-               Two sub-tabs (Achievements / Borders), same pattern as the existing
-               "Project Tools" section's .pt-tabs/.pt-panel above — own prefixed
-               classes (ach- instead of pt-) so the two sections' JS click handlers
-               never collide, even though they look identical. #}
+            {# ── Achievements admin ───────────────────────────────────────────────
+               Two sub-tabs. Own ach- classes so its tab handlers never collide
+               with Project Tools' pt- ones. #}
             <div class="admin-section hidden" id="admin-section-achievements">
                 <div class="ach-tabs">
                     <button type="button" class="ach-tab-btn active" data-ach="categories">Achievements</button>
@@ -969,15 +935,11 @@
                         </div>
                     </form>
 
-                    {# Hidden until a drag actually happens — appears so the admin has an #}
-                    {# explicit, unambiguous moment to commit reordering, rather than #}
-                    {# every drag auto-saving (same reasoning as the Pinned Achievements #}
-                    {# UI on the Account page, Phase 5). #}
+                    {# Hidden until a drag happens; a new order saves only on this click. #}
                     <button type="button" class="btn-primary hidden" id="save-ach-order-btn"
                         style="margin: 0.75rem 0;">Save Order</button>
 
-                    {# Rendered entirely by admin.js from GET /admin/api/achievement-categories — #}
-                    {# see loadAchievementCategories() there for the accordion markup. #}
+                    {# Rendered by admin.js loadAchievementCategories() from GET /admin/api/achievement-categories. #}
                     <div id="ach-categories-list"></div>
                 </div>
 
@@ -1001,10 +963,8 @@
     </aside>
 
     {# ── Add/Edit Achievement modal ────────────────────────────────────────────
-       One modal serves both create and edit — achievement-modal-mode / -editing-id
-       (set by admin.js right before opening it) tell the submit handler which
-       API call to make. Kept as a single modal rather than two nearly-identical
-       ones, same reasoning as the profile page's combined Edit Details popup. #}
+       One modal for both. admin.js sets data-mode / data-editing-id before
+       opening it; the save handler reads them to pick the API call. #}
     <div id="achievement-modal" class="modal-overlay hidden" data-mode="create" data-editing-id="">
         <div class="modal-box">
             <h3 class="modal-title" id="achievement-modal-title">Add Achievement</h3>
@@ -1020,16 +980,12 @@
             </div>
             <div class="form-group">
                 <label for="ach-form-category">Category</label>
-                {# Populated by admin.js from the already-loaded category list — #}
-                {# no separate fetch needed, the Achievements tab already has it. #}
+                {# Filled by admin.js from the already-loaded category list. #}
                 <select id="ach-form-category" class="form-input"></select>
             </div>
             <div class="form-group">
                 <label for="ach-form-trigger">Trigger Event</label>
-                {# Hardcoded to the 7 events actually wired into check_achievements() #}
-                {# call sites (see VALID_TRIGGER_EVENTS in admin_achievements.py) — #}
-                {# anything else could never fire, so a dropdown is the only option #}
-                {# that makes an achievement's trigger ever actually work. #}
+                {# Must match VALID_TRIGGER_EVENTS in admin_achievements.py; any other event never fires. #}
                 <select id="ach-form-trigger" class="form-input">
                     <option value="project_submitted">Project Submitted</option>
                     <option value="project_approved">Project Approved</option>
@@ -1054,8 +1010,7 @@
             <div class="form-group">
                 <label for="ach-form-badge-file">Badge Image</label>
                 <input type="file" id="ach-form-badge-file" class="form-input" accept=".png,.jpg,.jpeg,.webp,.gif">
-                {# Shown only when editing an achievement that already has an image — #}
-                {# lets the admin see what's currently saved without re-uploading it. #}
+                {# Shown only when editing an achievement that already has a badge. #}
                 <img id="ach-form-badge-preview" src="" alt="" class="hidden"
                     style="width: 48px; height: 48px; object-fit: contain; margin-top: 0.5rem;">
             </div>
@@ -1122,9 +1077,8 @@
         </div>
     </div>
 
-    {# Settings overlay — settings-overlay.js fetches auth.account's content
-    the same way SPA nav does (X-Nav-Request) and drops it in here, so every
-    existing form/endpoint on that page keeps working unchanged. #}
+    {# Settings overlay — settings-overlay.js fetches /account with X-Nav-Request
+       and drops its content in here, so that page's forms work unchanged. #}
     <div id="settings-modal" class="modal-overlay hidden">
         <div class="settings-modal-box">
             <button type="button" class="settings-modal-close" id="settings-modal-close">&times;</button>
@@ -1132,7 +1086,7 @@
         </div>
     </div>
 
-    {# Main content area — shifts right to make room for sidebar when authenticated #}
+    {# Main content — the only part SPA nav swaps. Shifts right to clear the sidebar. #}
     <main class="main-content" id="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -1251,14 +1205,12 @@
     {% endif %}
 
     <!-- ===== Confirm Modal ===== -->
-    <!-- Single reusable overlay for all confirmation dialogs.                     -->
-    <!-- JS shows it via showConfirm(message, onConfirm) defined in main.js.      -->
-    <!-- The 'hidden' class (display:none) is toggled by JS.                      -->
+    <!-- One overlay for every confirm dialog; showConfirm(message, onConfirm, title) in main.js fills and shows it. -->
     <div id="confirm-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
         <div class="confirm-modal-card">
-            <!-- Title — generic default; JS can override via data attribute if needed -->
+            <!-- Default title; showConfirm's title argument replaces it -->
             <p class="confirm-modal-title" id="confirm-modal-title">Are you sure?</p>
-            <!-- Message body — populated by showConfirm() before the modal opens -->
+            <!-- Filled by showConfirm() -->
             <p class="confirm-modal-body" id="confirm-modal-body"></p>
             <div class="confirm-modal-actions">
                 <button type="button" id="confirm-modal-cancel" class="btn-secondary">Cancel</button>
@@ -1268,23 +1220,21 @@
     </div>
 
     <!-- ===== Achievement Toast Container ===== -->
-    <!-- Sits above the regular toast container; showAchievementToast() injects here. -->
+    <!-- showAchievementToast() injects here; CSS stacks it above #toast-container. -->
     <div id="achievement-toast-container" aria-live="polite"></div>
 
     <!-- ===== Toast Container ===== -->
-    <!-- Fixed bottom-right container; individual toasts are injected by showToast() in main.js. -->
-    <!-- aria-live="polite" announces toasts to screen readers without interrupting.             -->
+    <!-- showToast() in main.js injects toasts here. -->
     <div id="toast-container" aria-live="polite"></div>
 
-    {# Global trays — always-on dock, outside #main-content so SPA nav can't remove it. #}
+    {# Global trays — outside #main-content so SPA nav never removes them. #}
     {% if current_user.is_authenticated %}
     {% include 'partials/tray_dock.html' %}
     {% endif %}
 
     <script>
-        // Per-user notification sound settings (on/off, volume, chosen file) —
-        // resolved server-side once per page load in inject_notifications().
-        // Read by helixPlayNotificationSound() in notifications.js.
+        // Per-user sound settings from inject_notifications(); read by
+        // helixPlayNotificationSound() in notifications.js.
         const HELIX_SOUND_PREFS = {{ sound_prefs | tojson }};
     </script>
 
@@ -1297,8 +1247,7 @@
        is loaded per-page inside that block. #}
     <script src="{{ url_for('core.static', filename='js/popover_position.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% if current_user.is_authenticated and can('admin_panel', current_user) %}
-    {# Role picker options for the account-edit form admin.js builds. var, never
-       const — this block re-runs on SPA nav (see spa-navigation.md). #}
+    {# Role picker options for the account-edit form admin.js builds. #}
     <script>var ROLE_LABELS = {{ role_labels | tojson }};</script>
     <script src="{{ url_for('admin_assets.static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>     
     {% endif %}
@@ -1309,13 +1258,12 @@
     {# Routes the inner module rail's links through sidebar.js's navigateTo.
        Document-delegated, so it loads once here rather than per module. #}
     <script src="{{ url_for('core.static', filename='js/module_rail.js') }}?v={{ config.STATIC_VERSION }}"></script>
-    <script src="{{ url_for('core.static', filename='js/fill_height.js') }}?v={{ config.STATIC_VERSION }}"></script>
+    <script src="{{ url_for('core.static', filename='js/mobile_menu.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('core.static', filename='js/settings-overlay.js') }}?v={{ config.STATIC_VERSION }}"></script>
-    {# polling.js runs on the dashboard and detail pages — detects which page it's on via DOM markers #}
+    {# polling.js: live updates for whichever page its DOM markers find, plus a redeploy check. #}
     {% if current_user.is_authenticated %}
     <script src="{{ url_for('core.static', filename='js/polling.js') }}?v={{ config.STATIC_VERSION }}"></script>
-    {# The chat drawer's controller — the Chat tray reuses it, so it can no
-       longer live only on the Projects page. #}
+    {# Chat drawer controller; loaded globally because the Chat tray uses it. #}
     <script src="{{ url_for('project_assets.static', filename='js/project_chat_panel.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('core.static', filename='js/trays.js') }}?v={{ config.STATIC_VERSION }}"></script>
     <script src="{{ url_for('project_assets.static', filename='js/chat_tray.js') }}?v={{ config.STATIC_VERSION }}"></script>

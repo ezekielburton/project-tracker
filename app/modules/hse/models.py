@@ -1,13 +1,11 @@
 """
 HSE & Compliance module — data model.
 
-One entry table for all twenty-one registers: the fields every register
-shares are real columns, everything register-specific lives in `data`
-(JSONB). Alongside it sit the officer's own reference data — assets,
-lists, people — and the recurring schedule the calendar is built on.
+One entry table for every register: shared fields are columns, the rest
+lives in `data` (JSONB). Plus reference data (lists, assets, people) and
+the recurring schedules behind the calendar.
 
-Nothing here stores a derived value. Days open, days to expiry and
-friends are computed at read time in lib/computed.py.
+No derived values are stored; see lib/computed.py.
 """
 
 from sqlalchemy.dialects.postgresql import JSONB
@@ -15,19 +13,15 @@ from sqlalchemy.dialects.postgresql import JSONB
 from app.modules.core.shared.extensions import db
 
 
-# Severity is a closed set, not a list the officer edits: it drives the
-# SLA clock and the performance page, so a new value would silently have
-# no SLA behind it.
+# Closed set, not an editable list: each value needs an entry in
+# computed.SLA_DAYS.
 SEVERITIES = ('Low', 'Medium', 'High', 'Critical')
 
-# Something that happened, or something that nearly did. A closed set
-# rather than a reference list: "near misses per incident" is a reported
-# metric, and a renamed value would quietly change it.
+# Closed set: "near misses per incident" is a reported metric.
 EVENT_CLASSES = ('Incident', 'Near miss')
 
-# Reference-list kinds. A new simple list is a new kind here, not a new table.
-# Everything past the first two is filled in by the officer himself on the
-# Lists & people page — they need no code beyond this tuple and a label.
+# Reference-list kinds. A new simple list is a new kind here, not a new
+# table; its values are edited on the Lists & people page.
 REFERENCE_KINDS = (
     'location', 'department',
     'incident_type', 'issue_type', 'compliance_type',
@@ -38,13 +32,13 @@ REFERENCE_KINDS = (
     'compliance_item',
 )
 
-# Asset kinds. An asset is a physical thing several registers point at.
+# Asset kinds.
 ASSET_KINDS = ('vehicle', 'machine', 'forklift', 'area')
 
 
 class HseReference(db.Model):
-    """The officer's own option lists, one table keyed by `kind`. Never
-    deleted — deactivated, because existing entries still point at the value."""
+    """Editable option lists, one table keyed by `kind`. Rows are
+    deactivated, never deleted, since entries still point at them."""
     __tablename__ = 'hse_reference'
     __table_args__ = (db.UniqueConstraint('kind', 'label', name='uq_hse_reference_kind_label'),)
 
@@ -60,14 +54,15 @@ class HseReference(db.Model):
 
 
 class HseAsset(db.Model):
-    """A vehicle, machine, forklift or area. Eight registers point at the
-    same physical things; as free text one vehicle becomes four spellings."""
+    """A vehicle, machine, forklift or area that several registers point at."""
     __tablename__ = 'hse_assets'
 
     id = db.Column(db.Integer, primary_key=True)
     kind = db.Column(db.String(20), nullable=False, index=True)
     label = db.Column(db.String(160), nullable=False)
     ref = db.Column(db.String(80), nullable=True)  # plate, serial or asset tag
+    # The maker's serial, held once here and shown on the machine registers.
+    serial_no = db.Column(db.String(120), nullable=True)
     active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
 
@@ -76,9 +71,8 @@ class HseAsset(db.Model):
 
 
 class HsePerson(db.Model):
-    """Anyone named on an entry — reported by, owner, or the person an
-    action is waiting on. Needs no OVP login; `user_id` links one when
-    they happen to have it."""
+    """Anyone named on an entry (reporter, owner, subject, waiting-on).
+    Needs no OVP login; `user_id` links one if they have it."""
     __tablename__ = 'hse_people'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -86,8 +80,7 @@ class HsePerson(db.Model):
     role = db.Column(db.String(160), nullable=True)
     organisation = db.Column(db.String(160), nullable=True)
     is_external = db.Column(db.Boolean, nullable=False, default=False)
-    # When true, an entry may park on this person: that time is reported
-    # separately and the SLA clock pauses while it is parked.
+    # Entries may be parked on this person; parked time pauses the SLA clock.
     can_hold_actions = db.Column(db.Boolean, nullable=False, default=False)
     email = db.Column(db.String(200), nullable=True)
     phone = db.Column(db.String(50), nullable=True)
@@ -104,8 +97,8 @@ class HsePerson(db.Model):
 
 
 class HseSchedule(db.Model):
-    """A recurring obligation — what the site is supposed to do, and how
-    often. Occurrences are generated at read time, never stored."""
+    """A recurring obligation and its frequency. Occurrences are generated
+    at read time, never stored."""
     __tablename__ = 'hse_schedules'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -130,8 +123,7 @@ class HseSchedule(db.Model):
         return f'<HseSchedule {self.register}:{self.label}>'
 
 
-# One schedule can cover several assets — three vehicles inspected every
-# Monday is one row, three occurrences a week.
+# One schedule can cover several assets, with one occurrence per asset.
 hse_schedule_assets = db.Table(
     'hse_schedule_assets',
     db.Column('schedule_id', db.Integer,
@@ -142,9 +134,8 @@ hse_schedule_assets = db.Table(
 
 
 class HseEntry(db.Model):
-    """One row per register entry, for every register. A column here earns
-    its place by being shared across registers or by being a foreign key;
-    everything else lives in `data`."""
+    """One row per entry, for every register. Columns are fields shared
+    across registers or foreign keys; everything else lives in `data`."""
     __tablename__ = 'hse_entries'
     __table_args__ = (
         db.UniqueConstraint('register', 'ref', name='uq_hse_entries_register_ref'),
@@ -164,8 +155,7 @@ class HseEntry(db.Model):
     closed_at = db.Column(db.Date, nullable=True)
     due_at = db.Column(db.Date, nullable=True)
 
-    # Foreign keys rather than JSONB values: an id inside JSONB has no
-    # referential integrity and rots the first time a record is merged.
+    # Real foreign keys: an id inside JSONB has no referential integrity.
     location_id = db.Column(
         db.Integer, db.ForeignKey('hse_reference.id', ondelete='SET NULL'), nullable=True)
     department_id = db.Column(
@@ -177,14 +167,13 @@ class HseEntry(db.Model):
     assigned_to_id = db.Column(
         db.Integer, db.ForeignKey('hse_people.id', ondelete='SET NULL'), nullable=True)
 
-    # The person this entry is ABOUT — the injured employee, the driver,
-    # the operator. Deliberately not reported_by: that is who filed it,
-    # and conflating the two makes every "who reports most" answer wrong.
+    # Who the entry is about (injured employee, driver, operator). Not the
+    # same as reported_by, who filed it.
     subject_id = db.Column(
         db.Integer, db.ForeignKey('hse_people.id', ondelete='SET NULL'), nullable=True)
 
-    # The certificate a compliance entry is about — a reference, not free
-    # text, so renaming it keeps its renewal history instead of splitting it.
+    # The certificate a compliance entry is about. A reference, so a rename
+    # keeps its renewal history together.
     compliance_item_id = db.Column(
         db.Integer, db.ForeignKey('hse_reference.id', ondelete='SET NULL'), nullable=True)
 
@@ -235,9 +224,8 @@ class HseRefCounter(db.Model):
 
 
 class HseAttachment(db.Model):
-    """A file filed against an entry. The bytes live on the NAS; this row is
-    the record of where. `nas_path` is stored in full rather than rebuilt on
-    read, so renaming a register later cannot orphan an existing file."""
+    """A file attached to an entry; the bytes live on the NAS. `nas_path` is
+    stored in full so renaming a register cannot orphan a file."""
     __tablename__ = 'hse_attachments'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -259,9 +247,7 @@ class HseAttachment(db.Model):
     def __repr__(self):
         return f'<HseAttachment {self.original_filename}>'
 
-    # Asked by the entry overlay. Kept on the model rather than as a
-    # template filter so "can this be previewed" has one answer, next to the
-    # file it is about.
+    # Read by the entry modal (_entry_modal.html).
     @property
     def is_previewable(self):
         from app.modules.hse.lib.files import is_previewable

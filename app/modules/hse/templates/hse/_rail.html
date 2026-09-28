@@ -1,13 +1,8 @@
-{# The HSE rail. The nav itself is the shared component; what hangs below is
-   this module's own — his lists and his performance page, which are about
-   him rather than about the site.
-
-   Not pinned to the very bottom: that would need .module-rail to become a
-   flex column, which is a shared change affecting Client Servicing and
-   Digital Innovation too. Worth doing in one deliberate pass when "My
-   performance" also needs pinning — not as a side effect of this page. #}
-{% from '_shared_macros.html' import module_rail %}
-{% call module_rail(rail, active_group) %}
+{# The HSE rail: the shared module_rail plus a module-specific foot (Lists &
+   people, My performance). Lists & people shows its sub-pages while open,
+   like a group shows its registers. #}
+{% from '_shared_macros.html' import module_rail, module_rail_children %}
+{% call module_rail(rail, active_group, active_sub=active_sub, module='HSE & Compliance') %}
 <div class="module-rail-foot hse-rail-foot">
     <a class="module-rail-item module-rail-item--rich{{ ' module-rail-item--active' if active_group == 'lists' else '' }}"
        href="{{ url_for('hse.lists_page') }}">
@@ -16,6 +11,7 @@
             <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>
         </svg>Lists &amp; people
     </a>
+    {% if active_group == 'lists' and list_pages %}{{ module_rail_children(list_pages, active_sub) }}{% endif %}
     <a class="module-rail-item module-rail-item--rich{{ ' module-rail-item--active' if active_group == 'performance' else '' }}"
        href="{{ url_for('hse.performance') }}">
         <svg class="module-rail-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"

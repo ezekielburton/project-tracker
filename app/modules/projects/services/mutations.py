@@ -1,10 +1,7 @@
 """
-Public, reusable Project-mutation functions. Same effect (notification +
-activity-log shape) as the equivalent project_overlay routes, so a change
-made from outside the overlay — the Client Servicing table, so far — still
-produces the exact history/notifications a change made in the overlay
-would. Callers do their own permission checks; these assume the caller
-already decided the actor may make this change.
+Shared Project mutations used by the overlay and the Client Servicing table,
+so both produce the same notifications and activity log. Callers must do
+their own permission checks.
 """
 from datetime import date
 
@@ -15,8 +12,7 @@ from app.modules.core.shared.services.notifications import create_notification
 
 
 def reassign_cs_lead(project, new_cs_lead, actor):
-    """Same notification/log shape as project_overlay/deliverables.py's
-    reassign-cs-lead route: notifies the new (and outgoing) CS lead."""
+    """Set the CS lead, notify the new and outgoing leads, and log it."""
     previous_cs_lead = project.cs_lead
     project.cs_lead_id = new_cs_lead.id
     db.session.commit()
@@ -45,8 +41,7 @@ def reassign_cs_lead(project, new_cs_lead, actor):
 
 
 def set_project_owner(project, new_owner, actor):
-    """Same notification/log shape as project_overlay/deliverables.py's
-    set-project-owner route: notifies the new owner (unless self-claimed)."""
+    """Set the Project Owner, notify them (unless self-claimed), and log it."""
     previous_owner = project.project_owner
     project.project_owner_id = new_owner.id
     db.session.commit()
@@ -68,8 +63,7 @@ def set_project_owner(project, new_owner, actor):
 
 
 def _dedupe(users):
-    """Preserve order, drop repeats (e.g. someone who is both secondary CS
-    and Project Owner should only get one notification)."""
+    """Drop repeat users, keeping order, so nobody gets two notifications."""
     seen = set()
     result = []
     for user in users:
@@ -97,8 +91,7 @@ def _designer_recipients(project, actor):
 
 
 def _notify_due_date_changed(project, actor, new_value):
-    """Due Date = the final design deadline — designers need to know, same
-    as CS and the owner."""
+    """Due Date is the final design deadline, so designers are notified too."""
     message = (f'The due date on "{project.name}" was changed to {new_value.strftime("%d %b %Y")} by {actor.name}.'
                if new_value else f'The due date on "{project.name}" was cleared by {actor.name}.')
     recipients = _designer_recipients(project, actor) + _secondary_cs_recipients(project, actor) + _owner_recipient(project, actor)
@@ -174,9 +167,8 @@ def _parse_contact_id(value):
         raise FieldError('must be a valid contact')
 
 
-# field name -> (Project attribute, parser). The brief's "writes back to
-# the project" fields minus CS lead / project owner, which are relationship
-# reassignments handled by the two functions above instead.
+# field name -> (Project attribute, parser). CS lead and owner are handled
+# by the reassignment functions above.
 DETAIL_FIELDS = {
     'job_number': ('job_number', _parse_text(100)),
     'contact_id': ('contact_id', _parse_contact_id),
@@ -195,12 +187,9 @@ DETAIL_FIELD_LABELS = {
 
 
 def save_detail_field(project, actor, field_name, raw_value):
-    """Validates and saves one of DETAIL_FIELDS, logging it the same way
-    project_overlay/details.py's overlay_details_save logs a Details-tab
-    edit. Raises FieldError for an invalid value or a value that fails a
-    business rule (job number already taken, contact not on this
-    project's client). Does nothing (no log, no commit) if the value
-    didn't actually change. Returns the stored value."""
+    """Validate, save, notify and log one of DETAIL_FIELDS; return the stored
+    value. Raises FieldError on a bad value (e.g. job number taken, contact
+    from another client). No-op if the value is unchanged."""
     entry = DETAIL_FIELDS.get(field_name)
     if entry is None:
         raise FieldError('that field cannot be edited here')
@@ -226,9 +215,6 @@ def save_detail_field(project, actor, field_name, raw_value):
     setattr(project, attr_name, new_value)
     db.session.commit()
 
-    # The brief's three "notify on change" writeback fields (Chunk 5).
-    # CS lead / Project Owner reassignment already notify via the two
-    # functions above — this covers the rest.
     if field_name == 'first_output_deadline':
         _notify_due_date_changed(project, actor, new_value)
     elif field_name == 'job_number':

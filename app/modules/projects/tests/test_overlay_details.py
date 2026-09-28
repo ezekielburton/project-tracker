@@ -43,3 +43,45 @@ def test_overlay_details_fragment_renders(app, client, db_session):
         url = url_for('project_overlay.overlay_details', project_id=project.id)
     resp = client.get(url)
     assert resp.status_code == 200
+
+
+def _nas_url(app, project_id):
+    with app.test_request_context():
+        return url_for('project_overlay.overlay_nas_folder_link', project_id=project_id)
+
+
+def _fake_drive(monkeypatch):
+    from app.modules.core.shared.services import nas
+    monkeypatch.setattr(nas, 'build_drive_folder_url', lambda path: 'https://drive.example/f')
+
+
+def test_nas_folder_link_refuses_roles_without_the_workspace(app, client, db_session, monkeypatch):
+    _fake_drive(monkeypatch)
+    _user, project = _standard_project(db_session, 'nas-hse')
+    officer = User(name='HSE Officer', email='details-test-nas-officer@example.com', role='hse')
+    officer.set_password('password123')
+    db_session.add(officer)
+    db_session.flush()
+
+    login_as(client, app, officer, 'password123')
+    assert client.get(_nas_url(app, project.id)).status_code == 403
+
+
+def test_nas_folder_link_returns_url(app, client, db_session, monkeypatch):
+    _fake_drive(monkeypatch)
+    user, project = _standard_project(db_session, 'nas-ok')
+    login_as(client, app, user, 'password123')
+    resp = client.get(_nas_url(app, project.id))
+    assert resp.status_code == 200
+    assert resp.get_json()['url'] == 'https://drive.example/f'
+
+
+def test_nas_folder_link_without_created_at_is_not_a_500(app, client, db_session, monkeypatch):
+    _fake_drive(monkeypatch)
+    user, project = _standard_project(db_session, 'nas-nodate')
+    project.created_at = None
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+    resp = client.get(_nas_url(app, project.id))
+    assert resp.status_code == 404
+    assert resp.get_json()['success'] is False

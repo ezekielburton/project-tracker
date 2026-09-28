@@ -1,12 +1,10 @@
 """
-HSE — the Schedule tab: the recurring week the calendar is drawn from.
+HSE Schedule page (rail sub-page of Calendar): the recurring plan the
+calendar is drawn from.
 
-Reading the plan is view_hse, so management can see what was committed to.
-Changing it is manage_hse. That split is deliberate and differs from the
-Lists page: lists are the officer's own setup, a schedule is the
-commitment inspection coverage is measured against.
-
-Nothing here creates an entry or stores an occurrence.
+Viewing is view_hse so management can see the plan; editing is manage_hse.
+(Lists, by contrast, are manage_hse to view.) Nothing here creates an
+entry or stores an occurrence.
 """
 from datetime import date, timedelta
 
@@ -18,7 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
 from app.modules.core.shared.lib.utils import log_activity
-from app.modules.hse.lib.query import open_counts_by_group
+from app.modules.hse.lib.query import open_counts_by_register
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.lib.schedules import (
     LOOKBACK_DAYS, ValidationError, apply_payload, clean_payload, display_row,
@@ -45,12 +43,8 @@ def _assets_by_id():
 
 
 def _scheduled_entries(today):
-    """Entries filed against a schedule inside the lookback window.
-
-    Only these matter to the table: the due column needs to know which
-    recent occurrences were satisfied, and nothing else on the page reads
-    an entry.
-    """
+    """Entries filed against a schedule within the lookback window; the due
+    column uses them to see which recent occurrences were done."""
     return (HseEntry.query
             .filter(HseEntry.schedule_id.isnot(None),
                     HseEntry.occurrence_date >= today - timedelta(days=LOOKBACK_DAYS),
@@ -59,8 +53,7 @@ def _scheduled_entries(today):
 
 
 def _last_done():
-    """The most recent date filed against each schedule, as one aggregate
-    rather than a query per row."""
+    """Latest occurrence date filed per schedule, in one aggregate query."""
     rows = (db.session.query(HseEntry.schedule_id,
                              func.max(HseEntry.occurrence_date))
             .filter(HseEntry.schedule_id.isnot(None))
@@ -70,8 +63,7 @@ def _last_done():
 
 
 def _payload(schedule):
-    """What a save hands back: the row as the table renders it, plus the
-    values that refill the form."""
+    """Save response: the table row plus the values that refill the form."""
     today = date.today()
     row = serialize_schedule(schedule, today,
                              _scheduled_entries(today), _last_done())
@@ -97,9 +89,9 @@ def schedule_page():
         people=[{'id': p.id, 'label': p.name} for p in people],
         assets=[{'id': a.id, 'label': a.label, 'kind': a.kind, 'ref': a.ref}
                 for a in _active_assets()],
-        rail=rail_items(open_counts_by_group(today), active_group='calendar'),
+        rail=rail_items(open_counts_by_register(today), active_group='calendar'),
         active_group='calendar',
-        active_view='schedule',
+        active_sub='schedule',
     )
 
 
@@ -127,9 +119,8 @@ def create_schedule():
 @login_required
 @require_api('manage_hse')
 def update_schedule(schedule_id):
-    """A full edit, or — when the body carries only `active` — the retire
-    and restore toggle. Schedules are never deleted: entries filed against
-    one still point at it, and past occurrences must stay as they were."""
+    """Full edit, or retire/restore when the body is only `active`.
+    Schedules are never deleted: entries and past occurrences reference them."""
     schedule = HseSchedule.query.get_or_404(schedule_id)
     actor = effective_user()
     payload = request.get_json(silent=True) or {}
@@ -160,9 +151,8 @@ def update_schedule(schedule_id):
 @login_required
 @require_api('manage_hse')
 def preview_schedule():
-    """The next few dates the form in front of him would produce. Validates
-    the same way a save does, so the preview can never show dates a save
-    would then reject."""
+    """Next few dates the current form would produce. Uses the save
+    validation (minus asset checks) so previews match what a save accepts."""
     try:
         values, _ = clean_payload(request.get_json(silent=True) or {},
                                   check_assets=False)

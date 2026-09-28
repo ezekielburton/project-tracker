@@ -1,13 +1,6 @@
-// app/static/js/project_flags.js
-//
-// Brief Flags (task #42) — shared create/reply/resolve/history logic for
-// every flag scope in the overlay. Details' compact panel (project/
-// concept/kv) and Deliverables' per-deliverable flags (one panel per
-// C&CM customer, one for Standard's flat list) both render one or more
-// .overlay-flag-section blocks (see _flag_project_panel.html) and call
-// window.ProjectFlags.init(rootEl, projectId, onChanged) once per
-// sub-tab load — this module finds and wires every section itself, so
-// callers don't need to know how many there are.
+// Flag create/reply/resolve/history for the overlay. Details and
+// Deliverables render .overlay-flag-section blocks (_flag_project_panel.html)
+// and call init() once per sub-tab load; it wires every section it finds.
 window.ProjectFlags = (function () {
     function init(rootEl, projectId, onChanged) {
         if (!rootEl) return null;
@@ -28,9 +21,7 @@ window.ProjectFlags = (function () {
             return div.innerHTML;
         }
 
-        // Client-side render for History items — same markup shape as
-        // _flag_card.html so Active (server-rendered) and History
-        // (fetched JSON) flag cards look identical.
+        // Renders a History item. Keep in sync with _flag_card.html.
         function renderFlagCard(flag) {
             var typeLabels = { project: 'Project', deliverable: 'Deliverable', concept: 'Concept', kv: 'KV' };
             var html = '<div class="overlay-flag-card' + (flag.is_resolved ? ' is-resolved' : '') + '" data-flag-id="' + flag.id + '">';
@@ -57,10 +48,8 @@ window.ProjectFlags = (function () {
             return html;
         }
 
-        // Resolve buttons need rewiring after every innerHTML swap (History
-        // fetch) — Active view's are wired once up front, History's each
-        // time its list is (re)rendered. Reply forms are Active-view-only
-        // (see _flag_card.html) so they don't need this treatment.
+        // Wires resolve buttons; called again after each History render.
+        // data-flag-wired stops double-binding.
         function wireFlagCardActions(container) {
             container.querySelectorAll('.overlay-flag-resolve-btn').forEach(function (btn) {
                 if (btn.dataset.flagWired) return;
@@ -71,7 +60,7 @@ window.ProjectFlags = (function () {
                             if (onChanged) onChanged();
                         }, function (err) { alert(err || 'Could not resolve this flag.'); });
                     };
-                    window.showConfirm('Mark this flag as resolved?', go); // M10: dropped dead native-confirm fallback
+                    window.showConfirm('Mark this flag as resolved?', go);
                 });
             });
         }
@@ -93,12 +82,8 @@ window.ProjectFlags = (function () {
         });
         wireFlagCardActions(rootEl);
 
-        // ── Each scope section: single Flag History toggle + raise-flag
-        // form. Both scopes (project on Details, deliverable on
-        // Deliverables) render the same compact layout now — see
-        // _flag_project_panel.html — one "Flag History" button that
-        // shows/hides a history panel in place; any open flag sits above
-        // it in its own div, always visible, never part of the toggle. ──
+        // ── Each section: a Flag History toggle (history fetched once,
+        // on first open) and, for deliverable scope, a compose form. ──
         rootEl.querySelectorAll('.overlay-flag-section').forEach(function (section) {
             var scope = section.dataset.flagScope;
             var customerId = section.dataset.customerId || null;
@@ -138,10 +123,9 @@ window.ProjectFlags = (function () {
                 });
             }
 
-            // ── Raise a flag — one compose form per section (deliverable
-            // scope only now — project-scope raising moved to the sidebar,
-            // see project_list.js's wireProjectLifecycleActions, so this
-            // simply finds nothing and no-ops for the compact panel). ──
+            // ── Raise a flag. Only deliverable-scope sections have a
+            // compose form; project flags are raised from the sidebar
+            // (project_list.js). ──
             var composeForm = section.querySelector('.overlay-flag-compose-form');
             var composeInput = section.querySelector('.overlay-flag-compose-input');
             var composeError = section.querySelector('.overlay-flag-revision-error');
@@ -163,19 +147,10 @@ window.ProjectFlags = (function () {
                 if (composeTarget) composeTarget.classList.add('is-hidden');
             }
 
-            // .overlay-flag-issue-btn only exists in deliverable-scope
-            // sections now (project scope's trigger lives in the sidebar,
-            // see _overlay.html) — finds nothing and no-ops otherwise.
-            var issueBtn = section.querySelector('.overlay-flag-issue-btn');
-            if (issueBtn) issueBtn.addEventListener('click', openCompose);
-
-            // Deliverable scope: every row trigger for this customer targets
-            // THIS section's compose form. The flag panel now lives in its
-            // own div ABOVE the Deliverables card (18 Aug 2026), a sibling
-            // rather than an ancestor of the row triggers, so closest() can't
-            // find them anymore — match by customer id instead. Standard has
-            // no customer scoping at all, so it's safe to search the whole
-            // sub-tab (there's only ever one deliverable-scope section there).
+            // Deliverable scope: this customer's ⚑ row triggers open THIS
+            // section's compose form. The flag panel is a sibling of the
+            // rows, not an ancestor, so match by customer id. Standard has
+            // one section, so it searches the whole sub-tab.
             if (scope === 'deliverable') {
                 var panel = customerId
                     ? (rootEl.querySelector(`.overlay-deliverables-panel[data-customer-panel="${customerId}"]`) || rootEl)

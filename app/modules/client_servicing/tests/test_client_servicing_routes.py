@@ -1,4 +1,5 @@
-"""Route-level coverage for the Client Servicing table view (read-only)."""
+"""Client Servicing routes: page access, the table and invoicing views, day
+thresholds, and the review lock."""
 from flask import url_for
 
 from app.modules.core.shared.models import User, Project
@@ -32,8 +33,7 @@ def test_index_forbidden_for_disallowed_role(app, client, db_session):
 
 
 def test_index_allowed_for_project_owner(app, client, db_session):
-    """Project Owners are in the allowed-role set alongside
-    admin/management/cs — they can view/use the CS sheet."""
+    """Project owners can open the CS sheet."""
     user = _user(db_session, 'a2', role='project_owner')
     login_as(client, app, user, 'password123')
 
@@ -44,7 +44,7 @@ def test_index_allowed_for_project_owner(app, client, db_session):
 
 
 def test_index_allowed_for_finance(app, client, db_session):
-    """Finance is in the allowed-role set — can view the CS sheet."""
+    """Finance can open the CS sheet."""
     user = _user(db_session, 'a3', role='finance')
     login_as(client, app, user, 'password123')
 
@@ -110,9 +110,7 @@ def test_table_rows_endpoint_returns_fragment(app, client, db_session):
 
 
 def test_deactivated_scope_drops_out_of_options_but_still_shows_on_its_row(app, client, db_session):
-    """A deactivated scope shouldn't be offered
-    for new picks, but a row that already has it should keep showing its
-    name — deactivating isn't deleting."""
+    """A deactivated scope is not offered for new picks but still shows on rows that have it."""
     user = _user(db_session, 'd', role='cs')
     scope = ClientServicingScope(name='Legacy Scope', active=True)
     db_session.add(scope)
@@ -225,8 +223,7 @@ def test_day_thresholds_rejects_green_not_less_than_amber(app, client, db_sessio
 
 
 def test_draft_projects_are_hidden_from_the_table(app, client, db_session):
-    """Drafts aren't real projects yet — they must not appear on the CS
-    table or the Invoicing tab."""
+    """Draft projects appear on neither the CS table nor the Invoicing tab."""
     user = _user(db_session, 'draft', role='cs')
     db_session.add(Project(name='Real Briefed Project', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed'))
     db_session.add(Project(name='Hidden Draft Project', cs_lead_id=user.id, created_by_id=user.id, project_status='draft'))
@@ -262,15 +259,11 @@ def test_table_page_has_search_and_filter_toolbar(app, client, db_session):
 
 
 # --- Review lock -----------------------------------------------------------
-# CLIENT_SERVICING_REVIEW_ONLY narrows the module to admin/management while
-# it is under management review. The suite runs with the flag off (see
-# TestingConfig), so these two turn it on deliberately to cover both sides.
-# The role model above is unaffected either way.
+# CLIENT_SERVICING_REVIEW_ONLY narrows the module to admin/management. The
+# suite runs with it off (TestingConfig), so these tests switch it on.
 
 def test_review_lock_shuts_out_allowed_roles(app, client, db_session):
-    """With the lock on, roles that normally have the module get a 403 —
-    not a redirect or a stripped page. The route gate is the real boundary;
-    the dimmed sidebar item is only the visible half of it."""
+    """With the lock on, roles that normally have the module get a 403 from the route."""
     for role in ('cs', 'project_owner', 'finance'):
         user = _user(db_session, 'lock-' + role, role=role)
         login_as(client, app, user, 'password123')
@@ -285,7 +278,7 @@ def test_review_lock_shuts_out_allowed_roles(app, client, db_session):
 
 
 def test_review_lock_lets_management_through(app, client, db_session):
-    """The point of the lock — management still reviews the module."""
+    """With the lock on, admin and management still get in."""
     for role in ('admin', 'management'):
         user = _user(db_session, 'lock-ok-' + role, role=role)
         login_as(client, app, user, 'password123')

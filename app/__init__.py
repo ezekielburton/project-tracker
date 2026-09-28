@@ -7,10 +7,9 @@ from app.modules.core.shared.extensions import db, login_manager, mail
 
 
 def _compute_static_version():
-    """Cache-busting stamp for STATIC_VERSION: the newest source-file mtime.
-    Mtime (not wall-clock) so all gunicorn workers compute the same value —
-    otherwise polling.js's version check misreads the drift as a redeploy and
-    loops reloads. Changes on deploy, since git rewrites changed files' mtimes."""
+    """STATIC_VERSION cache-buster: the newest file mtime under app/.
+    Mtime, not wall-clock, so every gunicorn worker gets the same value;
+    otherwise polling.js's version check sees a redeploy and reload-loops."""
     import time
     app_dir = os.path.dirname(os.path.abspath(__file__))
     newest = 0.0
@@ -25,8 +24,7 @@ def _compute_static_version():
                 continue
             if mtime > newest:
                 newest = mtime
-    # Fallback only if the walk somehow found nothing (shouldn't happen) —
-    # keeps STATIC_VERSION from ever being empty/zero.
+    # Fallback so STATIC_VERSION is never zero.
     return str(int(newest)) if newest else str(int(time.time()))
 
 
@@ -42,8 +40,7 @@ def create_app(config=Config):
     from app.modules.core.shared.services.sse_relay import init_sse_relay
     init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
 
-    # Cache-buster for every static tag in base.html (?v=...). See
-    # _compute_static_version — mtime-based so all workers agree.
+    # Cache-buster for every static tag in base.html (?v=...).
     app.config['STATIC_VERSION'] = _compute_static_version()
 
     login_manager.login_view = 'auth.login'
@@ -64,7 +61,7 @@ def create_app(config=Config):
     from app.modules.feedback.routes.feedback import feedback_bp
     from app.modules.feedback.routes.signal_tray import signal_tray_bp  # Signal tray boards + Friction Log
     from app.modules.wiki.routes.wiki import wiki_bp
-    from app.modules.core.shared.routes.api import api_bp  # polling endpoints for live dashboard/detail updates
+    from app.modules.core.shared.routes.api import api_bp  # /api/* JSON endpoints
     from app.modules.profile.routes.profile import profile_bp  # profile view/edit routes
     from app.modules.achievements.routes.admin_achievements import admin_achievements_bp  # achievement system admin panel
     from app.modules.profile.routes.wizard import wizard_bp
@@ -73,7 +70,6 @@ def create_app(config=Config):
     from app.modules.client_directory.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
     from app.modules.dashboard.routes.dashboard import dashboard_bp  # role-based dashboard
     from app.modules.time_tracking.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
-    from app.modules.projects.routes.transfer import transfer_bp  # C&CM deliverable transfer (move / duplicate to new customer)
     from app.modules.projects.routes.project_list import project_list_bp # Projects page list
     from app.modules.projects.routes.project_overlay import project_overlay_bp # Projects detail overlay
     from app.modules.projects.routes.project_preproduction import project_preproduction_bp # Pre-Production phase backend
@@ -134,7 +130,7 @@ def create_app(config=Config):
     app.register_blueprint(feedback_bp)
     app.register_blueprint(signal_tray_bp)
     app.register_blueprint(wiki_bp)
-    app.register_blueprint(api_bp)  # /api/* poll routes
+    app.register_blueprint(api_bp)  # /api/*
     app.register_blueprint(profile_bp)
     app.register_blueprint(admin_achievements_bp)
     app.register_blueprint(wizard_bp)
@@ -143,7 +139,6 @@ def create_app(config=Config):
     app.register_blueprint(client_directory_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(time_tracking_bp)
-    app.register_blueprint(transfer_bp)
     app.register_blueprint(project_list_bp)
     app.register_blueprint(project_overlay_bp)
     app.register_blueprint(project_preproduction_bp)
@@ -176,7 +171,7 @@ def create_app(config=Config):
         from app.modules.core.shared.lib.capabilities import effective_user
 
         if current_user.is_authenticated:
-            # Use the emulated user's ID when in emulation mode
+            # Emulation-aware: show the emulated user's notifications.
             notif_user_id = effective_user().id
 
             active_notifications = Notification.query.filter_by(
@@ -191,9 +186,8 @@ def create_app(config=Config):
 
             unread_count = sum(1 for n in active_notifications if not n.is_read)
 
-            # Attach each pending edit-access request id to its notification
-            # so base.html can show inline Approve/Deny buttons. One query total,
-            # keyed by (project_id, requester); None means already decided.
+            # Attach the pending edit-access request id so base.html can show
+            # inline Approve/Deny. One query; None means already decided.
             edit_access_notif_ids = [
                 n.id for n in active_notifications if n.notification_type == 'edit_access_requested'
             ]
@@ -207,8 +201,7 @@ def create_app(config=Config):
                     if n.notification_type == 'edit_access_requested':
                         n.edit_access_request_id = pending_by_key.get((n.project_id, n.triggered_by_id))
 
-            # Sound prefs from the notification_prefs JSON — needed on every
-            # page, since the global poll loop in base.html plays the sound.
+            # Needed on every page: base.html's global loop plays the sound.
             try:
                 prefs = json.loads(current_user.notification_prefs or '{}')
             except (ValueError, TypeError):
@@ -239,10 +232,9 @@ def create_app(config=Config):
         }
     
     def _active_badge_image(user):
-        """The user's active badge image filename, or None. Cached on flask.g
-        per request (a table can render one designer many times). A Jinja global,
-        not a context processor — those don't reach macros imported without
-        `with context`, so user_avatar() couldn't see it."""
+        """The user's active badge image filename, or None; cached on g per
+        request. A Jinja global because context processors don't reach macros
+        imported without `with context` (user_avatar())."""
         from flask import g
         from app.modules.core.shared.models import UserDisplaySettings, UserAchievement
 
@@ -254,8 +246,7 @@ def create_app(config=Config):
             settings = UserDisplaySettings.query.filter_by(user_id=user.id).first()
             if settings and settings.active_badge_id:
                 ua = UserAchievement.query.get(settings.active_badge_id)
-                # The achievement may have no uploaded image yet — nothing to
-                # overlay then, same as the fallback trophy elsewhere.
+                # The achievement may have no badge image uploaded.
                 if ua and ua.achievement.badge_image:
                     badge_image = ua.achievement.badge_image
             g._active_badge_cache[user.id] = badge_image
@@ -264,69 +255,12 @@ def create_app(config=Config):
 
     app.jinja_env.globals['active_badge_image'] = _active_badge_image
 
-    def _nas_deliverable_url(deliverable, project, project_customer=None, region_slug=None):
-        """DSM 7 File Station deep-link to a deliverable's Design Files folder,
-        or None if NAS is unconfigured. Standard: .../Design Files/{name};
-        C&CM (pass project_customer + region_slug): .../{Region}/{Customer}/{name}.
-        launchParam is double-encoded so & in folder names survives Synology's parse."""
-        from urllib.parse import quote
-        from app.modules.core.shared.services.nas import REGION_DISPLAY
-
-        base = (app.config.get('NAS_WEB_URL') or
-                f"https://{app.config.get('NAS_HOST', '')}:{app.config.get('NAS_PORT', '5001')}")
-
-        root        = app.config.get('NAS_PROJECT_ROOT', '/Projects')
-        year        = project.created_at.year
-        client      = project.client_brand.name if project.client_brand else 'Unknown Client'
-        proj_name   = project.name
-        design_root = f'{root}/{year}/{client}/{proj_name}/Design Files'
-
-        if project_customer and region_slug:
-            region_display = REGION_DISPLAY.get((region_slug or '').lower(), (region_slug or '').title())
-            customer_name  = project_customer.customer.name
-            folder_path    = f'{design_root}/{region_display}/{customer_name}/{deliverable.name}'
-        else:
-            folder_path = f'{design_root}/{deliverable.name}'
-
-        # DSM 7 deep-link: double-encode so & in folder names survives launchParam parse
-        path_encoded  = quote(folder_path, safe='/')      # & → %26, space → %20
-        launch_param  = quote(f'opendir={path_encoded}', safe='/')   # % → %25
-        return (f'{base.rstrip("/")}/index.cgi'
-                f'?launchApp=SYNO.SDS.App.FileStation3.Instance'
-                f'&launchParam={launch_param}')
-
-    app.jinja_env.globals['nas_deliverable_url'] = _nas_deliverable_url
-
-    def _nas_project_url(project):
-        """DSM 7 File Station deep-link to a project's root folder, or None if
-        NAS is unconfigured. Separate from _nas_deliverable_url — no 'Design
-        Files' suffix."""
-        from urllib.parse import quote
-
-        base = (app.config.get('NAS_WEB_URL') or
-                f"https://{app.config.get('NAS_HOST', '')}:{app.config.get('NAS_PORT', '5001')}")
-
-        root      = app.config.get('NAS_PROJECT_ROOT', '/Projects')
-        year      = project.created_at.year
-        client    = project.client_brand.name if project.client_brand else 'Unknown Client'
-        proj_name = project.name
-        folder_path = f'{root}/{year}/{client}/{proj_name}'
-
-        path_encoded = quote(folder_path, safe='/')
-        launch_param = quote(f'opendir={path_encoded}', safe='/')
-        return (f'{base.rstrip("/")}/index.cgi'
-                f'?launchApp=SYNO.SDS.App.FileStation3.Instance'
-                f'&launchParam={launch_param}')
-
-    app.jinja_env.globals['nas_project_url'] = _nas_project_url
-
-    # CS sidebar icon gates through the same access check the CS routes use.
-    # A Jinja global (not a context processor) so it's reusable anywhere.
+    # Same access check the CS routes use; gates the CS sidebar icon.
     from app.modules.client_servicing.lib.access import can_access_client_servicing
     app.jinja_env.globals['can_access_client_servicing'] = can_access_client_servicing
 
-    # Capability gate. Templates ask can('view_finance') instead of listing
-    # roles; role_labels drives every role picker from the same map.
+    # Capability gate: templates call can('view_finance') instead of listing
+    # roles. role_labels feeds every role picker.
     from app.modules.core.shared.lib.capabilities import can, ROLE_LABELS, role_label
     app.jinja_env.globals['can'] = can
     app.jinja_env.globals['role_labels'] = ROLE_LABELS
@@ -352,9 +286,8 @@ def create_app(config=Config):
             return {
                 'show_wizard': True,
                 'show_name_step': current_user.created_at >= WIZARD_LAUNCH_DATE,
-                # True only for accounts that already finished the wizard before
-                # the avatar step existed — they should land straight on that one
-                # new step, not replay steps 1-3 they've already done.
+                # Accounts that finished the wizard before the avatar step
+                # existed see only that step.
                 'avatar_step_only': current_user.wizard_completed and not current_user.avatar_step_completed,
             }
         return {'show_wizard': False, 'show_name_step': False, 'avatar_step_only': False}
@@ -362,8 +295,7 @@ def create_app(config=Config):
     def dubai_time(dt):
         if dt is None:
             return '_'
-        # Accept an ISO string too (dashboard's What Changed passes timestamps
-        # as isoformat strings for the JSON API); real datetimes are unchanged.
+        # Also accepts an ISO string (the dashboard's JSON API sends those).
         if isinstance(dt, str):
             dt = datetime.fromisoformat(dt)
         dubai_tz = timezone(timedelta(hours=4))
@@ -372,15 +304,15 @@ def create_app(config=Config):
     app.jinja_env.filters['dubai_time'] = dubai_time
 
 
-    # DEV TOOLS — hardcoded True for now. Switch back to env var check before deploying to prod:
-    # app.jinja_env.globals['dev_tools_enabled'] = os.environ.get('DEV_TOOLS_ENABLED', '').lower() == 'true'
-    app.jinja_env.globals['dev_tools_enabled'] = True
+    # Dev-only UI (e.g. Wipe Projects) follows the same flag the wipe route
+    # checks, so it never shows on a server where the route would 403.
+    app.jinja_env.globals['dev_tools_enabled'] = bool(app.config.get('DEV_TOOLS_ENABLED'))
 
     @app.before_request
     def detect_nav_request():
-        # SPA navigation: sidebar.js sends X-Nav-Request: 1 for internal link clicks.
-        # Routes render normally; base.html skips the outer shell when this flag is set,
-        # returning only the content block so JS can swap it into #main-content.
+        # SPA navigation: sidebar.js sends X-Nav-Request: 1. Routes render
+        # normally; spa_strip_response then returns only #main-content's inner
+        # HTML (plus the page's extra_js) for JS to swap in.
         g.is_nav_request = request.headers.get('X-Nav-Request') == '1'
     
     @app.after_request
@@ -400,9 +332,9 @@ def create_app(config=Config):
           )
           if m:
               content = m.group(1)
-              # A page's own {% block extra_js %} renders after </main>, so it's
-              # outside the sliced content. Markers pull in just that block —
-              # never the global scripts, which must not run twice.
+              # The page's own extra_js block renders after </main>. The markers
+              # pull in just that block, never the global scripts (they must
+              # not run twice).
               extra_js_match = re.search(
                   r'<!--\s*SPA:EXTRA_JS:START\s*-->(.*?)<!--\s*SPA:EXTRA_JS:END\s*-->',
                   html, re.DOTALL

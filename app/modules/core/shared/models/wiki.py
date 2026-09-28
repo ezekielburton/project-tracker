@@ -6,9 +6,8 @@ from datetime import datetime
 
 class WikiSection(db.Model):
     """
-    Top level Sections in the wiki (E.G Cs View, Designer View).
-    relevant_roles is a comma-separated list of the roles this secton is for
-    (drives the role indicator in the viewer). Empty = relevant to everyone.
+    A top-level wiki section (e.g. CS View). relevant_roles is a comma-separated
+    role list shown as role badges; empty means everyone.
     """
 
     __tablename__ = 'wiki_sections'
@@ -16,7 +15,7 @@ class WikiSection(db.Model):
     id              = db.Column(db.Integer, primary_key=True)
     title           = db.Column(db.String(200), nullable=False)
     slug            = db.Column(db.String(200), nullable=False, unique=True)
-    relevant_roles  = db.Column(db.String(200)) #e.g cs, admin or designer/team_lead
+    relevant_roles  = db.Column(db.String(200)) # e.g. "cs,admin"
     sort_order      = db.Column(db.Integer, default=0)
     is_published    = db.Column(db.Boolean, default=False)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
@@ -34,10 +33,10 @@ class WikiSection(db.Model):
 
 class WikiArticle(db.Model):
     """
-    A single page within a wiki section. sections_json holds the live Editor.js
-    document, draft_sections_json the autosaved working copy, and
-    legacy_sections_json the pre-Editor.js content as a fallback. help_key names
-    the page this article explains — one article per key.
+    A wiki page. sections_json is the live Editor.js document and
+    draft_sections_json the autosaved working copy; nothing reads
+    legacy_sections_json. help_key names the app page this article explains
+    (one article per key).
     """
 
     __tablename__='wiki_articles'

@@ -1,27 +1,15 @@
-// app/static/js/project_overlay_create.js
+// app/modules/projects/static/js/project_overlay_create.js
 //
-// Create-mode overlay (tasks #61-62) — the "+ New Project" flow's Details
-// and Deliverables steps. Deliberately separate from project_overlay.js/
-// project_overlay_edit.js/project_deliverables_card.js: those are built
-// around the live overlay's sub-tab rail, view/edit toggle, and Save ->
-// back-to-read-only flow, none of which fit create mode (a linear 2-step
-// wizard with no "read" state to fall back to yet — see task #64 for what
-// eventually replaces the current placeholder "Add New Project" action).
+// Create-mode overlay: the "+ New Project" wizard (Details, Deliverables,
+// then a confirm summary that finalizes the draft). Separate from the live
+// overlay's scripts because create mode has no read-only state.
 //
-// Details autosave contract: every [data-create-field] posts ONLY the one
-// field that changed to POST /projects/overlay/new, debounced per-field so
-// fast typing doesn't fire a request per keystroke. overlay_create_draft()
-// treats any field key it doesn't receive as "unchanged", so partial
-// payloads are always safe.
+// Details autosave: each [data-create-field] posts only the changed field to
+// POST /projects/overlay/new, debounced per field. overlay_create_draft()
+// treats missing keys as unchanged, so partial payloads are safe.
 //
-// Deliverables step deliberately reuses the SAME templates and SAME save
-// endpoint (/projects/<id>/overlay/deliverables/edit + /save) the live
-// overlay's "Edit Deliverables" already uses — same row-add-by-cloning-a-
-// <template>, same team toggles, same Apply Deadline to All, same bulk
-// Save. Per Ezekiel (18 Aug 2026): "remember the UX and conventions we're
-// using... we dont want adding deliverables to be a pain" — that UX was
-// already solved once for the live overlay, so create mode just points at
-// it rather than inventing a second way to add a deliverable row.
+// The Deliverables step reuses the live overlay's edit templates and
+// endpoints (/projects/<id>/overlay/deliverables/edit + /save).
 
 (function () {
     'use strict';
@@ -29,13 +17,8 @@
     var _closeCallback = null;
     var _onFinalized = null;
     var _currentStep = 'details';
-    // Tracks the most recent Details-step autosave request so step
-    // navigation can wait for it to land before fetching the next step —
-    // fixes a real bug (18 Aug 2026, per Ezekiel): picking C&CM customers
-    // then immediately clicking "Continue to Deliverables" could race the
-    // customer_ids autosave, so the Deliverables step's server-side render
-    // ran against a project that didn't have those ProjectCustomer rows
-    // yet, and the customers looked like they'd never been picked at all.
+    // Latest Details autosave. The Deliverables step waits on it, or its
+    // server render can miss C&CM customers ticked a moment before.
     var _pendingDetailsSave = Promise.resolve();
 
     function debounce(fn, wait) {
@@ -54,10 +37,6 @@
         var statusEl = footerEl ? footerEl.querySelector('#project-overlay-create-autosave-status') : null;
         var initialDeadlineEl = document.getElementById('overlay-create-initial-deadline-value');
 
-        // Fresh promise chain for this visit to the Details step — a
-        // leftover pending promise from a PREVIOUS visit (already resolved
-        // by the time anyone navigates again) would be harmless either way,
-        // but resetting here keeps the intent obvious.
         _pendingDetailsSave = Promise.resolve();
 
         function setStatus(text) {
@@ -83,10 +62,7 @@
                     if ('name' in payload && headerNameEl) {
                         headerNameEl.textContent = payload.name || 'Untitled Draft';
                     }
-                    // Initial Deadline is server-computed (see
-                    // _recompute_initial_deadline in project_overlay.py) —
-                    // every autosave response carries the current value so
-                    // this stays live without a full step reload.
+                    // Initial Deadline is server-computed; each response carries it.
                     if (initialDeadlineEl) {
                         initialDeadlineEl.textContent = data.first_output_deadline || 'Auto - Based on earliest deadline added';
                     }
@@ -134,13 +110,10 @@
                     scope.classList.toggle('is-hidden', scope.dataset.createScope !== briefType);
                 });
                 contentEl.dataset.createBriefType = briefType;
-                autosave({ brief_type: briefType }); // not debounced — this gates what the user sees next, shouldn't lag
+                autosave({ brief_type: briefType }); // not debounced: it gates what shows next
             });
         });
-        // Restore whichever scope matches an already-saved brief_type (e.g.
-        // reopening a draft — see task #65) — the server already renders
-        // the right one hidden/shown, this just keeps a freshly-navigated-
-        // back-to state consistent with dataset.createBriefType.
+        // Show the scope matching an already-saved brief_type (e.g. a reopened draft).
         var savedBriefType = contentEl.dataset.createBriefType;
         if (savedBriefType) {
             contentEl.querySelectorAll('[data-create-scope]').forEach(function (scope) {
@@ -157,9 +130,8 @@
             });
         }
 
-        // ---- Concept & KV toggle (C&CM) — one merged tickbox, see
-        // _details_create.html and overlay_create_draft()'s comment on
-        // how has_concept_kv maps onto the model's two separate columns. ----
+        // ---- Concept & KV toggle (C&CM): one tickbox for two model columns,
+        // see overlay_create_draft(). ----
         var hasConceptKvBox = document.getElementById('overlay-create-has-concept-kv');
         var conceptKvFields = document.getElementById('overlay-create-concept-kv-fields');
         if (hasConceptKvBox && conceptKvFields) {
@@ -169,11 +141,8 @@
         }
 
         // ---- Customer picker (C&CM) ----
-        // Not debounced, unlike the plain text fields above — same
-        // reasoning as the brief-type buttons: this gates what the
-        // Deliverables step can show, so it shouldn't lag, and a debounced
-        // save here was the actual cause of the "customers don't show up
-        // on Deliverables" bug (see _pendingDetailsSave's comment above).
+        // Not debounced: the Deliverables step depends on these customers
+        // (see _pendingDetailsSave).
         var customerBoxes = contentEl.querySelectorAll('[data-create-customer-id]');
         function currentCustomerIds() {
             return Array.prototype.filter.call(customerBoxes, function (b) { return b.checked; })
@@ -194,16 +163,13 @@
             });
         });
 
-        // ---- Re-run the client/contact directory cascade + "+ Add new…"
-        // wiring against this freshly-injected DOM. client_directory.js's
-        // own initBriefFormIntegration() only ran once at page load, before
-        // this fragment existed — see client_directory.js's exported
-        // initBriefFormIntegration for why it needs a manual re-call here. ----
+        // ---- Client/contact directory wiring: client_directory.js ran at
+        // page load, before this fragment existed, so re-run it here. ----
         if (window.ClientDirectoryModals && window.ClientDirectoryModals.initBriefFormIntegration) {
             window.ClientDirectoryModals.initBriefFormIntegration();
         }
 
-        // ---- Job number generator (task #63) ----
+        // ---- Job number generator ----
         var jobNumberInput = document.getElementById('overlay-create-job-number');
         var generateBtn = document.getElementById('overlay-create-generate-job-number-btn');
         if (generateBtn && jobNumberInput) {
@@ -224,13 +190,9 @@
             });
         }
 
-        // ---- Reference files (task #63) ----
-        // Reuses ProjectDetailsCard.init() wholesale rather than rewriting
-        // upload/preview/remove/drag-and-drop for a second time — it also
-        // wires several avatar pickers (#cs-lead-picker etc.) that don't
-        // exist in this DOM at all, but each of those is individually
-        // guarded (`if (picker) ...`) in project_details_card.js, so they
-        // no-op harmlessly here instead of erroring.
+        // ---- Reference files ----
+        // Reuses ProjectDetailsCard.init() for uploads. Its avatar pickers are
+        // absent here; each is null-guarded in project_details_card.js.
         if (window.ProjectDetailsCard) {
             window.ProjectDetailsCard.init(contentEl, projectId, function () {
                 loadDetailsStep(projectId);
@@ -239,13 +201,9 @@
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // Step 2: Deliverables — row logic mirrors project_deliverables_card.js's
-    // bindEdit() almost exactly (same markup, same endpoints). Duplicated
-    // rather than shared, matching this codebase's existing convention of
-    // small per-file helpers (see _can_skip_preproduction's docstring on
-    // the Python side) — the two Save behaviors genuinely diverge (this one
-    // never falls back to a read-only view), so sharing would mean a
-    // branch inside the shared function instead of two honest copies.
+    // Step 2: Deliverables. Row logic copies project_deliverables_card.js's
+    // bindEdit() (same markup and endpoints); keep the two in step. Only
+    // Save differs: this one reloads the edit view.
     // ════════════════════════════════════════════════════════════════════
 
     function bindDeliverablesStep(contentEl, projectId) {
@@ -301,8 +259,7 @@
 
         if (applyAllBtn) {
             applyAllBtn.addEventListener('click', function () {
-                // Scoped to the visible customer panel on C&CM — "all" means
-                // every row currently in view, not every customer's rows.
+                // On C&CM, "all" means the visible customer panel only.
                 var listEl = activeEditList();
                 if (!listEl) return;
                 var rows = listEl.querySelectorAll('.overlay-deliverables-edit-row');
@@ -365,11 +322,8 @@
                             if (window.showToast) window.showToast(data.error || 'Could not save deliverables.', 'error');
                             return;
                         }
-                        // No read-only view to fall back to yet in create mode
-                        // (that's the live overlay's Save behavior) — reload
-                        // the same edit fragment instead, so newly created
-                        // rows pick up real ids (Delete needs one) and rows
-                        // marked deleted are actually gone from the DOM.
+                        // Reload the edit fragment so new rows get real ids
+                        // (Delete needs one) and deleted rows leave the DOM.
                         loadDeliverablesStep(projectId);
                         if (window.showToast) window.showToast('Deliverables saved.', 'success');
                     })
@@ -408,19 +362,13 @@
         var contentEl = document.getElementById('project-overlay-content');
         var footerEl = document.getElementById('project-overlay-create-footer');
         if (!contentEl) return;
-        // overlay_deliverables_edit() falls back to rendering the Standard
-        // table for an unset brief_type — fine as a server-side default,
-        // but a confusing thing to land a user on if they never actually
-        // picked one. Caught here instead so the fix (go pick one) is
-        // obvious rather than "why does this look wrong."
+        // The server renders Standard for an unset brief_type, so ask the
+        // user to pick one first.
         if (!contentEl.dataset.createBriefType) {
             if (window.showToast) window.showToast('Choose Standard or C&CM first.', 'error');
             return;
         }
-        // Wait for any in-flight Details autosave (e.g. a customer checkbox
-        // just ticked) to actually land server-side before fetching this
-        // step — otherwise this can render against a stale project and
-        // miss customers/fields that were "saved" a moment too late.
+        // Wait for any in-flight Details autosave so the render isn't stale.
         return _pendingDetailsSave.then(function () {
             return fetch('/projects/' + projectId + '/overlay/deliverables/edit');
         })
@@ -431,7 +379,7 @@
                 var statusEl = footerEl ? footerEl.querySelector('#project-overlay-create-autosave-status') : null;
                 if (statusEl) statusEl.textContent = '';
                 var continueBtn = footerEl ? footerEl.querySelector('#project-overlay-create-continue') : null;
-                // Wired for real in #64 (confirm summary modal + finalize).
+                // On this step, Continue opens the confirm summary (wireStepNav).
                 if (continueBtn) continueBtn.textContent = 'Add New Project →';
                 bindDeliverablesStep(contentEl, projectId);
             });
@@ -462,7 +410,7 @@
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // Confirm summary modal + finalize (task #64)
+    // Confirm summary modal + finalize
     // ════════════════════════════════════════════════════════════════════
 
     function openCreateSummaryModal(projectId, continueBtn) {
@@ -472,8 +420,7 @@
             .then(function (data) {
                 if (continueBtn) continueBtn.disabled = false;
                 if (!data.success) {
-                    // Standard's "no deliverables" case lands here — a toast,
-                    // not a modal, per Ezekiel's original spec for that rule.
+                    // e.g. Standard with no deliverables: shown as a toast.
                     if (window.showToast) window.showToast(data.error || 'Could not prepare summary.', 'error');
                     return;
                 }
@@ -529,10 +476,8 @@
             });
     }
 
-    // Wires close + step navigation, then binds whichever step's fragment
-    // is currently sitting in the DOM. Called once right after the shell
-    // HTML first lands (from init(), below) and again every time
-    // loadDetailsStep() re-fetches the whole shell (going "back").
+    // Wires close + step navigation, then binds whichever step is in the DOM.
+    // Runs on init() and each time loadDetailsStep() re-fetches the shell.
     function initShell(projectId) {
         var closeBtn = document.getElementById('project-overlay-close');
         if (closeBtn && _closeCallback) closeBtn.addEventListener('click', _closeCallback);
@@ -553,12 +498,9 @@
         }
     }
 
-    // Entry point — called once by project_list.js right after the create
-    // shell's HTML is first injected into #project-overlay-mount (see
-    // openNewProjectOverlay in project_list.js). onFinalized(projectId) is
-    // called after a successful Confirm on the summary modal — project_list.js
-    // passes its own openProjectOverlay so the newly-created project opens
-    // straight into the full, all-tabs live overlay.
+    // Entry point, called by project_list.js's openCreateShellForDraft once
+    // the shell is in #project-overlay-mount. onFinalized(projectId) runs
+    // after Confirm; project_list.js passes openProjectOverlay.
     function init(projectId, closeCallback, onFinalized) {
         _closeCallback = closeCallback;
         _onFinalized = onFinalized;

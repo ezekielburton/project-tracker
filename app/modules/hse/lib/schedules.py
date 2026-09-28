@@ -1,14 +1,10 @@
 """
-The Schedule tab's own logic: what a recurring obligation may say, and how
-it reads on the page.
+Schedule page logic: validating a schedule form and formatting schedules
+for the table.
 
-Validation here is deliberately pure — no database, no mapped model — so
-every rule can be tested without the app, and so the same code can preview
-dates for a form that has not been saved yet.
-
-Nothing in this module writes. Occurrences come from lib/schedule.py and
-are computed at read time; this file only decides what a schedule is
-allowed to be.
+Validation is pure (no database), so rules test without the app and an
+unsaved form can preview its dates. Nothing here commits; apply_payload
+only sets fields on the model. Date generation lives in lib/schedule.py.
 """
 
 from collections import namedtuple
@@ -23,8 +19,8 @@ from app.modules.hse.lib.schedule import (
 MAX_LABEL = 200
 MAX_INTERVAL = 99
 
-# How many dates the form shows back, and how far ahead it will look to
-# find them — three years covers an annual schedule with an interval.
+# Dates the form previews, and how far ahead it looks (covers multi-year
+# annual intervals).
 PREVIEW_COUNT = 5
 PREVIEW_HORIZON_DAYS = 366 * 3
 
@@ -35,7 +31,7 @@ FREQUENCY_LABELS = (('daily', 'Daily'), ('weekly', 'Weekly'),
                     ('monthly', 'Monthly'), ('quarterly', 'Quarterly'),
                     ('annual', 'Annual'))
 
-# The frequencies that take a day of the month rather than a weekday.
+# Frequencies that take a day of the month, not a weekday.
 MONTHLY_FREQUENCIES = ('monthly', 'quarterly', 'annual')
 
 _ORDINAL_LAST = {1: 'st', 2: 'nd', 3: 'rd'}
@@ -45,21 +41,20 @@ WEEKDAY_SHORT = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
 ASSET_PLURALS = {'vehicle': 'vehicles', 'machine': 'machines',
                  'forklift': 'forklifts', 'area': 'areas'}
 
-# How far back the table looks for work he still owes. Long enough to catch
-# a missed monthly, short enough that a schedule abandoned last year does
-# not permanently read as overdue.
+# How far back the table counts missed dates. Catches a missed monthly
+# without an old, abandoned schedule reading as overdue forever.
 LOOKBACK_DAYS = 120
 
 
-# A saved schedule and an unsaved form both need to generate dates, and the
-# engine only reads attributes — so a plain record stands in for the model.
+# Stand-in for HseSchedule so an unsaved form can generate dates; the
+# engine only reads attributes.
 Plan = namedtuple(
     'Plan', 'frequency interval weekday day_of_month starts_on ends_on active assets id')
 Plan.__new__.__defaults__ = (True, (), None)
 
 
 class ValidationError(Exception):
-    """Carries a field -> message map straight back to the form."""
+    """Carries a field -> message map back to the form."""
 
     def __init__(self, errors):
         super().__init__('invalid schedule')
@@ -89,8 +84,8 @@ def _ordinal(n):
 
 
 def cadence_text(schedule):
-    """How often, in the words the officer would use. Read off the same
-    fields the generator uses, so the sentence cannot drift from the dates."""
+    """Cadence as a sentence ("Every 2 weeks on Monday"), used on calendar
+    cards. Reads the same fields as the date generator."""
     freq = schedule.frequency
     every = max(1, schedule.interval or 1)
 
@@ -123,10 +118,8 @@ def cadence_text(schedule):
 
 
 def cadence_short(schedule):
-    """The compact form for the table — "Weekly · Mon", "Every 6 months ·
-    5th". cadence_text() stays the sentence form the calendar cards use;
-    both read the same fields as the generator, so neither can drift from
-    the dates."""
+    """Compact cadence for the table ("Weekly · Mon", "Every 6 months ·
+    5th"). Reads the same fields as the date generator."""
     freq = schedule.frequency
     every = max(1, schedule.interval or 1)
 
@@ -158,20 +151,15 @@ def cadence_short(schedule):
 
 
 def applies_to_text(schedule):
-    """What the schedule covers, in a few words.
-
-    A list of every plate is unreadable at four vehicles and useless at
-    twelve, so anything past two collapses to a count of its kind. The
-    full list is still in the form.
-    """
+    """What the schedule covers, in a few words. Up to two assets are
+    named; more collapse to a count ("6 vehicles")."""
     declared = list(schedule.assets or [])
     if not declared:
         return 'Site-wide'
 
     active = [a for a in declared if getattr(a, 'active', True)]
     if not active:
-        # Every asset retired: the schedule is due for nothing, and saying
-        # so is better than naming things that no longer exist.
+        # Every asset retired: the schedule is due for nothing.
         return 'Nothing active'
     if len(active) <= 2:
         return ', '.join(a.ref or a.label for a in active)
@@ -183,46 +171,33 @@ def applies_to_text(schedule):
 
 
 def due_status(schedule, entries=(), today=None, lookback_days=LOOKBACK_DAYS):
-    """The date this schedule is actually waiting on, and how it reads.
-
-    Not simply the next future occurrence. If Monday's inspection was never
-    done then Monday is what he owes, and showing next Monday instead would
-    hide it behind a date that looks fine. The oldest outstanding occurrence
-    wins; only when nothing is outstanding does the next one show.
-    """
+    """Next due date plus how many dates were missed within the lookback.
+    `overdue_days` is the age of the oldest miss; the header's overdue
+    count and lateness sorting read it."""
     today = today or date.today()
     if not getattr(schedule, 'active', True):
-        return {'date': None, 'label': None, 'overdue_days': 0}
+        return {'date': None, 'label': None, 'missed': 0, 'overdue_days': 0}
 
-    # occurrences() comes back in date order, so the first overdue one is
-    # the oldest thing he still owes.
+    # occurrences() is date-ordered, so the first miss is the oldest.
     window_start = today - timedelta(days=lookback_days)
-    for occ in occurrences([schedule], entries, window_start, today, today):
-        if occ['state'] == 'overdue':
-            days = (today - occ['date']).days
-            return {'date': occ['date'], 'label': f'{days}d overdue',
-                    'overdue_days': days}
+    missed = [occ['date'] for occ in
+              occurrences([schedule], entries, window_start, today, today)
+              if occ['state'] == 'overdue']
+    overdue_days = (today - missed[0]).days if missed else 0
 
     upcoming = next_due(schedule, today)
-    if upcoming is None:
-        return {'date': None, 'label': None, 'overdue_days': 0}
-    ahead = (upcoming - today).days
-    return {'date': upcoming,
-            'label': 'Today' if ahead == 0 else f'{ahead}d',
-            'overdue_days': 0}
+    label = None
+    if upcoming is not None:
+        ahead = (upcoming - today).days
+        label = 'Today' if ahead == 0 else f'in {ahead}d'
+    return {'date': upcoming, 'label': label, 'missed': len(missed),
+            'overdue_days': overdue_days}
 
 
 def clean_payload(payload, available_asset_ids=(), check_assets=True):
-    """Turn a submitted form into the values a schedule may hold.
-
-    Raises ValidationError with a field -> message map. Returns
-    (values, asset_ids); `values` maps one-to-one onto HseSchedule columns.
-
-    `check_assets=False` skips the asset rules only — the preview uses it,
-    because which assets are picked never changes the dates, and refusing
-    to show them until the asset list is right would hide the one thing
-    the preview exists to catch.
-    """
+    """Validate a submitted form. Returns (values, asset_ids), where `values`
+    maps onto HseSchedule columns; raises ValidationError otherwise.
+    `check_assets=False` skips the asset rules (the date preview uses it)."""
     errors = {}
     payload = payload or {}
 
@@ -236,8 +211,7 @@ def clean_payload(payload, available_asset_ids=(), check_assets=True):
     if reg is None:
         errors['register'] = 'Pick a register'
     elif not reg.schedulable:
-        # Vehicle service is mileage-driven and preventive maintenance is
-        # called when a machine stops; neither has a calendar due date.
+        # e.g. mileage-driven or on-demand registers have no calendar date.
         errors['register'] = f'{reg.label} cannot be put on a schedule'
 
     frequency = (payload.get('frequency') or '').strip()
@@ -299,7 +273,7 @@ def clean_payload(payload, available_asset_ids=(), check_assets=True):
         if field is None and asset_ids:
             errors['asset_ids'] = f'{reg.label} does not record an asset'
         elif field is not None and field.required and not asset_ids:
-            # Otherwise "Log it" would open a form it cannot satisfy.
+            # Otherwise "Log it" would open a form that cannot be completed.
             errors['asset_ids'] = f'Pick at least one — {reg.label} needs a {field.label.lower()}'
 
     if errors:
@@ -319,8 +293,8 @@ def clean_payload(payload, available_asset_ids=(), check_assets=True):
 
 
 def plan_from(values):
-    """The duck-typed stand-in the generator needs, built from cleaned
-    values — so a form can be previewed before it is ever saved."""
+    """A Plan built from cleaned values, so an unsaved form can generate
+    dates."""
     return Plan(
         frequency=values['frequency'],
         interval=values['interval'],
@@ -332,12 +306,8 @@ def plan_from(values):
 
 
 def preview_dates(values, count=PREVIEW_COUNT, today=None):
-    """The next few dates this form would produce.
-
-    The cheapest guard there is against "every 2 weeks" being typed where
-    "every 2 months" was meant: he sees it before saving, rather than a
-    month later as a run of missed inspections.
-    """
+    """The next few dates this form would produce, shown before saving to
+    catch a wrong frequency."""
     today = today or date.today()
     plan = plan_from(values)
     horizon = max(today, values['starts_on']) + timedelta(days=PREVIEW_HORIZON_DAYS)
@@ -345,8 +315,8 @@ def preview_dates(values, count=PREVIEW_COUNT, today=None):
 
 
 def apply_payload(schedule, payload, assets_by_id):
-    """Validate, then write onto the schedule. All-or-nothing: a rejected
-    form leaves the existing schedule exactly as it was."""
+    """Validate, then set the values on the schedule. All-or-nothing: a
+    rejected form leaves the schedule untouched."""
     values, asset_ids = clean_payload(payload, tuple(assets_by_id))
     for name, value in values.items():
         setattr(schedule, name, value)
@@ -355,12 +325,9 @@ def apply_payload(schedule, payload, assets_by_id):
 
 
 def serialize_schedule(schedule, today=None, entries=(), last_done=None):
-    """One row of the schedule table.
-
-    `entries` are the entries already filed against schedules, so the due
-    column can tell "waiting on Monday" from "next Monday". `last_done`
-    maps schedule id to the most recent date filed against it.
-    """
+    """One row of the schedule table. `entries` (filed against schedules)
+    feed the missed count; `last_done` maps schedule id to its latest
+    filed date."""
     reg = register(schedule.register)
     return {
         'id': schedule.id,
@@ -390,14 +357,14 @@ DATE_FORMAT = '%d %b %Y'
 
 
 def display_row(row):
-    """The same row with every date already formatted, so the JSON a save
-    returns carries no dates for the browser to reformat differently from
-    the server."""
+    """The row with dates pre-formatted, so the save response's JSON renders
+    the same as the server-rendered table."""
     due = row['due']
     out = dict(row)
     out['due'] = {
         'date_label': due['date'].strftime(DATE_FORMAT) if due['date'] else None,
         'label': due['label'],
+        'missed': due['missed'],
         'overdue_days': due['overdue_days'],
     }
     out['last_done_label'] = (row['last_done'].strftime(DATE_FORMAT)
@@ -409,9 +376,8 @@ def display_row(row):
 
 
 def form_payload(row):
-    """Just what the edit form needs, as JSON-safe values. Dates go out as
-    ISO strings because that is what a date input reads; the table keeps the
-    real date objects for formatting."""
+    """The edit form's values, JSON-safe. Dates are ISO strings, the format
+    a date input reads."""
     return {
         'id': row['id'],
         'label': row['label'],
@@ -428,8 +394,8 @@ def form_payload(row):
 
 
 def form_options():
-    """What the form may offer: the registers that can carry a schedule,
-    and whether each one records an asset."""
+    """Form choices: schedulable registers (with their asset field, if
+    any), frequencies and weekdays."""
     registers = []
     for reg in schedulable_registers():
         field = asset_field(reg)

@@ -1,14 +1,6 @@
-"""Coverage for the Digital Innovation step-advancement state machine
-(lib/step_engine.py, "brain A"). No routes/HTTP here - this exercises the
-rules directly against the database, the same way
-client_servicing/tests/test_client_servicing_models.py covers its models.
-
-move_to_stage() replaced advance_stage() once Ezekiel confirmed he wants
-free movement to any stage, forward or backward, with no completion gate
-- see step_engine.py's module docstring. Tests below reflect that: there
-is no more "refuses when a step is still open" or "auto-advances on
-delete" behaviour to cover, and instead there is resume-on-revisit,
-seed-on-first-visit, and unconstrained direction to cover."""
+"""Tests for lib/step_engine.py, called directly (no HTTP): free movement
+in both directions, seed on first visit, resume on revisit, and step
+edits never moving the feature."""
 import pytest
 
 from app.modules.digital_innovation.models import DiProject, DiStepTemplate, DI_STAGES
@@ -107,13 +99,13 @@ def test_move_to_stage_moves_forward_and_seeds_a_new_stage(db_session):
     _template(db_session, DI_STAGES[0], 'Step one')
     _template(db_session, DI_STAGES[1], 'Planning step')
     feature = engine.create_feature(project, 'New thing')
-    # deliberately left unticked - movement is no longer gated on this
+    # left unticked: movement is not gated on completion
 
     engine.move_to_stage(feature, DI_STAGES[1])
 
     assert feature.status == DI_STAGES[1]
     assert [s.title for s in feature.steps if s.stage == DI_STAGES[1]] == ['Planning step']
-    # the old stage's step is kept, still there, for history
+    # the previous stage's step is kept
     assert any(s.stage == DI_STAGES[0] for s in feature.steps)
 
 
@@ -178,7 +170,7 @@ def test_move_to_stage_resumes_existing_steps_on_revisit(db_session):
     engine.tick_step(feature.steps[0], done=True)
 
     engine.move_to_stage(feature, DI_STAGES[1])  # leave researching
-    # add a template that would seed differently if reseeded
+    # a new template step that would show up if the stage were reseeded
     _template(db_session, DI_STAGES[0], 'Would-be second step')
     engine.move_to_stage(feature, DI_STAGES[0])  # come back
 
@@ -207,12 +199,11 @@ def test_delete_step_never_advances_the_feature(db_session):
     feature = engine.create_feature(project, 'New thing')
     keep, remove = feature.steps
     engine.tick_step(keep, done=True)
-    # `remove` is left unticked, then deleted - completing the stage
+    # deleting the only unticked step completes the stage
 
     engine.delete_step(remove)
 
-    # no more auto-advance-on-completion - stage movement is always an
-    # explicit move_to_stage() call now
+    # completing the stage does not move the feature
     assert feature.status == DI_STAGES[0]
     assert [s.title for s in feature.steps] == ['Keep me']
 
@@ -301,3 +292,25 @@ def test_seeding_from_a_template_copies_both_title_and_details(db_session):
 
     assert feature.steps[0].title == 'Write the brief'
     assert feature.steps[0].details == 'One page, sent to the client for sign-off.'
+
+
+def test_reopen_feature_returns_a_closed_feature_to_the_last_stage_with_its_steps(db_session):
+    project = _project(db_session, 'reopen-a')
+    feature = engine.create_feature(project, 'Shipped thing', starting_stage=DI_STAGES[-1])
+    step = engine.add_step(feature, 'Deploy')
+    engine.tick_step(step, done=True)
+    engine.close_feature(feature)
+    db_session.flush()
+
+    engine.reopen_feature(feature)
+
+    assert feature.status == DI_STAGES[-1]
+    assert feature.closed_at is None
+    assert [(s.title, s.is_done) for s in feature.steps] == [('Deploy', True)]
+
+
+def test_reopen_feature_refuses_an_open_feature(db_session):
+    project = _project(db_session, 'reopen-b')
+    feature = engine.create_feature(project, 'Still open')
+    with pytest.raises(ValueError):
+        engine.reopen_feature(feature)

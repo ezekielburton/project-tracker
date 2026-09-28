@@ -1,9 +1,10 @@
 """
-project_overlay/create.py — the multi-step "New Project" create-draft flow:
-create shell, draft-card list, finalize/validation, draft deletion.
+project_overlay/create.py — the "New Project" draft flow: draft autosave,
+create shell, summary + finalize, the resumable-drafts picker, and draft
+deletion.
 
 _CREATE_REGION_NAMES / _CREATE_REGION_ORDER live in ._common because
-details.py's _build_details_context needs them too.
+details.py's _build_details_context uses them too.
 """
 
 from flask import render_template, abort, request, jsonify
@@ -24,18 +25,17 @@ from ._common import (
 from app.modules.core.shared.lib.capabilities import can
 
 def _can_create_project(actor):
-    """Who can start a new project — admin/cs/management/project_owner.
-    Role-only; there's no project yet to scope against."""
+    """Who can start a new project (the create_projects capability). Role
+    only; there is no project yet to scope against."""
     return can('create_projects', actor)
 
 
 def _drop_unselected_brief_data(project):
-    """At finalize, only the selected brief type's data survives — anything
-    entered for the other type while trying it out is dropped. Both coexist
-    freely until here (see overlay_create_draft) so switching never loses work."""
+    """At finalize, drop data entered for the brief type not chosen. Both
+    types' data coexist during the draft so switching loses nothing."""
     from app.modules.core.shared.extensions import db
     if project.brief_type == 'standard':
-        # deleting ProjectCustomer rows cascades to their C&CM deliverables.
+        # Deleting ProjectCustomer rows cascades to their C&CM deliverables.
         for pc in list(project.project_customers):
             db.session.delete(pc)
         project.has_concept = False
@@ -67,8 +67,7 @@ def _create_mode_context(project, actor):
     }
     selected_customer_ids = {pc.customer_id for pc in project.project_customers if not pc.cancelled}
 
-    # can_manage_reference_files — duplicated from _build_details_context
-    # (its live version folds in extra checks that don't apply here).
+    # Same rule as can_manage_reference_files in _build_details_context.
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
     can_manage_reference_files = (
         can('manage_projects', actor)
@@ -94,9 +93,8 @@ def _create_mode_context(project, actor):
 @project_overlay_bp.route('/projects/overlay/new', methods=['POST'])
 @login_required
 def overlay_create_draft():
-    """Create or (given a project_id) patch the draft Project the create-mode
-    overlay works against. One endpoint for both — the frontend just posts
-    "here's what I know so far" and gets a project_id back."""
+    """Create a draft, or patch it when project_id is given. Returns the
+    project_id. Used by create-mode autosave."""
     from datetime import datetime as _dt
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import Scope, ProjectCustomer, Customer
@@ -124,8 +122,7 @@ def overlay_create_draft():
         draft = Project(
             name=(data.get('name') or '').strip() or 'Untitled Draft',
             client='TBD',
-            # cs_lead_id is NOT NULL — default to the actor; the CS Lead
-            # select lets them change it before finalizing.
+            # cs_lead_id is NOT NULL; default to the actor until one is picked.
             cs_lead_id=int(data['cs_lead_id']) if data.get('cs_lead_id') else actor.id,
             creator=actor,
             project_status='draft',
@@ -136,13 +133,11 @@ def overlay_create_draft():
         db.session.flush()
         record_project_status(draft, 'draft', actor)
 
-    # Every field below is optional per call — autosave sends only the field
-    # that changed, so a call with none still succeeds.
+    # Every field is optional: autosave sends only what changed.
     if 'name' in data:
         draft.name = (data.get('name') or '').strip() or 'Untitled Draft'
     if 'job_number' in data:
-        # job_number is unique — check here for a clean error instead of a
-        # 500 from the DB constraint.
+        # job_number is unique; check here for a clean error instead of a 500.
         job_number = (data.get('job_number') or '').strip() or None
         if job_number and Project.query.filter(Project.job_number == job_number, Project.id != draft.id).first():
             return jsonify({'error': f'Job number "{job_number}" is already in use.'}), 400
@@ -150,7 +145,7 @@ def overlay_create_draft():
     if 'brief_type' in data and data['brief_type'] in ('standard', 'ccm'):
         draft.brief_type = data['brief_type']
     if data.get('cs_lead_id'):
-        # cs_lead_id is NOT NULL — ignore an empty selection rather than null it.
+        # cs_lead_id is NOT NULL, so an empty selection is ignored.
         draft.cs_lead_id = int(data['cs_lead_id'])
     if 'project_owner_id' in data:
         draft.project_owner_id = int(data['project_owner_id']) if data.get('project_owner_id') else None
@@ -160,8 +155,7 @@ def overlay_create_draft():
         draft.contact_id = int(data['contact_id']) if data.get('contact_id') else None
     if 'design_teams' in data:
         draft.design_teams_requested = ','.join(data.get('design_teams') or [])
-    # first_output_deadline is derived — see _recompute_initial_deadline() at
-    # the end of this route.
+    # first_output_deadline is derived by _recompute_initial_deadline() below.
     if 'execution_date' in data:
         draft.execution_date = _parse_edit_date(data.get('execution_date'))
     if 'is_production_only' in data:
@@ -181,9 +175,9 @@ def overlay_create_draft():
     if 'additional_information' in data:
         draft.additional_information = data.get('additional_information') or None
 
-    # C&CM-only. Concept and KV are one tickbox/deadline/options set in create
-    # mode but two column-sets in the model — mirror each write onto both
-    # sides. concept_kv_requirements is stored on kv_requirements.
+    # C&CM-only. Concept & KV is one field set in the form but two column
+    # sets in the model, so each write goes to both. Requirements are stored
+    # on kv_requirements.
     if 'urgency' in data:
         draft.urgency = data.get('urgency') or None
     if 'has_concept_kv' in data:
@@ -201,8 +195,8 @@ def overlay_create_draft():
         draft.concept_options_required = value or None
         draft.kv_options_required = value or None
 
-    # C&CM customer picker — sent as the full checked set each time. Customers
-    # no longer checked are removed (nothing downstream references a draft yet).
+    # C&CM customer picker sends the full checked set; unchecked customers are
+    # deleted (safe, as nothing references a draft yet).
     if 'customer_ids' in data:
         wanted_ids = {int(cid) for cid in (data.get('customer_ids') or [])}
         existing = {pc.customer_id: pc for pc in draft.project_customers}
@@ -213,8 +207,8 @@ def overlay_create_draft():
             if customer_id not in existing and Customer.query.get(customer_id):
                 db.session.add(ProjectCustomer(project_id=draft.id, customer_id=customer_id))
 
-        # Keep ProjectRegion synced to the selected customers' regions — the
-        # NAS folder tree is built off ProjectRegion. Full replace.
+        # Rebuild ProjectRegion from the selected customers: the NAS folder
+        # tree is built from it.
         from app.modules.core.shared.models import ProjectRegion
         wanted_regions = {
             c.region for c in Customer.query.filter(Customer.id.in_(wanted_ids)).all() if c.region
@@ -237,9 +231,8 @@ def overlay_create_draft():
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/create')
 @login_required
 def overlay_create_shell(project_id):
-    """The create-mode overlay shell — Details then Deliverables only, no
-    lifecycle sidebar. Only for the draft's creator (or admin/management),
-    and only while it's still a draft."""
+    """Create-mode overlay shell: Details and Deliverables only, no
+    lifecycle sidebar. Draft's creator or admin/management, drafts only."""
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     if project.project_status != 'draft' or not (
@@ -252,15 +245,15 @@ def overlay_create_shell(project_id):
 
 
 def _can_finalize_create(project, actor):
-    """The draft's creator, or admin/management. (The finalize routes also
-    check project_status == 'draft' separately.)"""
+    """The draft's creator, or admin/management. Callers check
+    project_status == 'draft' separately."""
     return project.created_by_id == actor.id or can('manage_projects', actor)
 
 
 def _validate_for_finalize(project):
-    """Return an error string, or None if ready to become a real project.
-    Standard needs a deliverable; C&CM needs either Concept & KV with a
-    deadline or at least one deliverable."""
+    """Return an error string, or None if the draft can be finalized.
+    Standard needs a deliverable; C&CM needs a deliverable or Concept & KV
+    with a deadline."""
     if not project.name or not project.client_id or not project.cs_lead_id or not project.brief_type:
         return 'Fill in Name, Client, CS Lead, and Brief Type before creating this project.'
 
@@ -282,8 +275,8 @@ def _validate_for_finalize(project):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/create/summary')
 @login_required
 def overlay_create_summary(project_id):
-    """Renders the confirm-and-create modal. A validation failure comes back
-    as JSON so the frontend can toast it instead of opening a modal."""
+    """Render the confirm-and-create modal as JSON-wrapped HTML. A validation
+    error comes back in the JSON instead, for a toast."""
     from app.modules.core.shared.models import Deliverable
 
     project = Project.query.get_or_404(project_id)
@@ -308,8 +301,8 @@ def overlay_create_summary(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/create/finalize', methods=['POST'])
 @login_required
 def overlay_create_finalize(project_id):
-    """Confirm button — turns the draft into a real project. Re-validates
-    server-side (the summary and this click can be minutes apart)."""
+    """Turn the draft into a real project ('briefed'). Re-validates, since
+    the draft may have changed since the summary."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import Deliverable
     from app.modules.core.shared.services.status_tracking import record_project_status
@@ -327,10 +320,9 @@ def overlay_create_finalize(project_id):
 
     record_project_status(project, 'briefed', actor)
 
-    _drop_unselected_brief_data(project) # NEW
+    _drop_unselected_brief_data(project)
 
-    # Production Only (Standard) — every deliverable skips straight to
-    # Pre-Production.
+    # Production Only (Standard): every deliverable skips to Pre-Production.
     if project.is_production_only:
         deliverables = Deliverable.query.filter_by(project_id=project.id).all()
         if deliverables:
@@ -356,16 +348,14 @@ def overlay_create_finalize(project_id):
 @project_overlay_bp.route('/projects/overlay/drafts')
 @login_required
 def list_drafts():
-    """Resumable-drafts entry point. "+ New Project" calls this first; if any
-    drafts come back the frontend shows a picker. Creators see their own;
-    admin/management see everyone's. Path is under /projects/overlay/ to avoid
-    colliding with the legacy /projects/drafts route."""
+    """Called first by + New Project; if drafts exist the frontend shows a
+    resume picker. Creators see their own; admin/management see all. Lives
+    under /projects/overlay/ to avoid clashing with /projects/drafts."""
     actor = _get_actor()
     query = Project.query.filter_by(project_status='draft')
     if not can('manage_projects', actor):
         query = query.filter_by(created_by_id=actor.id)
-    # Most-recently-worked-on first — the one they just left is the one they
-    # most likely want back.
+    # Most recently worked on first.
     drafts = query.order_by(Project.last_autosaved_at.desc()).all()
 
     if not drafts:
@@ -381,9 +371,8 @@ def list_drafts():
 @project_overlay_bp.route('/projects/<int:project_id>/draft', methods=['DELETE'])
 @login_required
 def delete_draft(project_id):
-    """Discard an abandoned draft — creator or admin/management, and only
-    while it's still a draft. Cleans up its reference files from the NAS first
-    (cascade only removes DB rows, not NAS files)."""
+    """Discard a draft (creator or admin/management). Deletes its reference
+    files from the NAS first; the DB cascade doesn't touch NAS files."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.lib.utils import log_activity
     from app.modules.core.shared.services.nas import delete_app_file, build_file_path
@@ -395,8 +384,7 @@ def delete_draft(project_id):
     if not (project.created_by_id == actor.id or can('manage_projects', actor)):
         abort(403)
 
-    # delete_app_file() logs and swallows its own NAS failures, so no
-    # try/except needed here.
+    # delete_app_file() logs and swallows its own NAS failures.
     for f in list(project.reference_files):
         nas_path = build_file_path(project, 'Reference Files', f.original_filename)
         delete_app_file(nas_path)

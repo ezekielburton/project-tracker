@@ -1,23 +1,13 @@
-{# One macro per Client Servicing table column — each returns the exact
-   <td> markup for that column, unchanged from before this file existed.
-   Which columns appear, and in what order, is driven by the `columns`
-   list built in table.py (COLUMNS) and rendered by _table_rows.html —
-   this file only answers "how do I render column X", never "which
-   columns, in what order". That separation is what makes column
-   resize/reorder possible without touching this file.
+{# One macro per Client Servicing table column, returning that column's <td>.
+   Which columns show, and in what order, comes from table.py's COLUMNS via
+   _table_rows.html.
 
-   Every <td> carries data-col-key matching its column's key in COLUMNS —
-   the reorder-drag JS (client_servicing.js) uses it to find and move each
-   row's cell alongside its <th>/<col> when the user drags a header.
+   Every <td> needs data-col-key (its COLUMNS key), which the reorder drag in
+   client_servicing.js uses to move cells with their header.
 
-   Every <td> also carries data-sort-value for click-to-sort: one flat,
-   sortable primitive per column — an ISO date string
-   for date columns, a raw number for numeric columns (never the
-   formatted display text, which would sort "9" after "10"), a plain
-   name string for person columns. Blank/missing values are always '',
-   which client_servicing.js's sort always pushes to the bottom
-   regardless of direction, so unset dates/values don't scatter through
-   the middle of a sorted column. #}
+   Every <td> also needs data-sort-value for click-to-sort: an ISO date, a raw
+   number (never formatted text, which sorts "9" after "10"), or a plain name.
+   Blank is '', which the sort always puts last. #}
 {% from '_shared_macros.html' import person_chip, status_pill, tag %}
 
 {% macro cell_client(row) %}<td data-col-key="client" data-sort-value="{{ row.client or '' }}">{{ row.client or '—' }}</td>{% endmacro %}

@@ -1,8 +1,5 @@
-"""Group A2 regression test: project-row expand used to lazy-load each
-deliverable's disciplines and each discipline's designer one at a time.
-Now eager-loaded in the expand query itself. This proves the query count
-no longer grows with the number of deliverables, for both the Standard
-project path (expand) and the C&CM per-customer path (expand_customer)."""
+"""Project-row expand (Standard expand and C&CM expand_customer) renders
+deliverables and designers with a query count that stays flat as they grow."""
 from app.modules.core.shared.models import (
     User, Project, ProjectCustomer, Customer, Deliverable, DeliverableAssignment,
 )

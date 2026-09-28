@@ -4,9 +4,8 @@ from datetime import datetime
 
 class ActivityLog(db.Model):
     __tablename__ = 'activity_logs'
-    # App-wide audit log — every log_activity() call writes here, so it grows
-    # continuously. (entity_type, entity_id) is queried constantly (dashboard's
-    # What Changed card, the Projects unread-dots), so index it explicitly.
+    # App-wide audit log written by log_activity(). (entity_type, entity_id) is
+    # hot (What Changed card, Projects unread dots), hence the index.
     __table_args__ = (
         db.Index('ix_activity_logs_entity_type_entity_id', 'entity_type', 'entity_id'),
     )
@@ -25,9 +24,8 @@ class ActivityLog(db.Model):
 
 
 class SidebarClick(db.Model):
-    """Analytics table — records every sidebar link click.
-    Used by admin to see which tools and pages are most used.
-    Written to by POST /sidebar/track (fire-and-forget from sidebar.js)."""
+    """One row per sidebar link click, for admin usage stats. Written by
+    POST /sidebar/track (fire-and-forget from sidebar.js)."""
     __tablename__ = 'sidebar_clicks'
 
     id         = db.Column(db.Integer, primary_key=True)

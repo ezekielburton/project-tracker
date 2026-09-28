@@ -1,10 +1,10 @@
 """
-Monthly Summary rollup for the Invoicing tab. Everything here is computed
-live from the finance fields — nothing stored. Drafts are excluded via the
-shared _base_projects(). Money values are Decimals; the template formats them.
+Rollups for Invoicing > Monthly Summary, computed live from the finance fields.
+Builds on _base_projects() (drafts excluded, closed kept). Money is returned
+as Decimal; the template formats it.
 
-The project's value is Project.value — the one number the Table, Invoicing
-and Closed all read and write.
+A project's value is Project.value, the same figure the Table, Invoicing and
+Closed pages use.
 """
 from datetime import date
 from decimal import Decimal
@@ -18,13 +18,9 @@ _STUCK_VALIDATION = {'no_lpo', 'overdue'}
 
 
 def _billing_month(project):
-    """(year, month) a project is counted in: the date it was invoiced if it
-    has been, else the month it's due to be invoiced in, else the month the
-    work came out. None when it has none of those, and then it isn't in any
-    month's rollup.
-
-    Project.first_output_deadline is deliberately NOT in this chain — that's
-    the design deadline from the Projects page, nothing to do with billing."""
+    """(year, month) a project counts in: invoice_date, else invoice_month_date,
+    else removal_date. None (in no month) if all are unset.
+    Do not add Project.first_output_deadline: it is a design deadline, not billing."""
     cs = project.client_servicing
     if cs is None:
         return None
@@ -51,9 +47,9 @@ def _is_stuck(cs):
 
 
 def year_summary(year):
-    """(rows, total) for one calendar year — one row per month plus a
-    full-year total. Each row: month, label, pipeline, confirmed, invoiced,
-    progress (invoiced/confirmed %), stuck count."""
+    """(rows, total) for a calendar year: one row per month plus the year total.
+    Row keys: month, label, pipeline, confirmed, invoiced, progress
+    (invoiced/confirmed %), stuck, stuck_amount."""
     buckets = {m: {'pipeline': Decimal('0'), 'confirmed': Decimal('0'),
                    'invoiced': Decimal('0'), 'stuck': 0,
                    'stuck_amount': Decimal('0')} for m in range(1, 13)}
@@ -99,13 +95,10 @@ def year_summary(year):
 
 
 def stuck_this_month(year, month):
-    """The month's stuck projects, by name — the same financial set the
-    rollup counts, closed projects included, so the panel's number and its
-    names always agree.
-
-    `closed` says which side of the line each one is on: a closed project is
-    no longer on the Invoicing table, so the Dashboard sends it to the Closed
-    page instead."""
+    """The month's stuck projects, largest value first. Same set the rollup
+    counts (closed included), so the panel's count and list agree. `closed`
+    tells the Dashboard to link to the Closed page, as closed projects are
+    not on the Invoicing table."""
     out = []
     for p in _base_projects().all():
         if _billing_month(p) != (year, month):
@@ -127,9 +120,8 @@ def stuck_this_month(year, month):
 
 
 def due_this_month(year, month):
-    """The selected month's projects that aren't invoiced yet — the ones
-    still needing action. validation_status is returned raw; the route maps
-    it to a pill."""
+    """The month's projects not yet invoiced. validation is returned raw;
+    the route maps it to a pill."""
     out = []
     for p in _base_projects().all():
         if _billing_month(p) != (year, month):

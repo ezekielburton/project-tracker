@@ -1,14 +1,11 @@
-# Performance rollup builder + the month/quarter freeze. get_period_rollup() is
-# the one entry point routes/performance.py calls: it returns the same shape
-# whether the numbers came from a live query or a frozen DiPeriodSnapshot row.
+# Performance rollups and the month/quarter freeze. get_period_rollup() returns
+# the same shape whether live or frozen.
 #
-# Weekly periods are always computed live — DiPeriodSnapshot only ever holds
-# 'month'/'quarter'. A month or quarter freezes automatically on first view once
-# it has fully ended; until then it's recomputed live. Once frozen, every field
-# (including a project's name/colour) is locked to freeze-time — that's the point.
+# Weeks are always live. A month or quarter freezes into DiPeriodSnapshot on its
+# first view after it ends; from then on every field, including project names,
+# is fixed.
 #
-# Every number here is JSON-serializable, since the whole rollup is written into
-# DiPeriodSnapshot.snapshot_data as-is when a period freezes.
+# The rollup is stored as JSON, so every value in it must be JSON-serializable.
 
 from sqlalchemy import func
 
@@ -18,8 +15,7 @@ from app.modules.digital_innovation.models import (
     DiCostEntry, DiPeriodSnapshot, DI_STAGE_COLOURS, DI_COST_TYPES, stage_label,
 )
 
-# Lower-case labels for the "Total cost" card caption — its own map, separate
-# from costs.py's Title-Case DI_COST_TYPE_LABELS (a different display context).
+# Mostly lower-case labels for the "Total cost" card caption.
 _COST_TYPE_CAPTION_LABELS = {
     'dev_time': 'dev',
     'claude': 'Claude',
@@ -29,10 +25,9 @@ _COST_TYPE_CAPTION_LABELS = {
 
 
 def get_period_rollup(period_type, period_key):
-    """The one entry point Performance uses. Returns the rollup dict for
-    period_type/period_key — freshly computed for a week, or for a
-    still-open/current month or quarter, or read straight from a frozen
-    DiPeriodSnapshot for one that has already ended."""
+    """The rollup for a period: live for weeks and unfinished months or
+    quarters; otherwise the frozen snapshot, created and committed on first
+    read."""
     if period_type in ('month', 'quarter') and periods.period_has_ended(period_type, period_key):
         existing = DiPeriodSnapshot.query.filter_by(period_type=period_type, period_key=period_key).first()
         if existing:
@@ -116,11 +111,8 @@ def _compute_rollup(period_type, period_key):
 
 
 def _period_dev_hours(project_ids, period_start, period_end):
-    """(hours-by-project-id, hours-by-feature-id) for dev_time entries
-    dated inside [period_start, period_end] — separate from
-    board_data.py::feature_logged_hours(), which is a lifetime total for
-    the feature detail modal; this one is scoped to whatever window
-    Performance is currently showing."""
+    """(hours by project id, hours by feature id) for dev_time entries dated
+    inside the period."""
     if not project_ids:
         return {}, {}
     rows = (
@@ -143,10 +135,8 @@ def _period_dev_hours(project_ids, period_start, period_end):
 
 
 def _period_cost_types(project_ids, period_start, period_end):
-    """Set of DiCostEntry.type values with at least one entry dated
-    inside the window, across the projects that overlap it — feeds the
-    'Total cost' card's caption (e.g. "dev, Claude, hardware, licensing"
-    when all four show up, fewer names when they don't)."""
+    """Cost types with at least one entry dated inside the period, for the
+    'Total cost' card caption."""
     if not project_ids:
         return set()
     rows = (
@@ -163,12 +153,9 @@ def _period_cost_types(project_ids, period_start, period_end):
 
 
 def _period_total_cost(project_ids, period_start, period_end):
-    """Sum of every cost-ledger entry (any type) dated inside the
-    window, across the projects that overlap it — the 'Total cost' stat
-    card at the top of Performance. Unlike the per-project Cost column in
-    the table (a lifetime running total, same in every period), this one
-    genuinely is period-scoped: 'how much did we spend this
-    week/month/quarter', not 'how much has this project cost overall'."""
+    """Sum of all cost entries dated inside the period, for the 'Total cost'
+    card. Period-scoped, unlike the table's per-project Cost column, which
+    is a lifetime total."""
     if not project_ids:
         return 0.0
     total = (

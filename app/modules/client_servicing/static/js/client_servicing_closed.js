@@ -1,6 +1,6 @@
-/* Closed page — search over the loaded rows, and the mark-invoiced prompt.
-   IIFE + direct init so it re-runs on SPA nav; each half no-ops when its
-   DOM isn't there (a viewer who can't edit finance never gets the modal). */
+/* Closed page: search over the loaded rows, and the mark-invoiced prompt.
+   Init runs inline because the SPA router re-runs this on every visit. The
+   modal half no-ops for viewers who can't edit finance. */
 (function () {
     var table = document.getElementById('cs-closed-table');
     if (!table) return;
@@ -62,9 +62,8 @@
     cancel.addEventListener('click', close);
     modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
 
-    /* One field per request — that's the edit endpoint's shape. The value
-       goes first so a failure there leaves the row untouched rather than
-       invoiced-but-valueless. */
+    /* The edit endpoint takes one field per request. Value is saved first so
+       a failure there leaves the row untouched, not invoiced without a value. */
     function patchField(field, value) {
         return fetch(pending, {
             method: 'PATCH',

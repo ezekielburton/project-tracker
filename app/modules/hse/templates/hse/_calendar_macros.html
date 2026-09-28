@@ -1,6 +1,5 @@
-{# Calendar render macros — the KPI row, the legend, a day's chips and one
-   drawer card. Shared by the month grid, the agenda and the fetched day
-   drawer so the three cannot drift apart. #}
+{# Calendar macros: KPI row, legend, a day's chips, a drawer card. Shared by
+   the month grid, the agenda and the day drawer. #}
 
 {% macro cal_kpis(kpis) %}
 <div class="hse-cal-kpis">
@@ -16,7 +15,7 @@
         <div class="hse-cal-kpi-lab"><span class="hse-cal-dot hse-cal-dot--overdue"></span>Overdue</div>
         <div class="hse-cal-kpi-val">{{ kpis.overdue }}</div>
     </div>
-    {# Nothing due is not the same as failing, so it reads as a dash. #}
+    {# Nothing due shows a dash, not a failing score. #}
     <div class="hse-cal-kpi">
         <div class="hse-cal-kpi-lab">Coverage to date</div>
         <div class="hse-cal-kpi-val">{% if kpis.percent is none %}—{% else %}{{ kpis.percent }}%{% endif %}</div>
@@ -28,14 +27,11 @@
 </div>
 {% endmacro %}
 
-{# The legend is also the filter: clicking a state narrows to it, clicking
-   it again clears. Hollow and filled match the grid, so it reads as a key. #}
+{# The legend doubles as the filter: click a state to narrow, again to clear. #}
 {% macro cal_legend(chips, view) %}
 <div class="hse-cal-legend">
     {% for chip in chips %}
-    {# A key first and a filter second, so it stays as quiet as a key: the
-       count lives in the tooltip rather than putting a number and a box
-       around every state. #}
+    {# Counts go in the tooltip to keep the legend quiet. #}
     <a class="hse-cal-legend-item{{ ' is-selected' if chip.active else '' }}"
        href="{{ url_for('hse.calendar_month', view=view, state=chip.href_state) }}"
        title="{{ chip.count }} {{ chip.label|lower }}">
@@ -52,8 +48,7 @@
 </span>
 {% endmacro %}
 
-{# One card, one thing to do. Flat on purpose — an occurrence covering six
-   vehicles is six cards, because six vehicles is six jobs. #}
+{# One card per job: an occurrence covering six vehicles is six cards. #}
 {% macro drawer_card(card, can_edit) %}
 <div class="hse-cal-card hse-cal-card--{{ card.state }}">
     <div class="hse-cal-card-body">
@@ -77,8 +72,7 @@
             <a class="hse-btn hse-cal-btn" href="#"
                data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=card.entry_id) }}">Open</a>
         {% elif can_edit and card.register %}
-            {# Prefilled, and the save is an ordinary entry — the register
-               table and the tiles update from it too. #}
+            {# Opens a prefilled form; saving makes an ordinary entry. #}
             <a class="hse-btn hse-cal-btn" href="#"
                data-hse-form-url="{{ url_for('hse.new_entry_form',
                     register_key=card.register,
@@ -91,9 +85,8 @@
 </div>
 {% endmacro %}
 
-{# The register picker behind "+ Log entry" and "+ Log something else".
-   Rendered once per page and shown on demand; hse_calendar.js stamps the
-   open day onto the link before handing it to the entry overlay. #}
+{# Register picker behind "+ Log entry" / "+ Log something else", rendered
+   once per page. hse_calendar.js stamps the open day onto the chosen link. #}
 {% macro log_picker(log_registers) %}
 <div class="hse-picker" id="hse-picker" hidden>
     <div class="hse-picker-head">
@@ -104,7 +97,7 @@
         {% for reg in log_registers %}
         <button type="button" class="hse-picker-item" data-register="{{ reg.key }}">
             <span class="hse-picker-item-label">{{ reg.label }}</span>
-            <span class="hse-picker-item-group">{{ reg.group|capitalize }}</span>
+            {% if reg.group %}<span class="hse-picker-item-group">{{ reg.group }}</span>{% endif %}
         </button>
         {% endfor %}
     </div>

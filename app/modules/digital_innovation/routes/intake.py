@@ -1,23 +1,12 @@
-# The Incoming overlay: promote a card into a real feature, dismiss it, and
-# refresh the card list live. A card is one of two kinds (see board_data.py's
-# IncomingCard/pending_intake_items), each with its own promote/dismiss pair:
+# The Incoming tray: promote a card to a feature, dismiss it, and the live card
+# list. Each card is a shared FeatureRequest that DI does not own; see each
+# route for how it is handled.
 #
-# - /intake/<id>/... — a native DiIntakeItem, DI's own row. Promote/dismiss
-#   flips its status.
-# - /feature-requests/<id>/... — a live FeatureRequest, the shared feature-idea
-#   table DI doesn't own, so promote/dismiss can't just flip a flag on it — see
-#   each route's docstring for what it does instead.
+# Promote and dismiss return JSON. The JS reloads the page after a promote and
+# re-fetches intake_cards_fragment after a dismiss.
 #
-# Both promote routes call step_engine.create_feature, so a promoted card starts
-# on the board identically to a hand-typed one. None of the four hand back a
-# fragment — each changes more than the overlay (a promote also adds a card and
-# shifts the active-feature count), so the JS does a full reload.
-#
-# intake_cards_fragment is what digital_innovation_board.js re-fetches when the
-# di_changes SSE channel pings, keeping the Incoming badge and open overlay live
-# from the same _incoming_cards.html partial board.html's initial render uses.
-# Note: di_changes fires only for DI's own watched models, so a brand-new
-# FeatureRequest submission appears only on the next full page load, not live.
+# di_changes fires only for DI models, so a new FeatureRequest shows up on the
+# next page load, not live.
 
 from flask import jsonify, abort, render_template
 from flask_login import login_required, current_user
@@ -38,50 +27,28 @@ def _require_board_write_access():
         abort(403)
 
 
-@digital_innovation_bp.route('/intake/<int:item_id>/promote', methods=['POST'])
-@login_required
-def promote_intake_item(item_id):
-    _require_board_write_access()
-    item = DiIntakeItem.query.filter_by(id=item_id, status='pending').first()
-    if not item:
-        abort(404)
-
-    # item.description isn't carried over — DiFeature has no description field.
-    feature = step_engine.create_feature(item.project, item.title)
-    item.status = 'promoted'
-    db.session.commit()
-
-    return jsonify({'id': item.id, 'status': item.status, 'feature_id': feature.id})
-
-
-@digital_innovation_bp.route('/intake/<int:item_id>/dismiss', methods=['POST'])
-@login_required
-def dismiss_intake_item(item_id):
-    _require_board_write_access()
-    item = DiIntakeItem.query.filter_by(id=item_id, status='pending').first()
-    if not item:
-        abort(404)
-
-    item.status = 'dismissed'
-    db.session.commit()
-
-    return jsonify({'id': item.id, 'status': item.status})
+def _missing_permanent_board_response():
+    # FeatureRequest cards are filed on the permanent board; without it there
+    # is nowhere to put the feature or the dismissal marker.
+    return jsonify({'error': 'The permanent Digital Innovation board is missing. Ask an admin to restore it.'}), 409
 
 
 @digital_innovation_bp.route('/feature-requests/<int:feature_request_id>/promote', methods=['POST'])
 @login_required
 def promote_feature_request(feature_request_id):
-    """Promotes a live FeatureRequest card. Creates the DI feature exactly
-    like any other promote, AND sets the feature request itself to 'in_progress'
-    — that's what removes it from pending_intake_items() (a FeatureRequest shows
-    up there only while status='requested'), reusing the same notification the
-    app sends for that status change (routes/feedback.py's update_fr_status)."""
+    """Creates a feature from a FeatureRequest and sets the request to
+    'in_progress', which takes it off the tray. Logs and notifies the
+    submitter the same way the feedback module's update_fr_status does."""
     _require_board_write_access()
     fr = FeatureRequest.query.filter_by(id=feature_request_id, status='requested').first()
     if not fr:
         abort(404)
 
-    feature = step_engine.create_feature(permanent_project(), fr.title)
+    project = permanent_project()
+    if not project:
+        return _missing_permanent_board_response()
+
+    feature = step_engine.create_feature(project, fr.title)
 
     old_status = fr.status
     fr.status = 'in_progress'
@@ -105,16 +72,25 @@ def promote_feature_request(feature_request_id):
 @digital_innovation_bp.route('/feature-requests/<int:feature_request_id>/dismiss', methods=['POST'])
 @login_required
 def dismiss_feature_request(feature_request_id):
-    """Dismisses a live FeatureRequest card — hides it from THIS tray
-    only. The feature request itself is untouched — still 'requested', still
-    visible/upvotable/commentable on the public Feature Requests page (dismissing
-    here is DI saying "not right now," not the app saying "no"). Recorded as a
-    DiIntakeItem(source_type='feature_request', status='dismissed') purely so
-    pending_intake_items() knows to skip this fr.id next time."""
+    """Hides a FeatureRequest from this tray only; the request itself stays
+    'requested'. Records a 'dismissed' DiIntakeItem marker that
+    pending_intake_items() skips. Idempotent: a repeat dismiss (double click,
+    two tabs) finds the marker and adds no second row."""
     _require_board_write_access()
-    fr = FeatureRequest.query.get_or_404(feature_request_id)
+    fr = FeatureRequest.query.filter_by(id=feature_request_id, status='requested').first()
+    if not fr:
+        abort(404)
+
+    already_dismissed = DiIntakeItem.query.filter_by(
+        source_type='feature_request', source_ref=str(fr.id), status='dismissed',
+    ).first()
+    if already_dismissed:
+        return jsonify({'id': fr.id, 'status': 'dismissed'})
 
     project = permanent_project()
+    if not project:
+        return _missing_permanent_board_response()
+
     dismissal = DiIntakeItem(
         di_project_id=project.id,
         source_type='feature_request',

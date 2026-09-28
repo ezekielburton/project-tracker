@@ -1,10 +1,8 @@
-{# app/templates/project_overlay/_flag_card.html
-One Brief Flag — header (type/subject/meta/resolve), reply thread, and an
-always-open reply box while unresolved. Shared by every flag scope
-(Details' project/concept/kv flags, Deliverables' per-deliverable flags,
-both Active view and the History view's client-rendered items use the
-same visual shape, see project_flags.js's renderHistory). Expects `flag`
-(a BriefFlag with .messages loaded) and `can_manage_flags` in context. #}
+{# app/modules/projects/templates/project_overlay/_flag_card.html
+One Brief Flag: header (type/subject/meta/resolve), reply thread, and a
+reply box while unresolved. Used by every flag scope. Keep in sync with
+renderFlagCard() in project_flags.js, which draws History items. Expects
+`flag` (a BriefFlag with .messages loaded) and `can_manage_flags`. #}
 
 {% set _flag_type_labels = {'project': 'Project', 'deliverable': 'Deliverable', 'concept': 'Concept', 'kv': 'KV'} %}
 

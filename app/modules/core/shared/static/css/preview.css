@@ -1,16 +1,8 @@
-/* File Preview Modal — reuses the existing .modal-overlay backdrop from
-   main.css, but needs its own much larger box than the standard
-   .modal-box (which tops out at 420px, fine for small forms, useless for
-   viewing a document). */
+/* File preview modal — the shared .modal-overlay backdrop with its own
+   large box (.modal-box caps at 420px). */
 
-/* Overrides .modal-overlay's shared z-index (1000) — same value as the
-Detail + Briefing overlay's own backdrop, so whichever one happened to
-render later in the DOM was winning the tie and covering the other.
-File preview should always sit above both the overlay (1000) and its
-avatar-picker popovers (2000), since previewing a file is usually
-something you're doing FROM inside that overlay. Scoped to this one
-modal's id, not the shared .modal-overlay class, so nothing else that
-reuses that class elsewhere in the app is affected. */
+/* Above the project overlay (1000) and its picker popovers (2000), since
+   previews open from inside it. Scoped to this id, not .modal-overlay. */
 
 #file-preview-modal {
     z-index: 2500;
@@ -26,7 +18,7 @@ reuses that class elsewhere in the app is affected. */
     flex-direction: column;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
     overflow: hidden;
-    /* the iframe/image scrolls internally, not the box */
+    /* the body scrolls, not the box */
 }
 
 .file-preview-header {
@@ -36,10 +28,9 @@ reuses that class elsewhere in the app is affected. */
     padding: 16px 20px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     flex-shrink: 0;
-    /* header never shrinks, even if the title is long */
 }
 
-/* The actual viewing area. Fills whatever space is left below the header. */
+/* The viewing area; fills the space below the header. */
 .file-preview-body {
     flex: 1;
     display: flex;
@@ -47,7 +38,7 @@ reuses that class elsewhere in the app is affected. */
     justify-content: center;
     overflow: auto;
     background: var(--gray-525659);
-    /* neutral dark surround, same idea as a PDF reader */
+    /* neutral dark surround, like a PDF reader */
 }
 
 .file-preview-body iframe {
@@ -71,16 +62,14 @@ reuses that class elsewhere in the app is affected. */
     width: 90%;
 }
 
-/* Shown while we're waiting on the preview or pptx conversion to finish */
+/* While the preview (or pptx conversion) loads */
 .file-preview-loading {
     color: var(--white);
     font-family: var(--font-body);
     font-size: 0.95rem;
 }
 
-/* Shown when a file can't be previewed at all — wrong type (415) or a
-   conversion failure (502). Same visual treatment for both; the message
-   text is what tells them apart. */
+/* No preview possible: unsupported type or failed conversion. */
 .file-preview-fallback {
     display: flex;
     flex-direction: column;

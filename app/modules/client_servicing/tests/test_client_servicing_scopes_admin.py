@@ -1,7 +1,5 @@
-"""Coverage for the Scope reference-data endpoints
-(app/modules/client_servicing/routes/scopes_admin.py): full CRUD is
-admin-only (list/create/rename/deactivate), quick-add is open to the same
-cs/management/admin set as the rest of the module."""
+"""Scope endpoints (routes/scopes_admin.py): full CRUD is admin-only;
+quick-add is open to anyone with CS access."""
 import json
 
 from flask import url_for
@@ -140,10 +138,8 @@ def test_quick_add_is_idempotent_for_existing_active_scope(app, client, db_sessi
 
 
 def test_quick_add_reactivates_a_deactivated_scope(app, client, db_session):
-    """Returning an inactive scope's id here without reactivating it would
-    be a dead end - edit.py's _parse_scope_id only accepts active scopes,
-    so the very next save would fail with "must be a valid scope" right
-    after the user just "added" it."""
+    """Quick-add reactivates an inactive scope; edit.py only accepts active
+    scopes, so the next save would fail otherwise."""
     cs_user = _user(db_session, 'j', role='cs')
     scope = _scope(db_session, 'j', active=False)
     login_as(client, app, cs_user, 'password123')

@@ -5,9 +5,9 @@ window.ProjectSubmissionsDraftCard = (function () {
         return div.innerHTML;
     }
 
-    // Tracks the last-bound cleanup listeners for the gated-removal modal
-    // step, so repeated use across a session doesn't stack up duplicate
-    // listeners on the shared #confirm-modal.
+    // Last cleanup listeners bound to the shared #confirm-modal, so the
+    // custom modal steps don't stack duplicates. Picker handles live here
+    // too so the next init() can destroy them.
     var _lastCancelCleanup = null;
     var _lastBackdropCleanup = null;
     var _deliverablePickerHandle = null;
@@ -17,18 +17,13 @@ window.ProjectSubmissionsDraftCard = (function () {
     function init(contentEl, projectId, params, refresh) {
         if (!contentEl) return;
          
-        // ── Wire any rich-editor divs this fragment just introduced.
-        // Nothing dispatches helix:section-refreshed/helix:navigated for
-        // this overlay's own per-scope refresh, so rich-editor.js's normal
-        // auto-wiring never fires here on its own — call it explicitly.
-        // Safe every time: initEditor() guards itself with
-        // editor._richEditorInit, so already-wired elements are a no-op. ──
+        // ── Wire rich editors in the new fragment. rich-editor.js only
+        // auto-wires on page load and helix:navigated, so call it here.
+        // Safe to repeat: initEditor() skips already-wired editors. ──
         if (window.initRichEditors) window.initRichEditors();
 
-        // Destroy any previous picker instance before this refresh's new
-        // DOM subtree replaces the old one — see deliverable_picker.js's
-        // header comment for why this matters (document-level listeners
-        // otherwise accumulate against detached nodes on every refresh).
+        // Destroy the previous picker first: each one adds document-level
+        // listeners that would otherwise pile up on every refresh.
         if (_deliverablePickerHandle) {
             _deliverablePickerHandle.destroy();
             _deliverablePickerHandle = null;
@@ -38,18 +33,14 @@ window.ProjectSubmissionsDraftCard = (function () {
             _deliverablePickerHandle = window.DeliverablePicker.init(deliverablePickerEl);
         }
 
-        // Same destroy-before-reinit reasoning, separate handle — this is a
-        // different picker instance (Mark Approved's, not Submit Review's),
-        // deselected by default (CS picks what's ready, not the reverse).
+        // Mark Approved's picker (starts with nothing selected).
         if (_approvePickerHandle) {
             _approvePickerHandle.destroy();
             _approvePickerHandle = null;
         }
         var approvePickerEl = contentEl.querySelector('#overlay-mark-approved-picker');
         if (approvePickerEl) {
-            // Opens above the trigger, centered — deliverable_picker.js's
-            // opt-in flag, set here rather than in the macro since this is
-            // the only picker on the page that wants it.
+            // Opens above the trigger, centered (deliverable_picker.js).
             approvePickerEl.dataset.popoverAlign = 'above-center';
             _approvePickerHandle = window.DeliverablePicker.init(approvePickerEl);
         }
@@ -74,10 +65,7 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
-        // ── Draft / History view toggle — both panels are already
-        // server-rendered (events are cheap, no fetch needed), so this
-        // is a pure class-toggle, same idea as the Deliverables All/
-        // Focused toggle elsewhere in the overlay. ──
+        // ── Draft / History view toggle. Both panels are server-rendered. ──
         var viewToggleBtns = contentEl.querySelectorAll('.overlay-draft-view-toggle-btn');
         if (viewToggleBtns.length) {
             var draftView = contentEl.querySelector('#overlay-draft-view');
@@ -92,11 +80,10 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
-        // ── Scope-level Current / History toggle (revision history). Distinct
-        // from the internal Draft/History toggle above: this swaps the whole
-        // working area (#overlay-submissions-current) for the list of decks
-        // sent to client (#overlay-submissions-history). Same pure class-toggle
-        // pattern; both panels are already server-rendered. ──
+        // ── Scope-level Current / History toggle: swaps the whole working
+        // area for the list of decks sent to the client. Both panels are
+        // server-rendered. project_submissions_card.js moves these buttons
+        // into the header after init(). ──
         var subViewBtns = contentEl.querySelectorAll('.overlay-submissions-view-toggle-btn');
         if (subViewBtns.length) {
             var currentPanel = contentEl.querySelector('#overlay-submissions-current');
@@ -111,13 +98,8 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
-        // ── Preview — hand the file's preview + download URLs to the
-        // app-wide file-preview modal (window.openFilePreview, from
-        // preview.js, already loaded globally via base.html). Mirrors the
-        // Reference Files card's own wiring in project_details_card.js.
-        // Shown in BOTH states (unlocked draft + locked internal_review),
-        // so CS can actually open the deck they're reviewing. Download is a
-        // plain <a> in the template, so it needs no JS here. ──
+        // ── Preview: opens the global file-preview modal (preview.js).
+        // Download is a plain <a>, so it needs no JS. ──
         contentEl.querySelectorAll('.overlay-draft-file-preview').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var item = btn.closest('.overlay-reference-file-item');
@@ -130,9 +112,8 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         });
 
-        // Collapsed "N deliverables ▾" toggles — on the Active-with-Client
-        // indicator and every History entry. nextElementSibling (not an id)
-        // so any number of instances work with no collisions.
+        // Collapsed "N deliverables ▾" toggles. The list must be the
+        // button's next sibling.
         contentEl.querySelectorAll('.overlay-inc-toggle').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var list = btn.nextElementSibling;
@@ -143,29 +124,9 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         });
 
-        // Deliverables zone (Active-with-Client indicator) — swaps the
-        // middle zone between the count button and a scrollable list with
-        // a Back button, in place. Scoped per zone so it never collides
-        // with the history pills (.overlay-inc-toggle).
-        contentEl.querySelectorAll('.overlay-sent-zone--deliverables').forEach(function (zone) {
-            var btn = zone.querySelector('.overlay-delz-btn');
-            var panel = zone.querySelector('.overlay-delz-panel');
-            var back = zone.querySelector('.overlay-delz-back');
-            if (!btn || !panel || !back) return;
-            btn.addEventListener('click', function () {
-                btn.classList.add('is-hidden');
-                panel.classList.remove('is-hidden');
-            });
-            back.addEventListener('click', function () {
-                panel.classList.add('is-hidden');
-                btn.classList.remove('is-hidden');
-            });
-        });
-        
 
-        // ── Submit for Review — gathers the note + whichever selection
-        // control is showing (deliverable picker, or the Concept & KV
-        // toggle pair) and posts to the route that locks the draft. ──
+        // ── Submit for Review: sends the note plus the deliverable picker
+        // or Concept & KV toggles, and locks the draft. ──
         var submitReviewBtn = contentEl.querySelector('#overlay-submit-review-btn');
         if (submitReviewBtn) {
             submitReviewBtn.addEventListener('click', function () {
@@ -214,8 +175,7 @@ window.ProjectSubmissionsDraftCard = (function () {
                     });
             });
         }
-        // ── CS review row — Flag Internal Revision. "Submit to Client" is
-        // a visible stub for now; its real logic is sub-step 7. ──
+        // ── CS review row: Flag Internal Revision. ──
         var flagBtn = contentEl.querySelector('#overlay-flag-revision-btn');
         var flagActions = contentEl.querySelector('.overlay-cs-review-actions');
         var flagForm = contentEl.querySelector('#overlay-flag-revision-form');
@@ -287,14 +247,9 @@ window.ProjectSubmissionsDraftCard = (function () {
         }
 
         // ── Mark Approved (on the Submitted-to-Client indicator) ──────────
-        // Same inline-reveal pattern as Request Client Revision, sitting next
-        // to it. deliverable_ids omitted from the request entirely when
-        // there's no picker on screen (C&CM Concept & KV scope, or nothing
-        // left pending) — the backend reads that as "approve everything
-        // still pending," which for those cases is correct/a no-op-safe
-        // default. When the picker IS present, its current selection is
-        // sent even if empty — the backend rejects an explicit empty
-        // selection rather than silently approving everything.
+        // With no picker on screen, deliverable_ids is omitted and the
+        // server approves everything pending. With a picker, its selection
+        // is always sent; the server rejects an empty list.
         var maBtn = contentEl.querySelector('#overlay-mark-approved-btn');
         var maForm = contentEl.querySelector('#overlay-mark-approved-form');
         var maConfirm = contentEl.querySelector('#overlay-mark-approved-confirm');
@@ -304,8 +259,8 @@ window.ProjectSubmissionsDraftCard = (function () {
             maBtn.addEventListener('click', function () {
                 maBtn.classList.add('is-hidden');
                 maForm.classList.remove('is-hidden');
-                // Step-by-step focus: only one action live at a time. Cancel
-                // (below) is what brings Request Client Revision back.
+                // One action at a time; Cancel brings Request Client
+                // Revision back. (crBtn is declared below; var hoisting.)
                 if (crBtn) crBtn.classList.add('is-hidden');
             });
         }
@@ -358,9 +313,8 @@ window.ProjectSubmissionsDraftCard = (function () {
         }
 
         // ── Request Client Revision (on the Active-with-Client indicator) ──
-        // Same inline-reveal + rich-editor pattern as Flag Internal Revision,
-        // independent IDs. On success, refresh() re-renders the indicator into
-        // its "Revision Requested" state (badge + message spotlight).
+        // On success, refresh() re-renders the indicator in its "Revision
+        // Requested" state.
         var crBtn = contentEl.querySelector('#overlay-client-revision-btn');
         var crForm = contentEl.querySelector('#overlay-client-revision-form');
         var crConfirm = contentEl.querySelector('#overlay-client-revision-confirm');
@@ -370,7 +324,6 @@ window.ProjectSubmissionsDraftCard = (function () {
             crBtn.addEventListener('click', function () {
                 crBtn.classList.add('is-hidden');
                 crForm.classList.remove('is-hidden');
-                // Same step-by-step focus as Mark Approved's side of this.
                 if (maBtn) maBtn.classList.add('is-hidden');
             });
         }
@@ -434,9 +387,8 @@ window.ProjectSubmissionsDraftCard = (function () {
         }
 
         // ── Submit to Client ────────────────────────────────────
-        // Fetches the deck summary on demand, mounts it as a modal, and on
-        // confirm POSTs to the submit-to-client gate, then refresh()es —
-        // which re-renders this scope into the read-only Sent-to-Client state.
+        // Fetches the summary as a modal; confirm POSTs and refresh()es into
+        // the read-only Sent-to-Client state.
         var submitToClientBtn = contentEl.querySelector('#overlay-submit-to-client-btn');
         if (submitToClientBtn) {
             submitToClientBtn.addEventListener('click', function () {
@@ -471,9 +423,8 @@ window.ProjectSubmissionsDraftCard = (function () {
         }
 
         function showSubmitSummaryModal(html, scope, customerId) {
-            // Drop any stale instance, then mount fresh on <body> so the
-            // fixed-position modal escapes the overlay's own stacking/clipping
-            // context (same reasoning as the avatar-picker popover fix).
+            // Mount on <body> so the fixed modal escapes the overlay's
+            // stacking and clipping context.
             var stale = document.getElementById('overlay-submit-summary-modal');
             if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
 
@@ -492,7 +443,6 @@ window.ProjectSubmissionsDraftCard = (function () {
             if (cancelBtn) {
                 cancelBtn.addEventListener('click', function () { closeSubmitSummaryModal(modal); });
             }
-            // Clicking the dark backdrop (not the box) closes it too.
             modal.addEventListener('click', function (e) {
                 if (e.target === modal) closeSubmitSummaryModal(modal);
             });
@@ -570,12 +520,9 @@ window.ProjectSubmissionsDraftCard = (function () {
 
         enableDragAndDrop();
 
-        // ── Main deck toggle — two-phase visual sequence ──────────
-        // Phase 1 (instant, optimistic): flip the button states/highlight
-        // immediately, before the request even resolves.
-        // Phase 2 (after a short beat + the real request completing):
-        // re-fetch the correctly-sorted list and FLIP-animate each row
-        // into its new position.
+        // ── Main deck toggle ──────────
+        // Flips the highlight optimistically, then (after the request and a
+        // short pause) re-fetches the sorted list and FLIP-animates rows.
         contentEl.querySelectorAll('.overlay-draft-main-deck-btn:not([disabled])').forEach(function (btn) {
             btn.addEventListener('click', function () { promoteMainDeck(btn); });
         });
@@ -634,14 +581,9 @@ window.ProjectSubmissionsDraftCard = (function () {
                     firstRects[el.dataset.fileId] = el.getBoundingClientRect();
                 });
             }
-            var query = new URLSearchParams({ scope: params.scope || 'ckv', customer_id: params.customer_id || '' }).toString();
-            fetch(`/projects/${projectId}/overlay/submissions/content?${query}`)
-                .then(function (r) { return r.text(); })
-                .then(function (html) {
-                    contentEl.innerHTML = html;
-                    animateReorder(firstRects);
-                    init(contentEl, projectId, params, refresh);
-                });
+            // Reload through the card's refresh so the Current/History toggle
+            // lands in the header slot like any other load; animate after that.
+            refresh(function () { animateReorder(firstRects); });
         }
 
         function animateReorder(firstRects) {
@@ -667,10 +609,9 @@ window.ProjectSubmissionsDraftCard = (function () {
             });
         }
 
-        // ── Remove — step 1 is the standard confirm dialog; if the target
-        // is the main deck and other files remain, the backend 409s and we
-        // reopen the same #confirm-modal for step 2 (choose a replacement)
-        // instead of a separate inline panel. ─────────────────────────
+        // ── Remove: a standard confirm. Removing the main deck while other
+        // files remain returns 409, and #confirm-modal reopens to pick a
+        // replacement. ─────────────────────────
         contentEl.querySelectorAll('.overlay-draft-file-remove').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 showConfirm('Remove this file from the draft? This cannot be undone.', function () {
@@ -769,13 +710,9 @@ window.ProjectSubmissionsDraftCard = (function () {
                     });
             });
         }
-        // ── Edit — designer reopens a locked (internal_review) draft to
-        // fix something before CS reviews it; requires a reason. Mirrors
-        // showResolveStep's custom-body pattern (hide the default OK
-        // button, wire a bespoke submit button inside the injected body)
-        // since the reason needs to be validated before the modal is
-        // allowed to close — the shared showConfirm() OK button always
-        // closes unconditionally on click, which can't enforce that. ──
+        // ── Edit: designer reopens a locked (internal_review) draft, with a
+        // required reason. Uses its own submit button because the shared
+        // OK button always closes the modal and can't validate. ──
         var editBtn = contentEl.querySelector('#overlay-draft-edit-btn');
         if (editBtn) {
             editBtn.addEventListener('click', function () { showEditReasonStep(); });
@@ -801,10 +738,7 @@ window.ProjectSubmissionsDraftCard = (function () {
             if (card) card.classList.add('confirm-modal-card--wide');
             if (okBtn) okBtn.style.display = 'none';
 
-            // Insert our own submit button into the actions row itself,
-            // right where OK normally sits — so Confirm Edit / Cancel form
-            // one aligned row like every other modal on the page, instead
-            // of floating separately inside the body.
+            // Placed in the actions row where OK normally sits.
             var submitBtn = document.createElement('button');
             submitBtn.type = 'button';
             submitBtn.className = 'btn-primary';

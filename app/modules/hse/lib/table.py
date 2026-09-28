@@ -1,13 +1,14 @@
 """
-Turns a register declaration into table columns and rendered cells.
-
-The template only loops; what a cell says and which pill colour it takes is
-decided here, so it can be tested without rendering HTML.
+Turns a register declaration into table columns and cell view models, so
+cell text and pill colours are testable without rendering HTML.
 """
 
 from app.modules.hse.lib.computed import (
     days_open, days_to_expiry, effective_status,
 )
+from app.modules.hse.lib.overview import entry_title
+from app.modules.hse.lib.registers import shows_asset_serial, table_fields
+from app.modules.hse.lib.spend import amount_text
 from app.modules.hse.lib.vocab import severity_modifier, status_modifier
 
 
@@ -28,8 +29,7 @@ RELATION_ATTRS = {
 
 
 def _trailing_label(reg):
-    """The one computed column a register earns. A log earns none —
-    counting days open on a mileage row means nothing."""
+    """Header of the trailing computed column, or None for a log."""
     if reg.status_source == 'expiry':
         return 'Days to expiry'
     if reg.status_source == 'stored':
@@ -38,9 +38,11 @@ def _trailing_label(reg):
 
 
 def columns(reg):
-    """Header labels, in declaration order: the ref, each declared field,
-    then the computed column where there is one."""
-    heads = ['Ref'] + [f.label for f in reg.fields]
+    """Header labels: Ref, each in_table field, then computed columns. An
+    expiry register has no status field, so it gets an extra Status column."""
+    heads = ['Ref'] + [f.label for f in table_fields(reg)]
+    if reg.status_source == 'expiry':
+        heads.append('Status')
     trailing = _trailing_label(reg)
     if trailing:
         heads.append(trailing)
@@ -52,8 +54,8 @@ def _cell(kind, text, modifier=None, tone=None):
 
 
 def _raw(entry, field):
-    """The stored value behind a field — a column when it maps to one, else
-    whatever the JSONB blob holds."""
+    """The stored value behind a field: the related record's name, the
+    column value, or the JSONB value."""
     if field.column is None:
         return (entry.data or {}).get(field.name)
     if field.column in RELATION_ATTRS:
@@ -79,29 +81,38 @@ def cell(entry, field, reg, today=None):
 
     if field.type == 'date':
         return _cell('text', value.strftime(DATE_FORMAT))
-    if field.type in ('number', 'money'):
+    if field.type == 'money':
+        return _cell('mono', amount_text(value))
+    if field.type == 'number':
         return _cell('mono', value)
+    if field.type == 'textarea':
+        # One line in the table; the full text is in the hover card.
+        return _cell('clip', value)
     return _cell('text', value)
 
 
 def row(entry, reg, today=None):
-    """Every cell for one entry, ref first and the computed column last."""
+    """Every cell for one entry, in the same order as columns()."""
     cells = [_cell('mono', entry.ref)]
-    cells += [cell(entry, f, reg, today) for f in reg.fields]
+    cells += [cell(entry, f, reg, today) for f in table_fields(reg)]
+    if reg.status_source == 'expiry':
+        label = effective_status(entry, reg, today)
+        cells.append(_cell('pill', label, status_modifier(label)) if label
+                     else _cell('empty', '—'))
     if _trailing_label(reg):
         cells.append(_trailing(entry, reg, today))
     return cells
 
 
 def _trailing(entry, reg, today=None):
-    """Days open, or days to expiry — computed, never stored. Overdue and
-    expired read as a warning rather than a plain number."""
+    """Days open or days to expiry. Expired, and open over 30 days, get a
+    warning tone."""
     if reg.status_source == 'expiry':
         remaining = days_to_expiry(entry, today)
         if remaining is None:
             return _cell('empty', '—')
         if remaining < 0:
-            return _cell('text', f'{abs(remaining)} days ago', tone='overdue')
+            return _cell('text', f'{abs(remaining)} days ago', tone='expired')
         return _cell('text', f'{remaining} days')
 
     open_for = days_open(entry, today)
@@ -113,12 +124,9 @@ def _trailing(entry, reg, today=None):
 
 
 def status_chips(reg, counts, total, today=None):
-    """The filter row: All, then each status this register can show, with
-    its count. A status with no rows behind it still renders, so the set of
-    chips does not jump around as rows are filed.
-
-    A log has no statuses, so it gets no chip row at all rather than a
-    single chip that filters nothing."""
+    """Filter chips: All, then every status the register can show, with
+    counts (zero-count chips still render so the row stays stable). A log
+    gets no chips."""
     if reg.status_source == 'none':
         return []
     if reg.status_source == 'expiry':
@@ -130,14 +138,36 @@ def status_chips(reg, counts, total, today=None):
     return chips
 
 
+def peek(entry, reg, today=None):
+    """Hover-card lines: the machine's serial on a machine register, the
+    in_table=False fields, then the full text of clipped textarea fields.
+    Empty values are skipped."""
+    out = []
+    asset = getattr(entry, 'asset', None)
+    if shows_asset_serial(reg) and getattr(asset, 'serial_no', None):
+        out.append({'label': 'Serial no.', 'text': asset.serial_no})
+    hidden = [f for f in reg.fields if not f.in_table]
+    long_text = [f for f in reg.fields if f.in_table and f.type == 'textarea']
+    for field in hidden + long_text:
+        c = cell(entry, field, reg, today)
+        if c['kind'] != 'empty':
+            out.append({'label': field.label, 'text': str(c['text'])})
+    return out
+
+
 def table_rows(entries, reg, today=None):
-    """View rows for the template: the cells, plus the flattened text the
-    client-side search filters on."""
+    """View rows: cells, hover card, and lowercased text for client-side
+    search. On phones `title` heads the card, and `aside` (first field is a
+    date) puts that date top right beside the ref."""
+    fields = table_fields(reg)
+    lead_is_date = bool(fields) and fields[0].type == 'date'
     out = []
     for entry in entries:
         cells = row(entry, reg, today)
         searchable = ' '.join(
             str(c['text']) for c in cells if c['kind'] != 'empty' and c['text'] is not None
         ).lower()
-        out.append({'id': entry.id, 'cells': cells, 'search': searchable})
+        out.append({'id': entry.id, 'ref': entry.ref, 'cells': cells,
+                    'peek': peek(entry, reg, today), 'search': searchable,
+                    'title': entry_title(entry), 'aside': lead_is_date})
     return out

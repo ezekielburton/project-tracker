@@ -1,4 +1,4 @@
-"""Tests for the theme-preference save route and its no-flash server render (2.4.1)."""
+"""The theme-preference save route and the server-rendered data-theme."""
 from flask import url_for
 from app.modules.core.shared.models import User
 from app.modules.core.shared.testing import login_as
@@ -45,8 +45,7 @@ def test_theme_prefs_rejects_invalid_value(app, client, db_session):
 
 
 def test_saved_theme_renders_on_html_tag(app, client, db_session):
-    """Server-side render of <html data-theme="..."> — the no-flash fallback
-    for a fresh device that hasn't run the localStorage script yet."""
+    """A saved theme renders on <html data-theme>, for devices with no localStorage value yet."""
     user, password = _make_user(db_session, email='theme-test3@example.com')
     user.theme_preference = 'dark'
     db_session.commit()

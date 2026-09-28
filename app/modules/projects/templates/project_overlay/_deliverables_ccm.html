@@ -3,12 +3,9 @@
 {% set skippable = (all_deliverables | rejectattr('status', 'equalto', 'approved') | list) if can_skip_preproduction else [] %}
 
 <div class="overlay-details-grid">
-    {# Flags — own div per customer, sitting above the Deliverables card
-    entirely (per Ezekiel, 18 Aug 2026), sized to its own content rather
-    than living inside the card body. Toggled in lockstep with the
-    customer scope select via activateCustomerPanel() in
-    project_deliverables_card.js, which now targets any [data-customer-panel]
-    element, not just .overlay-deliverables-panel. #}
+    {# Flags: one div per customer above the Deliverables card. Shown with
+    the scope select via activateCustomerPanel() in
+    project_deliverables_card.js, which toggles every [data-customer-panel]. #}
     {% for c in all_customers %}
     {% if c.open_flags or can_manage_flags %}
     <div class="overlay-card-full{% if c.project_customer.id != first_customer_id %} is-hidden{% endif %}"
@@ -23,14 +20,8 @@
 
     <div class="overlay-card-full">
         {% call card('Deliverables') %}
-        {# Controls row: All/Focused on the left, Edit Deliverables / Skip to
-        Pre-Production / customer-region scope select grouped on the right —
-        mirrors the Submissions card's controls row (same
-        .overlay-card-controls-row / .overlay-scope-select classes) so the two
-        cards stay visually consistent. Region (Gulf) is folded into the
-        dropdown as optgroups rather than a separate tab-strip, same
-        simplification as Submissions — the customer-panel switch below only
-        ever needs a customer id, region was purely a display grouping. #}
+        {# Same controls-row classes as the Submissions card. Gulf regions
+        show as optgroups; the panel switch only needs a customer id. #}
         <div class="overlay-card-controls-row">
             {% if can_toggle_focus %}
             <span class="overlay-focus-toggle" id="overlay-deliverables-focus-toggle">
@@ -46,9 +37,8 @@
                     id="overlay-edit-deliverables-btn">Edit Deliverables</button>
                 {% endif %}
                 {% if can_skip_preproduction %}
-                {# Always visible rather than vanishing at zero deliverables —
-                data-skippable-count lets the click handler explain why via a
-                toast instead of the button just disappearing unexplained. #}
+                {# Shown even with nothing to skip; the click handler reads
+                data-skippable-count and explains via a toast. #}
                 <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
                     id="overlay-skip-preprod-btn" data-skippable-count="{{ skippable|length }}">Skip to
                     Pre-Production</button>
@@ -120,9 +110,7 @@
                             {{ d.design_deadline.strftime('%d %b %Y') if d.design_deadline else '—' }}{% if
                             d.design_deadline_time %} · {{ d.design_deadline_time.strftime('%H:%M') }}{% endif %}
                         </span>
-                        {# "All status changes need to be time stamped" (22
-                        Aug 2026, per Ezekiel) — same native title tooltip
-                        as _deliverables_standard.html, same reasoning. #}
+                        {# Tooltip shows when the status started. #}
                         <span class="overlay-deliverables-status"
                             {% if status_started_at_by_id.get(d.id) %}title="Since {{ status_started_at_by_id[d.id].strftime('%d %b %Y') }}"{% endif %}>
                             {% if can_override_status %}
@@ -145,11 +133,8 @@
         </div>
 
         {% if can_skip_preproduction and skippable %}
-        {# Whole-project picker (every customer, not just the one currently
-        selected in the scope dropdown) — Ezekiel's "select deliverables, or
-        click all" applies at the project level; picking just one
-        customer's items still works, it's just a smaller selection out of
-        the same list. #}
+        {# Picker spans every customer, not just the one selected in the
+        scope dropdown. #}
         <div class="overlay-flag-revision-form is-hidden" id="overlay-skip-preprod-form">
             {{ deliverable_picker('overlay-skip-preprod-picker', skippable, []) }}
             <span class="overlay-flag-revision-error hidden" id="overlay-skip-preprod-error"></span>

@@ -1,29 +1,20 @@
-//  app/static/js/project_list_layout.js
+// app/modules/projects/static/js/project_list_layout.js
 //
-// Column resize + reorder for the Projects table. Silent, personal.
-// The layout autosaves per user per table+view.
+// Column resize + reorder for the Projects table, autosaved per user per
+// table+view. Also the shared column widths for deliverable sub-tables.
 //
 // Mechanism: .project-table's grid-template-columns is built from
 // --track-1 to 12 and every project-col-* class reads its position
-// from a --pos<key> variable. 
-// Resizing changes a position's width, and reording changes which key
+// from a --pos-<key> variable.
+// Resizing changes a position's width; reordering changes which key
 // points to which position.
 
 (() => {
     const table = document.getElementById('project-table');
-    // #project-table (the grid itself) is no longer the element that
-    // scrolls — it's sized with `width: max-content` in project_list.css
-    // so it can be exactly as wide as its columns need, and the actual
-    // scrollable viewport is one level up, #project-table-scroll (the
-    // .project-table-rounded-clip wrapper). Every scrollLeft/scrollWidth/
-    // clientWidth/getBoundingClientRect() read below that's about "how
-    // much can be scrolled" or "what's actually visible" needs to be
-    // against THIS element, not `table` — `table`'s own box now just
-    // matches its content exactly, so scrollWidth === clientWidth on it
-    // always, which would make the sticky scrollbar think there's never
-    // anything to scroll. `table` itself is still correct for everything
-    // about the grid's own custom properties (--track-N, --pos-*) and for
-    // querying cells/header — that part is unchanged.
+    // The grid is sized to its content (width: max-content), so scrolling
+    // happens on #project-table-scroll. Use scrollContainer for scroll and
+    // visible-area reads (on `table`, scrollWidth always equals clientWidth);
+    // use `table` for the grid variables and cell queries.
     const scrollContainer = document.getElementById('project-table-scroll') || table;
     const stickyScrollbar = document.getElementById('sticky-scrollbar');
     const stickyScrollbarInner = document.getElementById('sticky-scrollbar-inner');
@@ -32,25 +23,27 @@
     function syncStickyScrollbar() {
         if (!stickyScrollbar || !stickyScrollbarInner) return;
         stickyScrollbarInner.style.width = `${scrollContainer.scrollWidth}px`;
-        // No point showing a scrollbar if there's nothing to scroll.
         stickyScrollbar.hidden = scrollContainer.scrollWidth <= scrollContainer.clientWidth;
     }
 
     if (!table) return;
 
-    // let, not const (28 Aug 2026) — re-read in refreshForCurrentTable()
-    // below on every soft-navigated view switch, since a different view
-    // has its own table_key and its own saved layout. Before that fix,
-    // switching views left these pointed at whatever view the page
-    // happened to load with: column widths silently stayed the OLD view's,
-    // and dragging a column after switching would have POSTed the change
-    // under the OLD view's table_key, corrupting its saved layout with
-    // data that actually belonged to the new one.
+    // The SPA router re-runs this file on every visit, and window/document
+    // listeners outlive the page, so each run swaps out the previous run's copy.
+    function bindGlobal(target, type, key, handler) {
+        const handlers = window.__projectListLayoutGlobalHandlers || (window.__projectListLayoutGlobalHandlers = {});
+        if (handlers[key]) target.removeEventListener(type, handlers[key]);
+        handlers[key] = handler;
+        target.addEventListener(type, handler);
+    }
+
+    // Re-read by refreshForCurrentTable() on every view switch: each view has
+    // its own table_key and saved layout, and a stale key would save one
+    // view's layout under another's.
     let tableKey = table.dataset.tableKey;
     let saveUrl = table.dataset.saveLayoutUrl;
 
-    // Absolute floor for each column — matches this build's current sizing.
-    // A column added later gets its own entry here at that time.
+    // Minimum width per column in px (unlisted columns default to 80).
     const MIN_WIDTHS = {
         name: 200,
         client: 100,
@@ -66,19 +59,10 @@
         job: 90,
     };
 
-    // Used the first time a user visits this table+view, before they've
-    // ever dragged anything — mirrors the original hand-written order/widths.
-    // Expand is deliberately excluded everywhere below: pinned, always
-    // position 1, never resizable or reorderable.
-    // Widths used to be fr strings ('2fr', '1.6fr', ...) — a shared-space
-    // unit that let one column's content (next-deliverable, holding long
-    // unbroken names) inflate every OTHER fr column via the grid spec's
-    // "find the size of an fr" step, regardless of that other column's own
-    // content (see the long comment on .project-table in project_list.css
-    // for the full diagnosis — this was Pass 4 of the scroll/resize bug).
-    // 'max-content' sidesteps that entirely: paired with the CSS's
-    // minmax(min-content, max-content), each column is sized purely from
-    // its own content, with no cross-column sharing at all.
+    // Layout for a user with no saved layout. Expand is excluded: it is
+    // pinned at position 1 and never resized or reordered.
+    // Use 'max-content', not fr: fr widths let one column's long content
+    // inflate every other fr column (see .project-table in project_list.css).
     const DEFAULT_LAYOUT = [
         { key: 'name', width: 'max-content' },
         { key: 'client', width: 'max-content' },
@@ -94,43 +78,29 @@
         { key: 'job', width: 'max-content' },
     ];
 
-    // Factored out of top-level code into its own function (28 Aug 2026)
-    // so refreshForCurrentTable() below can re-derive `layout` from
-    // whatever view's saved layout window.__savedTableLayout holds *right
-    // now*, not just once at module load — see the `let tableKey` comment
-    // above for why a stale `layout` is a real correctness bug, not just
-    // a cosmetic one.
+    // Builds the layout from window.__savedTableLayout as it is right now,
+    // so refreshForCurrentTable() can call it again after a view switch.
     function deriveLayout() {
         const derived = (window.__savedTableLayout && window.__savedTableLayout.length)
             ? window.__savedTableLayout
             : DEFAULT_LAYOUT.map((c) => ({ ...c }));
 
-        // Auto-heal: an account that used this table before Pass 4 may have a
-        // saved layout with the old fr-based widths (either an untouched
-        // default, like '2fr', or a value a drag ended on, since the drag
-        // handler used to compute its floor from an already fr-inflated
-        // rendered width). Upgrade any fr-suffixed width to 'max-content'
-        // transparently, so the fix applies immediately without asking anyone
-        // to reset their saved column widths by hand.
+        // Saved layouts may still hold fr widths; treat those as 'max-content'.
         derived.forEach((col) => {
             if (typeof col.width === 'string' && /fr$/.test(col.width.trim())) {
                 col.width = 'max-content';
             }
         });
 
-        // Defensive: if a column gets added in some future build, an older
-        // saved layout won't know about it yet — append it at its default
-        // width instead of letting it silently disappear for existing users.
+        // Append any column missing from a saved layout, so it can't vanish.
         DEFAULT_LAYOUT.forEach((def) => {
             if (!derived.find((c) => c.key === def.key)) {
                 derived.push({ ...def });
             }
         });
 
-        // Name is pinned right after Expand and can no longer be dragged (see
-        // the reorder section below). The sticky CSS assumes it's always at
-        // that spot, so move it there even if an older saved layout has it
-        // somewhere else from before this was a fixed column.
+        // Name is pinned right after Expand (the sticky CSS assumes it), so
+        // move it first even if a saved layout has it elsewhere.
         const nameIndex = derived.findIndex((c) => c.key === 'name');
         if (nameIndex > 0) {
             const [nameCol] = derived.splice(nameIndex, 1);
@@ -170,20 +140,10 @@
     }
 
     // ---- Resize + Reorder ----
-    // Both wrapped in one named function, rather than left as bare
-    // top-level code, so a table-content refresh (task #55 — the SSE live
-    // update swaps in fresh header/row markup via #project-table.innerHTML)
-    // can re-run just this part afterwards. Unlike the row-click handling
-    // in project_list.js (one delegated listener on #project-table itself,
-    // which survives an innerHTML swap of its children untouched), these
-    // two are bound directly to the header cells themselves — querying
-    // `table.querySelectorAll(...)` fresh each call, so calling this again
-    // after a refresh naturally targets only whatever's in the DOM right
-    // now. The OLD header cells (and their listeners) are simply garbage
-    // collected along with the DOM nodes being replaced — no manual
-    // teardown needed, and no risk of listeners piling up call over call.
-    // Exposed as window.helixRebindProjectTableColumns for project_list.js
-    // to call after that swap.
+    // Bound directly to the header cells, so bindColumnControls() must
+    // re-run after project_list.js swaps #project-table's innerHTML (via
+    // window.helixRebindProjectTableColumns). Old cells go with their
+    // listeners, so nothing stacks.
     const EDGE_ZONE = 40;    // px from the table's edge that triggers auto-extend
     const EXTEND_SPEED = 8;  // px per frame while pinned at an edge
 
@@ -196,22 +156,9 @@
             const key = headerCell.dataset.colKey;
             const entry = layout.find((c) => c.key === key);
 
-            // Never let a column shrink past what its own current content
-            // actually needs — measured fresh at the start of each drag, so
-            // it reflects whatever's really on screen right now rather than
-            // a fixed guess that goes stale as the data changes.
-            //
-            // cell.scrollWidth alone is NOT safe here: a grid item stretches
-            // to fill its track's assigned width by default, so if the
-            // column is currently wider than its content needs (as it always
-            // was under the old fr-sharing bug — see project_list.css),
-            // scrollWidth just reports that already-inflated rendered width
-            // back, not the content's real minimum. That's what made the
-            // column self-reinforcing: every drag re-measured the bloat it
-            // was trying to shrink, so the floor never moved and dragging
-            // narrower appeared to do nothing. Forcing width: max-content
-            // for the instant of measurement reads the cell's true intrinsic
-            // size regardless of how wide its track currently is.
+            // Floor = the column's current content width, measured at drag start.
+            // A grid item stretches to its track, so plain scrollWidth reports
+            // the current column width; force max-content while measuring.
             let contentMinWidth = 0;
             table.querySelectorAll(`.project-col-${key}`).forEach((cell) => {
                 const prevWidth = cell.style.width;
@@ -232,10 +179,7 @@
             if (dragIndicator) dragIndicator.hidden = false;
 
             function tick() {
-                // The edge-of-screen auto-extend check needs the visible
-                // scrollable viewport's edges, not the (often much wider,
-                // since it's sized to its own content now) grid's own
-                // bounding box — so this reads scrollContainer, not table.
+                // Edge auto-extend uses the visible viewport (scrollContainer), not the grid.
                 const rect = scrollContainer.getBoundingClientRect();
 
                 if (lastClientX >= rect.right - EDGE_ZONE) {
@@ -253,15 +197,12 @@
                 entry.width = `${currentWidth}px`;
                 applyLayout();
 
-                // Position the bar from the column's actual rendered edge —
-                // never from raw cursor position — so it's physically
-                // impossible for it to show anywhere the column isn't.
+                // Place the bar at the column's rendered edge, not the cursor.
                 if (dragIndicator) {
                     const edgeX = headerCell.getBoundingClientRect().right;
                     dragIndicator.style.left = `${edgeX}px`;
 
-                    // Only span the table itself, clamped to whatever's actually
-                    // visible on screen right now — not the whole page top-to-bottom.
+                    // Span only the visible part of the table.
                     const tableRect = scrollContainer.getBoundingClientRect();
                     const top = Math.max(0, tableRect.top);
                     const bottom = Math.min(window.innerHeight, tableRect.bottom);
@@ -302,8 +243,7 @@
     });
 
     // ---- Reorder ----
-    // Name is left out of this list on purpose: it's a fixed column, so it
-    // can't be dragged, and other columns can't be dropped onto it either.
+    // Name is fixed: it can't be dragged or dropped onto.
     const headerCells = Array.from(
         table.querySelectorAll('.project-table-header > span[data-col-key]')
     ).filter((cell) => cell.dataset.colKey !== 'name');
@@ -317,10 +257,8 @@
             let hasMoved = false;
 
             cell.classList.add('is-dragging');
-            // Same purpose as resize's 'is-resizing-column' body class above —
-            // lets refreshProjectTable() (project_list.js, task #55) detect a
-            // drag in progress and skip that one live-update swap rather than
-            // yank the header cell out from under an active reorder.
+            // project_list.js reads this body class (and is-resizing-column)
+            // to skip live table swaps mid-drag.
             document.body.classList.add('is-reordering-column');
 
             function onMouseMove(moveEvent) {
@@ -361,16 +299,9 @@
 
     bindColumnControls();
 
-    // 28 Aug 2026 — refreshes tableKey/saveUrl/layout from the table's
-    // current dataset + window.__savedTableLayout before re-binding, so a
-    // soft-navigated view switch (project_list.js's applyPageState()) picks
-    // up that new view's own saved column widths/order instead of silently
-    // continuing to use whichever view's layout happened to be loaded
-    // first — see the `let tableKey` and deriveLayout() comments above.
-    // For a same-view refresh (filters/sort/search, or the SSE live
-    // refresh) this just re-derives the identical values and reapplies
-    // them — a harmless no-op beyond the fresh header-cell rebind
-    // bindColumnControls() always needed to do anyway.
+    // Re-reads tableKey/saveUrl/layout from the table and
+    // window.__savedTableLayout, then re-binds header cells. Called by
+    // project_list.js after every table swap (view switch or live refresh).
     function refreshForCurrentTable() {
         tableKey = table.dataset.tableKey;
         saveUrl = table.dataset.saveLayoutUrl;
@@ -381,7 +312,9 @@
 
     window.helixRebindProjectTableColumns = refreshForCurrentTable;
 
-    window.addEventListener('resize', syncStickyScrollbar);
+    bindGlobal(window, 'resize', 'resize', () => {
+        if (table.isConnected) syncStickyScrollbar();
+    });
 
     if (stickyScrollbar) {
         let syncingScroll = false;
@@ -401,14 +334,9 @@
         });
     }
     // ---- Deliverable sub-table resize (shared across every open instance) ----
-    // Every .expand-deliverable-table on the page — Standard's or C&CM's,
-    // already open or fetched five minutes from now — shares ONE set of
-    // column widths, written as CSS variables on .project-list-page rather
-    // than on each table individually. Since custom properties inherit
-    // down the page, a resize updates every currently-open sub-table at
-    // once, and any sub-table fetched afterwards just inherits whatever
-    // the current widths are — no re-initialization needed when new ones
-    // show up later.
+    // All .expand-deliverable-table instances (Standard and C&CM) share one
+    // set of widths, set as CSS variables on .project-list-page, so open and
+    // later-fetched sub-tables inherit them.
     const pageEl = document.querySelector('.project-list-page');
 
     if (pageEl) {
@@ -422,15 +350,8 @@
             status: 90,
         };
 
-        // 'max-content' widths, not fr strings — same Pass 4 fix
-        // DEFAULT_LAYOUT above got, applied here 22 Aug 2026. A bare fr
-        // maximum is a shared-space unit: it let one column's content
-        // (a long deliverable name) inflate every OTHER fr column's
-        // rendered width regardless of what was actually in it — that's
-        // exactly the giant, mostly-empty Status column this was
-        // reported as. Paired with the CSS's minmax(min-content,
-        // max-content) (project_list.css, .expand-deliverable-table),
-        // each column now sizes purely from its own content.
+        // 'max-content', not fr, for the same reason as DEFAULT_LAYOUT above
+        // (see .expand-deliverable-table in project_list.css).
         const DELIVERABLE_DEFAULT_LAYOUT = [
             { key: 'name', width: 'max-content' },
             { key: 'deadline', width: 'max-content' },
@@ -445,14 +366,7 @@
             ? window.__savedDeliverableTableLayout
             : DELIVERABLE_DEFAULT_LAYOUT.map((c) => ({ ...c }));
 
-        // Auto-heal: an account with a saved layout from before this fix
-        // may still have fr-based widths (an untouched default, or a
-        // value a drag ended on — the resize handler below already
-        // forces max-content for the measurement instant, but the
-        // RESULT it saved was still a plain px value layered on top of
-        // whatever fr-inflated width was on screen at the time). Same
-        // upgrade DEFAULT_LAYOUT's own auto-heal does above — applies
-        // immediately, no manual layout reset needed.
+        // Saved layouts may still hold fr widths; treat those as 'max-content'.
         deliverableLayout.forEach((col) => {
             if (typeof col.width === 'string' && /fr$/.test(col.width.trim())) {
                 col.width = 'max-content';
@@ -485,11 +399,9 @@
             }, 500);
         }
 
-        // Delegated on document, not bound per-handle — a sub-table can be
-        // added to the page at any time (fetched the first time someone
-        // expands a row), so one listener here beats trying to re-bind a
-        // fresh one every time new content shows up.
-        document.addEventListener('mousedown', (e) => {
+        // Delegated on document because sub-tables are fetched on first expand.
+        bindGlobal(document, 'mousedown', 'deliverableResize', (e) => {
+            if (!pageEl.isConnected) return;
             const handle = e.target.closest('.expand-deliverable-col-resize-handle');
             if (!handle) return;
 
@@ -498,16 +410,9 @@
             const key = headerCell.dataset.colKey;
             const entry = deliverableLayout.find((c) => c.key === key);
 
-            // Same idea as the outer table, but scoped: "name", "deadline",
-            // and "status" are key names used by BOTH tables, so a plain
-            // [data-col-key] lookup would also catch the outer table's own
-            // cells. The .closest() guard keeps this measuring only cells
-            // that are actually inside a deliverable sub-table, across
-            // every one currently open on the page.
-            // Same contamination risk as the outer table's handler above —
-            // scrollWidth on a cell that's currently stretched wider than
-            // its content reports that inflated width back, not the true
-            // minimum. Force max-content for the measurement instant only.
+            // Keys like "name" and "status" exist in the outer table too, so
+            // only measure cells inside a deliverable sub-table. Force
+            // max-content while measuring, as in the outer table.
             let contentMinWidth = 0;
             document.querySelectorAll(`[data-col-key="${key}"]`).forEach((cell) => {
                 if (cell.closest('.expand-deliverable-table')) {

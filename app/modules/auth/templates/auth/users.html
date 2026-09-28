@@ -25,7 +25,7 @@
                 <td>
                     <form method="POST" action="{{ url_for('auth.reset_password', user_id=user.id) }}">
                         <button type="submit" class="btn-reset"
-                            onclick="return confirm('Reset password for {{ user.name }}?')">
+                            onclick='return confirm({{ ("Reset password for " ~ user.name ~ "?") | tojson }})'>
                             Reset Password
                         </button>
                     </form>

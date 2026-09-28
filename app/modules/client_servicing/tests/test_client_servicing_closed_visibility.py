@@ -23,8 +23,7 @@ def _user(db_session, tag, role='cs'):
 
 
 def _project(db_session, user, name, closed=False, install=None, **cs_kwargs):
-    # project_value= in a seed now means the project's own value — the CS
-    # column it used to set was retired when the two were merged.
+    # project_value= seeds Project.value; the other kwargs go to the CS row.
     project = Project(
         name=name, cs_lead_id=user.id, created_by_id=user.id,
         project_status='briefed', installation_date=install,
@@ -71,8 +70,7 @@ def test_closed_project_drops_off_invoicing_by_project(app, client, db_session):
 
 
 def test_a_project_with_no_cs_row_still_lists(app, client, db_session):
-    """The closed filter left-joins, so a project that has never had a CS
-    row must not disappear with it."""
+    """The closed filter left-joins, so a project with no CS row still lists."""
     user = _user(db_session, 'c')
     _project(db_session, user, 'Never Touched By CS')
     login_as(client, app, user, 'password123')
@@ -82,8 +80,7 @@ def test_a_project_with_no_cs_row_still_lists(app, client, db_session):
 
 
 def test_closed_project_still_counts_in_the_monthly_summary(app, db_session):
-    """Closing is an operational state, not a financial one — the month it
-    was invoiced in keeps its money."""
+    """A closed project's invoice still counts in the month it was invoiced."""
     user = _user(db_session, 'd')
     _project(db_session, user, 'Closed But Invoiced', closed=True,
              invoice_date=date(2026, 5, 12), project_value=Decimal('100'),
@@ -109,7 +106,7 @@ def test_closed_install_stays_on_the_calendar_and_is_marked(app, client, db_sess
 
 
 def test_closed_job_card_has_no_editable_cells(app, client, db_session):
-    """Read-only by absence — the inline-edit JS has nothing to hook."""
+    """A closed job renders no editable cells, so inline edit has nothing to hook."""
     today = date.today()
     user = _user(db_session, 'f')
     _project(db_session, user, 'Read Only Install', closed=True, install=today)
@@ -117,8 +114,7 @@ def test_closed_job_card_has_no_editable_cells(app, client, db_session):
 
     html = _get(app, client, 'client_servicing.calendar', view='agenda').get_data(as_text=True)
     assert 'cs-cal-job--closed' in html
-    # The closed job is the only install on the page, so no editable cell
-    # should be rendered anywhere on it.
+    # The closed job is the only install on the page.
     assert 'cs-editable' not in html
 
 

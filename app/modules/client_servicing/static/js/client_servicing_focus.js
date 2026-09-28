@@ -1,23 +1,16 @@
-/* Jump to one project's row and flash it.
-
-   The Dashboard's Urgent Actions link here with ?project=<id> — a missing
-   value goes to the Table, a stuck invoice to Invoicing. Both tables carry
-   data-project-id on their rows, so one file serves both.
-
-   IIFE + direct init: the tag sits in the page's content block, so an SPA
-   swap re-runs it and the link works whether the page was navigated to or
-   loaded outright. */
+/* Scrolls to the row named by ?project=<id> and flashes it. Used by the
+   Table, Invoicing and Closed pages, whose rows carry data-project-id.
+   Works on a full load and on SPA visits (the router re-runs this script). */
 (function () {
     var id = new URLSearchParams(window.location.search).get('project');
-    if (!id) return;
+    // Project ids are numbers; anything else would break the selector below.
+    if (!id || !/^\d+$/.test(id)) return;
 
     var SELECTOR = 'tr[data-project-id="' + id + '"]';
     var attempts = 0;
 
-    /* The nearest ancestor that actually scrolls. Both tables sit in their
-       own scroll box (.cs-table-scroll, .cs-inv-tablewrap), and scrolling it
-       directly is exact — scrollIntoView also walks the page and can land
-       short while the box is still being sized. */
+    /* The nearest ancestor that scrolls. Scrolling that box directly is
+       exact; scrollIntoView can land short while the box is still sizing. */
     function scroller(el) {
         var node = el.parentElement;
         while (node && node !== document.body) {
@@ -33,8 +26,7 @@
     function focus(row) {
         var box = scroller(row);
         if (box) {
-            // Centre the row in the box without touching the horizontal
-            // scroll — the finance table is usually scrolled sideways.
+            // Centre vertically; leave horizontal scroll where the user put it.
             var top = row.offsetTop - box.offsetTop - (box.clientHeight / 2) + (row.offsetHeight / 2);
             box.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
         } else {
@@ -44,10 +36,8 @@
         setTimeout(function () { row.classList.remove('cs-focus-flash'); }, 2400);
     }
 
-    /* The row may not be in the DOM yet on a full page load, and the box it
-       lives in may not have its height until layout settles. Look a few
-       times over a second, then give up quietly — the project simply may not
-       be on this page (closed, cancelled, or filtered out). */
+    /* The row or its box may not be ready yet, so retry for about a second,
+       then give up quietly (the project may not be on this page). */
     function attempt() {
         var row = document.querySelector(SELECTOR);
         if (row) {

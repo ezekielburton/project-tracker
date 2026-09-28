@@ -1,45 +1,34 @@
-/* Digital Innovation module — board page.
-   Built entirely on role tokens (--surface, --text, --border, …) per
-   theming.md, so light/dark just falls out of that — the only colour
-   choices made directly are the 7 stage colours + project dots, which
-   reuse the app's existing named palette (--sky/--coral/--canary/--sage/
-   --lavender/--clover/--oak/--poppy/--salmon) and their already-tuned
-   dark-mode values from shared.css's .status-pill--* rules, rather than
-   inventing anything new. See models.py's DI_STAGE_COLOURS for the
-   stage -> colour-name mapping this file's class names match. */
+/* Digital Innovation module styles (all DI screens).
+   Built on role tokens (--surface, --text, --border, …), so themes come for
+   free. The only direct colours are the 8 stage colours + project dots, from
+   the app's named palette with shared.css's .status-pill--* dark values.
+   Class suffixes match models.py's DI_STAGE_COLOURS. */
 
 .di-page {
     padding: 0;
 }
 
-/* Let the board run flush against the global sidebar and flush to the
-   viewport's right edge — .main-content's blanket 2rem padding (meant for
-   ordinary pages) otherwise leaves a 32px gap on both sides. .di-board and
-   .di-sidebar re-add their own inner padding, so content still isn't
-   jammed against the edges — only the DI page itself bleeds full-width. */
+/* Drop .main-content's side/bottom padding so DI pages run full-width;
+   .di-board and the rail add their own padding. */
 .main-content:has(.di-page) {
     padding-left: 0;
     padding-right: 0;
     padding-bottom: 0;
 }
 
-/* .di-shell/.di-page can't use a percentage-height chain: .main-content is a
-   flex ITEM, not a flex container with a definite height, so percentage heights
-   have nothing to resolve against and flex items skip growth-clamping. Uses a
-   definite-height technique instead (same as client_servicing.css). */
+/* .main-content is a flex item with no definite height, so a percentage
+   height chain cannot work here; the shell gets a definite height instead. */
 .di-shell {
     display: flex;
     align-items: stretch;
-    /* Solved by core/shared/js/fill_height.js. The fallback is a viewport
-       fraction, not calc(100vh - N): an offset goes stale the moment the
-       header or the footer changes height, and a shell that is quietly too
-       tall is what put the closed strip out of reach. */
+    /* Set by core/shared/static/js/fill_height.js. The fallback is a viewport
+       fraction: a calc(100vh - N) offset goes stale when the header or
+       footer height changes, and a too-tall shell hides the closed strip. */
     height: var(--di-shell-height, 72vh);
 }
 
-/* ── The Projects switcher that hangs under the rail ──
-   The rail itself is shared: .module-rail in shared.css, rendered by
-   _shared_macros.html's module_rail(). Only this section is DI's own. */
+/* ── Projects switcher under the rail ──
+   The rail itself is shared (.module-rail, module_rail() macro). */
 
 .di-sidebar-section-label {
     display: block;
@@ -180,14 +169,9 @@
     flex-direction: column;
 }
 
-/* Same recipe as .di-closed-strip further down — this module's existing
-   "footer" bar at the bottom of the board — mirrored to sit at the top
-   instead. Negative margins
-   cancel .di-board's own padding on 3 sides so the bar bleeds flush
-   against the DI sidebar (left), the content's right edge, and up
-   against the global .app-header (top) — no border-radius, since a
-   flush bar shouldn't read as a floating card. border-left is skipped
-   because .di-sidebar already draws its own border-right there. */
+/* Header bar mirrors .di-closed-strip at the top. Negative margins cancel
+   .di-board's padding so it runs flush to the rail, the right edge and the
+   app header. No border-left: the rail draws its own border there. */
 .di-board-header {
     display: flex;
     align-items: center;
@@ -230,12 +214,8 @@
     margin: 0;
 }
 
-/* Incoming button (header, next to "+ New project") + the overlay it
-   opens — a grid of cards rather than an inline strip. Cards are pre-rendered from the
-   same pending_intake_items the trigger's count badge uses — opening the
-   overlay is pure client-side show/hide, no fetch needed (same reasoning
-   as the new-feature-date input already being in the DOM before its
-   modal opens). */
+/* Incoming button + overlay. Cards are server-rendered on the page, so
+   opening the overlay needs no fetch. */
 .di-incoming-badge {
     background: var(--surface-hover);
     border-radius: 999px;
@@ -244,10 +224,8 @@
     margin-left: var(--space-1);
 }
 
-/* Plays once when a live SSE ping reports the Incoming count went up —
-   see _diUpdateIncomingBadge in digital_innovation_board.js. A quick
-   scale pop rather than a color change, so it reads as "something just
-   landed" without needing a second color in the module's palette. */
+/* Plays when a live ping raises the Incoming count
+   (_diUpdateIncomingBadge in digital_innovation_board.js). */
 .di-incoming-badge--pulse {
     animation: di-incoming-pulse 0.6s ease-out;
 }
@@ -327,13 +305,8 @@
     grid-column: 1 / -1;
 }
 
-/* System-project link badge/trigger (in .di-board-heading, next to the
-   title) + the search-as-you-type picker it opens. See routes/projects.py
-   ::search_projects for why this is a search box rather than the plain
-   <select> the app uses for shorter lists elsewhere. */
-/* Internal/External track badge, board.html - same read-only-vs-
-   editable shape as .di-linked-badge just below, so the two board-
-   header pills read as one family. */
+/* System-project link badge/trigger + its search picker. */
+/* Internal/External track badge; same shape as .di-linked-badge below. */
 .di-track-badge {
     font-size: var(--text-sm);
     color: var(--text-muted);
@@ -450,11 +423,8 @@
 }
 
 
-/* #di-board-body (see _board_columns.html) is the live-refresh JS's swap
-   target, between .di-board (flex column) and .di-columns/.di-closed-strip. It
-   must be a flex column itself, or those children lose the flex chain —
-   .di-columns' flex:1/overflow (the scrollable region) and .di-closed-strip's
-   flex-shrink:0 (pinned below) stop working under an ordinary block parent. */
+/* #di-board-body (the live-refresh swap target) must be a flex column, or
+   .di-columns loses its scroll region and .di-closed-strip is not pinned. */
 #di-board-body {
     display: flex;
     flex-direction: column;
@@ -501,16 +471,10 @@
     font-size: var(--text-xs);
 }
 
-/* Each column's count badge, tinted to match its header's colour — a light wash of the same colour behind the number,
-   not a solid fill, so it reads as "belongs to this header" without
-   competing with it. Literal rgba() tints, same recipe as shared.css's
-   dark-mode .status-pill--* rules (a CSS var can't be split into its R/G/B
-   components for rgba(), so this is the one place raw colour values are
-   unavoidable — same as those existing dark-mode rules). Sourced from the
-   readable colour each header text actually uses — the --di-*-text
-   overrides above for sky/canary/sage/salmon, the raw palette value for
-   the other 5 — never the original washed-out pastel, or the badge would
-   have the same illegibility problem the header text just got fixed for. */
+/* Count badges: a light wash of the header's text colour behind the number.
+   Literal rgba() because a CSS var cannot be split into R/G/B. Uses the
+   readable text colour (--di-*-text for sky/canary/sage/salmon), never the
+   raw pastel, which is illegible as text. */
 .di-column-count--sky { background: rgba(46, 109, 164, 0.14); color: var(--di-sky-text); }
 .di-column-count--coral { background: rgba(255, 133, 89, 0.16); color: var(--coral); }
 .di-column-count--canary { background: rgba(138, 109, 0, 0.14); color: var(--di-canary-text); }
@@ -559,13 +523,9 @@
     margin-bottom: var(--space-2);
 }
 
-/* Thin track + fill, sized by the same current_step_number board_data.py
-   already computes for the "Step N of total" text below it — so the bar
-   and the text can never disagree about how far along a feature is. The
-   fill reuses .di-dot--<colour> (background: var(--<colour>)) rather
-   than a new set of colour rules, same "don't invent a colour treatment
-   that already exists" approach as .di-card-step--<colour> reusing the
-   column header's palette. */
+/* Progress bar. Width comes from progress_pct (board_data.py), computed from
+   the same step number as the "Step N of total" text. The fill colour comes
+   from .di-dot--<colour>. */
 .di-card-progress {
     height: 6px;
     border-radius: 999px;
@@ -609,9 +569,7 @@
     flex-shrink: 0;
 }
 
-/* "+ Add feature" — only ever rendered at the bottom of the first
-   (Researching) column, since every feature starts there. Same plain
-   text-button recipe the sidebar's text buttons use. */
+/* "+ Add feature", under the first column only. */
 .di-add-feature-btn {
     background: none;
     border: none;
@@ -694,7 +652,7 @@
     font-size: var(--text-sm);
 }
 
-/* ── New-project modal error text ── */
+/* ── Form error text ── */
 
 .di-form-error {
     color: var(--poppy);
@@ -702,18 +660,12 @@
     margin: var(--space-2) 0 0 0;
 }
 
-/* ── The 9 reusable stage/project colours ──────────────────────────────
-   Light mode: the raw palette var directly — EXCEPT sky/canary/sage/
-   salmon, which are pastels tuned to sit behind black text (a dot, the
-   old solid-chip column header), not to BE text on the page's cream
-   background — at that job they're nearly illegible. --di-*-text below are darker/more saturated versions of
-   those same 4 hues, only for that "colour as text" job; the dot fill
-   and the progress bar's highlight keep using the real raw colour
-   further down, unaffected. The other 5 (coral/lavender/clover/oak/
-   poppy) are already dark/saturated enough to read fine as text.
-   Dark mode: the exact tinted text colours shared.css's .status-pill--*
-   dark rules already use for the same 9 names — reused verbatim, not
-   reinvented, per theming.md. */
+/* ── The 9 stage/project colours ──
+   Light mode: the raw palette var, except sky/canary/sage/salmon. Those are
+   pastels that are illegible as text on the cream background, so
+   --di-*-text holds darker versions for text use only; dot and progress
+   fills still use the raw colour. Dark mode: shared.css's .status-pill--*
+   dark text colours. */
 
 :root {
     --di-sky-text: #2E6DA4;
@@ -732,10 +684,9 @@
 .di-dot--poppy, .di-card-step--poppy, .di-column-header--poppy { color: var(--poppy); }
 .di-dot--salmon, .di-card-step--salmon, .di-column-header--salmon { color: var(--di-salmon-text); }
 
-/* Column headers: plain coloured text, no background chip, reusing the text-colour rule above. */
+/* Column headers are plain coloured text (rule above), no background. */
 
-/* .di-dot is a solid fill, not text, so it needs `background` too — same
-   colour, just the other property. */
+/* .di-dot is a fill, so it needs `background` as well as `color`. */
 .di-dot--sky { background: var(--sky); }
 .di-dot--coral { background: var(--coral); }
 .di-dot--canary { background: var(--canary); }
@@ -756,9 +707,7 @@
 :root[data-theme="dark"] .di-card-step--canary, :root[data-theme="dark"] .di-column-header--canary { color: #EBDC7E; }
 :root[data-theme="dark"] .di-card-step--lavender, :root[data-theme="dark"] .di-column-header--lavender { color: #C4A8FF; }
 
-/* Dots stay solid in dark mode too (a translucent pill-style fill would
-   make an 8px dot nearly invisible) — same reused hex values, as a solid
-   background instead of a tinted one. */
+/* Dots stay solid in dark mode; a translucent 8px dot would vanish. */
 :root[data-theme="dark"] .di-dot--coral { background: #FF9A73; }
 :root[data-theme="dark"] .di-dot--oak { background: #C79E6B; }
 :root[data-theme="dark"] .di-dot--clover { background: #6FD07E; }
@@ -769,10 +718,8 @@
 :root[data-theme="dark"] .di-dot--canary { background: #EBDC7E; }
 :root[data-theme="dark"] .di-dot--lavender { background: #C4A8FF; }
 
-/* ── Feature detail modal ──────────────
-   Content is a server-rendered fragment (_feature_detail.html) dropped
-   into #di-feature-detail-body by openDiFeatureDetail() in the board JS,
-   so everything below targets that fragment's markup. */
+/* ── Feature detail modal ──
+   Styles the _feature_detail.html fragment loaded into #di-feature-detail-body. */
 
 .di-feature-detail-header {
     display: flex;
@@ -849,11 +796,9 @@
     font-size: var(--text-sm);
 }
 
-/* Status row — 7 stage pills. "current" reuses the exact same
-   .di-column-header--<colour> classes the board's own column headers use
-   (solid fill, black text, dark-mode tint already handled there — no new
-   colour rules needed). "done"/"future" both stay neutral; the checkmark
-   is what actually signals "done", not a separate colour treatment. */
+/* Status row: one pill per stage. "current" also gets
+   .di-column-header--<colour> for its coloured text. "done" is marked by the
+   checkmark, not a colour. */
 .di-status-row {
     display: flex;
     flex-wrap: wrap;
@@ -941,9 +886,7 @@
     border-color: transparent;
 }
 
-/* Read-only viewers (can_edit_board is False) get no tick/delete/add/
-   advance controls at all — the row itself shouldn't look clickable
-   either, so this overrides .di-step's base cursor: pointer. */
+/* Read-only viewers: rows must not look clickable. */
 .di-step--readonly {
     cursor: default;
 }
@@ -1015,20 +958,13 @@
     margin-top: var(--space-3);
 }
 
-.di-advance-banner--muted {
-    color: var(--text-muted);
-}
-
-/* Per-step delete — small inline danger button, right-aligned by
-   .di-step-label's flex:1 pushing everything after it to the edge. */
+/* Per-step delete; .di-step-label's flex:1 pushes it right. */
 .di-step-delete {
     flex-shrink: 0;
 }
 
-/* Inline "add a step" row, sits below the checklist for every open
-   stage (including an empty/unconfigured one — there's no special
-   "skip" UI, so this is how a stage with zero template steps gets its
-   first one). */
+/* Add-a-step row, shown for every open stage; it is how an empty stage
+   gets its first step. */
 .di-step-add {
     display: flex;
     flex-direction: column;
@@ -1069,9 +1005,7 @@
     flex-shrink: 0;
 }
 
-/* Move-to-stage picker (_feature_detail.html) - a plain select + button,
-   same input/button shape as .di-step-add-row just above so the two
-   controls read as one family rather than two different form styles. */
+/* Move-to-stage picker; same shape as .di-step-add-row. */
 .di-stage-picker {
     display: flex;
     flex-direction: column;
@@ -1108,10 +1042,8 @@
     flex-shrink: 0;
 }
 
-/* Persistent error slot in the modal shell (board.html), a sibling of
-   #di-feature-detail-body so it survives that element's innerHTML being
-   swapped out on every successful tick/add/delete/advance/close. Same
-   colour treatment as .di-form-error elsewhere in this file. */
+/* Error slot in board.html's modal shell, outside #di-feature-detail-body
+   so fragment swaps do not wipe it. */
 .di-feature-detail-error {
     color: var(--poppy);
     font-size: var(--text-sm);
@@ -1131,12 +1063,9 @@
     text-align: center;
 }
 
-/* ── Edit Templates screen ─────────────────────────────────────────────
-   Reuses .di-column-header--<colour> for each stage's section header
-   (same solid-fill/black-text recipe as the board's own column headers)
-   and .di-step-label/.di-step-details for a row's title+details text —
-   only the row shell, move buttons and edit/delete affordances below are
-   new, since template rows have no done/active/pending state to style. */
+/* ── Edit Templates screen ──
+   Stage headers reuse .di-column-header--<colour>; row text reuses
+   .di-step-label/.di-step-details. */
 .di-template-stage {
     margin-bottom: var(--space-6);
 }
@@ -1215,12 +1144,33 @@
     flex-shrink: 0;
 }
 
-/* ── Cost breakdown modal ──────────────────────────
-   Content is a server-rendered fragment (_cost_breakdown.html) dropped
-   into #di-cost-body by openDiCostBreakdown() in the board JS — same
-   "fetch a fragment" pattern as the feature detail modal, so most of the
-   chrome reuses .di-feature-detail-header/-close/-title and
-   .di-detail-divider (both defined above) rather than duplicating them. */
+/* ── Settings screen ──
+   Fields are the shared .card + .form-group. */
+.di-settings-card {
+    max-width: 28rem;
+}
+
+.di-settings-card .di-form-error {
+    margin: 0;
+}
+
+/* Display only: the server uppercases on save. */
+.di-settings-currency-input {
+    text-transform: uppercase;
+}
+
+.di-settings-hint {
+    margin: 0 0 var(--space-4) 0;
+}
+
+.di-settings-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* ── Cost breakdown modal ──
+   Styles the _cost_breakdown.html fragment. Reuses .di-feature-badge,
+   .di-feature-detail-title/-close and .di-detail-divider from above. */
 
 .di-cost-header {
     display: flex;
@@ -1237,14 +1187,9 @@
     flex-shrink: 0;
 }
 
-/* Wider than the shared .modal-box--wide's 620px cap (also used by the
-   Decision Flag modal, which we don't want to affect — hence scoping
-   here instead of touching that shared rule). 960px is wide enough that
-   the 7-field add-row and the 5-card stat grid both sit on one line at
-   typical desktop widths instead of wrapping. This only raises the
-   ceiling: .di-cost-add-row keeps flex-wrap and .di-cost-stats keeps its
-   auto-fit grid, so both still wrap normally on a viewport too narrow to
-   give the modal the full 960px. */
+/* Wider than the shared .modal-box--wide (also used by the Decision Flag
+   modal, so scoped here). 960px fits the add-row and stat cards on one
+   line on desktop; both still wrap on narrow screens. */
 .di-cost-modal-box {
     max-width: 960px;
 }
@@ -1432,11 +1377,8 @@
     color: var(--di-sky-text);
 }
 
-/* Two lines — "Week 36" bold, the
-   actual date range small and muted underneath. A month/quarter has no
-   secondary line (lib/periods.py's format_period_label_parts() returns
-   '' for those — the whole label already reads fine as one line), so
-   this still needs to look right with only the primary child present. */
+/* Primary label bold, date range small underneath. Months and quarters
+   have no secondary line (lib/periods.py), so it must work with one child. */
 .di-perf-period-label {
     display: flex;
     flex-direction: column;
@@ -1454,15 +1396,8 @@
     color: var(--text-muted);
 }
 
-/* --pine is the app's established positive/success text colour, used as
-   plain `color:` throughout main.css with no dark-mode override needed
-   (it's muted enough to read fine in both modes) — reused here rather
-   than inventing a new "profit green". Projected profit instead reuses
-   .di-column-header--sky directly in the template (the DI stage
-   system's existing blue text token, already dark-tuned) rather than a
-   colour rule of its own here — "money already banked" vs "money still
-   being estimated" read as visibly different colours without a third
-   colour system. */
+/* Closed (banked) profit uses the app's success green, --pine, which needs no
+   dark override. Projected profit uses .di-column-header--sky in the template. */
 .di-perf-profit {
     color: var(--pine);
 }
@@ -1472,18 +1407,9 @@
     color: var(--text-muted);
 }
 
-/* .di-cost-stat-card (shared with the Cost Breakdown modal) is a flat
-   --surface-hover fill with no border/shadow of its own — fine inside
-   Cost Breakdown's white .modal-box, but Performance's copy sits
-   straight on the bare page background. A 1px --border edge alone
-   (first attempt) still barely read against the page — --surface-hover
-   (#EDEAE4 light mode) is only ~8 RGB units off --background (#f5f1ed),
-   and --border (#D4CCBE) is itself a light tan, so the "border" was
-   nearly invisible in a real screenshot. Switched to the same true-white recipe
-   .di-cost-stat-card--total already uses below (--surface-raised is
-   literal #FFFFFF / --border-strong is a real grey, #AAAAAA) — scoped
-   here, not on the shared class, so Cost Breakdown's own (unelevated,
-   inside-a-white-modal) cards are untouched. */
+/* Performance's stat cards sit on the page background, where the shared
+   card's --surface-hover fill barely shows. Raised white + strong border,
+   scoped here so the Cost Breakdown modal's cards are unchanged. */
 .di-perf-stats .di-cost-stat-card {
     background: var(--surface-raised);
     border: 1px solid var(--border-strong);
@@ -1500,13 +1426,8 @@
     gap: var(--space-2);
 }
 
-/* Same "true white, not just --white" fix as the stat cards above —
-   .table-wrapper's own var(--white) (#fafafa light mode) is only ~5-13
-   RGB units off the page background, so the table read as blending into
-   the page too. Overrides just for Performance's
-   copy, same specificity so this rule (declared after .table-wrapper in
-   the cascade) wins without touching the shared class other DI screens
-   use. */
+/* Same fix for the table: .table-wrapper's --white nearly matches the page
+   background. Scoped to Performance. */
 .di-perf-table-wrapper {
     background-color: var(--surface-raised);
     border: 1px solid var(--border-strong);
@@ -1563,18 +1484,13 @@
     transition: transform 0.15s ease;
 }
 
-/* Rotating the same "›" glyph 90° reads as a down-chevron when expanded
-   — one glyph, no JS innerHTML-swapping needed (digital_innovation_
-   performance.js just toggles the aria-expanded attribute). */
+/* The "›" glyph rotates to point down when expanded. */
 .di-perf-expand-btn[aria-expanded="true"] {
     transform: rotate(90deg);
 }
 
-/* Closed row: a faint permanent green wash (not a hover state) so a
-   closed/profitable project reads at a glance without hunting for the
-   Status pill — same low-alpha-over-page-background technique
-   .di-column-count--clover's fill already uses, which is why this needs
-   no separate dark-mode rule. */
+/* Faint green wash marks closed projects. Low alpha reads on both themes,
+   so no dark override. */
 .di-perf-project-row--closed {
     background: rgba(76, 175, 90, 0.06);
 }
@@ -1583,9 +1499,7 @@
     background: rgba(76, 175, 90, 0.1);
 }
 
-/* Feature rows reuse the SAME six columns as their parent project row
-   (see _performance_table.html's comment) instead of a separate
-   mini-table — this just indents/mutes the one cell that needs it. */
+/* Feature rows share the parent's columns; only the name cell is indented. */
 .di-perf-feature-row {
     background: var(--surface-hover);
 }
@@ -1596,10 +1510,7 @@
     font-size: var(--text-sm);
 }
 
-/* Small filled pill for a project's or feature's status. Reuses
-   .di-column-count--<colour>'s existing tinted-fill recipe (already
-   dark-tuned per colour) for the fill; this just adds the padding a
-   short text label needs that a numeric count badge didn't. */
+/* Status pill. Fill and colour come from .di-column-count--<colour>. */
 .di-perf-status-pill {
     display: inline-flex;
     align-items: center;

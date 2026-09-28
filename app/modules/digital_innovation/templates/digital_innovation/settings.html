@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Digital Innovation — Settings{% endblock %}
+
+{% block content %}
+<div class="di-page">
+    <div class="di-shell">
+        {% with active_nav = 'settings' %}
+        {% include "digital_innovation/_sidebar.html" %}
+        {% endwith %}
+
+        {# Must stay a <div>, not <main>: spa_strip_response (app/__init__.py)
+           cuts #main-content at the first "</main>", so a nested one drops
+           everything after it on SPA nav. #}
+        <div class="di-board">
+            <div class="di-board-header">
+                <div>
+                    <h1 class="di-board-title">Settings</h1>
+                    <p class="di-board-subtitle">Department-wide values used when pricing costs.</p>
+                </div>
+            </div>
+
+            <form class="card di-settings-card" id="di-settings-form" novalidate>
+                <div class="form-group">
+                    <label for="di-settings-rate">Dev hourly rate</label>
+                    <input type="number" id="di-settings-rate" name="dev_hourly_rate"
+                           min="0" step="0.01" inputmode="decimal"
+                           value="{{ '%.2f' | format(settings.dev_hourly_rate or 0) }}">
+                    <p class="di-form-error hidden" data-di-settings-error="dev_hourly_rate"></p>
+                </div>
+                <div class="form-group">
+                    <label for="di-settings-currency">Currency</label>
+                    <input type="text" id="di-settings-currency" name="currency"
+                           maxlength="10" autocomplete="off" class="di-settings-currency-input"
+                           value="{{ settings.currency }}">
+                    <p class="di-form-error hidden" data-di-settings-error="currency"></p>
+                </div>
+                <p class="form-hint di-settings-hint">New rate applies to new Dev Time entries; existing entries keep the rate they were saved with.</p>
+                <div class="di-settings-actions">
+                    <button type="submit" class="btn-primary" id="di-settings-save">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('digital_innovation_assets.static', filename='js/digital_innovation_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('digital_innovation_assets.static', filename='js/digital_innovation_shell.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('digital_innovation_assets.static', filename='js/digital_innovation_settings.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

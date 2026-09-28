@@ -1,19 +1,8 @@
-// file-templates.js — Vitamin-E
-// Drives the C&CM File Templates library page: collapsible regions and
-// customers, both persisted to localStorage the same mechanism as the
-// C&CM detail page's customer rows use, so state survives reloads.
-//
-// The "Download All" buttons on this page are NOT wired here — they reuse
-// the exact same data-action="download-all-zip" hook (and
-// triggerZipDownload() function) already defined in detail.js, which
-// loads globally on every page. Nothing new needed for those.
+// File Templates page: collapsible regions and customers (state kept in
+// localStorage), the Simulation Files button and the Download All zips.
 
-// Guard against re-registering this listener every time the SPA nav
-// re-executes this script (sidebar.js's execScripts() genuinely re-runs
-// external <script> tags on every navigation to this page). Without this,
-// document — which is never destroyed — would accumulate one extra click
-// listener per visit, and a single click would fire the toggle multiple
-// times, canceling itself out (toggle off then straight back on).
+// The SPA router re-runs this script on every visit; guard so document
+// does not stack click listeners (a double toggle cancels itself out).
 if (!window._ftDispatcherWired) {
     window._ftDispatcherWired = true;
     document.addEventListener('click', function (e) {
@@ -23,17 +12,34 @@ if (!window._ftDispatcherWired) {
         var customerToggle = e.target.closest('[data-action="toggle-ft-customer"]');
         if (customerToggle) { toggleFtSection(customerToggle); return; }
 
-        // Simulation Files button — wired here (not on the element directly) so it
-        // survives SPA navigation replacing the DOM.
+        // Delegated so it survives SPA navigation replacing the DOM.
         var simBtn = e.target.closest('#open-simulation-files-btn');
         if (simBtn) { openNasLink(simBtn); return; }
+
+        var zipBtn = e.target.closest('[data-action="download-all-zip"]');
+        if (zipBtn) { downloadAllZip(zipBtn); return; }
     });
 }
 
-// One shared toggle for both regions and customers — the behavior is
-// identical (toggle the target's hidden class, remember the choice), only
-// the CSS classes involved differ, and that's handled purely by which
-// element .collapsed lands on.
+// The build URL zips the files server-side and returns a one-shot download URL.
+function downloadAllZip(btn) {
+    var url = btn.getAttribute('data-zip-build-url');
+    if (!url || btn.disabled) return;
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Zipping...';
+    function reset() { btn.disabled = false; btn.textContent = originalText; }
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+        reset();
+        if (!data.success) { showToast(data.error || 'Could not build zip.', 'error'); return; }
+        window.location = data.download_url;
+    }).catch(function () {
+        reset();
+        showToast('Something went wrong.', 'error');
+    });
+}
+
+// Shared by region and customer toggles; the collapsed state is saved per target id.
 function toggleFtSection(toggleArea) {
     var targetId = toggleArea.getAttribute('data-target');
     var body = document.getElementById(targetId);
@@ -57,7 +63,6 @@ function restoreFileTemplatesCollapseState() {
 function initFileTemplatesPage() {
     if (!document.querySelector('.ft-region-block')) return; // not on this page
     restoreFileTemplatesCollapseState();
-    // simBtn click handled by the delegated listener above — no direct binding needed.
 }
 
 document.addEventListener('DOMContentLoaded', initFileTemplatesPage);

@@ -1,14 +1,7 @@
-{# app/templates/project_list/_deliverable_table.html
-The fixed-shape deliverable sub-table — Standard's direct project-level
-expansion and C&CM's per-customer expansion both render THIS same
-partial (see expand()/expand_customer() in project_list.py). Unlike the
-outer table, this has no drag-reorder/column customization — same
-"always this shape" spirit the old Deliverable View preset had.
-
-Every class here is prefixed expand-deliverable-* rather than plain
-deliverable-* — main.css already has an unrelated .deliverable-row
-class (from the brief-creation flow's deliverable list), loaded
-globally on every page, and it was silently colliding with this one. #}
+{# app/modules/projects/templates/project_list/_deliverable_table.html
+Fixed-shape deliverable sub-table, shared by Standard's project expansion
+and C&CM's per-customer expansion (expand()/expand_customer() in
+project_list.py). No column resize/reorder. #}
 {% from '_shared_macros.html' import tag, person_chip, status_pill %}
 <div class="expand-deliverable-table expand-deliverable-table--{{ brief_type }}">
     <div class="expand-deliverable-row expand-deliverable-header">

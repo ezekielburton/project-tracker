@@ -1,7 +1,6 @@
 /**
- * Drag-to-reorder for Editor.js blocks.
- * Editor.js ships a settings button but no block dragging; this makes that
- * button a handle and reorders with the editor's own blocks.move().
+ * Drag-to-reorder for Editor.js blocks: the block settings button becomes the
+ * handle, and blocks.move() does the reorder.
  * Listens in the capture phase, because Editor.js consumes drop events first.
  */
 (function () {

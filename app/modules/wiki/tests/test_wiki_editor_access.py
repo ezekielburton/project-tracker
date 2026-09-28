@@ -12,8 +12,8 @@ UPLOADS = ('/wiki/upload-image', '/wiki/upload-video')
 
 
 def _gated_rules():
-    """Read the route list from the committed baseline, so a new editor route
-    joins this test the moment it is added rather than slipping past ungated."""
+    """Editor and upload routes from the committed route baseline, so a new
+    editor route is covered automatically."""
     rules = []
     for line in open(BASELINE, encoding='utf-8'):
         parts = line.rstrip('\n').split('\t')
@@ -70,8 +70,8 @@ def _assert_through(resp, rule, who):
 
 @pytest.mark.parametrize('rule, methods', GATED_RULES, ids=[r for r, _ in GATED_RULES])
 def test_editor_route_is_admin_only(app, db_session, rule, methods):
-    """The gate reads the logged-in user, not the emulated one: emulation can
-    never let someone in, and never shuts a real admin out mid-preview."""
+    """Editor routes are admin-only and gate on the real user: emulation neither
+    grants nor blocks access."""
     section, article = _fixture_rows(db_session)
     designer = _user(app, db_session, 'gate-designer@example.com', 'designer')
     admin = _user(app, db_session, 'gate-admin@example.com', 'admin')

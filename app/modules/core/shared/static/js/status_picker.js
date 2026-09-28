@@ -1,19 +1,7 @@
-// app/static/js/status_picker.js
-// Admin-only status override control (22 Aug 2026, per Ezekiel) — click a
-// status pill in the overlay, see every possible status, pick one to
-// override it. Same generic popover mechanics as avatar_picker.js (open/
-// close/position/outside-click/Esc/close-on-scroll), just its own class
-// hooks (.status-picker*) and reading data-status-value instead of
-// data-user-id — kept as its own small file rather than generalizing
-// avatar_picker.js, since that component is already wired up and shipping
-// for the Deliverables assign feature and touching it risks regressing
-// that unrelated, already-working flow.
-//
-// Deliberately as dumb as AvatarPicker: this file only knows how to open/
-// close a popover and report which option was clicked. It doesn't know
-// what a "project" or "deliverable" is, or how to POST — see
-// project_details_card.js / project_deliverables_card.js for the actual
-// override request + DOM refresh built around this.
+// status_picker.js — admin-only status override popover: click a status
+// pill, pick a status. Same mechanics as avatar_picker.js, with .status-picker*
+// hooks and data-status-value. Only reports the pick; the POST and refresh
+// live in project_details_card.js / project_deliverables_card.js.
 window.StatusPicker = (function () {
     var activeClose = null;
 
@@ -59,8 +47,7 @@ window.StatusPicker = (function () {
         }
 
         function outsideClick(e) {
-            // While open the popover lives on <body>, so it is no longer a
-            // descendant of pickerEl — both have to count as inside.
+            // While open the popover lives on <body>, outside pickerEl.
             if (pickerEl.contains(e.target) || popover.contains(e.target)) return;
             close();
         }
@@ -82,6 +69,9 @@ window.StatusPicker = (function () {
 
         return {
             destroy: function () {
+                // Hide first: release() puts an open popover back at home,
+                // where it would show inline if the picker is still on the page.
+                popover.hidden = true;
                 window.PopoverPosition.release(popover);
                 window.removeEventListener('scroll', closeOnScroll, true);
                 if (activeClose === close) activeClose = null;

@@ -1,7 +1,6 @@
 /**
  * The Help tray: the contextual "?" and the dock's Help pill.
- * Loaded from base.html, so it binds once and survives SPA page swaps —
- * every click is handled by delegation rather than per-page wiring.
+ * Loaded once from base.html; clicks are delegated on document so they survive SPA swaps.
  */
 (function () {
     'use strict';
@@ -33,6 +32,7 @@
 
     /** Open the tray on a key. The shell clears the body, so the load waits for onOpen. */
     function openKey(key) {
+        if (!window.HelixTrays) { return; }
         pending = '/wiki/help/' + encodeURIComponent(key);
         if (window.HelixTrays.isOpen('help')) {
             load(pending);

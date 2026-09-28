@@ -10,7 +10,7 @@
         <span style="font-family: var(--font-mono); font-size: 1.8rem; color: var(--tangerine); letter-spacing: 0.06em; margin-left: 0.75rem; vertical-align: baseline;">v1.2 — June 2026</span>
     </div>
 
-    <!-- Seamless layout: dark nav | tangerine divider | white content -->
+    <!-- Layout: nav | tangerine divider | content -->
     <div style="display: flex; align-items: stretch; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">
 
         <!-- ── Left nav ─────────────────────────────────────────── -->
@@ -166,105 +166,14 @@
 </div>
 
 <style>
-/* ── Blog nav items ──────────────────────────────────────── */
-.blog-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.65rem 1.5rem;
-    text-decoration: none;
-    cursor: pointer;
-    transition: background 0.15s;
-    position: relative;
-}
-.blog-nav-item:hover {
-    background: var(--sandstone);
-}
-.blog-nav-item.active {
-    background: rgba(242,127,85,0.08);
-}
-.blog-nav-num {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: #bbb;
-    flex-shrink: 0;
-    transition: color 0.15s;
-}
-.blog-nav-label {
-    font-family: var(--font-body);
-    font-size: 0.875rem;
-    color: #888;
-    flex: 1;
-    transition: color 0.15s;
-    text-transform: none;
-    letter-spacing: normal;
-}
-.blog-nav-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--tangerine);
-    flex-shrink: 0;
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-.blog-nav-item.active .blog-nav-num { color: var(--tangerine); }
-.blog-nav-item.active .blog-nav-label { color: var(--black); font-weight: 600; }
-.blog-nav-item.active .blog-nav-dot { opacity: 1; }
-
-/* ── Blog content typography ─────────────────────────────── */
-.blog-section {
-    margin-bottom: 0.5rem;
-}
-.blog-h2 {
-    font-family: var(--font-heading);
-    font-size: 1.4rem;
-    color: var(--tangerine);
-    margin: 0 0 1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-.blog-h3 {
-    font-family: var(--font-body);
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--tangerine);
-    margin: 1.25rem 0 0.4rem;
-    text-transform: none;
-    letter-spacing: normal;
-}
-.blog-body {
-    font-size: 0.9rem;
-    line-height: 1.7;
-    color: #444;
-    margin: 0 0 0.75rem;
-}
-.blog-callout {
-    background: var(--sandstone);
-    border-left: 3px solid var(--tangerine);
-    border-radius: 0 6px 6px 0;
-    padding: 0.85rem 1.1rem;
-    font-size: 0.875rem;
-    line-height: 1.6;
-    color: #555;
-    margin: 1.25rem 0;
-}
-.blog-list {
-    margin: 0.5rem 0 0.75rem 1.25rem;
-    padding: 0;
-}
-.blog-list li {
-    font-size: 0.9rem;
-    line-height: 1.7;
-    color: #444;
-    margin-bottom: 0.35rem;
-}
-.blog-hr {
-    border: none;
-    border-top: 1px solid var(--tangerine);
-    margin: 2rem 0;
-    opacity: 0.35;
-}
+/* blog.css styles this page; these are the only values that differ from it
+   (fixed colours instead of theme tokens, and the nav item's positioning). */
+.blog-nav-item { position: relative; }
+.blog-nav-num { color: #bbb; }
+.blog-nav-label { color: #888; }
+.blog-body { color: #444; }
+.blog-callout { color: #555; }
+.blog-list li { color: #444; }
 </style>
 
 <script>
@@ -275,13 +184,11 @@
     var sections   = document.querySelectorAll('.blog-section');
 
     function getActive() {
-        // getBoundingClientRect is always relative to the viewport —
-        // avoids the offsetTop/offsetParent mismatch when the scroll
-        // container isn't a positioned ancestor of the sections.
+        // Viewport-relative rects; offsetTop breaks because the scroll
+        // container is not the sections' offsetParent.
         var containerTop = scrollArea.getBoundingClientRect().top;
         var active = sections[0];
         sections.forEach(function (s) {
-            // How far the section top is from the top of the visible article area
             var relTop = s.getBoundingClientRect().top - containerTop;
             if (relTop <= 60) active = s;
         });
@@ -296,10 +203,9 @@
     }
 
     scrollArea.addEventListener('scroll', updateNav);
-    updateNav(); // set on load
+    updateNav();
 
-    // Smooth scroll on nav click — same fix: use getBoundingClientRect
-    // to get the section's position relative to the scroll container.
+    // Smooth-scroll the article (not the window) to the clicked section.
     navItems.forEach(function (item) {
         item.addEventListener('click', function (e) {
             e.preventDefault();

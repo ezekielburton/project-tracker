@@ -1,5 +1,4 @@
-# Board-page data assembly, separate from routes/board.py so a JSON refresh
-# endpoint can reuse the same query/shape as a full page load.
+# Board-page data, shared by the full page and the live-refresh fragments.
 
 from collections import namedtuple
 
@@ -7,12 +6,6 @@ from sqlalchemy import func
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import FeatureRequest
 from app.modules.digital_innovation.models import DiProject, DiFeature, DiCostEntry, DiIntakeItem, DI_STAGES
-
-# One shape for both Incoming-tray sources: a native DiIntakeItem
-# (kind='intake_item') and a live FeatureRequest (kind='feature_request').
-# `id` is the underlying row's id; promote/dismiss in routes/intake.py branch
-# by kind — a FeatureRequest is a shared record DI doesn't own, a DiIntakeItem
-# is DI's own row.
 
 
 def sidebar_projects():
@@ -27,8 +20,8 @@ def sidebar_projects():
 
 
 def default_project():
-    """Landing project for a bare /digital-innovation visit — the permanent
-    board (guaranteed to exist, seeded and un-deletable)."""
+    """Landing board for a bare /digital-innovation visit: the permanent
+    board, which the migration seeds."""
     return (
         DiProject.query
         .filter_by(lifecycle='active')
@@ -38,8 +31,7 @@ def default_project():
 
 
 def closed_projects():
-    """Projects on the Archive 'Closed' list — off the active sidebar, still
-    viewable, reopenable, or archivable one step further."""
+    """Projects on the Archive 'Closed' list, most recently closed first."""
     return (
         DiProject.query
         .filter_by(lifecycle='closed')
@@ -49,8 +41,7 @@ def closed_projects():
 
 
 def archived_projects():
-    """Projects on the Archive 'Archived' list — one step past closed,
-    reopenable the same way."""
+    """Projects on the Archive 'Archived' list, most recently closed first."""
     return (
         DiProject.query
         .filter_by(lifecycle='archived')
@@ -60,63 +51,42 @@ def archived_projects():
 
 
 def permanent_project():
-    """The un-deletable seeded OVP board — the only project the Incoming tray
-    attaches intake items to. Kept separate from default_project() (which means
-    "where a bare visit lands") even though both resolve to the same row."""
+    """The seeded OVP board, where all intake items are filed. Resolves to
+    the same row as default_project(), which answers a different question."""
     return DiProject.query.filter_by(is_permanent=True).first()
 
 
-IncomingCard = namedtuple('IncomingCard', ['kind', 'id', 'title', 'source_label', 'description'])
+# One Incoming-tray card, built from a shared FeatureRequest; id is its id.
+IncomingCard = namedtuple('IncomingCard', ['id', 'title', 'source_label', 'description'])
 
 
 def pending_intake_items(di_project):
-    """Cards for di_project's Incoming tray, oldest first (a queue). Merges two
-    sources by arrival time:
+    """IncomingCards for di_project's tray, oldest first: on the permanent
+    board only, FeatureRequests in status 'requested'. A dismissed request
+    is hidden by a 'dismissed' DiIntakeItem marker; the FeatureRequest
+    itself is left untouched. Other boards get an empty list."""
+    if not di_project.is_permanent:
+        return []
 
-    1. Native DiIntakeItem rows with status='pending' (filed by
-       services/intake.py::add_feedback_item() for non-FeatureRequest sources).
-    2. Live FeatureRequest rows with status='requested' — read straight off the
-       shared table so every existing and new submission shows up. DI never
-       mutates that shared row to hide a card: a dismissed request is tracked by
-       a marker DiIntakeItem (source_type='feature_request', status='dismissed')
-       excluded below, leaving the request itself untouched. Promoting sets the
-       FeatureRequest to 'in_progress', which removes it from this list directly.
-
-    Only the permanent board surfaces FeatureRequest cards."""
-    entries = []  # (created_at, IncomingCard) pairs, sorted together at the end
-
-    native = DiIntakeItem.query.filter_by(di_project_id=di_project.id, status='pending').all()
-    for item in native:
-        source_label = item.source_type + (' · ' + item.source_ref if item.source_ref else '')
-        entries.append((
-            item.created_at,
-            IncomingCard('intake_item', item.id, item.title, source_label, item.description),
-        ))
-
-    if di_project.is_permanent:
-        dismissed_fr_ids = {
-            int(row.source_ref) for row in
-            DiIntakeItem.query.filter_by(source_type='feature_request', status='dismissed').all()
-            if row.source_ref and row.source_ref.isdigit()
-        }
-        for fr in FeatureRequest.query.filter_by(status='requested').all():
-            if fr.id in dismissed_fr_ids:
-                continue
-            entries.append((
-                fr.created_at,
-                IncomingCard('feature_request', fr.id, fr.title, 'Feature request · ' + fr.submitter.name, fr.description),
-            ))
-
-    entries.sort(key=lambda pair: pair[0])
-    return [card for _, card in entries]
+    dismissed_fr_ids = {
+        int(row.source_ref) for row in
+        DiIntakeItem.query.filter_by(source_type='feature_request', status='dismissed').all()
+        if row.source_ref and row.source_ref.isdigit()
+    }
+    requests = (FeatureRequest.query
+                .filter_by(status='requested')
+                .order_by(FeatureRequest.created_at.asc(), FeatureRequest.id.asc())
+                .all())
+    return [
+        IncomingCard(fr.id, fr.title, 'Feature request · ' + fr.submitter.name, fr.description)
+        for fr in requests if fr.id not in dismissed_fr_ids
+    ]
 
 
 def _feature_progress(feature):
-    """(done, total, active_step_label, current_step_number, progress_pct) for a
-    feature's current stage. feature.steps is pre-sorted by sort_order, so the
-    Python filter preserves order. current_step_number is done+1 while a step is
-    open, or total once all are done — computed here so the progress bar and the
-    "Step N of total" text share one number."""
+    """(done, total, active_step_label, current_step_number, progress_pct) for
+    the current stage. current_step_number is done+1 while a step is open,
+    else total; the progress bar and "Step N of M" text both use it."""
     stage_steps = [s for s in feature.steps if s.stage == feature.status]
     done = sum(1 for s in stage_steps if s.is_done)
     total = len(stage_steps)
@@ -127,7 +97,7 @@ def _feature_progress(feature):
 
 
 def feature_logged_hours(feature_id):
-    # Public — lib/feature_detail.py reuses this for the modal's "Nh logged" pill.
+    # Lifetime dev_time hours for a feature. Also used by lib/feature_detail.py.
     total = (
         db.session.query(func.coalesce(func.sum(DiCostEntry.hours), 0))
         .filter(DiCostEntry.di_feature_id == feature_id, DiCostEntry.type == 'dev_time')
@@ -137,8 +107,8 @@ def feature_logged_hours(feature_id):
 
 
 def build_board_context(di_project):
-    """Everything board.html needs for one project: open features grouped into
-    their 7 columns (each with progress info) plus the closed-features strip."""
+    """Board context for one project: open features grouped into their stage
+    columns with progress info, plus the closed features."""
     open_features = (
         DiFeature.query
         .filter(DiFeature.di_project_id == di_project.id, DiFeature.status != 'closed')

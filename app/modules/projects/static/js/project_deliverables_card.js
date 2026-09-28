@@ -5,16 +5,24 @@ window.ProjectDeliverablesCard = (function () {
         var skipPickerHandle = null;
         var assignPickerHandles = [];
         var statusPickerHandles = [];
-        // Apply to Multiple (26/27 Aug 2026, per Ezekiel) requires a clean
-        // Save first — it reads real, committed deliverables server-side,
-        // never in-form drafts — so every row mutation in edit mode flips
-        // this true via markUnsaved(), bindEdit() resets it false on a
-        // fresh render of saved state, and a successful Save resets it
-        // false again right before backToReadOnly().
+        // Apply to Multiple reads committed deliverables server-side, so it
+        // needs a clean Save first. Any edit-mode row change sets this;
+        // bindEdit() and a successful Save clear it.
         var hasUnsavedChanges = false;
         function markUnsaved() { hasUnsavedChanges = true; }
 
+        // Each picker adds document-level listeners, so the old handles must
+        // be destroyed before a re-render replaces them or the listeners pile up.
+        function destroyPickers() {
+            if (skipPickerHandle) { skipPickerHandle.destroy(); skipPickerHandle = null; }
+            assignPickerHandles.forEach(function (h) { h.destroy(); });
+            statusPickerHandles.forEach(function (h) { h.destroy(); });
+            assignPickerHandles = [];
+            statusPickerHandles = [];
+        }
+
         function bindReadOnly() {
+            destroyPickers();
             wireDeliverablesRail(rootEl);
             wireFocusToggle(rootEl);
             wireSkipToPreproduction();
@@ -22,13 +30,8 @@ window.ProjectDeliverablesCard = (function () {
             assignPickerHandles = wireManageAssignPickers();
             statusPickerHandles = wireStatusOverridePickers();
 
-            // Flags (task #42) — deliverable-scoped flag sections (one per
-            // C&CM customer panel, one for Standard's flat list) plus every
-            // row's ⚑ trigger. Reuses the same onChanged the rest of this
-            // card uses (loadSubTabContent re-fetch via project_list.js) so
-            // a flag action refreshes the whole tab exactly like every
-            // other action here. Edit mode has no flag UI, so this only
-            // runs here, not in bindEdit().
+            // Deliverable-scoped flag sections plus each row's ⚑ trigger.
+            // Read-only mode only; edit mode has no flag UI.
             if (window.ProjectFlags) window.ProjectFlags.init(rootEl, projectId, onChanged);
 
             var editBtn = rootEl.querySelector('#overlay-edit-deliverables-btn');
@@ -45,9 +48,8 @@ window.ProjectDeliverablesCard = (function () {
             }
         }
 
-        // ── Skip to Pre-Production — select deliverables (or Select All in
-        // the picker's own popover) and fast-forward them, bypassing
-        // Submissions/Client Approval entirely. ──
+        // ── Skip to Pre-Production: fast-forward the picked deliverables
+        // past Submissions and Client Approval. ──
         function wireSkipToPreproduction() {
             var btn = rootEl.querySelector('#overlay-skip-preprod-btn');
             var form = rootEl.querySelector('#overlay-skip-preprod-form');
@@ -57,11 +59,8 @@ window.ProjectDeliverablesCard = (function () {
 
             if (pickerEl) skipPickerHandle = window.DeliverablePicker.init(pickerEl);
 
-            // Button always renders (see _deliverables_standard.html /
-            // _deliverables_ccm.html) so it doesn't just vanish unexplained
-            // — data-skippable-count is 0 whenever the picker form (and its
-            // deliverable list) weren't rendered at all, so a toast explains
-            // why instead of nothing happening.
+            // The button always renders; data-skippable-count is 0 when the
+            // picker form isn't rendered, so a toast explains why.
             if (btn) {
                 btn.addEventListener('click', function () {
                     if (btn.dataset.skippableCount === '0') {
@@ -75,7 +74,7 @@ window.ProjectDeliverablesCard = (function () {
             }
             if (cancelBtn) {
                 cancelBtn.addEventListener('click', function () {
-                    form.classList.add('is-hidden');
+                    if (form) form.classList.add('is-hidden');
                     if (btn) btn.classList.remove('is-hidden');
                     var errorEl = rootEl.querySelector('#overlay-skip-preprod-error');
                     if (errorEl) errorEl.classList.add('hidden');
@@ -113,11 +112,9 @@ window.ProjectDeliverablesCard = (function () {
             }
         }
 
-        // ── Team-tag assignment (22 Aug 2026) — the Deliverables roster's
-        // Team column now doubles as the assign control. Two independent
-        // wire-ups, matching the two modes deliverable_assign_tag() renders
-        // (_shared_macros.html): a plain designer's one-click self-toggle
-        // (no popover), and everyone else's avatar-picker popover. ──
+        // ── Team-tag assignment. Matches the two modes of
+        // deliverable_assign_tag() in _shared_macros.html: a designer's
+        // one-click self-toggle, and everyone else's avatar-picker popover. ──
         function wireSelfAssignTags() {
             rootEl.querySelectorAll('.deliverable-assign-tag[data-mode="self"]').forEach(function (btn) {
                 btn.addEventListener('click', function () {
@@ -151,9 +148,8 @@ window.ProjectDeliverablesCard = (function () {
         function wireManageAssignPickers() {
             var handles = [];
             rootEl.querySelectorAll('.deliverable-assign-tag[data-team]').forEach(function (pickerEl) {
-                // Only the manage-mode wrapper (a real .avatar-picker div)
-                // gets AvatarPicker.init — the self-mode tag is a bare
-                // <button>, no popover, handled entirely above.
+                // Self-mode tags are bare buttons with no popover; only
+                // manage-mode .avatar-picker wrappers get a picker.
                 if (!pickerEl.classList.contains('avatar-picker')) return;
                 var handle = window.AvatarPicker.init(pickerEl, function (userId, el) {
                     fetch(`/projects/${projectId}/overlay/deliverables/assign`, {
@@ -182,11 +178,8 @@ window.ProjectDeliverablesCard = (function () {
             return handles;
         }
 
-        // Admin status override (22 Aug 2026, per Ezekiel) — only rendered
-        // at all when can_override_status (see _deliverables_standard.html
-        // / _deliverables_ccm.html), one .status-picker per deliverable
-        // row. onChanged() re-fetches the whole tab on success, same as
-        // every other mutation in this card.
+        // Admin status override: one .status-picker per row, rendered only
+        // when can_override_status.
         function wireStatusOverridePickers() {
             var handles = [];
             rootEl.querySelectorAll('.status-picker').forEach(function (pickerEl) {
@@ -225,10 +218,7 @@ window.ProjectDeliverablesCard = (function () {
         }
 
         function wireDeliverablesRail(rootEl) {
-            // Region is just an <optgroup> label inside the select now (see
-            // _deliverables_ccm.html) — the panel switch only ever needs the
-            // customer id, so one change listener replaces the old region-tab
-            // + customer-pill click chain entirely.
+            // C&CM only. Regions are <optgroup>s; the value is the customer id.
             var scopeSelect = rootEl.querySelector('#overlay-deliverables-scope-select');
             if (!scopeSelect) return;
             scopeSelect.addEventListener('change', function () {
@@ -237,11 +227,8 @@ window.ProjectDeliverablesCard = (function () {
         }
 
         function activateCustomerPanel(rootEl, customerId) {
-            // Generic [data-customer-panel] selector rather than
-            // .overlay-deliverables-panel specifically — the per-customer
-            // flag panel (see _deliverables_ccm.html) sits outside the
-            // Deliverables card entirely now but still needs to toggle in
-            // lockstep with the same customer switch.
+            // Any [data-customer-panel]: the per-customer flag panels sit
+            // outside the Deliverables card but switch with it.
             rootEl.querySelectorAll('[data-customer-panel]').forEach(function (panel) {
                 panel.classList.toggle('is-hidden', panel.dataset.customerPanel !== customerId);
             });
@@ -276,11 +263,8 @@ window.ProjectDeliverablesCard = (function () {
                     deleted: row.dataset.deleted === 'true',
                 };
 
-                // C&CM rows carry the catalog picker (see
-                // _deliverables_ccm_edit.html); Standard rows still just
-                // have a plain .overlay-deliverables-edit-name <input> —
-                // this branch is what keeps both shapes working through
-                // the one shared save route.
+                // C&CM rows have a catalog <select>; Standard rows have a
+                // plain name <input>. Both go through one save route.
                 var typeSelect = row.querySelector('.overlay-deliverables-edit-type-select');
                 if (typeSelect) {
                     if (typeSelect.value === '__new__') {
@@ -303,10 +287,8 @@ window.ProjectDeliverablesCard = (function () {
             });
         }
 
-        // Standard has one edit list; C&CM has one per customer panel (only
-        // one visible at a time — see _deliverables_ccm_edit.html). Save
-        // always gathers every list so switching the customer picker never
-        // drops unsaved edits in a panel you're not currently looking at.
+        // Standard has one edit list; C&CM has one per customer panel. Save
+        // gathers every list, including hidden panels, so no edits are lost.
         function collectAllRows(rootEl) {
             var out = [];
             rootEl.querySelectorAll('.overlay-deliverables-edit-list').forEach(function (listEl) {
@@ -319,11 +301,8 @@ window.ProjectDeliverablesCard = (function () {
             return out;
         }
 
-        // Every row here is a free-text name rather than a picked-from-
-        // catalogue type, so nothing stops two rows under the same customer
-        // (or both un-scoped, on Standard) ending up with the identical
-        // name by accident — catches that before Save rather than after,
-        // returning the first duplicate name found, or null if none.
+        // Returns the first name used twice within one customer (or twice on
+        // Standard), case-insensitive, or null. Deleted rows are ignored.
         function findDuplicateName(deliverables) {
             var seen = {};
             for (var i = 0; i < deliverables.length; i++) {
@@ -336,9 +315,8 @@ window.ProjectDeliverablesCard = (function () {
             return null;
         }
 
-        // The list Add Deliverable / Apply Deadline to All should target:
-        // the visible customer panel's list on C&CM, or the only list on
-        // Standard (no panels there at all).
+        // Target list for Add Deliverable / Apply Deadline to All: the
+        // visible panel's list on C&CM, the only list on Standard.
         function activeEditList(rootEl) {
             var visiblePanel = rootEl.querySelector('.overlay-deliverables-edit-panel:not(.is-hidden)');
             if (visiblePanel) return visiblePanel.querySelector('.overlay-deliverables-edit-list');
@@ -361,10 +339,8 @@ window.ProjectDeliverablesCard = (function () {
                     markUnsaved();
                 });
             }
-            // C&CM's catalog picker only (Standard still uses a plain
-            // .overlay-deliverables-edit-name <input>, no select — see
-            // _deliverables_standard_edit.html) — picking "+ Add new
-            // deliverable…" reveals the free-text name field beside it.
+            // C&CM only: picking "+ Add new deliverable…" reveals the
+            // free-text name field.
             var typeSelect = row.querySelector('.overlay-deliverables-edit-type-select');
             var newNameInput = row.querySelector('.overlay-deliverables-edit-new-name');
             if (typeSelect && newNameInput) {
@@ -381,17 +357,12 @@ window.ProjectDeliverablesCard = (function () {
         }
 
         function bindEdit() {
-            // A fresh render of edit mode always reflects committed state
-            // (either the first Edit Deliverables click, or the reload
-            // Apply to Multiple's confirm step does on success) — reset
-            // here rather than only after Save, so opening Apply to
-            // Multiple right after either of those never false-positives.
+            // Edit mode has no pickers; drop the read-only ones it replaced.
+            destroyPickers();
+            // A fresh edit render always reflects committed state.
             hasUnsavedChanges = false;
-            // Standard has one shared #overlay-deliverable-row-template;
-            // C&CM has one per customer panel, keyed by customer id (see
-            // _deliverables_ccm_edit.html) so a cloned row's picker always
-            // offers THAT customer's catalog — addTemplateFor() below
-            // resolves which one Add Deliverable should clone from.
+            // Standard has one row template; C&CM has one per customer
+            // (id suffix) so a new row offers that customer's catalog.
             var template = rootEl.querySelector('#overlay-deliverable-row-template');
             var addBtn = rootEl.querySelector('#overlay-add-deliverable-btn');
             var applyAllBtn = rootEl.querySelector('#overlay-apply-deadline-all-btn');
@@ -406,7 +377,7 @@ window.ProjectDeliverablesCard = (function () {
 
             rootEl.querySelectorAll('.overlay-deliverables-edit-row').forEach(wireRow);
 
-            // C&CM only — Standard has no panels/select, so this is a no-op there.
+            // C&CM only.
             if (scopeSelect) {
                 scopeSelect.addEventListener('change', function () {
                     rootEl.querySelectorAll('.overlay-deliverables-edit-panel').forEach(function (panel) {
@@ -433,20 +404,13 @@ window.ProjectDeliverablesCard = (function () {
 
             if (applyAllBtn) {
                 applyAllBtn.addEventListener('click', function () {
-                    // Scoped to the visible customer panel on C&CM — "all"
-                    // means every row you're currently looking at, not
-                    // every deliverable across every customer.
+                    // On C&CM, "all" means the visible customer's rows only.
                     var listEl = activeEditList(rootEl);
                     if (!listEl) return;
                     var rows = listEl.querySelectorAll('.overlay-deliverables-edit-row');
                     if (!rows.length) return;
-                    // Bug fix (27 Aug 2026, per Ezekiel) — this used to
-                    // always copy row 0's date/time verbatim, even when
-                    // row 0 had none set (a freshly added row, or one
-                    // nobody had dated yet), which silently blanked every
-                    // other row's real deadline with no warning. Now it
-                    // uses the first row that actually HAS a date as the
-                    // source, and refuses (with a toast) if no row does.
+                    // Source is the first row with a date, so an undated
+                    // row can't blank the others.
                     var sourceRow = null;
                     for (var i = 0; i < rows.length; i++) {
                         if (rows[i].querySelector('.overlay-deliverables-edit-date').value) {
@@ -507,18 +471,11 @@ window.ProjectDeliverablesCard = (function () {
             wireApplyToMultiple();
         }
 
-        // ── Apply to Multiple (26/27 Aug 2026, per Ezekiel) — C&CM only;
-        // the modal itself only renders when the project has more than one
-        // customer (see _deliverables_ccm_edit.html), so this is a no-op
-        // everywhere else, Standard included. Two-step modal: pick target
-        // customers -> server computes matches/misses against each
-        // target's own catalog (POST .../apply-multiple/preview, no
-        // writes) -> review, one deadline per target customer applied to
-        // everything duplicated onto it, plus a per-customer checklist for
-        // any deliverable missing from that customer's catalog -> Apply
-        // (POST .../apply-multiple/confirm, writes once). Requires a clean
-        // Save first since both endpoints read committed deliverables, not
-        // in-form drafts. ──
+        // ── Apply to Multiple: copy the visible customer's saved
+        // deliverables to other customers. The modal renders only on C&CM
+        // with 2+ customers. Step 1 picks targets and POSTs /preview (no
+        // writes); step 2 sets one deadline per target, ticks missing
+        // catalog items, and POSTs /confirm. Needs a clean Save first. ──
         function wireApplyToMultiple() {
             var modal = rootEl.querySelector('#overlay-apply-multiple-modal');
             if (!modal) return;
@@ -551,9 +508,8 @@ window.ProjectDeliverablesCard = (function () {
                 sourceCustomerId = activeSourceCustomerId();
                 if (!sourceCustomerId) return;
                 var sourcePanel = rootEl.querySelector('.overlay-deliverables-edit-panel[data-customer-panel="' + sourceCustomerId + '"]');
-                // dataset.deleted, not the row's inline display style — same
-                // signal collectRows()/the save route already use to tell a
-                // soft-deleted-but-unsaved row apart from a real one.
+                // Soft-deleted rows are marked by dataset.deleted, same as
+                // collectRows() uses.
                 var visibleRows = sourcePanel ? Array.prototype.filter.call(
                     sourcePanel.querySelectorAll('.overlay-deliverables-edit-row[data-deliverable-id]'),
                     function (row) { return row.dataset.deleted !== 'true'; }
@@ -580,10 +536,6 @@ window.ProjectDeliverablesCard = (function () {
                 modal.classList.add('hidden');
             }
 
-            // Click-to-toggle tags (27 Aug 2026, per Ezekiel) — same
-            // is-selected convention as the 2D/3D/Technical toggles and
-            // the deliverable picker popover, so "selected" looks the
-            // same everywhere on this page.
             modal.querySelectorAll('.overlay-apply-multiple-customer-tag').forEach(function (tagEl) {
                 tagEl.addEventListener('click', function () {
                     tagEl.classList.toggle('is-selected');
@@ -596,11 +548,7 @@ window.ProjectDeliverablesCard = (function () {
                 }).map(function (tagEl) { return tagEl.dataset.customerId; });
             }
 
-            // Small helper — a customer card is built from up to three
-            // clearly divided sections (name + counts, deadline, add to
-            // catalog), matching how every other overlay card separates
-            // its own sections rather than running everything into one
-            // paragraph. Plain language throughout, no em dashes.
+            // One labelled section of a target customer's review card.
             function buildSection(labelText) {
                 var section = document.createElement('div');
                 section.className = 'overlay-apply-multiple-target-section';
@@ -620,9 +568,7 @@ window.ProjectDeliverablesCard = (function () {
                     el.className = 'overlay-apply-multiple-target';
                     el.dataset.customerId = t.customer_id;
 
-                    // Section 1: customer name plus a couple of small,
-                    // plain-language count tags instead of one long
-                    // sentence.
+                    // Section 1: customer name and count tags.
                     var header = document.createElement('div');
                     header.className = 'overlay-apply-multiple-target-header';
                     var name = document.createElement('span');
@@ -646,8 +592,7 @@ window.ProjectDeliverablesCard = (function () {
                     header.appendChild(counts);
                     el.appendChild(header);
 
-                    // Section 2: deadline for everything duplicated onto
-                    // this customer.
+                    // Section 2: one deadline for everything copied here.
                     var deadlineSection = buildSection('Deadline');
                     var deadlineRow = document.createElement('div');
                     deadlineRow.className = 'overlay-apply-multiple-target-deadline';
@@ -662,8 +607,8 @@ window.ProjectDeliverablesCard = (function () {
                     deadlineSection.appendChild(deadlineRow);
                     el.appendChild(deadlineSection);
 
-                    // Section 3: only shown when this customer's catalog is
-                    // missing one or more of the source deliverables.
+                    // Section 3: only when this customer's catalog lacks
+                    // some source deliverables.
                     if (t.missing.length) {
                         var missingSection = buildSection('Add to catalog');
                         missingSection.classList.add('overlay-apply-multiple-missing');
@@ -795,9 +740,7 @@ window.ProjectDeliverablesCard = (function () {
         return {
             destroy: function () {
                 destroyed = true;
-                if (skipPickerHandle) skipPickerHandle.destroy();
-                assignPickerHandles.forEach(function (h) { h.destroy(); });
-                statusPickerHandles.forEach(function (h) { h.destroy(); });
+                destroyPickers();
             }
         };
     }

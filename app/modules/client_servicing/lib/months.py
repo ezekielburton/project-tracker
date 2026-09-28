@@ -1,10 +1,8 @@
 """
-Invoice month: a real month, stored as the first of that month.
+Invoice month helpers. A month is stored as the 1st of that month.
 
-It used to be free text, so the stored values are whatever people typed —
-"Aug 2026", "August 2026", "08/2026", "2026-08" (what the Table's month
-picker produced). parse_month reads all of those so the migration can carry
-them across and a pasted value still lands somewhere sensible.
+parse_month reads typed forms such as "Aug 2026", "August 2026", "08/2026"
+and "2026-08", so pasted values still land on a sensible month.
 """
 from datetime import date
 

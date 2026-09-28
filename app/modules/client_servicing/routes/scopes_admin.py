@@ -1,8 +1,7 @@
 """
-Admin CRUD for the CS Scope option list — separate from per-row cell edits
-(edit.py). Full CRUD is admin-only (Admin Panel "CS Scopes" tab); quick_add_scope
-is the table's inline "+ Add scope" on the CS/management/admin gate. Scopes
-deactivate rather than delete (rows keep a dropped scope), and quick-add
+CS Scope option list. Full CRUD needs manage_scopes (Admin Panel "CS Scopes"
+tab); quick_add_scope is the table's inline "+ Add scope" behind require_cs.
+Scopes are deactivated, never deleted, so rows keep their scope. Quick-add
 reactivates a deactivated name so it never returns an unusable id.
 """
 from flask import request, jsonify, abort
@@ -23,8 +22,7 @@ def _serialize(scope):
 @client_servicing_bp.route('/scopes', methods=['GET'])
 @login_required
 def list_scopes():
-    # Scope CRUD reads the real logged-in user, not the emulated one, so an
-    # admin previewing as someone else keeps their admin tools.
+    # Real user, not emulated: an admin previewing as someone keeps admin tools.
     if not can('manage_scopes', current_user):
         abort(403)
     scopes = ClientServicingScope.query.order_by(ClientServicingScope.name).all()
@@ -34,8 +32,7 @@ def list_scopes():
 @client_servicing_bp.route('/scopes', methods=['POST'])
 @login_required
 def create_scope():
-    # Scope CRUD reads the real logged-in user, not the emulated one, so an
-    # admin previewing as someone else keeps their admin tools.
+    # Real user, not emulated: an admin previewing as someone keeps admin tools.
     if not can('manage_scopes', current_user):
         abort(403)
     data = request.get_json(silent=True) or {}
@@ -45,7 +42,7 @@ def create_scope():
     if ClientServicingScope.query.filter_by(name=name).first():
         return jsonify({'error': 'Already exists'}), 409
 
-    scope = ClientServicingScope(name=name, active=True)
+    scope = ClientServicingScope(name=name, active=True)  # pyright: ignore[reportCallIssue]
     db.session.add(scope)
     db.session.commit()
     return jsonify(_serialize(scope))
@@ -54,8 +51,7 @@ def create_scope():
 @client_servicing_bp.route('/scopes/<int:scope_id>', methods=['PATCH'])
 @login_required
 def update_scope(scope_id):
-    # Scope CRUD reads the real logged-in user, not the emulated one, so an
-    # admin previewing as someone else keeps their admin tools.
+    # Real user, not emulated: an admin previewing as someone keeps admin tools.
     if not can('manage_scopes', current_user):
         abort(403)
     scope = ClientServicingScope.query.get_or_404(scope_id)
@@ -83,10 +79,7 @@ def update_scope(scope_id):
 @login_required
 @require_cs
 def quick_add_scope():
-    # Same page gate as the rest of this module, not the admin-only CRUD
-    # above — emulation-aware to match, so an admin previewing as e.g. a CS
-    # user sees the same "can I add a scope from here" behavior that user
-    # would actually get.
+    # Page gate only (require_cs, emulation-aware), unlike the admin CRUD above.
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
     if not name:
@@ -99,7 +92,7 @@ def quick_add_scope():
             db.session.commit()
         return jsonify(_serialize(existing))
 
-    scope = ClientServicingScope(name=name, active=True)
+    scope = ClientServicingScope(name=name, active=True)  # pyright: ignore[reportCallIssue]
     db.session.add(scope)
     db.session.commit()
     return jsonify(_serialize(scope))

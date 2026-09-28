@@ -1,5 +1,8 @@
 import json
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
+import secrets
+import string
+from urllib.parse import urlparse
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.modules.core.shared.extensions import db
@@ -11,8 +14,29 @@ from app.modules.core.shared.services.achievements import check_achievements
 auth = Blueprint('auth', __name__, template_folder='../templates')
 
 
-# Profile view/edit routes and the profile-image helpers live in the profile
-# module, not here — this blueprint covers auth and account settings only.
+# Auth and account settings only; profile pages live in the profile module.
+
+
+def _safe_next_path(target):
+    """Return `target` if it is a same-site relative path, else None.
+    Browsers read a backslash as a slash, so '/\\evil.com' is '//evil.com';
+    they also drop tabs/newlines, so control characters are refused too."""
+    if not target or not target.startswith('/'):
+        return None
+    if target.replace('\\', '/').startswith('//'):
+        return None
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in target):
+        return None
+    parsed = urlparse(target)
+    if parsed.scheme or parsed.netloc:
+        return None
+    return target
+
+
+def generate_temp_password():
+    """Random one-off password for an admin reset; shown once to that admin."""
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(12))
 
 
 @auth.route('/register', methods=['GET', 'POST'])
@@ -37,15 +61,12 @@ def register():
         if not role:
             errors.append('Role is required.')
 
-        # Team is required only for designer and team_lead roles
         if role in ['designer', 'team_lead'] and not team:
             errors.append('Team must be selected for Designer and Team Lead roles.')
 
-        # For roles that don't have a team, clear the team field
         if role not in ['designer', 'team_lead']:
             team = None
 
-        # Check email uniqueness
         if email:
             existing_user = User.query.filter_by(email=email).first()
             if existing_user:
@@ -84,7 +105,7 @@ def login():
 
         if not user or not check_password_hash(user.password_hash, password):
             flash('Incorrect email or password.', 'error')
-            # Preserve next so the redirect still works after a failed attempt
+            # Keep next so a retry still lands on the page asked for.
             return redirect(url_for('auth.login', next=request.form.get('next', '')))
 
         if not user.is_active:
@@ -94,20 +115,12 @@ def login():
         login_user(user, remember=True)
         check_achievements(user, 'user_login')
         flash(f'Welcome back, {user.name}.', 'success')
-        next_page = request.form.get('next') or ''
-        # Flask-Login sometimes sets next to a full URL — extract just the path
-        if next_page and not next_page.startswith('/'):
-            from urllib.parse import urlparse
-            parsed = urlparse(next_page)
-            next_page = parsed.path + ('?' + parsed.query if parsed.query else '')
-        if next_page and next_page.startswith('/'):
+        next_page = _safe_next_path(request.form.get('next'))
+        if next_page:
             return redirect(next_page)
 
-        # Land on the role-based dashboard after login. Its endpoint is
-        # projects.index (the dashboard blueprint; see main.index in the app
-        # factory for the endpoint-naming note). dashboard.py's index()
-        # selects the right role template (dashboard_cs/_leadership/_designer)
-        # internally via layout_role, so no per-role deep link is needed here.
+        # projects.index is the role-based dashboard (dashboard.py's blueprint
+        # is named 'projects'); it picks the layout by role.
         return redirect(url_for('projects.index'))
 
     return render_template('auth/login.html', next=request.args.get('next', ''))
@@ -145,7 +158,7 @@ def account():
         flash('Password updated successfully.', 'success')
         return redirect(url_for('auth.account'))
 
-   # Parse current notification prefs to pass to the template (default empty dict = all on)
+    # Missing keys mean "on", so an empty dict is all toggles on.
     try:
         current_prefs = json.loads(current_user.notification_prefs or '{}')
     except (ValueError, TypeError):
@@ -153,9 +166,7 @@ def account():
 
     available_sounds = NotificationSound.query.order_by(NotificationSound.name).all()
 
-    # Imported inline (used only in this route). Achievement-domain logic
-    # lives in the profile module; this pulls the Active Rewards + pinning
-    # data shown in the account page's rewards sections.
+    # Achievement data for the account page's rewards sections (profile module).
     from app.modules.profile.routes.profile import _build_account_achievement_context
     achievement_context = _build_account_achievement_context(current_user)
 
@@ -174,15 +185,20 @@ def save_notification_prefs():
     if data is None:
         return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
 
-    # Whitelist of valid pref keys — ignore anything unknown
+    # Every toggle account.html renders; unknown keys are ignored.
     valid_keys = {
-        'new_project', 'lead_assigned', 'concept_kv_assigned', 'revision_flag',
-        'flag_reply', 'flag_resolved', 'brief_flag', 'revision_submitted',
-        'project_started', 'lead_changed', 'deliverable_status',
-        'project_submitted_client', 'project_approved', 'email_decision_flag'
+        'concept_kv_assigned', 'preprod_stream_approved', 'brief_flag',
+        'preprod_stream_uploaded', 'due_date_changed', 'job_number_changed',
+        'client_spoc_changed', 'flag_reply', 'flag_resolved', 'lead_changed',
+        'project_submitted_client', 'project_approved',
     }
-    # Build a clean dict of only known keys with boolean values
-    prefs = {k: bool(v) for k, v in data.items() if k in valid_keys}
+    # Read-modify-write: the blob also holds sound prefs and the toggles of
+    # other roles, which this page doesn't send.
+    try:
+        prefs = json.loads(current_user.notification_prefs or '{}')
+    except (ValueError, TypeError):
+        prefs = {}
+    prefs.update({k: bool(v) for k, v in data.items() if k in valid_keys})
     current_user.notification_prefs = json.dumps(prefs)
     db.session.commit()
     return jsonify({'success': True})
@@ -193,7 +209,6 @@ def save_notification_prefs():
 @require('manage_users', real_user=True)
 def admin_users():
     users = User.query.order_by(User.name).all()
-    # dev_tools_enabled is injected globally via context processor in app/__init__.py
     return render_template('auth/users.html', users=users)
 
 
@@ -202,27 +217,23 @@ def admin_users():
 @require('manage_users', real_user=True)
 def reset_password(user_id):
     user = User.query.get_or_404(user_id)
-    user.set_password('Vitamin2026!')
+    temp_password = generate_temp_password()
+    user.set_password(temp_password)
     db.session.commit()
-    flash(f'Password for {user.name} has been reset to Vitamin2026!', 'success')
+    flash(f'Password for {user.name} has been reset to {temp_password} — '
+          f'share it with them now; it will not be shown again.', 'success')
     return redirect(url_for('auth.admin_users'))
 
 @auth.route('/account/sound-prefs', methods=['POST'])
 @login_required
 def save_sound_prefs():
-    """
-    Save the user's sound-related preferences (on/off, chosen sound, volume)
-    into the same notification_prefs JSON blob used for email prefs.
-    Kept as its own route rather than folded into save_notification_prefs,
-    because that route force-casts every value to bool — fine for on/off
-    toggles, but it would corrupt a volume float or a sound_id.
-    """
+    """Save sound prefs (on/off, sound, volume) into the notification_prefs
+    blob. Separate from save_notification_prefs, which casts every value to bool."""
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
 
-    # Read-modify-write: load whatever's already there so we don't clobber
-    # the unrelated email-toggle keys living in this same JSON column.
+    # Read-modify-write: the blob also holds the email toggles.
     try:
         prefs = json.loads(current_user.notification_prefs or '{}')
     except (ValueError, TypeError):
@@ -235,11 +246,11 @@ def save_sound_prefs():
         try:
             prefs['sound_volume'] = max(0.0, min(1.0, float(data['sound_volume'])))
         except (TypeError, ValueError):
-            pass  # ignore a malformed value rather than 500ing the request
+            pass  # ignore a malformed value
 
     if 'sound_id' in data:
         sound_id = data['sound_id']
-        # Accept null (reset to default chime) or a real, still-existing sound
+        # null resets to the default chime; otherwise the sound must exist.
         if sound_id is None or NotificationSound.query.get(sound_id):
             prefs['sound_id'] = sound_id
 

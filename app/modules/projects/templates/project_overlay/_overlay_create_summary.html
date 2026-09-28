@@ -1,12 +1,7 @@
-{# app/templates/project_overlay/_overlay_create_summary.html
-   Confirm-and-create summary modal (task #64) — opens when "Add New
-   Project" is clicked in the create-mode overlay. Deliberately reuses the
-   SAME modal shell + CSS classes as the Submit to Client summary
-   (_submissions_submit_summary.html: modal-overlay/modal-box/modal-title/
-   modal-actions, overlay-submit-summary-section/-note/-error) per
-   Ezekiel's instruction to reuse that exact pattern rather than invent a
-   new one — only the content differs. Returned by
-   overlay_create_summary(); the confirm button posts to
+{# app/modules/projects/templates/project_overlay/_overlay_create_summary.html
+   Confirm-and-create summary modal, opened by "Add New Project" in create
+   mode. Uses the same modal classes as _submissions_submit_summary.html.
+   Returned by overlay_create_summary(); confirm posts to
    overlay_create_finalize(). #}
 <div class="modal-overlay overlay-submit-summary-modal" id="overlay-create-summary-modal">
     <div class="modal-box overlay-submit-summary-box">

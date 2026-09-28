@@ -1,8 +1,8 @@
-"""Signal tray — the Bug Report and Feature Request boards in their compact tray
-form, plus the weekly Friction Log.
+"""Signal tray: compact Bug Report and Feature Request boards, plus the weekly
+Friction Log.
 
-The boards read the same models the feedback module owns and post to its own
-endpoints; only the list shape is new. The Friction Log is this file's own.
+The boards read the feedback models; writes go to the feedback routes. The
+Friction Log's routes live here.
 """
 from datetime import datetime
 
@@ -22,8 +22,8 @@ from app.modules.core.shared.models import (
 
 signal_tray_bp = Blueprint('signal_tray', __name__)
 
-# The stored values, with the labels the tray shows. Deliberately the real
-# vocabulary — the boards and the tray must word a status the same way.
+# Stored status values and their tray labels. Keys must match the feedback
+# routes' VALID_STATUSES / BUG_VALID_STATUSES.
 BUG_STATUSES = [
     ('in_queue', 'In queue'),
     ('fix_in_progress', 'Fix in progress'),
@@ -41,9 +41,6 @@ SEVERITIES = [('high', 'High'), ('medium', 'Med'), ('low', 'Low')]
 BUG_STATUS_LABELS = dict(BUG_STATUSES)
 FEATURE_STATUS_LABELS = dict(FEATURE_STATUSES)
 SEVERITY_LABELS = dict(SEVERITIES)
-
-# How many weeks of the Friction Log come back at once.
-_FRICTION_WEEKS = 8
 
 
 def _counts(rows, statuses):
@@ -94,10 +91,9 @@ def bug_board():
 
 
 def _di_states():
-    """Which feature requests Digital Innovation declined, through DI's own
-    service seam. DI reads status 'requested' as its incoming tray and flips
-    the status when it picks one up, so queued/picked-up is decided here from
-    our own model — only the dismissal lives over there."""
+    """IDs of feature requests Digital Innovation declined, via DI's intake
+    service. Queued vs picked-up comes from our own status field ('requested'
+    means queued); only declines are stored in DI."""
     from app.modules.digital_innovation.services.intake import declined_feature_ids
 
     return declined_feature_ids()
@@ -143,7 +139,7 @@ def feature_board():
             'di_state': di_state,
         })
 
-    # The board sorts itself by support, which is the point of the upvote.
+    # Most-upvoted first.
     rows.sort(key=lambda r: r['upvotes'], reverse=True)
     return jsonify({'rows': rows, 'counts': _counts(rows, FEATURE_STATUSES)})
 
@@ -151,7 +147,7 @@ def feature_board():
 @signal_tray_bp.route('/signal/friction')
 @login_required
 def friction_log():
-    """The running thread, newest week first. Everyone reads it."""
+    """Friction Log grouped by week, newest week first. Readable by everyone."""
     actor = effective_user()
     entries = (FrictionLogEntry.query
                .options(joinedload(FrictionLogEntry.author))
@@ -202,8 +198,8 @@ def post_friction():
 
 
 def _unread_since(seen_at):
-    """New bug, feature and friction items since this user last opened the tray.
-    Three counts in three cheap queries, summed for the launcher bubble."""
+    """Count of new bugs, features and friction entries since the user last
+    opened the tray, for the launcher bubble."""
     if seen_at is None:
         # Never opened it: the bubble would be the whole history, which is noise.
         return 0

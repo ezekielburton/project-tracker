@@ -3,9 +3,7 @@
 {% set skippable = (deliverables | rejectattr('status', 'equalto', 'approved') | list) if can_skip_preproduction else [] %}
 
 <div class="overlay-details-grid">
-    {# Flags — own div, sitting above the Deliverables card entirely (per
-    Ezekiel, 18 Aug 2026), sized to its own content rather than living
-    inside the card body. #}
+    {# Flags sit in their own div above the Deliverables card. #}
     {% if open_flags or can_manage_flags %}
     <div class="overlay-card-full">
         {% set flag_scope = 'deliverable' %}
@@ -31,9 +29,8 @@
                     id="overlay-edit-deliverables-btn">Edit Deliverables</button>
                 {% endif %}
                 {% if can_skip_preproduction %}
-                {# Always visible rather than vanishing at zero deliverables —
-                data-skippable-count lets the click handler explain why via a
-                toast instead of the button just disappearing unexplained. #}
+                {# Shown even with nothing to skip; the click handler reads
+                data-skippable-count and explains via a toast. #}
                 <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
                     id="overlay-skip-preprod-btn" data-skippable-count="{{ skippable|length }}">Skip to
                     Pre-Production</button>
@@ -83,11 +80,8 @@
                         {{ d.design_deadline.strftime('%d %b %Y') if d.design_deadline else '—' }}{% if
                         d.design_deadline_time %} · {{ d.design_deadline_time.strftime('%H:%M') }}{% endif %}
                     </span>
-                    {# "All status changes need to be time stamped" (22 Aug
-                    2026, per Ezekiel) — a native title tooltip rather than
-                    always-visible text, since this compact table row has
-                    no room to spare (see project_overlay/_details_top_cards.html
-                    for the always-visible version on the Details tab). #}
+                    {# Tooltip shows when the status started (no room for
+                    visible text in this compact row). #}
                     <span class="overlay-deliverables-status"
                         {% if status_started_at_by_id.get(d.id) %}title="Since {{ status_started_at_by_id[d.id].strftime('%d %b %Y') }}"{% endif %}>
                         {% if can_override_status %}
@@ -109,10 +103,6 @@
 
         {% if can_skip_preproduction and skippable %}
         <div class="overlay-flag-revision-form is-hidden" id="overlay-skip-preprod-form">
-            {# Deliverable picker's own "Select All" in its popover footer
-            covers Ezekiel's "or click all" case — no separate control
-            needed, selecting everything here is exactly the same request
-            as selecting a subset, just larger. #}
             {{ deliverable_picker('overlay-skip-preprod-picker', skippable, []) }}
             <span class="overlay-flag-revision-error hidden" id="overlay-skip-preprod-error"></span>
             <div class="overlay-flag-revision-form-actions">

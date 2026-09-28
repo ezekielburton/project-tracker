@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request, url_for
-from flask_login import login_required, current_user
+from flask_login import login_required
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Notification
 from app.modules.core.shared.lib.capabilities import effective_user
@@ -11,13 +11,11 @@ notifications_bp = Blueprint('notifications', __name__)
 @notifications_bp.route('/notifications/<int:notification_id>/read', methods=['POST'])
 @login_required
 def mark_read(notification_id):
-    """
-    Mark a single notification as read.
-    Returns JSON with the URL to navigate to (the related project).
-    """
+    """Marks one notification read and returns the URL to open: its link,
+    else its project, else home."""
     notification = Notification.query.get_or_404(notification_id)
 
-    # Emulation-aware auth check — same pattern as archive/restore routes
+    # Emulation-aware: check against the emulated user when an admin emulates.
     notif_user_id = effective_user().id
 
     if notification.recipient_id != notif_user_id:
@@ -26,9 +24,6 @@ def mark_read(notification_id):
     notification.is_read = True
     db.session.commit()
 
-    # Build the URL to redirect the user to
-    # Prefer an explicit link (blog posts, feature requests, bug reports),
-    # then fall back to the related project, then home.
     if notification.link:
         redirect_url = notification.link
     elif notification.project_id:
@@ -45,11 +40,10 @@ def mark_read(notification_id):
 @notifications_bp.route('/notifications/mark-all-read', methods=['POST'])
 @login_required
 def mark_all_read():
-    """
-    Mark every unread notification for the current user as read.
-    """
+    """Marks every unread notification as read for the effective user (the
+    emulated user while an admin emulates), like the other routes here."""
     Notification.query.filter_by(
-        recipient_id=current_user.id,
+        recipient_id=effective_user().id,
         is_read=False
     ).update({'is_read': True})
     db.session.commit()
@@ -58,20 +52,15 @@ def mark_all_read():
 @notifications_bp.route('/notifications/<int:notification_id>/archive', methods=['POST'])
 @login_required
 def archive_notification(notification_id):
-    # Fetch the notification or return 404 if it doesn't exist
     notification = Notification.query.get_or_404(notification_id)
 
 
-    # Emulation-aware auth check:
-    # If admin is emulating another user, check against the emulated user's ID
-    # Otherwise, check against the real logged-in user's ID
+    # Emulation-aware ownership check, as in mark_read.
     notif_user_id = effective_user().id
 
-    # Block access if this notification doesn't belong to the resolved user
     if notification.recipient_id != notif_user_id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     
-    # Mark the notification as archived and also read
     notification.is_archived = True
     notification.is_read = True
     db.session.commit()
@@ -109,12 +98,9 @@ def delete_bulk():
 @notifications_bp.route('/notifications/poll')
 @login_required
 def poll():
-    """
-    Lightweight polling endpoint.
-    Accepts a 'since' query param (ISO timestamp).
-    Returns any unread, non-archived notifications created after that time.
-    JS calls this every 30s and uses the results to fire desktop notifications + sound.
-    """
+    """Returns unread, non-archived notifications created after ?since=<ISO>,
+    oldest first. notifications.js calls it on each SSE ping (30s poll as
+    fallback) to fire desktop alerts."""
     notif_user_id = effective_user().id
 
     since_str = request.args.get('since')
@@ -152,22 +138,18 @@ def poll():
     })
 
 
-#Restore Notifications Route
 @notifications_bp.route('/notifications/<int:notification_id>/restore', methods=['POST'])
 @login_required
 def restore_notification(notification_id):
 
-    # Fetch the notification or return 404 if it doesn't exist
     notification = Notification.query.get_or_404(notification_id)
 
-    # Emulation-aware auth check - same pattern as archive route
+    # Emulation-aware ownership check, as in mark_read.
     notif_user_id = effective_user().id
 
-    # Block access if this notification doesn't belong to the resolved user
     if notification.recipient_id != notif_user_id:
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     
-    # Move notification back to inbox
     notification.is_archived = False
     db.session.commit()
 

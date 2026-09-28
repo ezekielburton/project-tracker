@@ -48,9 +48,52 @@ def test_upload_video_enforces_size_cap(app, client, db_session, monkeypatch):
     monkeypatch.setattr(wiki_module, '_VIDEO_MAX_BYTES', 10)
     admin, pw = _make_user(db_session, 'admin2@example.com', role='admin')
     login_as(client, app, admin, pw)
+    before = _saved_videos(app)
     resp = client.post('/wiki/upload-video', data={'file': (io.BytesIO(b'0123456789ABCDEF'), 'clip.mp4')})
     assert resp.status_code == 400
     assert 'too large' in resp.get_json()['error']
+    assert _saved_videos(app) == before
+
+
+def _saved_videos(app):
+    folder = os.path.join(app.root_path, 'static', 'wiki-uploads', 'videos')
+    return set(os.listdir(folder)) if os.path.isdir(folder) else set()
+
+
+def test_upload_video_refuses_oversize_request_before_reading_it(app, client, db_session, monkeypatch):
+    """A Content-Length over the cap is refused before the multipart body is parsed."""
+    from flask import Request
+    parsed = []
+    original = Request._load_form_data
+    monkeypatch.setattr(Request, '_load_form_data', lambda self: (parsed.append(1), original(self))[1])
+    monkeypatch.setattr(wiki_module, '_VIDEO_MAX_BYTES', 10)
+    monkeypatch.setattr(wiki_module, '_VIDEO_FORM_SLACK', 0, raising=False)
+    admin, pw = _make_user(db_session, 'admin5@example.com', role='admin')
+    login_as(client, app, admin, pw)
+    parsed.clear()
+
+    before = _saved_videos(app)
+    resp = client.post('/wiki/upload-video', data={'file': (io.BytesIO(b'x' * 64), 'clip.mp4')})
+
+    assert resp.status_code == 400
+    assert 'too large' in resp.get_json()['error']
+    assert parsed == []
+    assert _saved_videos(app) == before
+
+
+def test_upload_video_at_the_cap_is_accepted(app, client, db_session, monkeypatch):
+    monkeypatch.setattr(nas_module, '_run_in_background', lambda app_obj, fn: None)
+    monkeypatch.setattr(wiki_module, '_VIDEO_MAX_BYTES', 16)
+    admin, pw = _make_user(db_session, 'admin6@example.com', role='admin')
+    login_as(client, app, admin, pw)
+
+    resp = client.post('/wiki/upload-video', data={'file': (io.BytesIO(b'0123456789ABCDEF'), 'clip.mp4')})
+
+    assert resp.status_code == 200
+    saved_path = os.path.join(app.root_path, 'static', 'wiki-uploads', 'videos', resp.get_json()['filename'])
+    with open(saved_path, 'rb') as saved:
+        assert saved.read() == b'0123456789ABCDEF'
+    os.remove(saved_path)
 
 
 def test_upload_video_accepts_mp4_and_backs_up_to_nas(app, client, db_session, monkeypatch):

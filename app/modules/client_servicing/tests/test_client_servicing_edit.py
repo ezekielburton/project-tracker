@@ -1,4 +1,4 @@
-"""Coverage for the Client Servicing field-update endpoint (CS-only fields)."""
+"""The Client Servicing field-update endpoint (CS-only fields)."""
 import json
 
 from flask import url_for
@@ -169,8 +169,7 @@ def test_management_and_owner_cannot_edit_finance_fields(app, client, db_session
 
 
 def test_management_can_still_edit_non_finance_cs_field(app, client, db_session):
-    """The finance gate is narrower than page access — it must not block the
-    ordinary CS-only fields management could already edit."""
+    """The finance gate does not block management from non-finance CS fields."""
     user = _user(db_session, 'finy', role='management')
     project = _project(db_session, 'finy', user)
     login_as(client, app, user, 'password123')

@@ -1,7 +1,6 @@
-/*  app/static/css/project_overlay.css
-    The detail & briefing overlay shell and it's two-tier rail.
-    Main options are always visible, with sub-options adapting to the main
-    option selection. 
+/*  project_overlay.css
+    The project overlay: modal shell, flat side rail, chat drawer, and the
+    styles for every page inside it.
 */
 
 .project-overlay-backdrop {
@@ -14,12 +13,9 @@
     transition: left var(--sidebar-transition);
     ;
     display: flex;
-    /* align-items: center; justify-content: center; — removed, replaced
-       by margin: auto on the sheet itself below */
     padding: var(--space-6);
-    background: rgba(26, 26, 26, 0.25);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    /* Plain tint, no backdrop-filter: a blur redraws on every scroll and lags. */
+    background: rgba(26, 26, 26, 0.45);
     overflow: auto;
 }
 
@@ -34,8 +30,8 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     max-width: 1600px;
     min-width: 900px;
     margin: auto;
-    /* NEW — centers in both axes; collapses to 0 instead
-                       of clipping once the sheet overflows the backdrop */
+    /* Centers in both axes; unlike align/justify center on the backdrop,
+       auto margins collapse to 0 instead of clipping when the sheet overflows. */
     background: var(--white);
     border-radius: var(--radius);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
@@ -45,13 +41,13 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     transition: width 0.3s ease, max-width 0.3s ease;
 }
 
-/* Chat open — the sheet widens as the drawer slides out, adding real room. */
+/* Chat open: the sheet widens to make room for the drawer. */
 .project-overlay-sheet.chat-open {
     width: 96%;
     max-width: 1900px;
 }
 
-/* ------- Header: name, Edit, Close — one row, no rail anymore ------- */
+/* ------- Header: name, Edit, Close — one row ------- */
 
 .project-overlay-header {
     display: flex;
@@ -78,12 +74,11 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     color: var(--black);
 }
 
-/* Chat toggle (M10 chat redesign) — sits between Edit/Save/Cancel and
-   Close; .is-active marks it while the drawer is open. */
+/* Chat toggle, between Edit/Save/Cancel and Close; .is-active while the drawer is open. */
 .project-overlay-chat-btn {
     background: none;
     border: none;
-    display: inline-flex;   /* centers the lucide SVG (was a 💬 emoji, sized via font-size alone) */
+    display: inline-flex;   /* centers the lucide SVG */
     align-items: center;
     justify-content: center;
     color: var(--grey-dark);
@@ -148,12 +143,9 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     cursor: default;
 }
 
-/* Edit mode (M4, task #33) — property rows and Requirements fields
-   dual-render a view span/paragraph plus a hidden input/select/textarea;
-   entering edit mode is a pure class toggle (is-hidden on each), no
-   refetch. Bordered sky, matching the visual system's neutral-primary-
-   action tier, so an editable field reads as "live" the instant edit
-   mode turns on. */
+/* Edit mode: property rows and Requirements fields render both a view
+   element and a hidden input; edit mode just toggles is-hidden, no refetch.
+   The sky border marks a field as editable. */
 .overlay-property-row[data-field] .overlay-edit-input {
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -181,12 +173,9 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     margin-top: 4px;
 }
 
-/* Specificity trap: the display:block above (2 classes + 1 attribute)
-   outranks the single-class .is-hidden rule, so a hidden textarea would
-   render anyway outside edit mode. This selector adds .is-hidden into the
-   same chain so it wins instead — same fix shape as any other "is-hidden
-   isn't hiding it" case in this file: match the winning rule's
-   specificity, don't just add !important. */
+/* Specificity trap: the display:block above outranks plain .is-hidden, so
+   repeat the chain with .is-hidden to keep the textarea hidden. Match the
+   specificity here; don't reach for !important. */
 .overlay-notes[data-field] .overlay-edit-input.is-hidden {
     display: none;
 }
@@ -224,29 +213,13 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     border-radius: 0 var(--radius) var(--radius) 0;
 }
 
-/* Sections: bold + full-strength text color even at rest, so they read
-   as headers on their own — no longer relying on indentation alone to
-   separate them from what's nested under Design. */
-.project-overlay-sidebar-item {
-    padding: var(--space-2) var(--space-3);
-    margin-top: var(--space-3);
-    font-size: var(--text-med);
-    font-weight: 700;
-    color: var(--grey-dark);
-}
-
-.project-overlay-sidebar-item:first-child {
-    margin-top: 0;
-}
-
-/* Subsections: smaller, lighter weight, muted color — deliberately
-   quieter than a section so the eye clocks it as "belongs to Design"
-   rather than "another destination at the same level." */
+/* One flat list, every entry the same weight. */
+.project-overlay-sidebar-item,
 .project-overlay-sidebar-subitem {
-    padding: var(--space-1) var(--space-3) var(--space-1) calc(var(--space-3) + var(--space-4) + 2px);
-    font-size: 0.9rem;
-    font-weight: 400;
-    color: var(--grey-mid);
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--grey-dark);
 }
 
 .project-overlay-sidebar-item:hover,
@@ -262,38 +235,14 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
     font-weight: 700;
 }
 
-/* The subgroup gets its own thin vertical rule as a literal connector
-   from Design down to its last subitem — a visual "these belong to the
-   item above" cue that doesn't depend on color at all. */
+/* Plain wrapper; the JS finds the Design pages through it. No indent. */
 .project-overlay-sidebar-subgroup {
-    position: relative;
     display: flex;
     flex-direction: column;
-    margin: 0 0 var(--space-2);
-    padding-left: calc(var(--space-3) + 5px);
 }
 
-.project-overlay-sidebar-subgroup::before {
-    content: '';
-    position: absolute;
-    left: calc(var(--space-3) + 5px);
-    top: 2px;
-    bottom: 8px;
-    width: 1px;
-    background: var(--border-subtle);
-}
-
-.project-overlay-sidebar-subgroup .project-overlay-sidebar-subitem {
-    padding-left: var(--space-3);
-}
-
-.project-overlay-sidebar-subgroup.is-hidden {
-    display: none;
-}
-
-/* Lifecycle actions (Put on Hold / Resume, Cancel / Reactivate) — pinned
-to the bottom of the sidebar via margin-top:auto on the flex column, so
-they stay put regardless of how many nav items sit above them. */
+/* Sidebar actions (Open Folder, Request Access, Flag Issue, Hold/Resume,
+Cancel/Reactivate), pinned to the bottom by margin-top:auto. */
 .project-overlay-sidebar-lifecycle {
     margin-top: auto;
     padding-top: var(--space-3);
@@ -323,18 +272,13 @@ they stay put regardless of how many nav items sit above them. */
     display: none;
 }
 
-/* Request Editing Access, while a request is pending (26 Aug 2026) — the
-button itself is disabled rather than swapped for text, so its label
-("Editing Access Requested") stays in the same spot other lifecycle
-buttons occupy instead of shifting the layout. */
+/* Disabled state, e.g. Request Editing Access while a request is pending. */
 .project-overlay-sidebar-action-btn:disabled {
     cursor: default;
     opacity: 0.6;
 }
 
-/* Blue action tier (Resume, Reactivate, and — per Ezekiel, 18 Aug 2026 —
-Put on Hold too, so all "confirm-gated but not destructive" lifecycle
-moves read as the same color). */
+/* Blue action tier: Put on Hold, Resume, Reactivate (confirm-gated but not destructive). */
 .project-overlay-sidebar-action-btn--action {
     color: var(--black);
     background: var(--sky);
@@ -345,7 +289,7 @@ moves read as the same color). */
     filter: brightness(0.94);
 }
 
-/* Danger tier — Cancel Project only. */
+/* Danger tier: Cancel Project and Flag Issue, plus their confirm buttons. */
 .project-overlay-sidebar-action-btn--danger {
     color: var(--salmon);
     background: var(--white);
@@ -357,12 +301,9 @@ moves read as the same color). */
     background: var(--salmon);
 }
 
-/* Dark-mode overrides for the sidebar lifecycle buttons (Put on Hold /
-   Resume / Cancel / Reactivate / Flag Issue) — a separate button family
-   from .overlay-file-action-btn and .btn-primary, missed by the original
-   sweep since it points at --sky/--black/--salmon rather than hardcoded
-   hex, so neither picked up a dark value on its own. Same Option A tinted
-   treatment as the other blue/danger buttons elsewhere. */
+/* Dark mode: these use --sky/--black/--salmon directly, which have no dark
+   values, so they need their own tinted overrides like the other
+   blue/danger buttons. */
 :root[data-theme="dark"] .project-overlay-sidebar-action-btn--action {
     color: var(--tone-blue);
     background: rgba(143, 196, 240, 0.15);
@@ -386,9 +327,7 @@ moves read as the same color). */
     background: rgba(255, 79, 79, 0.22);
 }
 
-/* Inline cancel-reason form — same expand-on-click pattern as
-.overlay-flag-revision-form elsewhere, just narrowed to fit the
-200px sidebar rather than a full-width card. */
+/* Inline reveal form (cancel reason, flag issue), sized for the 200px sidebar. */
 .project-overlay-sidebar-cancel-form {
     display: flex;
     flex-direction: column;
@@ -488,8 +427,7 @@ moves read as the same color). */
     overflow: hidden;
 }
 
-/* ---- Pinned strip — a fixed sibling above #overlay-chat-thread, stays put
-   while the thread scrolls beneath it. ------- */
+/* ---- Pinned strip — sibling above #overlay-chat-thread, so it stays put while the thread scrolls ---- */
 
 .overlay-chat-pinned-strip {
     flex-shrink: 0;
@@ -504,7 +442,7 @@ moves read as the same color). */
 }
 
 .overlay-chat-pinned-item {
-    /* No overflow:hidden here — it clipped the Unpin menu along with the text. */
+    /* No overflow:hidden: it would clip the Unpin menu. */
     position: relative;
     display: flex;
     align-items: baseline;
@@ -526,7 +464,7 @@ moves read as the same color). */
 }
 
 .overlay-chat-pinned-text {
-    min-width: 0;   /* lets the ellipsis actually kick in inside a flex row */
+    min-width: 0;   /* lets the ellipsis work inside a flex row */
     flex-shrink: 1;
     font-family: var(--font-body);
     font-size: var(--text-xs);
@@ -536,7 +474,7 @@ moves read as the same color). */
     text-overflow: ellipsis;
 }
 
-/* Opens a one-item Unpin menu; margin-left:auto keeps it pinned to the right edge. */
+/* Opens a one-item Unpin menu; margin-left:auto pushes it to the right edge. */
 .overlay-chat-pinned-menu-btn {
     flex-shrink: 0;
     margin-left: auto;
@@ -621,7 +559,7 @@ moves read as the same color). */
 
 .overlay-chat-avatar {
     margin-top: 1.1rem;
-    /* aligns roughly with bubble top, below where the author name line sits */
+    /* lines up with the bubble top, below the author name */
 }
 
 .overlay-chat-bubble-col {
@@ -1257,39 +1195,20 @@ button.overlay-chat-reaction-chip:hover {
 }
 
 
-.overlay-field-grid {
-    display: flex;
-    gap: var(--space-6);
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-}
-
-.overlay-field-col {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    flex: 1;
-}
-
 .overlay-field {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
 }
 
-/* Project Status field: status pill + the Start Project button (Details
-   tab, Briefed-only) sitting side by side rather than stacked. */
+/* Status pill with its neighbours (Start Project button, "Since" date) in one row. */
 .overlay-status-row {
     display: flex;
     align-items: center;
     gap: var(--space-3);
 }
 
-/* "Since <date>" next to a status pill (22 Aug 2026, per Ezekiel — "All
-   status changes need to be time stamped"). Deliberately quiet/secondary
-   next to the pill itself, same muted treatment .overlay-field-empty
-   already uses for this kind of meta text. */
+/* Muted "Since <date>" timestamp beside a status pill. */
 .overlay-status-since {
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -1411,12 +1330,6 @@ button.overlay-chat-reaction-chip:hover {
     border-bottom: 2px solid var(--grey-light);
 }
 
-.overlay-field-value {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--black);
-}
-
 .overlay-field-empty {
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -1455,23 +1368,13 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--rose);
 }
 
-.overlay-placeholder {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    color: var(--grey-mid);
-}
-
 .overlay-card-full {
     flex: 1 1 100%;
 }
 
-/* Flags panel + Cancel Customer toggle share one row (23 Aug 2026, per
-   Ezekiel — "a cancel customer button next to flag history - blue"). The
-   flags panel (a whole _flag_project_panel.html include, not just its
-   button) takes the row's flex space; the toggle button sits fixed-width
-   at the end, top-aligned with the Flag History button rather than
-   centered against the panel's full (possibly taller, once a flag is
-   open) height. */
+/* C&CM: flags panel + Manage Customers toggle in one row. The panel takes
+   the spare width; the button is top-aligned so it stays level with Flag
+   History when an open flag makes the panel taller. */
 .overlay-ccm-top-row {
     display: flex;
     align-items: flex-start;
@@ -1487,30 +1390,6 @@ button.overlay-chat-reaction-chip:hover {
     flex-shrink: 0;
 }
 
-.overlay-card-third {
-    min-width: 0;
-}
-
-.overlay-card-narrow {
-    flex: 0 1 calc((100% - (var(--space-5) * 2)) * 0.3);
-}
-
-.overlay-card-wide {
-    flex: 1 1 calc((100% - (var(--space-5) * 2)) * 0.4);
-}
-
-/* Sized to content, not a fixed height — Summary no longer needs an
-   internal scrollbar to fit, and Designer Assignments no longer leaves
-   dead space under a short list. Row edges won't align perfectly across
-   the three cards anymore; that's the accepted trade-off. */
-.overlay-card-third .card {
-    display: flex;
-    flex-direction: column;
-}
-
-.overlay-card-half {
-    flex: 1 1 calc((100% - var(--space-5)) / 2);
-}
 /* ------- Designer Assignments: Team / Designer / Action table ------- */
 
 .overlay-designer-table {
@@ -1546,11 +1425,9 @@ button.overlay-chat-reaction-chip:hover {
     padding: var(--space-2) 0;
 }
 
-/* Customers card (23 Aug 2026, per Ezekiel — "we need a way to cancel a
-   customer") — reuses .overlay-designer-table's grid/header look as-is,
-   just wrapped in .overlay-customer-item so each row can carry its own
-   optional cancel-reason line + inline cancel form underneath its grid
-   row (see _details_ccm.html) without breaking the 3-column grid itself. */
+/* Customers card (C&CM): reuses .overlay-designer-table's grid. Each row is
+   wrapped in .overlay-customer-item so its cancel note and cancel form can
+   sit under the grid row without breaking the 3 columns. */
 .overlay-customer-item {
     display: flex;
     flex-direction: column;
@@ -1578,9 +1455,8 @@ button.overlay-chat-reaction-chip:hover {
     gap: var(--space-2);
 }
 
-/* Dimmed, not hidden — a cancelled customer stays visible here (this card
-   is the one place it still shows up at all, see the customer_rows
-   comment in _build_details_context) but reads as inactive at a glance. */
+/* Cancelled customers are dimmed, not hidden: this card is the only place
+   they show (see customer_rows in details.py). */
 .overlay-customer-item.is-cancelled .overlay-customer-name {
     color: var(--grey-mid);
 }
@@ -1596,14 +1472,7 @@ button.overlay-chat-reaction-chip:hover {
     margin-bottom: var(--space-2);
 }
 
-/* Add Customer (25 Aug 2026) — sits above the Customers table inside the
-   same card, so it needs its own bottom margin to separate from the table
-   header below, same spacing .overlay-customer-cancel-form uses to
-   separate a row's reveal-form from whatever comes after it. The toggle
-   button's own .overlay-file-action-btn styling is untouched; only the
-   wrapper needs the gap since the select/actions inside reuse
-   .overlay-flag-revision-form, which already spaces itself from the
-   toggle button above it via margin-top. */
+/* Add Customer, above the Customers table in the same card. */
 .overlay-customer-add-row {
     margin-bottom: var(--space-3);
 }
@@ -1611,12 +1480,8 @@ button.overlay-chat-reaction-chip:hover {
 .overlay-customer-add-form select {
     display: block;
     width: 100%;
-    /* Missed this the first pass — .overlay-flag-revision-input (the
-       cancel-reason textarea this form's actions row is styled after)
-       carries its own margin-bottom to separate itself from the Confirm/
-       Cancel buttons underneath; a plain <select> has no such built-in
-       class here, so without this the picker and the Add Customer/Cancel
-       buttons sat flush against each other (25 Aug 2026, per Ezekiel). */
+    /* A bare <select> lacks .overlay-flag-revision-input's bottom margin,
+       so add it here to keep the buttons below off the picker. */
     margin-bottom: var(--space-2);
 }
 
@@ -1629,11 +1494,7 @@ button.overlay-chat-reaction-chip:hover {
     background: var(--background);
 }
 
-/* Background/border reworked 21 Aug 2026, per Ezekiel — the old flat
-   --background fill + black left-accent bar read as "ugly" against the rest
-   of the theme. Now just a step darker than the white card it sits in
-   (--surface-hover) with a real border all the way round, same treatment
-   as .overlay-preprod-stream below so the two match. */
+/* Quoted-body box: a step darker than the card it sits in, full border. */
 .overlay-notes-text {
     font-family: var(--font-body);
     font-size: 0.95rem;
@@ -1657,11 +1518,8 @@ button.overlay-chat-reaction-chip:hover {
     padding: var(--space-2) var(--space-4);
 }
 
-/* Sent to Client / Next Draft cards: direct children (status row, revision
-   note, actions, file list, draft-view) need consistent breathing room
-   regardless of which conditional blocks render. A gapped flex column on
-   the card body guarantees this without chasing every sibling combination
-   with margin-top. Scoped to these two cards only, not .card globally. */
+/* Sent to Client / Next Draft cards: a gapped flex column spaces whichever
+   conditional children render. Scoped to these cards, not .card globally. */
 #overlay-submissions-current>.card {
     display: flex;
     flex-direction: column;
@@ -1763,9 +1621,7 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--black);
 }
 
-/* Danger tier: outline at rest, never filled — same rose as the
-   Cancelled status pill, so the color itself already reads as "reversal."
-   Fills solid only on hover, as a heightened warning before you commit. */
+/* Danger tier (reversal actions): salmon outline at rest, solid fill on hover. */
 .overlay-file-action-btn--danger {
     color: var(--salmon);
     border-color: var(--salmon);
@@ -1792,13 +1648,8 @@ button.overlay-chat-reaction-chip:hover {
     filter: brightness(0.93);
 }
 
-/* Was width: 100% back when this was the only action on the indicator —
-   dropped now that Mark Approved sits next to it in .overlay-sent-actions
-   (see that class, and .overlay-cs-review-actions for the same "paired CS
-   action buttons, content-width, not stretched" pattern used elsewhere in
-   this card for Flag Internal Revision / Submit to Client). Same danger
-   tier as .overlay-file-action-btn--danger, just at the bigger decision-
-   button size to match Mark Approved next to it. */
+/* Request Client Revision: danger tier at the larger decision-button size,
+   to match Mark Approved beside it in .overlay-sent-actions. */
 #overlay-client-revision-btn {
     padding: var(--space-2) var(--space-3);
     font-size: var(--text-sm);
@@ -1813,15 +1664,13 @@ button.overlay-chat-reaction-chip:hover {
     border-color: var(--salmon);
 }
 
-/* Flag Internal Revision — same danger tier, bumped to the same
-   decision-button size as its sibling Submit to Client. */
+/* Flag Internal Revision: decision-button size, to match Submit to Client beside it. */
 #overlay-flag-revision-btn {
     padding: var(--space-2) var(--space-3);
     font-size: var(--text-sm);
 }
 
-/* Mark Approved / Confirm Approval — clover, since these are the genuinely
-   positive/forward outcome (Handed to Production pills are clover too). */
+/* Positive tier (Mark Approved, Confirm Approval, Approve): clover. */
 .overlay-file-action-btn--primary {
     padding: var(--space-2) var(--space-3);
     font-size: var(--text-sm);
@@ -1837,10 +1686,9 @@ button.overlay-chat-reaction-chip:hover {
     filter: brightness(0.93);
 }
 
-/* The real "primary but not positive/negative" tier — Start Project,
-   Confirm Skip, Save. Sky rather than a warm brand color, so it doesn't
-   compete with tangerine's wayfinding-only meaning — dark text since sky
-   is too pale for white text to read on. */
+/* Neutral primary tier (Start Project, Confirm Skip, Save, Submit to Client).
+   Sky keeps tangerine for wayfinding only; dark text because white is
+   unreadable on sky. */
 .overlay-file-action-btn--action {
     padding: var(--space-2) var(--space-3);
     font-size: var(--text-sm);
@@ -1856,9 +1704,9 @@ button.overlay-chat-reaction-chip:hover {
     filter: brightness(0.94);
 }
 
-/* Dark mode — same tinted language as .btn-primary, .btn-approve-*, .btn-danger.
-   Solid --sky/--clover/--tangerine fills read as pale, low-contrast blocks
-   against a dark page, so these get the same rgba tint + brighter text. */
+/* Dark mode: solid --sky/--clover/--tangerine fills look pale and
+   low-contrast on a dark page, so use an rgba tint + brighter text, as
+   .btn-primary / .btn-approve-* / .btn-danger do. */
 :root[data-theme="dark"] .overlay-file-action-btn--action {
     color: var(--tone-blue);
     background: rgba(143, 196, 240, 0.15);
@@ -1895,12 +1743,8 @@ button.overlay-chat-reaction-chip:hover {
     filter: none;
 }
 
-/* Mark Approved layout: picker column (left) + notes textarea column
-   (right) sit in .overlay-mark-approved-columns, a flex row. That row —
-   not the picker alone, now that it shares space with the note column —
-   is set to fill the form's full width, same "fill full width, let the
-   actions row's buttons flex:1 split evenly to match" trick the picker
-   used to do alone, just one level up. */
+/* Mark Approved layout: picker column (left) + note column (right) in a
+   full-width flex row, so it lines up with the flex:1 actions row below. */
 .overlay-mark-approved-columns {
     display: flex;
     gap: var(--space-4);
@@ -2004,14 +1848,6 @@ button.overlay-chat-reaction-chip:hover {
     letter-spacing: 0.02em;
 }
 
-.overlay-draft-card-section {
-    background: var(--white);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius);
-    padding: var(--space-4);
-    margin-top: 1rem;
-}
-
 #overlay-draft-view {
     margin-top: var(--space-4);
 }
@@ -2111,19 +1947,9 @@ button.overlay-chat-reaction-chip:hover {
     gap: var(--space-2);
 }
 
-.overlay-draft-state-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-3);
-}
-
-/* Locked internal_review state: dim the row's *content* (icon/name/meta) to
-   read as read-only, but deliberately NOT the .overlay-reference-file-actions —
-   Preview/Download stay live because opening the deck is CS's whole job on a
-   locked card. (Can't just set the actions back to opacity:1: opacity on the
-   item creates a stacking context its children can't escape, so we dim the
-   individual children instead of the parent.) */
+/* Locked (internal_review): dim icon/name/meta but not the actions, since
+   CS still needs Preview/Download. Dim the children, not the item: opacity
+   on the item can't be undone on a child. */
 .overlay-reference-files-list--locked .overlay-reference-file-item>.overlay-reference-file-icon,
 .overlay-reference-files-list--locked .overlay-reference-file-item>.overlay-reference-file-name,
 .overlay-reference-files-list--locked .overlay-reference-file-item>.overlay-reference-file-meta {
@@ -2180,8 +2006,7 @@ button.overlay-chat-reaction-chip:hover {
     max-width: 320px;
     max-height: 280px;
     overflow-y: auto;
-    /* Stops the list's scroll chaining to the page at either end, which would
-       fire a page scroll and close the popover. */
+    /* Stops scroll chaining to the page, which would close the popover. */
     overscroll-behavior: contain;
     background: var(--white);
     border: 1px solid var(--border-subtle);
@@ -2198,15 +2023,11 @@ button.overlay-chat-reaction-chip:hover {
     display: none;
 }
 
-/* Mark Approved's picker only — bigger popover + bigger text than the
-   default compact-pill picker used elsewhere (Submit Review's), since this
-   one opens above/centered over a full-width trigger (see .deliverable-
-   picker-trigger's own #overlay-mark-approved-form override) rather than a
-   small inline control. Positioning itself (above/centered) is JS —
-   deliverable_picker.js's data-popover-align opt-in, set in
-   project_submissions_draft_card.js. Targeted by data-popover-owner, not
-   a descendant selector: while open the popover is parked on <body> (see
-   popover_position.js) so it is not inside the picker. */
+/* Mark Approved's picker: larger popover and text for its full-width
+   trigger. Placement is JS (data-popover-align, set in
+   project_submissions_draft_card.js). Target by data-popover-owner, not a
+   descendant selector: while open the popover lives on <body>
+   (popover_position.js). */
 .deliverable-picker-popover[data-popover-owner="overlay-mark-approved-picker"] {
     min-width: 320px;
     max-width: 420px;
@@ -2346,11 +2167,8 @@ button.overlay-chat-reaction-chip:hover {
     gap: var(--space-2);
 }
 
-/* Skip to Pre-Production's picker — same "full-width, taller trigger"
-   treatment as #overlay-mark-approved-form's picker above, so the picker
-   and the Confirm/Cancel row below it read as one column instead of a
-   narrow pill sitting on top of a full-width row. flex:1 on the actions
-   matches the picker's width against the two buttons combined. */
+/* Skip to Pre-Production's picker: full-width, taller trigger (as in Mark
+   Approved), with flex:1 buttons below so picker and actions form one column. */
 #overlay-skip-preprod-form .deliverable-picker {
     display: block;
     width: 100%;
@@ -2497,15 +2315,11 @@ button.overlay-chat-reaction-chip:hover {
     display: none;
 }
 
-/* ------- Deliverables: Team-tag assignment (22 Aug 2026) -------
-   deliverable_assign_tag() (_shared_macros.html) reuses .avatar-picker /
-   .avatar-picker-trigger / .avatar-picker-popover / .avatar-picker-option
-   and .avatar-picker-placeholder as-is (shared.css) for the picker
-   plumbing and the "nobody yet, dashed pill" empty state — this block is
-   only the pieces that are genuinely new: the small team-ringed avatar
-   that replaces a tag once someone's assigned, and the self-toggle
-   button's own reset (it isn't a .avatar-picker-trigger, just a plain
-   button carrying the same look). */
+/* ------- Deliverables: Team-tag assignment -------
+   deliverable_assign_tag() (_shared_macros.html) uses the .avatar-picker-*
+   classes from shared.css. This block adds only the team-ringed avatar
+   and the reset for the self-toggle button (a plain button, not a
+   .avatar-picker-trigger). */
 
 .deliverable-assign-avatar {
     width: var(--avatar-sm);
@@ -2527,8 +2341,7 @@ button.overlay-chat-reaction-chip:hover {
     object-fit: cover;
 }
 
-/* Same three colors as .tag--2d/3d/technical (shared.css) — team stays
-   identifiable by color even once the tag's text is replaced by a face. */
+/* Same colors as .tag--2d/3d/technical (shared.css), so the team still shows once a face replaces the tag. */
 .deliverable-assign-avatar--2d { border-color: var(--pine); }
 .deliverable-assign-avatar--3d { border-color: var(--ashen); }
 .deliverable-assign-avatar--technical { border-color: var(--oak); }
@@ -2554,8 +2367,7 @@ button.overlay-chat-reaction-chip:hover {
     box-shadow: 0 0 0 2px var(--surface-hover);
 }
 
-/* Unassign is a reversal action, not a pick — same rose the rest of the
-   app reserves for that (Cancel, Flag, Request Client Revision). */
+/* Unassign is a reversal action, so it takes the reversal color. */
 .avatar-picker-option.deliverable-assign-unassign {
     color: var(--rose);
     font-weight: 600;
@@ -2568,9 +2380,7 @@ button.overlay-chat-reaction-chip:hover {
     background: var(--surface-hover);
 }
 
-/* Static (view-only) rendering keeps the original plain tag and just
-   appends the avatar alongside it — the viewer has no standing to act,
-   so nothing here is a button. */
+/* View-only: the plain tag with the avatar beside it; nothing is a button. */
 .deliverable-assign-avatar--static {
     margin-left: -2px;
 }
@@ -2630,12 +2440,9 @@ button.overlay-chat-reaction-chip:hover {
     border-color: var(--black);
 }
 
-/* C&CM's deliverable catalog picker (26/27 Aug 2026, per Ezekiel) — the
-   row's first grid cell now wraps a <select> (.overlay-deliverables-edit-name
-   still, so it inherits the field styling above) plus a conditional
-   free-text input that only shows once "+ Add new deliverable…" is picked.
-   Standard's plain .overlay-deliverables-edit-name <input> never gets this
-   wrapper, so it's unaffected. */
+/* C&CM catalog picker: the name cell wraps a <select> (still
+   .overlay-deliverables-edit-name) plus a free-text input shown when
+   "+ Add new deliverable…" is picked. Standard rows have no wrapper. */
 .overlay-deliverables-edit-name-wrap {
     display: flex;
     flex-direction: column;
@@ -2711,21 +2518,15 @@ button.overlay-chat-reaction-chip:hover {
 }
 
 /* ------- Deliverables: Apply to Multiple modal ------- */
-/* (26/27 Aug 2026, per Ezekiel) — sits on the standard .modal-overlay/
-   .modal-box shell (main.css); only what's specific to this modal's two
-   steps lives here. */
+/* Uses the .modal-overlay/.modal-box shell (main.css); only this modal's extras live here. */
 
 .overlay-apply-multiple-box {
     max-width: 32rem;
     width: 100%;
 }
 
-/* Target-customer tags (27 Aug 2026, per Ezekiel) — click-to-select
-   chips instead of a checkbox list. Same shape/font as the app's base
-   .tag class (shared.css) so this reads as the same visual language as
-   every other tag in the product; same sky-fill-when-selected convention
-   as the 2D/3D/Technical toggles above and .deliverable-picker-option's
-   .is-selected, so "selected" always means the same thing on this page. */
+/* Target-customer chips, click to select. Shaped like the base .tag
+   (shared.css); sky fill means selected, as elsewhere on this page. */
 .overlay-apply-multiple-customer-tags {
     display: flex;
     flex-wrap: wrap;
@@ -2796,11 +2597,8 @@ button.overlay-chat-reaction-chip:hover {
     margin-bottom: var(--space-2);
 }
 
-/* One customer card, three clearly divided sections (27 Aug 2026, per
-   Ezekiel — was one run-on sentence per customer, replaced with the same
-   name/label/border-divider pattern the rest of the overlay already uses,
-   e.g. _submissions_submit_summary.html's .overlay-submit-summary-section):
-   name + status tags, Deadline, and (only when needed) Add to catalog. */
+/* One card per customer, in divided sections: name + status tags,
+   Deadline, and (when needed) Add to catalog. */
 .overlay-apply-multiple-target {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
@@ -2866,48 +2664,13 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--black);
 }
 
-.overlay-deliverables-ccm {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-}
-
-.overlay-deliverables-region {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-}
-
-.overlay-deliverables-region-name {
-    font-family: var(--font-body);
-    font-size: var(--text-base);
-    font-weight: 700;
-    color: var(--black);
-    margin: 0;
-}
-
-.overlay-deliverables-customer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-left: var(--space-4);
-}
-
-.overlay-deliverables-customer-name {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--grey-mid);
-    margin: 0;
-}
 .is-hidden {
     display: none;
 }
 
-/* ── Submit-to-Client deck summary modal (sub-step 7) ─────────────────────
-   Reuses the app's generic .modal-overlay/.modal-box chrome; these scoped
-   rules only lift it above the project overlay (both share z-index 1000) and
-   shape the deck breakdown inside. */
+/* ── Submit-to-Client deck summary modal ──────────────────────────────────
+   Generic .modal-overlay/.modal-box chrome. It must be lifted above the
+   project overlay, since both default to z-index 1000. */
 .overlay-submit-summary-modal {
     z-index: 2600;
     /* above overlay backdrop (1000), popovers (2000), file preview (2500) */
@@ -3014,11 +2777,9 @@ button.overlay-chat-reaction-chip:hover {
     font-size: var(--text-sm);
 }
 
-/* Resume-a-draft picker (task #65) — rows reuse
-   .overlay-submit-summary-deliverable's bordered/spaced-between shape,
-   but the row itself isn't clickable; the left side is its own button
-   (Resume) so the Delete button on the right can sit beside it without
-   nested-click ambiguity. */
+/* Resume-a-draft picker: rows reuse .overlay-submit-summary-deliverable's
+   shape. The row isn't clickable; Resume (left) and Delete (right) are
+   separate buttons, so clicks never nest. */
 .overlay-create-drafts-list {
     max-height: 320px;
     overflow-y: auto;
@@ -3059,31 +2820,15 @@ button.overlay-chat-reaction-chip:hover {
     margin: 0 var(--space-3) 0 0;
 }
 
-/* Forward/positive step (sends the deck onward), same tier as Mark
-   Approved — clover, not the neutral action tier. */
+/* Summary modal's confirm is a forward step, so it takes the clover (positive) tier. */
 .overlay-submit-summary-confirm {
     background: var(--clover);
     color: var(--white);
 }
 
-/* Sent-to-Client state in the draft card, once the deck is submitted. */
-.overlay-sent-meta {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: var(--space-2) 0 0;
-    font-size: var(--text-sm);
-    color: var(--grey-mid);
-    word-break: break-word;
-}
-
-.overlay-sent-meta-file {
-    color: var(--grey-dark);
-}
-
 /* ── Scope-level Current / History toggle (Submissions revision history) ──
-   Matches the internal Draft/History toggle's pill look; distinct class so
-   the two toggles never cross-fire (see project_submissions_draft_card.js). */
+   Looks like the Draft/History toggle but has its own class so the two
+   never cross-fire (project_submissions_draft_card.js). */
 .overlay-submissions-view-toggle {
     display: flex;
     gap: var(--space-2);
@@ -3107,9 +2852,8 @@ button.overlay-chat-reaction-chip:hover {
     color: var(--tone-blue);
 }
 
-/* Shared "controls row" — left cluster (view/filter toggle) + right-pinned
-   .overlay-scope-select — used by both the Submissions and Deliverables
-   cards so the two stay visually consistent. Not card-specific. */
+/* Shared controls row (Submissions and Deliverables cards): toggle on the
+   left, .overlay-scope-select pinned right. */
 .overlay-card-controls-row {
     display: flex;
     align-items: center;
@@ -3144,10 +2888,8 @@ button.overlay-chat-reaction-chip:hover {
     border-color: var(--black);
 }
 
-/* Right cluster of .overlay-card-controls-row on the Deliverables card:
-   action buttons + (C&CM only) the customer scope select, grouped and
-   pinned right. Select's own margin-left:auto is reset since this wrapper
-   already handles the right-pin. */
+/* Deliverables card's right cluster: action buttons + (C&CM) the customer
+   select. The wrapper does the right-pin, so the select's auto margin is reset. */
 .overlay-deliverables-controls-right {
     display: flex;
     align-items: center;
@@ -3182,15 +2924,6 @@ button.overlay-chat-reaction-chip:hover {
 .overlay-submissions-history-meta {
     font-size: var(--text-xs);
     color: var(--grey-mid);
-}
-
-/* "Next Draft" label separating the Active-with-Client indicator from the
-   working draft area below it, on the Submissions Current tab. */
-.overlay-submissions-next-draft-label {
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--grey-dark);
-    margin: var(--space-5) 0 var(--space-3);
 }
 
 /* Included deliverables (or Concept/KV) tags on each revision-history entry. */
@@ -3244,125 +2977,11 @@ button.overlay-chat-reaction-chip:hover {
     display: none;
 }
 
-.overlay-sent-zones {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-3);
-    align-items: start;
-}
 
-.overlay-sent-zone {
-    height: 120px;
-    padding: var(--space-3);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius);
-    overflow: hidden;
-}
-
-.overlay-sent-zone--status {
-    padding: 0;
-    border: none;
-}
-
-.overlay-sent-zone--status .status-pill {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    border-radius: var(--radius);
-    font-size: var(--sent-zone-text);
-}
-
-.overlay-sent-zone--deliverables {
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-}
-
-.overlay-sent-zone--meta {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--space-1);
-    font-size: var(--text-sm);
-    color: var(--grey-mid);
-    word-break: break-word;
-    overflow-y: auto;
-}
-
-/* Expanded deliverables panel — fills the 120px zone; list scrolls,
-   Back stays pinned bottom-left because it sits outside the scroll area. */
-.overlay-delz-panel {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    gap: var(--space-2);
-    padding: var(--space-3);
-}
-
-.overlay-delz-list {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    gap: var(--space-2);
-}
-
-.overlay-delz-back {
-    flex: 0 0 auto;
-    align-self: flex-start;
-    margin-top: var(--space-1);
-    padding: var(--space-1) var(--space-2);
-    background: none;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-size: var(--text-sm);
-    color: var(--grey-dark);
-}
-
-.overlay-delz-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-size: var(--sent-zone-text);
-    color: var(--grey-dark);
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-.overlay-delz-btn:hover {
-    background: var(--sandstone);
-    color: var(--black);
-}
-
-.overlay-delz-back:hover {
-    color: var(--black);
-    background: var(--sandstone);
-}
-
-.overlay-delz-btn.is-hidden,
-.overlay-delz-panel.is-hidden {
-    display: none;
-}
-
-
-/* ── Pre-Production tab (13 Aug 2026) ──────────────────────────────────
-   Same visual language as the rest of the overlay: .card/.overlay-field-
-   label/.overlay-file-action-btn/.status-pill/.overlay-notes-text are all
-   reused as-is, these rules only cover what's genuinely new — the stream
-   blocks, progress readout, and flag history panel. */
+/* ── Pre-Production tab ─────────────────────────────────────────────────
+   Reuses .card, .overlay-field-label, .overlay-file-action-btn, .status-pill
+   and .overlay-notes-text. These rules add the stream blocks, progress
+   readout and flag history panel. */
 
 .overlay-preprod-progress {
     margin-bottom: var(--space-3);
@@ -3373,25 +2992,6 @@ button.overlay-chat-reaction-chip:hover {
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--grey-dark);
-}
-
-.overlay-preprod-history-panel {
-    margin-top: var(--space-3);
-    margin-bottom: var(--space-4);
-    padding: var(--space-3);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius);
-    background: var(--sandstone, var(--white));
-}
-
-.overlay-preprod-history-panel.is-hidden {
-    display: none;
-}
-
-.overlay-preprod-history-panel .overlay-scope-select {
-    margin-left: 0;
-    width: 100%;
-    margin-bottom: var(--space-3);
 }
 
 .overlay-preprod-history-list {
@@ -3408,12 +3008,7 @@ button.overlay-chat-reaction-chip:hover {
     padding: var(--space-5);
 }
 
-/* Full card treatment (21 Aug 2026, per Ezekiel — each history entry was a
-   bare border-bottom row with no fill, so the list read as one continuous
-   blur instead of distinct entries). Matches .overlay-preprod-row/
-   .overlay-flag-card's white+border+shadow language rather than a plain
-   divided list — .overlay-preprod-history-list's existing gap (below)
-   already spaces these out, so no :last-child override is needed anymore. */
+/* Each history entry is a full card (white + border + shadow); the list's gap spaces them. */
 .overlay-preprod-history-item {
     padding: var(--space-3) var(--space-4);
     background: var(--white);
@@ -3446,11 +3041,7 @@ button.overlay-chat-reaction-chip:hover {
     display: none;
 }
 
-/* background+shadow added 21 Aug 2026, per Ezekiel — this had only a
-   border before, no fill, so an active row visually blended straight into
-   the page background ("I don't know where to look in this system").
-   Matches the white+border+shadow language .overlay-preprod-attention-card/
-   .overlay-flag-card already use elsewhere on this same tab. */
+/* White + border + shadow so an active row stands off the page background. */
 .overlay-preprod-row {
     padding: var(--space-4);
     background: var(--white);
@@ -3459,11 +3050,7 @@ button.overlay-chat-reaction-chip:hover {
     box-shadow: var(--shadow);
 }
 
-/* Completed rows deliberately stay flat (no shadow), background matched to
-   the same --white every other row uses (21 Aug 2026, per Ezekiel — the
-   --sandstone fill read as a second, different-colored section instead of
-   just a flatter version of the same card; a border is enough to mark it
-   "settled/archived" next to the elevated active rows above). */
+/* Completed rows stay flat (no shadow), same white fill as active rows. */
 .overlay-preprod-row.is-complete {
     background: var(--white);
     box-shadow: none;
@@ -3509,11 +3096,7 @@ button.overlay-chat-reaction-chip:hover {
     font-weight: 700;
 }
 
-/* Divider lives here now, not per-stream (23 Aug 2026, per Ezekiel — "The
-   divider should be between the Name of the deliverable + files and the
-   rest of the elements") — one line under the deliverable's own name/Files
-   row, separating it from the streams below, instead of one repeated
-   inside every stream box. */
+/* The row's single divider sits under the name/Files header, above the streams. */
 .overlay-preprod-row-header {
     display: flex;
     align-items: center;
@@ -3523,14 +3106,11 @@ button.overlay-chat-reaction-chip:hover {
     border-bottom: 1px solid var(--border-subtle);
 }
 
-/* ------- Brief Flags (task #42) -------
-Generic "needs attention" + card/thread/reply/history component, reused
-identically for both Details (project/concept/kv-scoped) and Deliverables
-(deliverable-scoped, per customer for CCM). Deliberately separate class
-names from .overlay-preprod-* even though the attention-card look is
-copied from it — this way Pre-Production's markup/JS stays untouched, and
-this component stays reusable across both flag scopes without either
-feature accidentally coupling to the other's internals. */
+/* ------- Brief Flags -------
+Attention card, thread, reply and history, shared by Details
+(project/concept/KV flags) and Deliverables (per deliverable; per customer
+for C&CM). Looks like .overlay-preprod-* but keeps its own classes so the
+two features don't couple. */
 
 .overlay-flag-attention-card {
     background: var(--white);
@@ -3690,10 +3270,8 @@ feature accidentally coupling to the other's internals. */
     box-sizing: border-box;
 }
 
-/* Raise-flag compose form — same inline-reveal convention as Cancel
-Project (.overlay-flag-revision-form), scoped fresh here so a flag
-section's own is-hidden toggle can't collide with unrelated forms
-reusing that class elsewhere on the same page. */
+/* Raise-flag compose form: inline reveal, with its own class so its
+is-hidden toggle can't hit other forms that share .overlay-flag-revision-form. */
 .overlay-flag-compose-form {
     margin-top: var(--space-3);
 }
@@ -3728,9 +3306,8 @@ reusing that class elsewhere on the same page. */
     margin-top: var(--space-2);
 }
 
-/* Row-level trigger — sits inline in the deliverable Name cell rather
-than as its own grid column, so it doesn't disturb the fixed 6-column
-deliverables grid. Badge count only renders when the row has open flags. */
+/* Row-level trigger, inline in the Name cell so the fixed deliverables grid
+keeps its columns. The count badge renders only when the row has open flags. */
 .overlay-flag-row-trigger {
     display: inline-flex;
     align-items: center;
@@ -3759,15 +3336,9 @@ deliverables grid. Badge count only renders when the row has open flags. */
     background: rgba(233, 30, 99, 0.06);
 }
 
-.overlay-flag-section {
-    margin-bottom: var(--space-4);
-}
-
-/* Compact variant (18 Aug 2026) — no card chrome, lives in its own
-.overlay-card-full above whatever it's flagging (Properties, Deliverables)
-so it only takes up as much height as its own content — the surrounding
-.overlay-details-grid's gap handles spacing to the block below, not a
-margin here, so an empty panel (just the History button) stays tiny. */
+/* Compact variant: no card chrome, in its own .overlay-card-full above what
+it flags. No bottom margin; the parent grid's gap spaces it, so an empty
+panel (just the History button) stays small. */
 .overlay-flag-section--compact {
     margin-bottom: 0;
 }
@@ -3790,26 +3361,15 @@ margin here, so an empty panel (just the History button) stays tiny. */
     display: none;
 }
 
-.overlay-flag-history-item {
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--border-subtle);
-}
-
-.overlay-flag-history-item:last-child {
-    border-bottom: none;
-}
-
 .overlay-preprod-name {
-    font-family: var(--font-heading);
+    font-family: var(--font-headline);
     font-weight: 600;
     font-size: var(--text-base);
     margin-right: auto;
 }
 
-/* Rose, not the neutral tier — a flag count is a warning signal (something
-   needs attention), same family as Flag for Reupload. Sized to match
-   .overlay-file-action-btn--action (the Files button) — 21 Aug 2026, per
-   Ezekiel, it was reading as an afterthought next to it. */
+/* Flag count is a warning, so salmon like Flag for Reupload. Sized to match
+   the Files button beside it. */
 .overlay-preprod-flag-count-btn {
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -3831,31 +3391,15 @@ margin here, so an empty panel (just the History button) stays tiny. */
     margin-bottom: var(--space-3);
 }
 
-/* Three stream blocks side by side — one per team (2D/3D/Technical), same
-   reasoning as the earlier "picker left, note right" split from Client
-   Approval: a deliverable with multiple streams active needs to compare
-   them at a glance. */
+/* Stream blocks side by side, one per team (2D/3D/Technical), for comparison at a glance. */
 .overlay-preprod-streams {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-3);
 }
 
-/* Restyled to match Site Visits' "clean and organised" card language (23
-   Aug 2026, per Ezekiel, wireframed by hand — see .overlay-note-item /
-   .overlay-note-item--visit in the Site Visits block of this file for the
-   reference), then re-sized the same day once Ezekiel saw it live — a lone
-   stream (flex-grow:1) was stretching to fill the ENTIRE row on a
-   single-team deliverable ("One deliverable should be one div, the work
-   done cards within should be smaller like they used to be... Dont fill
-   the entire div if there is just one team"). flex-grow back to 0 (a
-   fixed-ish 220px box that can still shrink on a narrow screen, not one
-   that expands to fill spare row width) — with 2 or 3 streams, flex-wrap on
-   the parent (.overlay-preprod-streams) still lays them out side by side,
-   it's just that a single one no longer balloons to the full row. Padding
-   trimmed back to one value (var(--space-3), not --space-4 on the sides)
-   for the same "smaller, like they used to be" reason — this is a compact
-   sub-section of the row card, not a second full card floating inside it. */
+/* Compact card, styled like .overlay-note-item. flex-grow is 0 so a lone
+   stream stays ~220px instead of filling the row; it can still shrink. */
 .overlay-preprod-stream {
     flex: 0 1 220px;
     padding: var(--space-3);
@@ -3865,11 +3409,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
     box-shadow: var(--shadow);
 }
 
-/* Label + status only — no divider here any more (23 Aug 2026, per Ezekiel:
-   the divider moved up to sit under the deliverable's own name/Files row —
-   see .overlay-preprod-row-header — instead of repeating inside every
-   stream box). Just enough margin to separate the label from the picker
-   below it. */
+/* Label + status only; the divider lives on .overlay-preprod-row-header. */
 .overlay-preprod-stream-header {
     display: flex;
     margin-bottom: var(--space-2);
@@ -3883,11 +3423,8 @@ margin here, so an empty panel (just the History button) stays tiny. */
     flex: 1 1 auto;
 }
 
-/* No --none variant any more (23 Aug 2026, per Ezekiel — "We dont need
-   'To be done' text, mark done already implies that") — the not-started
-   state now renders no status line at all (see _preproduction_row.html),
-   so this only ever needs to style the three states that ARE worth calling
-   out: uploaded/approved/flagged. */
+/* Only uploaded/approved/flagged get a status line; not-started renders
+   none (_preproduction_row.html). */
 .overlay-preprod-stream-status {
     font-family: var(--font-body);
     font-size: var(--text-xs);
@@ -3906,13 +3443,8 @@ margin here, so an empty panel (just the History button) stays tiny. */
     color: var(--salmon);
 }
 
-/* Renders below the assignment picker now, for every stream uniformly (23
-   Aug 2026, per Ezekiel — "the same approve and flag for reupload buttons
-   take its place, sized correctly"). Left-aligned (flex-start, not the old
-   flex-end) since it's no longer sharing a row with the label/status over
-   on the right — it's its own full-width line under the picker, same
-   left edge. flex-wrap still lets Approve + Flag for Reupload (two
-   buttons) wrap onto a second line rather than overflowing the card. */
+/* Actions sit on their own line under the picker, left-aligned. flex-wrap
+   lets Approve + Flag for Reupload wrap instead of overflowing the card. */
 .overlay-preprod-stream-actions {
     display: flex;
     flex-wrap: wrap;
@@ -3925,34 +3457,24 @@ margin here, so an empty panel (just the History button) stays tiny. */
     display: none;
 }
 
-/* Assignment picker slot (21 Aug 2026, per Ezekiel; folded into every
-   stream's own box 23 Aug 2026) — sits below the header row, same spot the
-   old read-only person_chip used to occupy before 2D/3D's was replaced by
-   this same interactive picker Technical already had. */
+/* Assignment picker slot, below the stream header. */
 .overlay-preprod-stream-assignment {
     margin-top: var(--space-1);
 }
 
-/* Mark Done/Approve/Flag render after the assignment picker for every
-   stream now ("selector on top, mark done below" — 21 Aug 2026, per
-   Ezekiel, extended to 2D/3D 23 Aug 2026) — needs its own top margin here
-   since it's no longer sharing a row's gap with anything. */
+/* Mark Done/Approve/Flag follow the picker and need their own top margin. */
 .overlay-preprod-stream-assignment + .overlay-preprod-stream-actions {
     margin-top: var(--space-2);
 }
 
-/* The flag comment shown inside a flagged stream's card (21 Aug 2026, per
-   Ezekiel) — reuses .overlay-notes-text's quoted-body look, just tightened
-   up to fit a 220px card instead of the wider CS Note/history usage. */
+/* Flag comment in a flagged stream: .overlay-notes-text, tightened for the 220px card. */
 .overlay-preprod-flag-message {
     font-size: var(--text-sm);
     padding: var(--space-2);
     margin-top: var(--space-2);
 }
 
-/* Files button icon — the real Synology Drive logo now (21 Aug 2026, per
-   Ezekiel, dropped in static/images/drivelogo.png), swapped in for the
-   earlier generic cloud glyph placeholder. */
+/* Files button icon: the Synology Drive logo (static/images/drivelogo.png). */
 .overlay-preprod-nas-icon {
     width: 0.95em;
     height: 0.95em;
@@ -4001,13 +3523,10 @@ margin here, so an empty panel (just the History button) stays tiny. */
     display: none;
 }
 
-/* ------- Create-mode overlay (task #61, 18 Aug 2026) -------
-   The "+ New Project" flow's own shell/step-rail/footer + the Details
-   step's always-editable form fields. Deliberately its own namespace
-   (overlay-create-*) rather than reusing .overlay-edit-input etc. — those
-   are built around the view/edit TOGGLE (a hidden input revealed by
-   clicking Edit); every field here is just permanently an input, so it
-   needs its own simpler visual treatment, not the toggle machinery's CSS. */
+/* ------- Create-mode overlay -------
+   The "+ New Project" flow: step rail, footer and always-editable Details
+   fields. Own overlay-create-* namespace because .overlay-edit-input is
+   tied to the view/edit toggle; these fields are always inputs. */
 
 .project-overlay-create-rail {
     width: 180px;
@@ -4121,9 +3640,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
     color: var(--tone-blue);
 }
 
-/* Every field in create mode is permanently "live" (no view/edit toggle to
-   unhide it), so the input itself carries the sky border that
-   .overlay-edit-input only shows once edit mode is entered elsewhere. */
+/* Create-mode fields are always editable, so they always carry the sky border. */
 .overlay-create-input {
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -4155,11 +3672,9 @@ margin here, so an empty panel (just the History button) stays tiny. */
     cursor: pointer;
 }
 
-/* Teams Required edit-mode checkbox group (Details tab). Layout only; the
-   labels reuse .overlay-create-checkbox-inline above. The .is-hidden pair
-   is the same specificity trick documented for .overlay-edit-input higher
-   up — a two-class selector so is-hidden wins over this rule regardless of
-   source order, keeping the group hidden outside edit mode. */
+/* Teams Required checkbox group (Details, edit mode); labels use
+   .overlay-create-checkbox-inline. The two-class .is-hidden rule outranks
+   the display:flex, so the group stays hidden outside edit mode. */
 .overlay-teams-edit {
     display: flex;
     flex-wrap: wrap;
@@ -4184,12 +3699,9 @@ margin here, so an empty panel (just the History button) stays tiny. */
     display: none;
 }
 
-/* Standard vs C&CM field blocks — only one shown at a time, driven by the
-   brief-type buttons above (project_overlay_create.js). Flex+gap here (not
-   just on the parent .overlay-details-right) because that parent's gap
-   only separates the standard/ccm scope divs from EACH OTHER — the C&CM
-   scope holds two separate cards (Concept & KV, Customers) that need their
-   own spacing between them too. */
+/* Standard vs C&CM field blocks, one shown at a time by the brief-type
+   buttons (project_overlay_create.js). Own gap because the C&CM block
+   holds two cards (Concept & KV, Customers). */
 .overlay-create-scope {
     display: flex;
     flex-direction: column;
@@ -4236,19 +3748,11 @@ margin here, so an empty panel (just the History button) stays tiny. */
     gap: var(--space-2) var(--space-4);
 }
 
-/* ── Notes + Site Visits (task #52/M9, 18 Aug 2026) ──────────────────────
-   Two cards, same fragment, same row shape reused for both (a note and a
-   site visit are both "an attributed, timestamped thing that happened").
-   .overlay-notes-text (the quoted-body look) and .overlay-file-action-btn
-   are both reused as-is — only the row/list/form scaffolding is new. */
+/* ── Site Visits (data-main-tab="notes", _overlay_notes.html) ────────────
+   The visit log and the Add Site Visit modal. Class names keep the "note"
+   prefix. Reuses .overlay-notes-text and .overlay-file-action-btn. */
 
-/* Full card treatment (21 Aug 2026, per Ezekiel — same fix as
-   .overlay-preprod-history-item above and for the same reason: this was a
-   bare border-bottom row with no fill, so the whole feed blended into the
-   page background instead of reading as individual entries). #overlay-
-   notes-list's gap (below) spaces these out now, so no :last-child override
-   is needed. .overlay-note-item--visit's left-border accent (further down
-   this file) still layers on top of this fine. */
+/* Each entry is a full card; #overlay-notes-list's gap spaces them. */
 .overlay-note-item {
     display: flex;
     flex-direction: column;
@@ -4267,27 +3771,6 @@ margin here, so an empty panel (just the History button) stays tiny. */
     margin-top: var(--space-4);
 }
 
-.overlay-note-meta {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-3);
-}
-
-.overlay-note-author {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--black);
-}
-
-.overlay-note-date {
-    font-family: var(--font-body);
-    font-size: var(--text-xs);
-    color: var(--grey-mid);
-    flex-shrink: 0;
-}
-
 .overlay-note-link {
     font-family: var(--font-body);
     font-size: var(--text-xs);
@@ -4299,33 +3782,16 @@ margin here, so an empty panel (just the History button) stays tiny. */
     align-self: flex-start;
 }
 
-.overlay-note-add {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-top: var(--space-4);
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--border-subtle);
-}
-
-.overlay-note-add .overlay-file-action-btn {
-    align-self: flex-start;
-}
-
 .overlay-notes-section {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
 }
 
-/* Site visit Date & Time picker — replaces the old Air Datepicker
-   range+time widget with something styled like the projects table's own
-   Initial/Next Deadline picker (.date-range-picker in project_list.css,
-   already loaded on this page since the overlay is injected into
-   project_list/index.html). Reuses that file's .date-range-picker-nav/
-   -months/-month/-weekdays/-days/-day/-arrow/-footer/-clear/-cancel/
-   -apply classes as-is for the calendar and footer — only the two-column
-   body (calendar | time) and the typed H:MM inputs are new here. */
+/* Site visit Date & Time picker. Reuses the .date-range-picker-* classes
+   from project_list.css (loaded because the overlay lives inside
+   project_list/index.html); only the calendar | time layout and the H:MM
+   inputs are new here. */
 #overlay-visit-modal .modal-box {
     max-width: 900px;
 }
@@ -4411,18 +3877,10 @@ margin here, so an empty panel (just the History button) stays tiny. */
     font-weight: 700;
     color: var(--grey-dark);
     user-select: none;
-    /* fixed separator, never itself editable */
 }
 
-/* Designer picker restyled as "our usual blue action button" (18 Aug 2026)
-   — scoped to THIS instance only, not avatar_picker generally. Every other
-   avatar_picker on the page (CS Lead reassign, Project Owner, etc.) keeps
-   its neutral-at-rest/black-on-hover look on purpose (see the comment on
-   .avatar-picker-action-label in shared.css) — this one's an initial
-   "start a new site visit" action, not a plain reassignment, so it borrows
-   .overlay-file-action-btn--action's sky treatment instead. Sized up
-   (both before and after picking someone) since it's the first, most
-   prominent field in the Add Site Visit modal. */
+/* Add Site Visit's designer picker only: styled as a larger sky action
+   button. Other avatar_pickers keep the neutral look from shared.css. */
 #overlay-visit-designer-picker .avatar-picker-action-label {
     padding: var(--space-3) var(--space-4);
     font-size: var(--text-med);
@@ -4466,11 +3924,7 @@ margin here, so an empty panel (just the History button) stays tiny. */
     padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
 }
 
-/* Merged Notes/Site-Visits feed (18 Aug 2026) — a logged visit gets a
-   left-border accent so it reads as distinct from a freeform note at a
-   glance, same visual language as .overlay-notes-text's own left-border
-   quote treatment elsewhere. Sky, not black, to match the rest of the
-   site-visit-flavored UI (the designer picker and date button above). */
+/* Sky left-border accent on each logged visit, matching the designer picker. */
 .overlay-note-item--visit {
     border-left: 3px solid var(--sky);
     padding-left: var(--space-3);
@@ -4519,9 +3973,8 @@ margin here, so an empty panel (just the History button) stays tiny. */
     color: var(--grey-dark);
 }
 
-/* .overlay-create-input's own width:200px is a fixed override elsewhere
-   (create-mode overlay fields) — same specificity, so this wins purely by
-   being declared later in the cascade. Scoped to this one field only. */
+/* Overrides .overlay-create-input's width:200px. Same specificity, so it
+   wins only by coming later in the file. */
 .overlay-visit-location-input {
     width: 100%;
     box-sizing: border-box;
@@ -4545,25 +3998,15 @@ margin here, so an empty panel (just the History button) stays tiny. */
     min-width: 0;
 }
 
-/* No link on this visit — same visual weight as the linked version,
-   just not clickable (no underline/pine color). */
-.overlay-note-link--plain {
-    color: var(--grey-dark);
-}
-
-/* Add Site Visit modal body — every field (designer, picker, location,
-   notes, footer) stacks with even spacing instead of relying on each
-   piece's own margins. */
+/* Add Site Visit modal: fields stack with an even gap. */
 #overlay-visit-modal .modal-box {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
 }
 
-/* Footer now lives at the bottom of the whole modal (not just under the
-   calendar) since Add Site Visit submits the full form. Three-column grid
-   so the error message can sit dead-center regardless of how wide Clear
-   or the Cancel/Add buttons are. */
+/* Modal footer (Add Site Visit submits the whole form). Grid of Clear |
+   error | Cancel | Add, so the error stays centred whatever the button widths. */
 #overlay-visit-modal .date-range-picker-footer {
     display: grid;
     grid-template-columns: auto 1fr auto auto;

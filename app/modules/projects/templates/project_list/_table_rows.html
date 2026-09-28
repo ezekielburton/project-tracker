@@ -1,14 +1,8 @@
-{# app/templates/project_list/_table_rows.html
-   Drop-in replacement for #project-table's innerHTML (header row(s) plus
-   whatever rows/groups are currently in scope) — nothing else. Rendered by
-   project_list.py's table_rows() route, fetched by project_list.js's
-   refreshProjectTable() as the fallback when an SSE ping's project_id
-   isn't already on screen — see _single_row.html/table_row() for the
-   common case, one already-visible row changing.
-
-   Deliberately mirrors index.html's own {% if groups %}...{% endif %} block
-   byte-for-byte (same macros, same structure) so a live-refreshed table is
-   indistinguishable from one that came from a real page load. #}
+{# app/modules/projects/templates/project_list/_table_rows.html
+   #project-table's innerHTML: header row(s) plus rows or groups. Included by
+   index.html and rendered by table_rows() in project_list.py, which
+   refreshProjectTable() fetches when an SSE ping names a project not on
+   screen (a visible row uses _single_row.html instead). #}
 {% from 'project_list/_row_macros.html' import project_row, table_header_row with context %}
 {% if groups %}
 {% for group in groups %}

@@ -1,8 +1,8 @@
 """
-Client Servicing — Invoicing section. Two tabs behind an in-page strip:
-By Project (the per-project finance table) and Monthly Summary (rollup).
-Finance fields are plain ClientServicing columns and read-only here —
-editing lives in edit.py.
+Client Servicing — Invoicing. Two side-rail sub-pages: By Project (the
+per-project finance table, plus CSV export) and Monthly Summary (rollup).
+Finance-field edits go through edit.py; this file only writes the
+Days Pending thresholds.
 """
 import csv
 import io
@@ -41,8 +41,8 @@ def _fmt_amount(v):
 
 
 def _days_cell(days, green_max, red_max):
-    """(label, pill colour) for Days Pending. None when there's no date to
-    measure from — the cell renders a muted dash, not a badge."""
+    """(label, pill colour) for Days Pending; (None, None) when there is no
+    date to measure from."""
     if days is None:
         return None, None
     if days <= green_max:
@@ -86,10 +86,9 @@ def _finance_row(p, green_max, red_max):
 
 
 def _filter_args():
-    """(invoice_month, validation) from the query string. invoice_month is a
-    YYYY-MM the select emits, returned as the 1st of that month; '' means
-    All. An unreadable month or unknown validation code falls back to All
-    rather than emptying the table."""
+    """(invoice_month, validation) from the query string. invoice_month
+    comes in as YYYY-MM and returns as the 1st of that month. Blank or
+    unreadable values mean All."""
     invoice_month = parse_month((request.args.get('invoice_month') or '').strip())
     validation = (request.args.get('validation') or '').strip()
     if validation and validation != 'none' and validation not in _VALIDATION:
@@ -98,9 +97,7 @@ def _filter_args():
 
 
 def _invoice_month_options():
-    """(value, label) for every invoice month in use, newest first — built
-    from the data rather than a fixed range, so the list only ever offers
-    months that would return something."""
+    """(value, label) for every invoice month in use, newest first."""
     rows = (
         db.session.query(ClientServicing.invoice_month_date)
         .filter(ClientServicing.invoice_month_date.isnot(None))
@@ -112,8 +109,8 @@ def _invoice_month_options():
 
 
 def _filtered_projects(invoice_month, validation):
-    """The By Project set, narrowed by the toolbar. Shared by the page and
-    the CSV export so the two can never filter differently."""
+    """Open projects narrowed by the toolbar filters. Shared by the page and
+    the CSV export so both filter the same way."""
     query = _open_projects()
     if invoice_month:
         query = query.filter(ClientServicing.invoice_month_date == invoice_month)
@@ -149,15 +146,13 @@ def invoicing():
 
 
 def _money_cell(value):
-    """Money in the CSV always carries two decimals, so the spreadsheet reads
-    cleanly and Float-backed values don't show up as 100.0."""
+    """Money with two decimals, so Float-backed values don't export as 100.0."""
     if value is None:
         return ''
     return '{:.2f}'.format(value)
 
 
-# CSV header -> how to read that value off a project. Raw values only: ISO
-# dates and plain numbers, so the file opens cleanly in a spreadsheet.
+# CSV header -> reader(project, cs). Raw values only: ISO dates, plain numbers.
 _EXPORT_COLUMNS = [
     ('Project', lambda p, cs: p.name),
     ('Client', lambda p, cs: p.client_brand.name if p.client_brand else ''),
@@ -180,8 +175,8 @@ _EXPORT_COLUMNS = [
 @login_required
 @require_cs
 def invoicing_export():
-    """The filtered By Project rows as CSV. Same gate and same filtering as
-    the page; the toolbar's search box is client-side and not reflected here."""
+    """The filtered By Project rows as CSV. The toolbar search box is
+    client-side only, so it does not apply here."""
     invoice_month, validation = _filter_args()
     buffer = io.StringIO()
     writer = csv.writer(buffer)

@@ -1,6 +1,5 @@
-"""The tray binds handlers on the feedback module's detail fragments by id and
-class. Those two files can be edited without ever opening the tray's JS, so this
-reads the contract the JS declares and checks the templates still honour it."""
+"""Checks the feedback detail fragments still carry every selector that
+signal_tray.js declares in FRAGMENT_CONTRACT."""
 import json
 import re
 from pathlib import Path
@@ -13,8 +12,8 @@ _TEMPLATES = _MODULE / 'templates' / 'feedback'
 
 
 def _declared_contract():
-    """Pull FRAGMENT_CONTRACT out of the JS without running it. The literal is
-    plain JSON once the quotes are normalised and any trailing comma is gone."""
+    """Parse FRAGMENT_CONTRACT from the JS without running it: swap single
+    quotes for double and drop trailing commas, then read it as JSON."""
     source = _JS.read_text(encoding='utf-8')
     match = re.search(r'var FRAGMENT_CONTRACT = (\{.*?\});', source, re.DOTALL)
     assert match, 'FRAGMENT_CONTRACT is no longer declared in signal_tray.js'

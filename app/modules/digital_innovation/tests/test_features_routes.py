@@ -1,5 +1,5 @@
-"""Route-level coverage for Digital Innovation feature creation and the
-read-only feature detail view."""
+"""Route tests for feature creation, stage moves and the feature detail
+view."""
 from flask import url_for
 
 from app.modules.core.shared.models import User
@@ -17,10 +17,8 @@ def _user(db_session, tag, role='admin'):
 
 
 def _project(db_session, tag, lifecycle='active', is_permanent=False):
-    # is_permanent: lets callers stand in for the OVP
-    # board, the only DiProject visible to every role regardless of
-    # lib/access.py's can_view_di_project — defaults to False so every
-    # existing caller in this file keeps its prior behaviour.
+    # is_permanent=True stands in for the OVP board, the only board every
+    # role can view.
     project = DiProject(name=f'Test DI Project {tag}', lifecycle=lifecycle, is_permanent=is_permanent)
     db_session.add(project)
     db_session.flush()
@@ -183,8 +181,7 @@ def test_move_feature_stage_moves_forward(app, client, db_session):
 
 
 def test_move_feature_stage_allows_moving_backward(app, client, db_session):
-    # No completion gate - the whole point of the free-movement model
-    # (step_engine.move_to_stage) is that this is allowed at any time.
+    # Moving has no completion gate.
     user = _user(db_session, 'v')
     project = _project(db_session, 'v')
     feature = engine.create_feature(project, 'New thing')
@@ -334,10 +331,7 @@ def test_feature_detail_shows_cost_footer_to_management(app, client, db_session)
 
 
 def test_feature_detail_hides_cost_footer_from_other_roles(app, client, db_session):
-    # is_permanent=True: this test is about the cost-
-    # footer gate, not the separate visibility gate (can_view_di_
-    # project) — stand in for OVP so a designer can reach the feature
-    # detail fragment at all.
+    # is_permanent=True so a designer passes the visibility gate.
     user = _user(db_session, 'n', role='designer')
     project = _project(db_session, 'n', is_permanent=True)
     feature = engine.create_feature(project, 'New thing')
@@ -354,10 +348,7 @@ def test_feature_detail_hides_cost_footer_from_other_roles(app, client, db_sessi
 
 
 def test_feature_detail_footer_is_emulation_aware(app, client, db_session):
-    # is_permanent=True: while emulating a designer, the
-    # visibility gate (can_view_di_project) resolves by the emulated
-    # role too, same as the cost-footer gate below — stand in for OVP
-    # so this stays isolated to the footer's own emulation-awareness.
+    # is_permanent=True: the visibility gate also follows the emulated role.
     admin = _user(db_session, 'o', role='admin')
     designer = _user(db_session, 'o2', role='designer')
     project = _project(db_session, 'o', is_permanent=True)
@@ -373,8 +364,7 @@ def test_feature_detail_footer_is_emulation_aware(app, client, db_session):
     resp = client.get(url)
     body = resp.get_data(as_text=True)
 
-    # Admin's own role would show the footer — but while emulating a
-    # designer, the emulated role is what should decide it.
+    # While emulating a designer, the designer's role decides the footer.
     assert resp.status_code == 200
     assert 'Costs, client charge and profit' not in body
 
@@ -388,9 +378,7 @@ def test_feature_detail_footer_ignores_emulation_from_a_non_admin(app, client, d
     login_as(client, app, management, 'password123')
 
     with client.session_transaction() as sess:
-        # Only real admins can emulate elsewhere in the app — a stray
-        # emulating_user_id on a non-admin's session should be ignored,
-        # not honoured.
+        # emulating_user_id is ignored on a non-admin's session.
         sess['emulating_user_id'] = designer.id
 
     with app.test_request_context():

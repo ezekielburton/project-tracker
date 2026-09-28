@@ -1,4 +1,4 @@
-"""Session-cookie hardening: SameSite/HttpOnly guard against regression."""
+"""The session cookie stays SameSite=Lax and HttpOnly."""
 
 
 def test_session_cookie_is_hardened(app):

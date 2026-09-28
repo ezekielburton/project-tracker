@@ -1,20 +1,14 @@
-# Digital Innovation — department-wide step template management, for the
-# admin-only "Edit Templates" screen (routes/templates.py, gated by
-# lib/access.py's can_edit_di_templates). Editing a template never
-# touches any feature already seeded from it — see step_engine.py's
-# module docstring and its
-# test_editing_a_later_template_does_not_touch_existing_features — so
-# this is plain CRUD plus reordering on DiStepTemplate, no interaction
-# with brain A's state machine at all.
+# CRUD and reordering for department step templates, behind the admin-only
+# Edit Templates screen (routes/templates.py). Template edits never touch
+# steps already copied onto features.
 
 from app.modules.core.shared.extensions import db
 from app.modules.digital_innovation.models import DiStepTemplate, DI_STAGES
 
 
 def templates_by_stage():
-    """{stage: [DiStepTemplate, ...]} for every stage, each list already
-    ordered by sort_order — exactly what the Edit Templates screen
-    renders, one section per stage."""
+    """{stage: [DiStepTemplate, ...]} for every stage, each ordered by
+    sort_order."""
     templates = DiStepTemplate.query.order_by(DiStepTemplate.sort_order).all()
     by_stage = {stage: [] for stage in DI_STAGES}
     for template in templates:
@@ -32,10 +26,8 @@ def add_template_step(stage, title, details=None):
 
 
 def edit_template_step(template, title, details=None):
-    """Updates a template step's title/details in place. Never touches
-    stage or sort_order — moving between stages or positions isn't a
-    supported action (delete + re-add covers the rare "wrong stage"
-    case, and move_template_step below covers reordering)."""
+    """Updates a template step's title and details. Stage and position are
+    unchanged; use move_template_step to reorder."""
     template.title = title
     template.details = details
 
@@ -45,10 +37,8 @@ def delete_template_step(template):
 
 
 def move_template_step(template, direction):
-    """Swaps this template step's sort_order with its neighbour in the
-    same stage — 'up' moves it earlier in the list, 'down' moves it
-    later. A no-op at either end (already first and moving up, or
-    already last and moving down)."""
+    """Swaps sort_order with the neighbour above ('up') or below ('down')
+    in the same stage. No-op at either end."""
     siblings = (
         DiStepTemplate.query
         .filter_by(stage=template.stage)

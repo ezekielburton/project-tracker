@@ -1,13 +1,6 @@
-"""
-Admin achievement management — Phase 7 of the achievement system.
-
-Mirrors app/routes/admin.py's conventions exactly, since this is another
-admin-only JSON API feeding a section of the same embedded admin panel in
-base.html (no separate page/template — see admin-section-sounds for the
-precedent this follows): local admin_required alias (JSON 403, not an
-HTML abort page, since every route here is called via fetch()), GET
-returns a plain list of dicts, POST creates, PATCH edits, DELETE removes.
-"""
+"""Admin JSON API for achievements, categories and borders, used by the
+admin panel's Achievements section. Errors are JSON (every call is fetch());
+GET lists, POST creates, PATCH edits, DELETE removes."""
 import os
 import uuid
 from flask import Blueprint, jsonify, url_for, request
@@ -15,7 +8,10 @@ from flask_login import login_required, current_user
 from app.modules.core.shared.lib.capabilities import require_api
 from werkzeug.utils import secure_filename
 from app.modules.core.shared.extensions import db
-from app.modules.core.shared.models import Achievement, AchievementCategory, AchievementBorder, UserAchievement
+from app.modules.core.shared.models import (
+    Achievement, AchievementCategory, AchievementBorder, UserAchievement,
+    UserDisplaySettings, UserPinnedAchievement,
+)
 from app.modules.core.shared.lib.utils import log_activity
 
 admin_achievements_bp = Blueprint('admin_achievements', __name__)
@@ -26,15 +22,13 @@ admin_achievements_bp = Blueprint('admin_achievements', __name__)
 admin_required = require_api('manage_achievements', real_user=True)
 
 
-ACHIEVEMENT_UPLOAD_FOLDER = os.path.join('app', 'static', 'achievements')
-ALLOWED_BADGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif'}  # gif included — animated badges may want an animated source image
+# Absolute (app/static/achievements) so saves don't depend on the working directory.
+ACHIEVEMENT_UPLOAD_FOLDER = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), '..', '..', '..', 'static', 'achievements'))
+ALLOWED_BADGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'gif'}  # gif for animated badges
 
-# The ONLY trigger_event values that actually do anything — every call site
-# in the app that fires check_achievements() is one of these. Hardcoded as a
-# dropdown (rather than a free-text field) specifically
-# because the Achievement model's own docstring calls out the risk: "a typo
-# here silently meaning this achievement never fires." A dropdown of exactly
-# these seven makes that typo impossible.
+# Admin dropdown choices; each must match an event passed to
+# check_achievements() or the achievement never fires.
 VALID_TRIGGER_EVENTS = [
     'project_submitted', 'project_approved', 'bug_submitted',
     'feature_submitted', 'blog_comment', 'upvote_given', 'user_login',
@@ -42,7 +36,7 @@ VALID_TRIGGER_EVENTS = [
 
 
 def _save_badge_image(file):
-    """Same shape as the shared profilepic.save_profile_pic — validates server-side, returns stored filename or None."""
+    """Saves a badge upload if its extension is allowed; returns the stored filename or None."""
     if not file or file.filename == '':
         return None
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
@@ -79,11 +73,7 @@ def _achievement_to_dict(a):
 @login_required
 @admin_required
 def list_achievement_categories():
-    """
-    Powers the whole Achievements tab in one call: every category, each
-    with its achievements nested inside, both already in display order.
-    Avoids a second round-trip just to then fetch achievements per category.
-    """
+    """Every category with its achievements nested, both in display order."""
     categories = AchievementCategory.query.order_by(AchievementCategory.display_order).all()
     result = []
     for cat in categories:
@@ -102,18 +92,12 @@ def list_achievement_categories():
 @login_required
 @admin_required
 def create_achievement_category():
-    """
-    Not in the original Phase 7 spec (which only mentions categories being
-    reorderable), but Achievement.category_id is a required FK — there's no
-    way to create an achievement at all without this existing first.
-    """
+    """Creates a category, placed last."""
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
     if not name:
         return jsonify({'success': False, 'error': 'Category name is required'}), 400
 
-    # New categories go last — display_order = current max + 1. Admins
-    # reorder via drag afterward if they want it elsewhere.
     max_order = db.session.query(db.func.max(AchievementCategory.display_order)).scalar() or 0
 
     category = AchievementCategory(name=name, icon=(data.get('icon') or '').strip() or None, display_order=max_order + 1)
@@ -149,15 +133,8 @@ def update_achievement_category(category_id):
 @login_required
 @admin_required
 def delete_achievement_category(category_id):
-    """
-    Blocks the delete if the category still has achievements in it, rather
-    than cascading — the same "hard block, clear error" pattern used for
-    user deletion (e.g. "user is CS Lead ... returns a clear
-    error"). Achievement.category_id is NOT NULL, so silently cascading
-    would destroy earned-achievement history for every user who'd earned
-    something in this category; forcing the admin to move or delete those
-    achievements first is the safer default.
-    """
+    """Deletes an empty category. Refuses while it still has achievements,
+    since cascading would wipe users' earned history."""
     category = AchievementCategory.query.get_or_404(category_id)
     name = category.name
 
@@ -180,7 +157,7 @@ def delete_achievement_category(category_id):
 @login_required
 @admin_required
 def reorder_achievement_categories():
-    """Body: {'category_ids': [id, id, ...]} in the new display order — matches the drag-and-drop accordion order."""
+    """Body: {'category_ids': [id, ...]} in the new display order."""
     data = request.get_json(silent=True) or {}
     category_ids = data.get('category_ids')
     if not isinstance(category_ids, list):
@@ -198,13 +175,8 @@ def reorder_achievement_categories():
 @login_required
 @admin_required
 def create_achievement():
-    """
-    Multipart form (not JSON) — this route accepts an optional badge image
-    file alongside the text fields, same reasoning as profile.py's avatar/
-    banner uploads. Booleans arrive as the literal strings 'true'/'false'
-    (the admin panel JS sends them explicitly rather than relying on
-    checkbox-only-present-when-checked FormData quirks).
-    """
+    """Creates an achievement from a multipart form (optional badge_file).
+    Booleans arrive as the strings 'true'/'false'."""
     name = (request.form.get('name') or '').strip()
     category_id = request.form.get('category_id')
     trigger_event = request.form.get('trigger_event')
@@ -261,13 +233,8 @@ def create_achievement():
 @login_required
 @admin_required
 def update_achievement(achievement_id):
-    """
-    Edits an existing achievement. The badge image is optional on edit —
-    unlike create, where a missing file just means "no image," here a
-    missing file means "keep whatever's already saved." Only a new file
-    replaces it (and the old file on disk is deleted, same as
-    profile.py's avatar-replace logic).
-    """
+    """Edits an achievement (multipart, like create). No badge_file keeps
+    the current image; a new one replaces it and deletes the old file."""
     achievement = Achievement.query.get_or_404(achievement_id)
 
     name = (request.form.get('name') or '').strip()
@@ -319,24 +286,30 @@ def update_achievement(achievement_id):
 @login_required
 @admin_required
 def delete_achievement(achievement_id):
-    """
-    Deletes the achievement catalogue entry AND every user's progress
-    toward it (UserAchievement rows) — there's no meaningful "achievement
-    you can't see the definition of but still have progress on" state to
-    preserve. Matches the cascade-then-delete pattern used
-    for user deletion: clear out dependents first, then the row itself.
-    """
+    """Deletes the achievement, its badge file, and every user's
+    UserAchievement rows for it, first dropping the pins and active
+    badge/title choices that point at those rows (plain FKs, no cascade)."""
     achievement = Achievement.query.get_or_404(achievement_id)
     name = achievement.name
+    badge_image = achievement.badge_image
 
-    if achievement.badge_image:
-        path = os.path.join(ACHIEVEMENT_UPLOAD_FOLDER, achievement.badge_image)
-        if os.path.exists(path):
-            os.remove(path)
+    ua_ids = db.session.query(UserAchievement.id).filter_by(achievement_id=achievement_id)
+    UserPinnedAchievement.query.filter(
+        UserPinnedAchievement.user_achievement_id.in_(ua_ids)
+    ).delete(synchronize_session=False)
+    for column in (UserDisplaySettings.active_badge_id, UserDisplaySettings.active_title_id):
+        UserDisplaySettings.query.filter(column.in_(ua_ids)).update(
+            {column: None}, synchronize_session=False)
 
     UserAchievement.query.filter_by(achievement_id=achievement_id).delete()
     db.session.delete(achievement)
     db.session.commit()
+
+    # After the commit, so a failed delete keeps its badge.
+    if badge_image:
+        path = os.path.join(ACHIEVEMENT_UPLOAD_FOLDER, badge_image)
+        if os.path.exists(path):
+            os.remove(path)
 
     log_activity('achievement_removed', f'{current_user.name} removed achievement "{name}"',
                  user=current_user, entity_type='achievement', entity_name=name, entity_id=achievement_id)
@@ -347,7 +320,7 @@ def delete_achievement(achievement_id):
 @login_required
 @admin_required
 def reorder_achievements():
-    """Body: {'achievement_ids': [id, id, ...]} — all within ONE category (the accordion section being reordered)."""
+    """Body: {'achievement_ids': [id, ...]}, all from one category, in the new order."""
     data = request.get_json(silent=True) or {}
     achievement_ids = data.get('achievement_ids')
     if not isinstance(achievement_ids, list):
@@ -392,15 +365,8 @@ def create_achievement_border():
 @login_required
 @admin_required
 def delete_achievement_border(border_id):
-    """
-    Blocked if any Achievement still references this border — same
-    reasoning as category deletion. UserDisplaySettings.active_border_id
-    also points at borders, but that FK is nullable and not our concern
-    here: if a border in active use elsewhere got deleted anyway, the
-    active_badge_image()-style lookups just find nothing and render
-    without it, rather than crashing — but blocking at the achievement
-    level catches the far more common case up front.
-    """
+    """Deletes a border unless an achievement still rewards it. Users who
+    still have it active fall back to no border."""
     border = AchievementBorder.query.get_or_404(border_id)
     name = border.name
 
@@ -411,6 +377,8 @@ def delete_achievement_border(border_id):
             'error': f'Cannot delete "{name}" — {in_use} achievement(s) still reward this border.'
         }), 400
 
+    UserDisplaySettings.query.filter_by(active_border_id=border_id).update(
+        {'active_border_id': None}, synchronize_session=False)
     db.session.delete(border)
     db.session.commit()
 

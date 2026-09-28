@@ -51,10 +51,8 @@ class Project(db.Model):
     brief_file = db.Column(db.String(255), nullable=True)
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=True)
 
-    # contact_id: which Contact (a person at project.client_brand) this brief
-    # is for. client_id already identifies "the company" for this project, so
-    # there is no separate company_id — a second column for the same concept
-    # could drift out of sync. Nullable: not every project has a contact.
+    # The Contact (a person at client_brand) this brief is for. client_id is
+    # the company; there is no separate company_id.
     contact_id = db.Column(db.Integer, db.ForeignKey('contacts.id'), nullable=True)
 
     brief_type = db.Column(db.String(50), nullable=True)
@@ -62,7 +60,7 @@ class Project(db.Model):
     held_from_status = db.Column(db.String(50), nullable=True)  # status saved before put on hold
     concept_status = db.Column(db.String(50), nullable=True)    # tracks concept through the workflow
     kv_status = db.Column(db.String(50), nullable=True)         # tracks KV through the workflow
-    ckv_revision_count = db.Column(db.Integer, default=0, nullable=True)  # C&KV-specific revision counter (CCM projects only)
+    ckv_revision_count = db.Column(db.Integer, default=0, nullable=True)  # Concept & KV revision counter (C&CM only)
     posm_country_revision_counts = db.Column(db.JSON, nullable=True)  # {'kuwait': 2, 'qatar': 1, ...}
     campaign_notes = db.Column(db.Text, nullable=True)
     urgency = db.Column(db.String(50), nullable=True)
@@ -82,9 +80,8 @@ class Project(db.Model):
     concept_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     kv_designer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    # Sentinel the dashboard filters on to find projects awaiting a
-    # management decision. The full flag data lives in DecisionFlag /
-    # DecisionFlagMessage.
+    # Dashboard filter for projects awaiting a management decision; the flag
+    # itself lives in DecisionFlag.
     decision_needed = db.Column(db.Boolean, default=False, nullable=True)
  
 
@@ -99,9 +96,8 @@ class Project(db.Model):
     # Revision tracking
     revision_count = db.Column(db.Integer, default=0, nullable=False)
 
-    # Approval tracking — set when CS approves the final submitted deck.
-    # For C&CM POSM projects this is cascaded automatically once every channel
-    # is individually approved; for Standard briefs it is set directly.
+    # Set when CS approves the final submission. For C&CM it is set once every
+    # POSM channel (and Concept/KV, if any) is approved.
     approved_at = db.Column(db.DateTime, nullable=True)
     approved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
@@ -120,17 +116,16 @@ class Project(db.Model):
     is_production_only = db.Column(db.Boolean, default=False, nullable=False)
     preproduction_requirements = db.Column(db.Text, nullable=True)
 
-    # Cancel/Archive — reversible removal from active lists.
+    # Cancel/Archive: reversible removal from active lists.
     cancel_reason = db.Column(db.Text, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    # Soft-delete — rare, admin-only, permanent removal from the archive
+    # Soft-delete: admin-only, removes the project from the archive too.
     is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
     deleted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    # Relationships
     cs_lead = db.relationship('User', foreign_keys=[cs_lead_id])
     project_owner = db.relationship('User', foreign_keys=[project_owner_id])
     cancelled_by = db.relationship('User', foreign_keys=[cancelled_by_id])
@@ -153,14 +148,8 @@ class Project(db.Model):
     
     @property
     def active_decision_flag(self):
-        """
-        The current unresolved DecisionFlag on this project, or None. A
-        project can accumulate a history of past (resolved) flags over
-        time — this is always the one still open, if any. Queried
-        directly rather than filtered out of the `decision_flags`
-        relationship in Python, so it stays correct even when that
-        relationship hasn't been eagerly loaded.
-        """
+        """The newest unresolved DecisionFlag, or None. Runs its own query on
+        each access."""
         from app.modules.core.shared.models.flags import DecisionFlag
         return DecisionFlag.query.filter_by(
             project_id=self.id, is_resolved=False
@@ -205,7 +194,7 @@ class ProjectApproval(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-# Project Region Class. Handles region data for projects, allowing us to specify which regions are relevant for each project.
+# A region a project covers.
 class ProjectRegion(db.Model):
     __tablename__ = 'project_regions'
 
@@ -217,7 +206,7 @@ class ProjectRegion(db.Model):
         return f'<ProjectRegion {self.region} for project {self.project_id}>'
 
 
-# ProjectCustomer Class, Links projects to customers, allowing customers to be assigned to projects.  
+# A customer on a project.
 class ProjectCustomer(db.Model):
     __tablename__ = 'project_customers'
 
@@ -228,11 +217,8 @@ class ProjectCustomer(db.Model):
     design_deadline = db.Column(db.Date, nullable=True)
     design_deadline_time = db.Column(db.Time, nullable=True)
     cancelled = db.Column(db.Boolean, default=False, nullable=False)
-    # Cancel a single customer within a C&CM project — freezes its state
-    # for invoicing, and is reversible. Same shape as Project's
-    # cancel_reason/cancelled_at/cancelled_by_id. `cancelled` stays the
-    # source of truth every read site filters on; these three are additive,
-    # for audit/display only.
+    # Reversible cancel of one customer (freezes it for invoicing). Read sites
+    # filter on `cancelled`; the three fields below are for audit/display.
     cancel_reason = db.Column(db.Text, nullable=True)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -249,8 +235,8 @@ class ProjectCustomer(db.Model):
 
 
 class ProjectSecondaryCS(db.Model):
-    """Tracks CS users added as secondary CS on a project.
-    The CS lead remains the primary owner; secondary CS have full operational access."""
+    """A secondary CS on a project. The CS lead stays the owner; secondary CS
+    get full operational access."""
     __tablename__ = 'project_secondary_cs'
 
     id           = db.Column(db.Integer, primary_key=True)
@@ -270,8 +256,8 @@ class ProjectSecondaryCS(db.Model):
 
 
 class ProjectSecondaryCsRegion(db.Model):
-    """For C&CM projects: which regions a secondary CS has subscribed to for notifications.
-    If a secondary CS has no rows here, they receive all region notifications (no filter)."""
+    """C&CM regions a secondary CS gets notifications for. No rows means all
+    regions."""
     __tablename__ = 'project_secondary_cs_regions'
 
     id          = db.Column(db.Integer, primary_key=True)
@@ -289,11 +275,9 @@ class ProjectSecondaryCsRegion(db.Model):
 
 
 class ProjectPosmChannel(db.Model):
-    """One record per parallel POSM submission channel.
-    Gulf C&CM projects have multiple concurrent channels:
-      - UAE: one per ProjectCustomer (posm_customer_id set)
-      - Kuwait/Qatar/Bahrain/Oman: one per country (posm_customer_id = None)
-    Each channel tracks its own submission state machine independently."""
+    """One parallel POSM submission channel on a C&CM project, with its own
+    status: per ProjectCustomer (posm_customer_id set) or per country
+    (posm_customer_id NULL)."""
     __tablename__ = 'project_posm_channels'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -303,9 +287,8 @@ class ProjectPosmChannel(db.Model):
     status = db.Column(db.String(50), default='in_queue', nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Approval tracking — set when CS approves this channel's submission.
-    # Once every channel on the project is approved, the route cascades
-    # project.project_status → 'approved' automatically.
+    # Set when this channel's deliverables are all approved. Once every channel
+    # (and Concept/KV, if any) is approved, the route sets project.approved_at.
     approved_at = db.Column(db.DateTime, nullable=True)
     approved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
@@ -317,30 +300,27 @@ class ProjectPosmChannel(db.Model):
         return f'<ProjectPosmChannel {self.posm_country} cust={self.posm_customer_id} status={self.status}>'
 
 
-    # ProjectFile Class — stores reference files uploaded to a project by CS or admin
+    # A reference file uploaded to a project.
 class ProjectFile(db.Model):
     __tablename__ = 'project_files'
 
     id = db.Column(db.Integer, primary_key=True)
 
-    # Which project this file belongs to
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
 
-    # The name we saved the file as on disk (UUID-based, avoids collisions)
+    # Stored name on disk (unique, avoids collisions)
     filename = db.Column(db.String(255), nullable=False)
 
-    # The original filename the user uploaded (shown in the UI)
+    # Uploaded filename, shown in the UI
     original_filename = db.Column(db.String(255), nullable=False)
 
     # File extension e.g. 'pdf', 'jpg'
     file_type = db.Column(db.String(20), nullable=False)
 
-    # Who uploaded it and when
     uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationships — cascade='all, delete-orphan' ensures files are deleted from
-    # SQLAlchemy's session when the parent project is deleted, preventing NOT NULL errors
+    # delete-orphan cascade: deleting a project deletes its rows (project_id is NOT NULL).
     project = db.relationship('Project', backref=db.backref('reference_files', cascade='all, delete-orphan'))
     uploaded_by = db.relationship('User', foreign_keys=[uploaded_by_id])
 
@@ -350,9 +330,8 @@ class ProjectFile(db.Model):
 
 class SiteVisit(db.Model):
     """
-    Structured record of a technical person's site visit — start/end
-    times captured precisely (not a freeform note) so the dashboard can
-    compute when a technical designer is out of the building.
+    A site visit with exact start/end times, so the dashboard can tell when a
+    technical designer is out of the office.
     """
     __tablename__ = 'site_visits'
 
@@ -361,7 +340,7 @@ class SiteVisit(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     start_at = db.Column(db.DateTime, nullable=False)
     end_at = db.Column(db.DateTime, nullable=False)
-    location = db.Column(db.String(255), nullable=True)   # location name, shown as plain text or (if location_link is set) as link text
+    location = db.Column(db.String(255), nullable=True)   # shown as text, or as link text when location_link is set
     location_link = db.Column(db.String(500), nullable=True)   # optional maps/address URL
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -374,13 +353,10 @@ class SiteVisit(db.Model):
 
 
 class ProjectEditAccessRequest(db.Model):
-    """A designer's self-service request for full deliverable-management rights
-    on one live project they're assigned to (the overlay's "Request Editing
-    Access" button), for when the CS Lead is someone else. Its own row, not a
-    flag, because it needs a pending/approved/denied lifecycle + audit trail.
-    Eligibility is computed live in project_overlay.py, not stored here. Grants
-    are permanent (no revoke yet). UNIQUE(project_id, user_id): a denied request
-    is re-requested by resetting the same row."""
+    """An assigned designer's request for deliverable-management rights on one
+    project (the overlay's "Request Editing Access"). Eligibility is computed in
+    routes/project_overlay/. Grants are permanent. One row per (project, user):
+    a re-request after denial resets the same row."""
     __tablename__ = 'project_edit_access_requests'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -404,13 +380,10 @@ class ProjectEditAccessRequest(db.Model):
 
 
 class ProjectActivitySeen(db.Model):
-    """Per-(user, project) watermark backing the Projects table's two unread
-    dots. Two independent timestamps: last_seen_update_at (advanced by opening
-    the overlay) and last_seen_chat_at (advanced only by opening Chat) — both via
-    mark_project_activity_seen() in lib/utils.py. No row means "never seen";
-    project_list.py treats that as seen at its rollout cutoff so the existing
-    backlog doesn't light up every row. "Updates" read from ActivityLog, "chats"
-    from ProjectNote."""
+    """Per-(user, project) watermarks for the Projects table's two unread dots:
+    updates (ActivityLog, set on overlay open) and chat (ProjectNote, set when
+    chat opens), via mark_project_activity_seen(). A missing row counts as
+    seen at ACTIVITY_SEEN_ROLLOUT_CUTOFF."""
     __tablename__ = 'project_activity_seen'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -432,9 +405,8 @@ class ProjectActivitySeen(db.Model):
 
 class ProjectOverlaySeen(db.Model):
     """
-    One row per (user, project) marking that user's first visit to the new
-    Detail overlay for that project — drives "first visit defaults to
-    Project Details, later visits default to Deliverables". A marker, not a log.
+    One row per (user, project) marking a first overlay visit. No code reads
+    or writes it.
     """
     __tablename__ = 'project_overlay_views'
 

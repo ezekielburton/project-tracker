@@ -1,5 +1,4 @@
-{# Section metadata — one overlay serving both New Section and Edit.
-   Standard app modal (.modal-overlay/.modal-box), toggled with .hidden. #}
+{# Section overlay for both New and Edit. Standard .modal-overlay/.modal-box, toggled with .hidden. #}
 <div class="modal-overlay hidden" id="wiki-section-modal">
     <div class="modal-box wiki-modal">
         <div class="modal-title" id="wiki-section-modal-title">New section</div>
@@ -14,11 +13,11 @@
 
             <div class="form-group">
                 <label>Relevant roles
-                    <span class="form-hint">Sorts the wiki for these people first. It hides nothing from anyone
+                    <span class="form-hint">Shows a role badge on this section. It hides nothing from anyone
                         else.</span>
                 </label>
                 <div class="wiki-role-options">
-                    {# Keys, not labels — capabilities.py owns the role list. #}
+                    {# Stores role keys, not labels; capabilities.py owns the role list. #}
                     {% for key, label in role_labels.items() %}
                     <label class="team-tag-toggle">
                         <input type="checkbox" name="relevant_roles" value="{{ key }}" data-role="{{ key }}">

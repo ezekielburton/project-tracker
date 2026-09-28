@@ -1,15 +1,16 @@
-// Generic Drag & Drop for every existting file upload in the app.
-// Works by finding every <input type="file"> and allows dropping a file into its container.
+// Drag-and-drop for every <input type="file">: its parent element becomes
+// the drop zone, and a drop fills the input and fires 'change'.
 function enableDragAndDrop() {
     document.querySelectorAll('input[type="file"]').forEach(function (input){
-        if (input.dataset.dndEnabled) return; 
-        input.dataset.dndEnabled = 'true';
-
-        // The drop zione is whatever visually cotnain this input and its
-        // button - the immediate parent, in every upload block in the app
-
         var dropZone = input.parentElement;
-        if (!dropZone) return;
+        // A hidden picker sitting straight in the page shell has no zone of
+        // its own; binding there would turn the whole page into a drop target.
+        if (!dropZone || dropZone === document.body || dropZone.id === 'main-content') return;
+
+        // Flag the zone, not the input: a zone that outlives its input
+        // (SPA swaps, re-rendered forms) must not collect a second set of listeners.
+        if (dropZone.dataset.dndZone) return;
+        dropZone.dataset.dndZone = 'true';
 
         ['dragenter', 'dragover'].forEach(function (evt) {
             dropZone.addEventListener(evt, function (e) {
@@ -27,10 +28,12 @@ function enableDragAndDrop() {
             });
         });
 
+        // Look the input up on each drop, so a replaced one is the one filled.
         dropZone.addEventListener('drop', function (e) {
-            if (!e.dataTransfer.files.length) return;
-            input.files = e.dataTransfer.files;
-            input.dispatchEvent(new Event('change', {bubbles: true}));
+            var target = dropZone.querySelector(':scope > input[type="file"]');
+            if (!target || !e.dataTransfer.files.length) return;
+            target.files = e.dataTransfer.files;
+            target.dispatchEvent(new Event('change', {bubbles: true}));
         });
     });
 }

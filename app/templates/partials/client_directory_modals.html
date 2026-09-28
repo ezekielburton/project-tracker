@@ -1,23 +1,7 @@
-{# app/templates/partials/client_directory_modals.html
-
-   Add Company / Add Contact modals - shared between the Client Directory
-   page (app/templates/client_directory/index.html) and the brief form
-   (app/templates/projects/create.html), per the spec's "share the same
-   modal HTML and JS - don't duplicate it" requirement.
-
-   Included via {% include %} rather than copy-pasted into both templates -
-   if these fields ever change (a new field added, a label reworded), there
-   is exactly one place to edit instead of two copies quietly drifting apart.
-
-   All the JS that opens/closes these and handles their Save buttons lives
-   in client_directory.js, NOT here - this file is markup only. Both pages
-   that include this partial must also load client_directory.js themselves.
-
-   Uses the existing .modal-overlay / .modal-box / .modal-title /
-   .modal-actions classes already defined in main.css (same ones the
-   Review & Submit modal on the brief form and the achievement/wipe modals
-   elsewhere use) - no new modal chrome invented here, per the "no new
-   design language" instruction. #}
+{# Add Company / Add Contact modals, shared by the Client Directory page
+   (client_directory/index.html) and the Projects list (project_list/index.html).
+   Markup only: client_directory.js (window.ClientDirectoryModals) drives them,
+   and every page that includes this partial must load that script. #}
 
 <div id="add-company-modal" class="modal-overlay hidden"
      onclick="if(event.target===this) window.ClientDirectoryModals.closeAddCompanyModal()">
@@ -46,8 +30,8 @@
         </div>
 
         <div class="modal-actions">
-            <button type="button" class="btn btn--secondary btn--sm" id="cancelAddCompanyModal">Cancel</button>
-            <button type="button" class="btn btn--primary btn--sm" id="confirmAddCompanyModal">Save</button>
+            <button type="button" class="btn-secondary" id="cancelAddCompanyModal">Cancel</button>
+            <button type="button" class="btn-primary" id="confirmAddCompanyModal">Save</button>
         </div>
     </div>
 </div>
@@ -57,10 +41,7 @@
     <div class="modal-box">
         <h3 class="modal-title">Add Contact</h3>
 
-        {# Set by JS right before the modal is opened - the caller (directory
-           page company row, or the brief form's Contact dropdown) always
-           knows which company this new contact belongs to, so this is never
-           user-editable, just a carrier for that value into the POST body. #}
+        {# Set by client_directory.js when the modal opens: the company the new contact joins. #}
         <input type="hidden" id="addContactClientId">
 
         <div class="form-group">
@@ -84,8 +65,8 @@
         </div>
 
         <div class="modal-actions">
-            <button type="button" class="btn btn--secondary btn--sm" id="cancelAddContactModal">Cancel</button>
-            <button type="button" class="btn btn--primary btn--sm" id="confirmAddContactModal">Save</button>
+            <button type="button" class="btn-secondary" id="cancelAddContactModal">Cancel</button>
+            <button type="button" class="btn-primary" id="confirmAddContactModal">Save</button>
         </div>
     </div>
 </div>

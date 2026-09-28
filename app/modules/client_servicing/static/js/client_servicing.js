@@ -1,20 +1,17 @@
-// Client Servicing table page. This script re-executes on every SPA
-// navigation onto the page (its tag is in {% block extra_js %}), so it needs
-// no helix:navigated listener. polling.js calls
-// window.helixRefreshClientServicingTable() on each SSE ping to swap the rows.
+// Client Servicing table page. The SPA router re-runs this script on every
+// visit and DOMContentLoaded never fires again, so setup runs inline.
+// polling.js calls window.helixRefreshClientServicingTable() on each SSE ping.
 //
-// Cell editing: every .cs-editable <td> edits in place (click → input → save
-// on blur), delegated on #client-servicing-table-body so it survives refresh
-// swaps. Scope and Client SPOC can also be created inline via a "+ Add new..."
-// option. Click-to-sort is client-side only (module-scope `currentSort`), not
-// persisted; it resets on reload and re-applies after a live refresh.
+// .cs-editable cells edit in place (click, input, save on blur), delegated on
+// #client-servicing-table-body so they survive refresh swaps. Scope and Client
+// SPOC can be created inline via "+ Add new...". Sort is client-side only and
+// not persisted; it re-applies after a live refresh.
 (function () {
     var body = document.getElementById('client-servicing-table-body');
     if (!body) return;
 
-    // Sticky Project column: its left offset must equal the "Open in Projects"
-    // column's rendered width, measured here and handed to the CSS as a custom
-    // property. Re-run after every refresh (the whole table is replaced).
+    // The sticky Project column's left offset must equal the "Open in Projects"
+    // column's rendered width. Re-run after every refresh (the table is replaced).
     function syncStickyProjectOffset() {
         var table = document.getElementById('cs-table');
         var openHeaderCell = table && table.querySelector('thead th.cs-col-open');
@@ -22,24 +19,17 @@
         table.style.setProperty('--cs-sticky-project-left', openHeaderCell.getBoundingClientRect().width + 'px');
     }
 
-    // Measures the table-box height live and sets it as a CSS custom
-    // property the box's `height` reads; the CSS calc(100vh - 180px) is
-    // only the pre-JS fallback.
+    // Sizes the table box to fill down to the footer (shared fill_height.js).
+    // If that script is missing, the CSS calc() height is the fallback.
     function syncTableScrollHeight() {
-        // The solve moved to core/shared/js/fill_height.js when HSE needed
-        // the same one — second copy, so it was extracted (conventions.md).
-        // The call sites below are unchanged. If that file ever fails to
-        // load, .cs-table-scroll falls back to its own calc() in the CSS.
         if (!window.fillHeightToFooter) return;
         window.fillHeightToFooter(document.getElementById('cs-table-scroll'),
                                   '--cs-table-scroll-height');
     }
 
     // ── Click-to-sort ─────────────────────────────────────────────
-    // Columns whose data-sort-value is a plain number, not text/an ISO
-    // date string — everything else sorts lexicographically, which
-    // already works correctly for ISO dates (YYYY-MM-DD sorts
-    // chronologically as a string) and for names/labels.
+    // Columns whose data-sort-value is a number. The rest compare as strings,
+    // which is correct for names and ISO (YYYY-MM-DD) dates.
     var NUMERIC_SORT_COLUMNS = { value: true, cost_to_client: true, inward_cost: true, margin_percent: true };
     var currentSort = null; // { key: 'value', dir: 'asc' } | null (null = default server order)
 
@@ -51,9 +41,8 @@
         if (!rows.length) return;
 
         if (!currentSort) {
-            // Back to the server's own order — every row carries the
-            // position it was rendered in (table.py sorts by Project
-            // name), so this needs no re-fetch to restore.
+            // Server order (table.py sorts by Project name), restored from
+            // each row's data-row-order without a re-fetch.
             rows.sort(function (a, b) { return Number(a.dataset.rowOrder) - Number(b.dataset.rowOrder); });
         } else {
             var key = currentSort.key;
@@ -64,9 +53,7 @@
                 var bTd = b.querySelector('td[data-col-key="' + key + '"]');
                 var aVal = aTd ? aTd.dataset.sortValue || '' : '';
                 var bVal = bTd ? bTd.dataset.sortValue || '' : '';
-                // Blank cells sort to the bottom no matter the direction —
-                // an ascending sort on Due Date shouldn't put "no date
-                // set" rows before every real date.
+                // Blank cells always sort last, whatever the direction.
                 if (aVal === '' && bVal === '') return 0;
                 if (aVal === '') return 1;
                 if (bVal === '') return -1;
@@ -109,14 +96,12 @@
                 updateSortIndicators();
             })
             .catch(function () {
-                // Network blip — silently skip, same as every other poll/stream
-                // callback in this app. The next ping tries again.
+                // Network blip: skip silently; the next ping retries.
             });
     };
 
-    // field -> options list (for the select-type fields). cs_lead_id and
-    // project_owner_id are global lists; contact_id's depends on the
-    // row's client, resolved from the td's data-client-id at build time.
+    // field -> options for select-type fields, read from window.__cs* globals
+    // the template sets. contact_id's list depends on the td's data-client-id.
     var SELECT_FIELDS = {
         scope_id: function () { return window.__csScopeOptions || []; },
         cs_status: function () { return window.__csStatusOptions || []; },
@@ -129,13 +114,11 @@
         },
     };
 
-    // Sentinel value picked from a SELECT_FIELDS dropdown to start the
-    // inline "add new" flow instead of saving a real value.
+    // Sentinel option value that starts the inline "add new" flow; never saved.
     var ADD_NEW_VALUE = '__cs_add_new__';
 
-    // field -> quick-add config. `create` posts the new name, resolves
-    // to {id, name}, and updates the client-side option cache so the
-    // new record shows up immediately in any other cell of the same kind.
+    // field -> quick-add config. `create` posts the name, resolves to
+    // {id, name}, and adds it to the option cache so other cells see it.
     var QUICK_ADD = {
         scope_id: {
             label: '+ Add new scope...',
@@ -230,9 +213,8 @@
         return input;
     }
 
-    // Rebuilds the status cell (pill + indicator chips + auto hint) from
-    // the effective status the edit endpoint returns, so a cs_status edit
-    // shows manual-vs-auto and the right chips immediately.
+    // Rebuilds the status cell (pill, indicator chips, "auto" hint) from the
+    // effective status the edit endpoint returns.
     var STATUS_CHIP_VARIANT = { '2D': '2d', '3D': '3d', 'Technical': 'technical' };
     function renderStatusCell(td, status) {
         td.innerHTML = '';
@@ -257,9 +239,7 @@
         }
     }
 
-    // Builds the same .person-chip markup the server's person_chip()
-    // Jinja macro renders, so a CS Lead/Project Owner edit shows the real
-    // avatar immediately instead of plain text until the next refresh.
+    // Mirrors the person_chip() Jinja macro's markup; keep the two in sync.
     function renderPersonChip(person) {
         var chip = document.createElement('span');
         chip.className = 'person-chip';
@@ -337,8 +317,7 @@
                 }
             })
             .catch(function () {
-                // Network blip — revert to the last known-good value; the
-                // next click retries the edit fresh.
+                // Network error: roll back to the last saved value.
                 td.innerHTML = originalHtml;
             });
     }
@@ -360,9 +339,7 @@
 
         var actions = document.createElement('div');
         actions.className = 'cs-quick-add-actions';
-        // Reuse the app's existing btn-primary/btn-secondary classes so the
-        // colours (and dark-mode overrides) are the ones already proven
-        // elsewhere — cs-quick-add-btn in the CSS only shrinks them to fit.
+        // App button classes; cs-quick-add-btn only shrinks them to fit.
         var addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'btn-primary cs-quick-add-btn';
@@ -473,8 +450,7 @@
     });
 
     // ── Column resize ─────────────────────────────────────────────
-    // Delegated on `body`, not the table — the table is replaced on every
-    // live refresh, so a handle-bound listener would stop working after one.
+    // Delegated on `body`: the table is replaced on every live refresh.
     var MIN_COL_WIDTH = 60;
     var layoutSaveTimer = null;
 
@@ -491,7 +467,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ table_key: tableKey, layout: layout }),
             }).catch(function () {
-                // Best-effort, silent — the next resize just tries again.
+                // Best-effort; the next resize tries again.
             });
         }, 400);
     }
@@ -518,6 +494,7 @@
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
             handle.classList.remove('cs-resize-handle--active');
+            swallowNextClick();
             scheduleLayoutSave(table);
         }
         document.addEventListener('mousemove', onMove);
@@ -525,15 +502,20 @@
     });
 
     // ── Column reorder ────────────────────────────────────────────
-    // Delegated on `body` (survives refresh swaps); skips the resize handle's
-    // own mousedown. Moves the dragged column's <th>/<col>/<td>s live via
-    // insertBefore; scheduleLayoutSave() persists the order and the next
-    // refresh re-renders it via table.py's _ordered_columns().
+    // Delegated on `body`. Moves the dragged column's <th>/<col>/<td>s live;
+    // scheduleLayoutSave() persists the order, which table.py's
+    // _ordered_columns() renders on the next refresh.
     var DRAG_THRESHOLD = 4; // px of movement before a mousedown becomes a drag, not a stray click
 
-    // A header click sorts; a drag reorders. Set when a real drag ends so the
-    // click handler below can tell the two apart from the same mouse pair.
+    // Set when a drag or resize ends so the click that follows does not also
+    // sort. Cleared on the next tick in case no click follows (mouse released
+    // outside the header).
     var suppressNextClick = false;
+
+    function swallowNextClick() {
+        suppressNextClick = true;
+        setTimeout(function () { suppressNextClick = false; }, 0);
+    }
 
     function findColumnCells(table, key) {
         return {
@@ -566,9 +548,8 @@
     body.addEventListener('mousedown', function (e) {
         if (e.target.closest('.cs-resize-handle')) return; // the resize handler above owns this
         var th = e.target.closest('th[data-col-key]');
-        // Project is pinned right after "Open in Projects" (sticky CSS
-        // below assumes it never moves) — same as the Projects page
-        // excluding its own Name column from reorder entirely.
+        // Project stays pinned after "Open in Projects"; the sticky CSS
+        // assumes it never moves.
         if (!th || th.dataset.colKey === 'project') return;
         e.preventDefault();
 
@@ -586,7 +567,7 @@
             }
             var hovered = document.elementFromPoint(ev.clientX, ev.clientY);
             var targetTh = hovered && hovered.closest('th[data-col-key]');
-            if (!targetTh || targetTh === th || targetTh.dataset.colKey === 'project') return; // pinned — not a drop target either
+            if (!targetTh || targetTh === th || targetTh.dataset.colKey === 'project') return; // pinned, so not a drop target
 
             var rect = targetTh.getBoundingClientRect();
             var after = ev.clientX > rect.left + rect.width / 2;
@@ -597,7 +578,7 @@
             document.removeEventListener('mouseup', onUp);
             th.classList.remove('cs-th-dragging');
             if (dragging) {
-                suppressNextClick = true; // this mouseup's 'click' is the drag ending, not a sort request
+                swallowNextClick();
                 scheduleLayoutSave(table);
             }
         }
@@ -605,8 +586,7 @@
         document.addEventListener('mouseup', onUp);
     });
 
-    // A non-drag click sorts by that column. Covers Project too — sortable
-    // though not draggable.
+    // A non-drag header click sorts (Project included, though not draggable).
     body.addEventListener('click', function (e) {
         if (suppressNextClick) { suppressNextClick = false; return; }
         if (e.target.closest('.cs-resize-handle')) return;
@@ -616,15 +596,11 @@
     });
 
     // ── Sticky column wiring ──────────────────────────────────────────
-    // Both run now, for this visit's freshly-swapped table.
     syncStickyProjectOffset();
     syncTableScrollHeight();
 
-    // Bound once for the session. This file re-executes on every SPA nav
-    // (execScripts re-runs the fragment's script tags), and both handlers
-    // re-query the DOM on each call, so one registration serves every visit —
-    // without the guard each navigation stacked another pair. Same reasoning
-    // as the filter panel's outside-click listener below.
+    // window listeners outlive SPA swaps: bind once per session so visits do
+    // not stack them. Both handlers re-query the DOM on each call.
     if (!window.__csTableResizeBound) {
         window.__csTableResizeBound = true;
         window.addEventListener('resize', syncStickyProjectOffset);
@@ -634,10 +610,8 @@
 
 
 /* ── Table search + filter (client-side over the loaded rows) ────────────
-   Reads the same data-sort-value hooks the sort uses, hides non-matching
-   rows, and re-runs after each SSE live refresh. Self-contained; no server,
-   no new data. Chip options are built from the rows themselves so they
-   always match what's in the table. */
+   Matches on the cells' data-sort-value, hides non-matching rows, and
+   re-runs after each SSE refresh. Chip options are built from the rows. */
 (function () {
     var searchInput = document.getElementById('cs-search');
     var table = document.getElementById('cs-table');
@@ -651,8 +625,7 @@
     var countEl = document.getElementById('cs-filter-count');
     var clearBtn = document.getElementById('cs-filter-clear');
 
-    // Filter field key = the column's data-col-key; its data-sort-value holds
-    // the value we filter on.
+    // key = the column's data-col-key.
     var FIELDS = [
         { key: 'client', label: 'Client' },
         { key: 'cs_lead', label: 'CS Contact' },
@@ -695,8 +668,7 @@
         return !!sel[tokenOf(tr, key)];
     }
 
-    // Passes the search plus every field EXCEPT `except` (used for faceted counts;
-    // pass null to test all fields).
+    // Search plus every field except `except` (for faceted counts; null = all).
     function passes(tr, term, except) {
         if (!matchesSearch(tr, term)) return false;
         for (var i = 0; i < FIELDS.length; i++) {
@@ -711,7 +683,7 @@
         return token === BLANK ? '—' : token;
     }
 
-    // Build the chip columns from the current rows, preserving selections.
+    // Builds chip columns from the current rows; selections are kept in `selected`.
     function buildChips() {
         table = document.getElementById('cs-table');
         if (!table) return;
@@ -720,6 +692,9 @@
         FIELDS.forEach(function (f) {
             var tokens = {};
             all.forEach(function (tr) { tokens[tokenOf(tr, f.key)] = true; });
+            // Keep a selected chip even when a refresh leaves no row with its
+            // value, so the active filter stays visible and can be switched off.
+            Object.keys(selected[f.key]).forEach(function (t) { tokens[t] = true; });
             var list = Object.keys(tokens).sort(function (a, b) {
                 if (a === BLANK) return 1;
                 if (b === BLANK) return -1;
@@ -773,10 +748,10 @@
         }
     }
 
-    // Recompute chip counts (faceted) + selected states.
+    // Recomputes faceted chip counts and selected states. A chip's count uses
+    // the rows passing search and every OTHER field's filter.
     function updateChips(all, term) {
         var chips = columnsEl.querySelectorAll('.cs-chip');
-        // base sets per field: rows passing search + all OTHER fields
         var baseByField = {};
         FIELDS.forEach(function (f) {
             baseByField[f.key] = all.filter(function (tr) { return passes(tr, term, f.key); });
@@ -834,9 +809,8 @@
         e.stopPropagation();
         panel.hidden = !panel.hidden;
     });
-    // Outside-click close. Bound on document (persistent across SPA nav), so
-    // bind ONCE for the session and re-resolve the current panel each click —
-    // otherwise every navigation would stack another live listener.
+    // Outside-click close. document outlives SPA swaps, so bind once per
+    // session and look the panel up on each click.
     if (!window.__csFilterOutsideBound) {
         window.__csFilterOutsideBound = true;
         document.addEventListener('click', function (e) {
@@ -851,8 +825,7 @@
         apply();
     });
 
-    // Chip clicks (delegated on the columns container, which is rebuilt on
-    // refresh — the listener sits on the container, so it survives).
+    // Delegated on the container: the chips inside are rebuilt on refresh.
     columnsEl.addEventListener('click', function (e) {
         var chip = e.target.closest('.cs-chip');
         if (!chip) return;
@@ -862,8 +835,8 @@
         apply();
     });
 
-    // Re-apply after the SSE live refresh swaps the table rows. Disconnect any
-    // observer from a previous SPA visit so only one is ever active.
+    // Re-apply after the SSE refresh swaps the table. Disconnect the previous
+    // visit's observer so only one is active.
     if (window.__csFilterObserver) window.__csFilterObserver.disconnect();
     var refreshTimer = null;
     var mo = new MutationObserver(function () {

@@ -14,13 +14,6 @@
                     <span class="hse-header-note">Yours to edit</span>
                 </div>
 
-                <div class="tab-strip">
-                    {% for t in tabs %}
-                    <a class="tab-strip-item hse-tab{{ ' active' if t.key == active_tab else '' }}"
-                       href="{{ url_for('hse.lists_page', tab_key=t.key) }}">{{ t.label }}</a>
-                    {% endfor %}
-                </div>
-
                 <p class="hse-lists-intro">
                     Every dropdown in the module is filled from these lists. Nothing here
                     is ever deleted — entries already filed still point at it, so a value
@@ -38,7 +31,7 @@
 
                     <div class="hse-list-rows">
                         {% for row in section.rows %}
-                        <div class="hse-list-row{{ '' if row.active else ' is-off' }}" data-row-id="{{ row.id }}">
+                        <div class="hse-list-row{{ '' if row.active else ' is-off' }}{{ ' hse-list-row--serial' if section.has_serial else '' }}" data-row-id="{{ row.id }}">
                             <span class="hse-list-label">{{ row.label }}</span>
                             {% if section.kind == 'people' %}
                             <span class="hse-list-meta">
@@ -48,6 +41,12 @@
                             </span>
                             {% elif section.kind == 'assets' and row.ref %}
                             <span class="hse-list-meta mono">{{ row.ref }}</span>
+                            {% endif %}
+                            {# Edited in place; saves when the field is left. #}
+                            {% if section.has_serial %}
+                            <input type="text" class="form-input hse-list-serial mono" maxlength="120"
+                                   data-row-id="{{ row.id }}" value="{{ row.serial_no or '' }}"
+                                   placeholder="Serial no." aria-label="Serial no. for {{ row.label }}">
                             {% endif %}
                             <button type="button" class="hse-list-toggle"
                                     data-row-id="{{ row.id }}" data-active="{{ 'yes' if row.active else 'no' }}">
@@ -69,7 +68,11 @@
                         </label>
                         {% elif section.kind == 'assets' %}
                         <input type="text" class="form-input hse-add-name" placeholder="Name">
-                        <input type="text" class="form-input hse-add-ref" placeholder="Plate / serial">
+                        <input type="text" class="form-input hse-add-ref"
+                               placeholder="{{ 'Asset tag' if section.has_serial else 'Plate / serial' }}">
+                        {% if section.has_serial %}
+                        <input type="text" class="form-input hse-add-serial" maxlength="120" placeholder="Serial no.">
+                        {% endif %}
                         {% else %}
                         <input type="text" class="form-input hse-add-name" placeholder="Add to {{ section.label|lower }}…">
                         {% endif %}

@@ -1,7 +1,6 @@
-{# The closed months. One tbody per closing month, newest first, each with
-   a header row carrying that month's count and value. Marking a pending
-   project invoiced PATCHes edit.py's field endpoint (invoice_date), so
-   this page adds no permission logic of its own. #}
+{# One tbody per closing month, newest first, each headed by its count and
+   value. Marking invoiced PATCHes edit.py's field endpoint (invoice_date),
+   which owns the permission check. #}
 <div class="cs-inv-tablewrap">
     <table class="cs-inv-table cs-inv-sumtable cs-closed-table" id="cs-closed-table">
         <thead>

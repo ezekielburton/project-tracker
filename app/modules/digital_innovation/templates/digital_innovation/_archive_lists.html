@@ -1,7 +1,7 @@
-{# Archive's closed/archived project lists, as a partial wrapped in
-   #di-archive-lists so a fragment route can re-render just this on a DI-wide
-   live SSE ping, while archive.html includes it on first load. Needs
-   closed_projects, archived_projects and can_edit_board in context. #}
+{# Archive's closed/archived lists. Rendered by archive.html and by the
+   .../archive/lists fragment route for live refresh; #di-archive-lists is the
+   node that gets replaced. Needs closed_projects, archived_projects,
+   can_edit_board. #}
 <div id="di-archive-lists">
     <section class="di-archive-section">
         <h2 class="di-archive-section-title">Closed</h2>

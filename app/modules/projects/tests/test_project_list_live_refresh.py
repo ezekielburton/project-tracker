@@ -1,5 +1,5 @@
-"""Group C regression tests: task #55's targeted single-row SSE refresh
-(table_row()) and the _fetch_all_view_rows() safety cap."""
+"""Project list: the single-row SSE refresh (table_row()) and the
+_fetch_all_view_rows() row cap."""
 import app.modules.projects.routes.project_list as project_list_module
 from app.modules.core.shared.models import User, Project
 from app.modules.core.shared.testing import login_as

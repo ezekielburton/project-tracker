@@ -1,7 +1,6 @@
-{# By Project finance table. Fixed columns in wireframe order; finance
-   columns form the "Invoicing — Master Control" band (.cs-inv-fin); the
-   Project column is sticky-left and wraps. When can_edit_finance, the
-   finance cells become inline-editable (client_servicing_invoicing.js). #}
+{# By Project finance table, fixed columns. Finance columns sit under the
+   .cs-inv-fin band; the Project column is sticky-left. With can_edit_finance
+   the finance cells are inline-editable (client_servicing_invoicing.js). #}
 {% set edit = can_edit_finance %}
 <div class="cs-inv-tablewrap">
     <table class="cs-inv-table">

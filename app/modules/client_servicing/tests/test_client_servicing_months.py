@@ -1,5 +1,5 @@
-"""Reading a written invoice month. The field was free text before it became
-a real month, so the migration and any pasted value both come through here."""
+"""Parsing free-text invoice months (pasted values and the data migration),
+plus display and input formatting."""
 from datetime import date
 
 import pytest
@@ -27,8 +27,7 @@ def test_a_written_month_reads_as_the_first_of_it(text, expected):
 
 @pytest.mark.parametrize('text', ['', None, 'sometime', 'Q3', 'next month', '2026'])
 def test_what_cannot_be_read_is_none(text):
-    """None rather than a guess — the migration reports these instead of
-    quietly filing money in the wrong month."""
+    """Unreadable text returns None, never a guessed month."""
     assert parse_month(text) is None
 
 

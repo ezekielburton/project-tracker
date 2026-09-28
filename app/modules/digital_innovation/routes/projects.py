@@ -1,8 +1,5 @@
-# Digital Innovation — project (board) management: creation, the three
-# lifecycle actions (close, archive, reopen), and the system-project link
-# (search + set/clear) — linking a DI project to a real projects-module
-# Project so a future management dashboard can roll DI hours/profit up
-# into it (see services/rollup.py, not yet built).
+# Board management: create, set track, close/archive/reopen, and linking a
+# board to a shared Project (search + set/clear).
 
 from datetime import datetime
 
@@ -14,9 +11,8 @@ from app.modules.digital_innovation.routes.blueprint import digital_innovation_b
 from app.modules.digital_innovation.models import DiProject, DI_PROJECT_TRACKS
 from app.modules.digital_innovation.lib.access import can_edit_di_board
 
-# Rotation the board's project dots cycle through on creation — names match the
-# app's .status-pill--<name> classes (DI_STAGE_COLOURS in models.py), so every
-# dot is dark-mode-tinted for free.
+# Colours new boards cycle through. Names must match the shared
+# .status-pill--<name> classes, like DI_STAGE_COLOURS.
 _COLOUR_ROTATION = ['sky', 'clover', 'coral', 'lavender', 'canary', 'sage', 'oak', 'poppy', 'salmon']
 
 
@@ -26,11 +22,8 @@ def _require_board_write_access():
 
 
 def _permanent_guard(project):
-    """None if `project` isn't permanent; otherwise the (response, status)
-    the route should return immediately. The seeded OVP board can never be
-    closed or archived — whatever the UI does, whoever's asking, admin
-    included — so this is checked in the two lifecycle routes below even
-    though the UI never renders the controls for it either."""
+    """None, or a 400 response if `project` is the permanent board, which
+    can never be closed or archived (admins included)."""
     if project.is_permanent:
         return jsonify({'error': 'This project is permanent and cannot be closed or archived.'}), 400
     return None
@@ -46,8 +39,7 @@ def create_project():
     if not name:
         return jsonify({'error': 'Name is required.'}), 400
 
-    # 'internal' unless the New Project modal's internal/external
-    # picker sent something else - see DI_PROJECT_TRACKS (models.py).
+    # Defaults to 'internal'.
     track = (data.get('track') or '').strip() or 'internal'
     if track not in DI_PROJECT_TRACKS:
         return jsonify({'error': f"Track must be one of: {', '.join(DI_PROJECT_TRACKS)}."}), 400
@@ -70,20 +62,16 @@ def create_project():
 @digital_innovation_bp.route('/projects/<int:project_id>/track', methods=['PATCH'])
 @login_required
 def update_project_track(project_id):
-    """Sets a board's internal/external track after creation - the header
-    badge's editor. Track is board-level (DiProject.track, models.py),
-    not per-feature, so this is the only place it changes once a board
-    exists; changing it re-labels every card's management_review stage
-    (via stage_label(), models.py) without touching any feature's actual
-    status or steps - a relabel, not a move."""
+    """Sets a board's internal/external track. This only relabels the
+    management_review stage; no feature's status or steps change."""
     _require_board_write_access()
     project = DiProject.query.get_or_404(project_id)
 
-    track = (request.get_json(silent=True) or {}).get('track', '').strip()
-    if track not in DI_PROJECT_TRACKS:
+    track = (request.get_json(silent=True) or {}).get('track')
+    if not isinstance(track, str) or track.strip() not in DI_PROJECT_TRACKS:
         return jsonify({'error': f"Track must be one of: {', '.join(DI_PROJECT_TRACKS)}."}), 400
 
-    project.track = track
+    project.track = track.strip()
     db.session.commit()
 
     return jsonify({'id': project.id, 'track': project.track})
@@ -92,8 +80,7 @@ def update_project_track(project_id):
 @digital_innovation_bp.route('/projects/<int:project_id>/close', methods=['POST'])
 @login_required
 def close_project(project_id):
-    """active -> closed. Drops off the active sidebar; the project shows
-    up on the Archive screen instead, still reopenable from there."""
+    """active -> closed: leaves the sidebar and appears on the Archive screen."""
     _require_board_write_access()
     project = DiProject.query.filter_by(id=project_id, lifecycle='active').first()
     if not project:
@@ -113,15 +100,13 @@ def close_project(project_id):
 @digital_innovation_bp.route('/projects/<int:project_id>/archive', methods=['POST'])
 @login_required
 def archive_project(project_id):
-    """closed -> archived — one step further, from the Archive screen.
-    Only a closed project can be archived; an active one has to be closed
-    first."""
+    """closed -> archived. Only a closed project can be archived."""
     _require_board_write_access()
     project = DiProject.query.filter_by(id=project_id, lifecycle='closed').first()
     if not project:
         abort(404)
 
-    guard = _permanent_guard(project)  # unreachable today (permanent stays active) — kept for defense-in-depth
+    guard = _permanent_guard(project)  # defensive: a permanent board is never closed
     if guard:
         return guard
 
@@ -134,8 +119,7 @@ def archive_project(project_id):
 @digital_innovation_bp.route('/projects/<int:project_id>/reopen', methods=['POST'])
 @login_required
 def reopen_project(project_id):
-    """closed or archived -> active — the escape hatch, so closing or
-    archiving a project is never a one-way door."""
+    """closed or archived -> active. Clears closed_at."""
     _require_board_write_access()
     project = DiProject.query.filter(
         DiProject.id == project_id,
@@ -154,13 +138,8 @@ def reopen_project(project_id):
 @digital_innovation_bp.route('/projects/search', methods=['GET'])
 @login_required
 def search_projects():
-    """Type-to-search for the system-project link picker (see
-    #di-link-project-modal in board.html). The shared Project table can
-    run into the hundreds across the company, so unlike the short lists
-    (e.g. Clients) the rest of the app renders as a plain <select>, this
-    needs server-side filtering rather than dumping every option in a
-    dropdown. Gated the same as the picker itself — only can_edit_di_board
-    users ever see the control that calls this."""
+    """Type-to-search for the link picker (#di-link-project-modal in
+    board.html). Matches name or client; needs 2+ characters; max 20."""
     _require_board_write_access()
 
     query = (request.args.get('q') or '').strip()
@@ -184,13 +163,8 @@ def search_projects():
 @digital_innovation_bp.route('/projects/<int:project_id>/link', methods=['PATCH'])
 @login_required
 def link_project(project_id):
-    """Sets or clears DiProject.linked_project_id. board.html's "part of
-    -> [project]" badge reads project.linked_project directly (the
-    relationship already exists on the model) so no extra context is
-    needed on the board route itself. The permanent OVP board is never
-    linkable — it isn't "part of" any single client project — same
-    object-level-guard shape as close/archive, a 400 not a 403 since it's
-    a rule about the object, not about who's asking."""
+    """Sets or clears DiProject.linked_project_id. The permanent board can
+    never be linked (400)."""
     _require_board_write_access()
     project = DiProject.query.get_or_404(project_id)
 
@@ -198,9 +172,7 @@ def link_project(project_id):
         return jsonify({'error': 'This project is permanent and cannot be linked to a system project.'}), 400
 
     body = request.get_json(silent=True) or {}
-    # Key present with value null (JS "Clear link") vs. key absent both
-    # clear the link; only a real id sets one — keeps the endpoint usable
-    # for both "set" and "clear" without a separate DELETE route.
+    # A null or missing linked_project_id clears the link.
     target_id = body.get('linked_project_id')
 
     if target_id is None:

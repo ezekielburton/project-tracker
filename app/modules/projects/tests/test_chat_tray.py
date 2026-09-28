@@ -1,9 +1,5 @@
-"""The Chat tray's conversation list and its gates.
-
-The list is the only new surface — the thread is the overlay's chat drawer,
-covered by its own tests. What matters here: you see your projects and nobody
-else's, the unread numbers are right, management reaches anything, and the
-query count does not grow with the size of the list.
+"""Chat tray conversation list: visibility, unread counts, add/hide/pin,
+ordering, and a flat query count. The thread is the overlay chat drawer.
 """
 from datetime import datetime, timedelta
 
@@ -110,8 +106,7 @@ def test_a_designer_cannot_pin_a_project_they_are_not_on(app, client, db_session
 
 
 def test_management_can_pin_any_project(app, client, db_session):
-    """Management and admin reach anything — the same rule the chat's post gate
-    already uses."""
+    """Management can add any project (same rule as the chat post gate)."""
     owner = _user(db_session, 'boss-owner')
     boss = _user(db_session, 'boss', 'management')
     project = _project(db_session, 'Someone Elses', owner)
@@ -123,7 +118,7 @@ def test_management_can_pin_any_project(app, client, db_session):
 
 
 def test_management_does_not_auto_surface_every_project(app, client, db_session):
-    """Reaching a project is not the same as it filling your list unasked."""
+    """Management's list only shows projects they are on or added."""
     owner = _user(db_session, 'quiet-owner')
     boss = _user(db_session, 'boss-list', 'management')
     project = _project(db_session, 'Busy Elsewhere', owner)
@@ -190,8 +185,7 @@ def test_opening_a_thread_clears_the_unread(app, client, db_session):
 
 
 def test_the_list_does_not_grow_a_query_per_project(app, client, db_session):
-    """The point of the bulk helpers — three projects and ten must cost the same
-    number of queries."""
+    """Three projects and ten cost the same number of queries."""
     owner = _user(db_session, 'perf')
     mate = _user(db_session, 'perf-mate', 'designer')
     login_as(client, app, owner, 'password123')

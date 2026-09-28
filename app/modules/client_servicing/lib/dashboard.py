@@ -1,11 +1,9 @@
 """
-Client Servicing dashboard aggregations — the module's landing overview.
+Client Servicing dashboard: the module's landing panels and its feed for the
+global Dashboard. Read-only.
 
-One eager-loaded fetch of the CS project set (drafts already excluded by
-_base_projects), turned into the six panels and the cross-cutting feed the
-global Dashboard merges. Composes the existing helpers so no number can drift
-from the Table, Calendar or Invoicing pages. Reads only; writes nothing.
-Finance figures are gated by can_view_finance — page access is wider.
+Reuses the Table, Calendar and Invoicing helpers so numbers match those pages.
+Finance figures need can_view_finance; page access alone is not enough.
 """
 from datetime import date, timedelta
 
@@ -20,13 +18,11 @@ from app.modules.client_servicing.lib.summary import year_summary, due_this_mont
 from app.modules.client_servicing.routes.table import _base_projects
 
 
-# Upcoming-install horizon for the module feed, and how many rows the
-# Upcoming Installs panel shows.
+# Days ahead the feed looks for installs; rows shown in Upcoming Installs.
 _FEED_INSTALL_DAYS = 7
 _UPCOMING_LIMIT = 8
 
-# Effective-status label -> lifecycle family for the Status Spread panel;
-# covers both the auto-derived labels and the manual CS_STATUS_OPTIONS.
+# Status label (derived or manual) -> family for the Status Spread panel.
 _STATUS_FAMILY = {
     'Briefing': 'In Design', 'Survey': 'In Design', 'In Design': 'In Design',
     'KV in Progress': 'In Design', 'AW in Progress': 'In Design',
@@ -54,8 +50,7 @@ def _signal_sort(item):
 
 
 def _active(projects):
-    """The board's active set — cancelled and closed projects drop out
-    (drafts already excluded upstream)."""
+    """Projects minus cancelled and closed ones."""
     return [
         p for p in projects
         if p.cancelled_at is None
@@ -64,8 +59,7 @@ def _active(projects):
 
 
 def _snapshot(active, today):
-    """Status + risk resolved once per project; every panel reads this so a
-    project is never re-derived."""
+    """Status and risk resolved once per project, for every panel to share."""
     snap = []
     for p in active:
         status = effective_cs_status(p)[0]
@@ -81,19 +75,18 @@ def _projects_link(project_id):
 
 
 def _table_link(project_id):
-    """The CS table, focused on one project. Install date and value are
-    edited there, not on the Projects page."""
+    """The CS table focused on one project (where install date and value are edited)."""
     return url_for('client_servicing.table', project=project_id)
 
 
 def _invoicing_project_link(project_id):
-    """Invoicing's By Project tab, focused on one project."""
+    """Invoicing > By Project, focused on one project."""
     return url_for('client_servicing.invoicing', project=project_id)
 
 
 def _closed_project_link(project_id, closed_at):
-    """The Closed page, filtered to that project's closing month so the row
-    is actually on screen, and focused on it."""
+    """The Closed page filtered to the project's closing month (so the row is
+    on screen) and focused on it."""
     params = {'project': project_id}
     if closed_at is not None:
         params['year'] = closed_at.year
@@ -102,8 +95,7 @@ def _closed_project_link(project_id, closed_at):
 
 
 def _stuck_link(row):
-    """A stuck project sits on the Invoicing table until it's closed, and on
-    the Closed page after. Link to whichever one actually has the row."""
+    """Link to the page that shows the row: Closed if closed, else Invoicing."""
     if row['closed']:
         return _closed_project_link(row['id'], row['closed_at'])
     return _invoicing_project_link(row['id'])
@@ -172,8 +164,7 @@ def _upcoming(snap, today):
 
 
 def _gaps(p):
-    # cs_lead_id is NOT NULL on Project, so a project always has a lead —
-    # the only real gaps are a missing install date or value.
+    # No lead check: Project.cs_lead_id is NOT NULL.
     gaps = []
     if p.installation_date is None:
         gaps.append('install date')
@@ -183,8 +174,8 @@ def _gaps(p):
 
 
 def _finance_signals(due, today):
-    """Urgent/feed rows from the month's uninvoiced set — one source with the
-    Invoicing summary tab."""
+    """Urgent/feed rows from the month's uninvoiced projects (the same set
+    Invoicing > Monthly Summary uses)."""
     link = _invoicing_link(today)
     items = []
     for d in due:
@@ -247,8 +238,8 @@ def _feed_installs(snap, today):
 # --- public ----------------------------------------------------------------
 
 def dashboard_context(user):
-    """Everything the dashboard template needs. Finance panels are present
-    only for finance viewers; the template renders what it's given."""
+    """Context for the CS dashboard template. Finance panels are filled only
+    for finance viewers."""
     today = date.today()
     show_finance = can_view_finance(user)
     snap = _snapshot(_active(_base_projects().all()), today)
@@ -259,9 +250,7 @@ def dashboard_context(user):
         rows, _ = year_summary(today.year)
         month_row = rows[today.month - 1]
         due = due_this_month(today.year, today.month)
-        # The panel names them rather than only counting them. Same set the
-        # rollup counted, so the number and the names agree; each row links
-        # to wherever that project actually lives now.
+        # Same set the rollup counts, so the panel's count and names agree.
         stuck = [dict(row, link=_stuck_link(row)) for row in
                  stuck_this_month(today.year, today.month)]
 
@@ -279,9 +268,8 @@ def dashboard_context(user):
 
 
 def feed_items(user):
-    """The module's cross-cutting feed for the global Dashboard: upcoming
-    installs plus (for finance viewers) the month's outstanding LPO / unbilled
-    / overdue invoices. Empty for anyone without CS access."""
+    """Feed for the global Dashboard: upcoming installs plus, for finance
+    viewers, the month's No LPO / unbilled / overdue items. Empty without CS access."""
     if not can_access_client_servicing(user):
         return []
     today = date.today()

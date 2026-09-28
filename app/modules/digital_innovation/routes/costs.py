@@ -1,6 +1,5 @@
-# Cost breakdown view (restricted, see lib/access.py): per-project cost ledger
-# CRUD + Excel export. Every route gates on can_view_di_performance — add/delete
-# uses the same gate as view, so there's no separate "can edit costs" check.
+# Cost breakdown modal: per-project ledger add/delete and Excel export. Every
+# route, reads and writes alike, gates on can_view_di_performance.
 
 from datetime import datetime
 
@@ -21,11 +20,7 @@ def _require_cost_access():
 
 
 def _render_cost_breakdown(project):
-    """The one place that turns a project into the Cost breakdown modal's
-    HTML fragment — used by the initial GET and by every mutating route
-    below, mirroring routes/features.py's _render_feature_detail() choke
-    point: an add or a delete always leaves the modal showing exactly
-    what a fresh GET would show for that project."""
+    """The Cost breakdown modal fragment. Every route here returns this."""
     summary = costs.cost_summary(project)
     return render_template(
         'digital_innovation/_cost_breakdown.html',
@@ -42,10 +37,8 @@ def _render_cost_breakdown(project):
 @digital_innovation_bp.route('/<int:project_id>/costs')
 @login_required
 def cost_breakdown(project_id):
-    """Returns the Cost breakdown modal's content as a rendered HTML
-    fragment. Deliberately no lifecycle filter, unlike the live board's
-    routes — a closed or archived project's cost history is still worth
-    reviewing, so this works for every project regardless of state."""
+    """The Cost breakdown modal fragment. Works for closed and archived
+    projects too (no lifecycle filter)."""
     _require_cost_access()
     project = DiProject.query.get_or_404(project_id)
     return _render_cost_breakdown(project)
@@ -84,10 +77,7 @@ def add_cost_entry_route(project_id):
         except (TypeError, ValueError):
             return jsonify({'error': 'Hours must be a number.'}), 400
 
-    # Only Dev Time entries carry a feature — resolved here (not in
-    # lib/costs.py) because looking up a DiFeature by id is HTTP-layer
-    # work, same division of labour as step_engine's callers always
-    # passing objects, never raw ids.
+    # Only Dev Time entries carry a feature, and it must belong to this project.
     feature = None
     if cost_type == 'dev_time':
         feature_id = data.get('feature_id')
@@ -113,7 +103,7 @@ def add_cost_entry_route(project_id):
 def delete_cost_entry_route(entry_id):
     _require_cost_access()
     entry = DiCostEntry.query.get_or_404(entry_id)
-    project = entry.project  # backref — re-render needs to know which project's modal this belongs to
+    project = entry.project  # needed to re-render after the entry is gone
 
     costs.delete_cost_entry(entry)
     db.session.commit()
@@ -124,8 +114,7 @@ def delete_cost_entry_route(entry_id):
 @digital_innovation_bp.route('/<int:project_id>/costs/export')
 @login_required
 def export_cost_ledger(project_id):
-    """Streams the project's ledger as an .xlsx download — see
-    lib/excel_export.py for the workbook itself."""
+    """Downloads the project's cost ledger as .xlsx."""
     _require_cost_access()
     project = DiProject.query.get_or_404(project_id)
 

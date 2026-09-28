@@ -8,6 +8,12 @@
     justify-content: center;
 }
 
+/* The photo step opens the shared crop modal (main.css, z 5500): lift it over
+   the wizard while the wizard is up — above the tray dock, below the toasts. */
+body:has(#wizard-overlay) #crop-modal {
+    z-index: 10015;
+}
+
 .wizard-card {
     background: var(--white);
     border-radius: 12px;
@@ -19,7 +25,7 @@
 }
 
 
-/* Override the global uppercase H1-H6 rule */
+/* Undo the global uppercase headings. */
 .wizard-card h2 {
     text-transform: none;
     letter-spacing: normal;

@@ -1,23 +1,15 @@
-{# app/templates/project_list/_row_macros.html
-   project_row() and table_header_row() - pulled out of index.html on 20 Aug
-   2026 (task #55, table-side SSE refresh) so the new /projects-new/table-rows
-   endpoint (see project_list.py's table_rows()) can render the exact same
-   markup a real page load would, via {% from ... import ... with context %},
-   without re-rendering all of index.html (which extends base.html and would
-   drag the whole page's chrome along with it).
+{# app/modules/projects/templates/project_list/_row_macros.html
+   project_row() and table_header_row(), shared by index.html and the SSE
+   refresh partials (table_rows()/table_row() in project_list.py) so both
+   render identical markup.
 
-   `with context` matters here specifically because project_row() reads
-   `today` directly rather than taking it as a parameter - both index() and
-   table_rows() pass `today` into their render context so this resolves
-   either way. #}
+   Import `with context`: project_row() reads `today` from the render
+   context, which every caller must provide. #}
 {% from '_shared_macros.html' import person_chip, tag, status_pill %}
 
-{# One project row (the link row itself, plus its expand-container sibling).
-`ns` is a Jinja namespace object (a mutable counter, not a plain {% set %}
-scalar) carrying the running --row-num across BOTH the flat "no grouping"
-loop and the grouped-boxes loop below — a plain {% set %} inside a macro
-or a nested {% for %} would re-scope on every iteration and lose the
-running count, which is exactly why this needs a namespace instead. #}
+{# One project row plus its expand-container sibling. `ns` is a Jinja
+namespace carrying the running --row-num; a plain {% set %} would be
+re-scoped inside the macro and loops and lose the count. #}
 {% macro project_row(row, ns) %}
 <a href="{{ url_for('project_list.index', **dict(request.args.to_dict(), project=row.id)) }}"
     class="project-row project-row--link"
@@ -30,16 +22,9 @@ running count, which is exactly why this needs a namespace instead. #}
     </span>
     <span class="project-col-name">
         {{ row.name }}
-        {# Unread dots (26/27 Aug 2026, per Ezekiel) — two independent
-        indicators, deliberately not one combined dot: staff need to tell
-        "new update" and "new chat message" apart, and clear them
-        separately (opening the overlay clears the update dot; only
-        opening Chat specifically clears the chat one — see
-        mark_project_activity_seen() in core/shared/lib/utils.py). Lives
-        right on project_row(), the one macro every render path shares
-        (real page load, live SSE refresh, every filter/sort/group
-        combination), so there's no separate code path for this to fall
-        out of sync with. #}
+        {# Two unread dots, cleared separately: opening the overlay clears
+        the update dot, opening Chat clears the chat dot (see
+        mark_project_activity_seen() in core/shared/lib/utils.py). #}
         {% if row.has_unread_update %}<span class="project-unread-dot project-unread-dot--update"
             title="New updates since you last viewed this project"></span>{% endif %}
         {% if row.has_unread_chat %}<span class="project-unread-dot project-unread-dot--chat"
@@ -74,16 +59,10 @@ running count, which is exactly why this needs a namespace instead. #}
     <span class="project-col-next-deliverable">
         {{ row.next_deadline.deliverable_name if row.next_deadline else '—' }}
     </span>
-    {# data-status-value drives project_list.js's Design Completed click
-    override below — a plain data attribute rather than string-matching the
-    pill's rendered text, so it survives any future label/copy tweak. title
-    is "All status changes need to be time stamped" (22 Aug 2026, per
-    Ezekiel) — a native tooltip, same compact-table reasoning as the
-    Overlay's Deliverables tab (see project_overlay/_deliverables_standard.html).
-    Once Handed to Production, "Since" alone would be the handoff date, not
-    when the client actually approved — client_approved_at (added the same
-    day, later, once "Client Approved" stopped being its own pill stage)
-    fills that back in as a second line. #}
+    {# data-status-value is read by project_list.js (a Handed to Production
+    pill click jumps to the Design Completed tab). The title tooltip shows
+    when the status started and, once handed over, when the client
+    approved ("Since" is then the handoff date). #}
     {% set status_title = [] %}
     {% if row.status_started_at %}{% set _ = status_title.append('Since ' ~ row.status_started_at.strftime('%d %b %Y')) %}{% endif %}
     {% if row.client_approved_at %}{% set _ = status_title.append('Client-approved ' ~ row.client_approved_at.strftime('%d %b %Y')) %}{% endif %}
@@ -99,15 +78,9 @@ running count, which is exactly why this needs a namespace instead. #}
 {% set ns.row_num = ns.row_num + 2 %}
 {% endmacro %}
 
-{# The column-header row, in one place so it can be repeated — Group by
-renders this once per group (Monday-style separate mini-tables with
-their own repeating header), on top of the one always rendered at the
-very top of the page. Every repeat shares the exact same classes/
-data-col-key attributes as the original, so project_list_layout.js's
-resize/reorder logic (which queries by class/attribute across the
-whole table, not by a single fixed element) picks up every copy for
-free — dragging any one of them resizes/reorders that column
-everywhere at once, same as a single real table would. #}
+{# The column-header row. Rendered at the top and again for each group
+when grouping. Every copy shares the same classes/data-col-key, which
+project_list_layout.js queries, so resizing/reordering one updates all. #}
 {% macro table_header_row(row_num) %}
 <div class="project-table-header project-row" style="--row-num: {{ row_num }};">
     <span class="project-col-expand"></span>

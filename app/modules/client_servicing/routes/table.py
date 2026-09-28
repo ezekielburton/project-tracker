@@ -1,7 +1,6 @@
 """
-Client Servicing table — the read view. Every row is a Project, with its
-CS extension row (if one exists yet) joined in. Field writes live in
-edit.py, on the same blueprint.
+Client Servicing table — the read view. Every row is a Project joined to
+its ClientServicing row, if it has one. Field writes live in edit.py.
 """
 from datetime import date
 
@@ -22,11 +21,10 @@ from app.modules.client_servicing.lib.access import can_close_projects, require_
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 
 
-# Every reorderable/resizable column, in the default order — key must
-# match a macro name in _columns.html ("cell_" + key) and, for editable
-# columns, the data-field the edit endpoint expects. The pinned "Open in
-# Projects" column isn't here: it's not reorderable or resizable, same as
-# the Projects page's own Expand column.
+# Every reorderable/resizable column, in default order. key must match a
+# macro in _columns.html ("cell_" + key) and, for editable columns, the
+# data-field edit.py expects. The pinned "Open in Projects" column is not
+# listed because it cannot be moved or resized.
 COLUMNS = [
     {'key': 'client', 'label': 'Client'},
     {'key': 'project', 'label': 'Project'},
@@ -52,18 +50,14 @@ COLUMNS = [
     {'key': 'priority', 'label': 'Priority'},
 ]
 
-# One row per (user, TABLE_KEY) in the shared UserTableLayout model — same
-# table_key convention the Projects page already uses for its own tables
-# ('project_list:my', etc.), just this module's own key. Stores column
-# widths; the array order also drives column order once reorder writes to it.
+# UserTableLayout key for this table (one row per user). The saved list
+# holds column widths, and its order is the column order. layout.py uses it.
 TABLE_KEY = 'client_servicing:table'
 
 
 def _saved_layout():
-    """The effective user's saved layout for this table ([] if none), fetched
-    once per request and shared by _ordered_columns/_column_widths. Keyed on
-    effective_user() so an admin emulating someone sees and saves that
-    person's layout."""
+    """The effective user's saved layout ([] if none). Emulation-aware, so an
+    admin previewing as someone sees that person's layout."""
     row = UserTableLayout.query.filter_by(user_id=effective_user().id, table_key=TABLE_KEY).first()
     if not row or not row.layout:
         return []
@@ -71,10 +65,9 @@ def _saved_layout():
 
 
 def _ordered_columns(saved):
-    """COLUMNS in the user's saved order; unknown saved keys are dropped and
-    columns missing from the save are appended, so no column is lost. Project
-    is then forced to the front — it's the pinned, non-draggable sticky column
-    and must always render first."""
+    """COLUMNS in the user's saved order. Unknown saved keys are dropped and
+    unsaved columns appended. Project is forced first: it is the pinned
+    sticky column."""
     by_key = {col['key']: col for col in COLUMNS}
     saved_keys = [entry['key'] for entry in saved if entry['key'] in by_key]
     ordered = [by_key[key] for key in saved_keys]
@@ -88,9 +81,8 @@ def _ordered_columns(saved):
 
 
 def _column_widths(saved):
-    """{column_key: saved_width_px} for the current user, or {} if
-    they've never resized anything — every column just falls back to its
-    normal content-based width in that case."""
+    """{column_key: width_px} from the saved layout. Unsaved columns use
+    their content-based width."""
     return {
         entry.get('key'): entry.get('width')
         for entry in saved
@@ -105,9 +97,8 @@ def _serialize_person(user):
 
 
 def _eager_load(query):
-    """Bulk-loads every relationship the row serializer touches, so
-    listing every project doesn't fire one query per row per
-    relationship — same reasoning as project_list.py's _eager_load."""
+    """Bulk-loads every relationship the row serializer touches, to avoid
+    N+1 queries. lib/calendar.py relies on these being loaded too."""
     return query.options(
         joinedload(Project.cs_lead),
         joinedload(Project.project_owner),
@@ -131,9 +122,7 @@ def _serialize_row(p, contacts_by_id, client_approved_at):
         'name': p.name,
         'briefing_date': p.briefing_date,
         'designers': designers,
-        # Comma-joined names: click-to-sort needs one flat sortable string
-        # per column, and designers is the only list-valued column.
-        # Computed here so the sort value and the chips can't drift.
+        # Flat string for click-to-sort; designers is the only list column.
         'designers_sort': ', '.join(d['name'] for d in designers if d),
         'client_approved_at': client_approved_at.get(p.id),
         'status_label': status_label,
@@ -183,48 +172,45 @@ def _contacts_by_client(client_ids):
 
 
 def _base_projects():
-    """The projects the CS module lists — drafts excluded (a draft isn't a
-    real project yet). Shared by the table and the Invoicing tab."""
+    """Every non-draft project, eager-loaded, closed ones included. The base
+    query for the Calendar, Monthly Summary, Closed, Dashboard and
+    _open_projects()."""
     return _eager_load(Project.query).filter(Project.project_status != 'draft')
 
 
 def _open_projects():
-    """The projects still being worked — _base_projects() minus anything
-    closed. Left join, so a project with no CS row yet still lists. The
-    Monthly Summary and the Calendar deliberately keep closed projects and
-    stay on _base_projects()."""
+    """_base_projects() minus closed ones; used by the table and Invoicing
+    By Project. Left join, so a project with no CS row still lists."""
     return _base_projects().outerjoin(
         ClientServicing, ClientServicing.project_id == Project.id,
     ).filter(ClientServicing.closed_at.is_(None))
 
 
 def _awaiting_close_out(project):
-    """A cancelled project nobody has closed out yet. It leaves the table
-    rows and waits in the strip above them until CS answers the invoicing
-    question."""
+    """A cancelled project not yet closed. It shows in the close-out strip
+    above the table, not in the rows."""
     cs = project.client_servicing
     return project.cancelled_at is not None and not (cs is not None and cs.closed_at is not None)
 
 
 def _close_out_row(project):
-    """One entry in the close-out strip — just enough to identify the
-    project and open the prompt."""
+    """One close-out strip entry: enough to identify the project and open
+    the close prompt."""
     cs = project.client_servicing
     return {
         'id': project.id,
         'client': project.client_brand.name if project.client_brand else None,
         'name': project.name,
         'cancelled_at': project.cancelled_at,
-        # The prompt asks for a value only when there isn't one yet.
-        'has_value': cs is not None and cs.project_value is not None,
+        # The prompt asks for a value only when the project has none yet.
+        'has_value': project.value is not None,
     }
 
 
 def _page_context():
-    """Everything a template needs: the rows, plus every dropdown's
-    option list. scope/cs-lead/project-owner options are global; contact
-    options are keyed by client_id since Client SPOC's choices are
-    whichever client that row's project belongs to."""
+    """Template context: rows, close-out strip and dropdown options. Contact
+    options are keyed by client_id, since a row's Client SPOC must belong to
+    its project's client."""
     listed = _open_projects().order_by(Project.name.asc()).all()
     to_close_out = [p for p in listed if _awaiting_close_out(p)]
     projects = [p for p in listed if not _awaiting_close_out(p)]
@@ -266,7 +252,6 @@ def table():
 @login_required
 @require_cs
 def table_rows():
-    """Full-refresh endpoint. The SSE ping handler (client_servicing.js)
-    re-fetches this and swaps it into #client-servicing-table-body —
-    same pattern as the Projects page's table_rows()."""
+    """Rows fragment for the SSE live refresh; client_servicing.js swaps it
+    into #client-servicing-table-body."""
     return render_template('client_servicing/_table_rows.html', **_page_context())

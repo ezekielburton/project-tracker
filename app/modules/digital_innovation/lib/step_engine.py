@@ -1,22 +1,15 @@
-# "Brain A": the step-template / stage-movement state machine. All the rules
-# live here so the board route, the feature-detail route and the Incoming-tray
-# promotion path move features the same way.
+# Feature and step state machine. Every route that creates or moves a feature
+# goes through here.
 #
-# The rules:
-# - A feature's CURRENT stage's steps can be ticked/unticked/added/deleted at
-#   any time. Steps from other stages are left alone.
-# - A feature can be moved to ANY stage, forward or backward, at any time, via
-#   move_to_stage() - no completion gate.
-# - Moving into a stage the feature has visited before RESUMES its existing steps
-#   (exactly as left) rather than reseeding; a first visit seeds fresh from the
-#   department template. Steps are never deleted just for moving away from a stage.
-# - Deleting a step never auto-advances anything - it just deletes the step.
-# - A stage with zero steps is never "complete" - it sits as "No steps
-#   configured" until a step is added.
-# - Implementation is the last stage but isn't special to move_to_stage() - a
-#   feature can move out of it backward. Closing a feature is a separate action
-#   (close_feature()), gated on being in the last stage with it complete (see
-#   routes/features.py).
+# Rules:
+# - Only the CURRENT stage's steps can be ticked, added or deleted.
+# - A feature can move to any stage, forward or backward, with no completion gate.
+# - Re-entering a stage resumes its old steps as left; a first visit copies the
+#   department template. Moving away never deletes steps.
+# - Ticking or deleting a step never moves the feature.
+# - A stage with zero steps is never "complete".
+# - Closing is separate (close_feature); routes/features.py only allows it from
+#   the last stage with every step done. reopen_feature puts it back there.
 
 from datetime import datetime
 
@@ -25,10 +18,8 @@ from app.modules.digital_innovation.models import DiFeature, DiFeatureStep, DiSt
 
 
 def create_feature(di_project, name, projected_date=None, starting_stage=None):
-    """New card, placed at the end of its project's list, starting in
-    starting_stage (validated against DI_STAGES) if given, else the
-    pipeline's first stage - with that stage's current template steps
-    copied in either way."""
+    """New card at the end of its project, in starting_stage (default: the
+    first stage), with that stage's template steps copied in."""
     if starting_stage is None:
         starting_stage = DI_STAGES[0]
     elif starting_stage not in DI_STAGES:
@@ -49,11 +40,8 @@ def create_feature(di_project, name, projected_date=None, starting_stage=None):
 
 
 def add_step(feature, title, details=None):
-    """Adds a step to the feature's CURRENT stage - used both for ordinary
-    checklist editing and for the Implementation-stage "add another step"
-    choice (they're the same action). title is the short "at a glance"
-    text the board card shows; details is optional longer elaboration,
-    shown only in the feature detail checklist."""
+    """Adds a step to the feature's current stage. title shows on the board
+    card; details only in the detail modal."""
     if feature.status == 'closed':
         raise ValueError("Can't add steps to a closed feature.")
     current = _current_stage_steps(feature)
@@ -65,49 +53,33 @@ def add_step(feature, title, details=None):
         is_done=False,
         sort_order=next_order,
     )
-    # Appended through the relationship (not db.session.add() with a raw
-    # di_feature_id) so feature.steps - and step.feature, via the backref -
-    # are correct immediately in memory, with no flush/re-query needed.
+    # Append through the relationship so feature.steps and step.feature are
+    # correct in memory without a flush.
     feature.steps.append(step)
     return step
 
 
 def tick_step(step, done=True):
-    """Ticks or unticks a step. Never moves the feature's stage on its
-    own, even if this is the step that completes it - stage movement is
-    always a separate, explicit move_to_stage() call from the UI's stage
-    picker."""
+    """Ticks or unticks a current-stage step. Never moves the feature."""
     _assert_current_stage_step(step)
     step.is_done = done
 
 
 def delete_step(step):
-    """Deletes a step from the feature's current stage. Movement between stages
-    is unconstrained (see move_to_stage), so deleting a step never triggers a
-    stage change - it just deletes the step."""
+    """Deletes a current-stage step. Never moves the feature."""
     _assert_current_stage_step(step)
     feature = step.feature
-    # Removed through the relationship, same reasoning as add_step above -
-    # this also keeps feature.steps in sync immediately. cascade='delete-
-    # orphan' on DiFeature.steps (models.py) is what turns "no longer in
-    # the collection" into an actual DELETE once this flushes.
+    # Remove through the relationship to keep feature.steps in sync; the
+    # delete-orphan cascade on DiFeature.steps issues the DELETE on flush.
     feature.steps.remove(step)
     db.session.flush()
 
 
 def move_to_stage(feature, target_stage):
-    """Moves a feature directly to any stage, forward or backward, at any time -
-    no completion gate. The sole way a feature's status changes (besides creation
-    and closing).
-
-    Resume-on-revisit: a feature's steps are stage-scoped but never
-    deleted just because the feature moved to a different stage, so if
-    target_stage is one the feature has been in before, its steps from
-    that earlier visit are still sitting in feature.steps - this resumes
-    them exactly as they were left (ticked or not) rather than reseeding.
-    Only a stage the feature has genuinely never entered gets fresh
-    steps copied from the department's current template.
-    """
+    """Moves a feature to any stage, forward or backward, with no completion
+    gate. A stage visited before keeps its old steps as left; only a first
+    visit copies the template. A stage with no steps (template or own)
+    counts as unvisited, so it re-copies the template."""
     if feature.status == 'closed':
         raise ValueError("Can't move a closed feature - reopen it first.")
     if target_stage not in DI_STAGES:
@@ -122,17 +94,24 @@ def move_to_stage(feature, target_stage):
 
 
 def close_feature(feature):
-    """Marks a feature closed - the Implementation-stage "close this
-    feature" choice, closing just this card, not its whole project."""
+    """Marks a feature closed. No stage or completion check here; the route
+    enforces that."""
     feature.status = 'closed'
     feature.closed_at = datetime.utcnow()
 
 
+def reopen_feature(feature):
+    """closed -> the last stage, where close_feature_route allows closing
+    from. Its steps were never removed, so it resumes as it was left."""
+    if feature.status != 'closed':
+        raise ValueError("Only a closed feature can be reopened.")
+    feature.status = DI_STAGES[-1]
+    feature.closed_at = None
+
+
 def is_stage_complete(feature):
-    """True when the current stage has at least one step and all are done. A
-    zero-step stage is never "complete" - see the module docstring. Doesn't gate
-    stage movement (see move_to_stage), but drives the Implementation-stage "add
-    step or close" choice and the close-feature guard."""
+    """True when the current stage has at least one step and all are done.
+    Used by the close-feature guard; does not gate movement."""
     steps = _current_stage_steps(feature)
     return bool(steps) and all(s.is_done for s in steps)
 
@@ -154,7 +133,7 @@ def _seed_steps_from_template(feature, stage):
         .all()
     )
     for template in templates:
-        # Same append-through-the-relationship reasoning as add_step above.
+        # Append through the relationship, as in add_step.
         feature.steps.append(DiFeatureStep(
             stage=stage,
             title=template.title,

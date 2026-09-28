@@ -8,7 +8,7 @@
     <div class="module-shell">
         {% include 'hse/_rail.html' %}
         <div class="module-main hse-main">
-            <div class="hse-inner hse-inner--fill">
+            <div class="hse-inner hse-inner--fill hse-inner--page">
 
                 <div class="hse-header">
                     <h1 class="hse-title">Overview</h1>
@@ -18,15 +18,13 @@
                         <a class="hse-btn hse-tab"
                            href="{{ url_for('hse.calendar_month') }}">Calendar</a>
                         {% if can('manage_hse', effective_user) %}
-                        <a class="hse-btn hse-btn--primary hse-tab"
+                        <a class="hse-btn hse-btn--primary hse-tab mobile-primary"
                            href="{{ url_for('hse.calendar_today') }}">+ Log entry</a>
                         {% endif %}
                     </div>
                 </div>
 
-                {# Five cards, each a number with what it counts underneath.
-                   The sub-line is what stops a manager reading "13" as
-                   thirteen of anything. #}
+                {# Five tiles; each sub-line says what the number counts. #}
                 <div class="hse-ov-tiles">
                     <div class="hse-ov-tile">
                         <div class="hse-ov-num">{{ tiles.needs_you_now }}</div>
@@ -46,16 +44,17 @@
                     <div class="hse-ov-tile">
                         <div class="hse-ov-num">{{ tiles.expiring_soon }}</div>
                         <div class="hse-ov-lab">Expiring soon</div>
-                        <div class="hse-ov-sub">Certificates &amp; insurance</div>
+                        <div class="hse-ov-sub">Certificates, vehicle docs &amp; PPE</div>
                     </div>
-                    {# Nothing tracked is not the same as nothing valid, so an
-                       empty register reads as a dash rather than 0%. #}
+                    {# Nothing tracked shows a dash, not 0%. #}
                     <div class="hse-ov-tile">
                         <div class="hse-ov-num">
                             {% if tiles.health_percent is none %}—{% else %}{{ tiles.health_percent }}%{% endif %}
                         </div>
-                        <div class="hse-ov-lab">Compliance health</div>
-                        <div class="hse-ov-sub">{{ tiles.health_valid }} of {{ tiles.health_total }} valid</div>
+                        {# Covers all renewals (certificates, vehicle docs, PPE), not
+                           just the Compliance register. #}
+                        <div class="hse-ov-lab">Renewals valid</div>
+                        <div class="hse-ov-sub">{{ tiles.health_valid }} of {{ tiles.health_total }} · all renewals</div>
                     </div>
                 </div>
 
@@ -91,14 +90,13 @@
 
                         <section class="hse-ov-panel">
                             <div class="hse-ov-head">
-                                <h2 class="hse-ov-title">Compliance</h2>
+                                <h2 class="hse-ov-title">Renewals</h2>
                                 <span class="hse-ov-note">
                                     {% if health.percent is none %}nothing tracked
                                     {% else %}{{ health.valid }} of {{ health.total }} valid{% endif %}
                                 </span>
                             </div>
-                            {# What lapsed is named rather than hidden. A page that
-                               only flatters is worth nothing in the room. #}
+                            {# Lapsed items are listed by name, not hidden. #}
                             {% for row in expiring.rows %}
                             <a class="hse-ov-row{{ ' is-lapsed' if row.lapsed else '' }}" href="#"
                                data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
@@ -122,13 +120,56 @@
                             {% endif %}
                         </section>
 
+                        {# Every cost field in the registers, by entry date. Bars are
+                           shares of the year's total, so a register sits inside its area. #}
+                        <section class="hse-ov-panel hse-spend-panel">
+                            <div class="hse-ov-head">
+                                <h2 class="hse-ov-title">Spend</h2>
+                                <span class="hse-ov-note">From the cost registers</span>
+                            </div>
+                            <div class="hse-spend-figs">
+                                {% for fig in spend.figures %}
+                                <div class="hse-spend-fig">
+                                    <div class="hse-spend-lab">{{ fig.label }}</div>
+                                    <div class="hse-spend-val">{{ fig.value }}</div>
+                                    <div class="hse-spend-sub">{{ fig.sub }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <h3 class="hse-spend-subhead">By area · {{ spend.year }}</h3>
+                            {% for area in spend.areas %}
+                            <div class="hse-ov-bar hse-spend-area">
+                                <div class="hse-ov-barhead">
+                                    <span>{{ area.label }}</span>
+                                    <span class="hse-spend-amt">{{ area.amount }}<span class="hse-spend-share">{{ area.share }}%</span></span>
+                                </div>
+                                <div class="hse-ov-track">
+                                    <div class="hse-spend-fill" style="width: {{ area.share }}%"></div>
+                                </div>
+                                {% for r in area.registers %}
+                                <div class="hse-spend-reg">
+                                    <div class="hse-ov-barhead">
+                                        <span>{{ r.label }}</span>
+                                        <span class="hse-spend-amt">{{ r.amount }}<span class="hse-spend-share">{{ r.share }}%</span></span>
+                                    </div>
+                                    <div class="hse-ov-track hse-spend-track--reg">
+                                        <div class="hse-spend-fill hse-spend-fill--reg" style="width: {{ r.share }}%"></div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                            <p class="hse-ov-foot">
+                                {{ spend.total }} in {{ spend.year }}. Machine cost and machine maintenance can record the same work, so both are shown.
+                            </p>
+                        </section>
+
                     </div>
 
                     <div class="hse-ov-side">
 
-                        {# Counted, not typed. Every column of the weekly HSC
-                           report is derivable from the registers, which is
-                           why that report is a generated view. #}
+                        {# Counted from the registers; the weekly HSC report is
+                           generated from the same figures. #}
                         <section class="hse-ov-panel">
                             <h2 class="hse-ov-title hse-ov-title--ruled">This week</h2>
                             <div class="hse-ov-line"><span>Incidents</span><span class="hse-ov-fig">{{ week.incidents }}</span></div>
@@ -147,9 +188,7 @@
 
                         <section class="hse-ov-panel hse-ov-panel--grow">
                             <h2 class="hse-ov-title hse-ov-title--ruled">Incidents by severity</h2>
-                            {# Scaled against the tallest bar, not the total:
-                               with four severities a share-of-total bar is
-                               always short and says nothing. #}
+                            {# Bars scale to the tallest bar, not the total, so they stay readable. #}
                             {% for b in severity.bars %}
                             <div class="hse-ov-bar">
                                 <div class="hse-ov-barhead">
@@ -171,9 +210,8 @@
                                 <h2 class="hse-ov-title">Waiting on others</h2>
                                 <span class="hse-ov-count">{{ waiting.total }}</span>
                             </div>
-                            {# Its own panel on purpose: the performance page refuses
-                               to measure what he does not control, and this should
-                               not read as work he is behind on. #}
+                            {# Separate panel: work waiting on others is not the officer's
+                               backlog, and the performance page does not count it. #}
                             {% for row in waiting.rows %}
                             <a class="hse-ov-row" href="#"
                                data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">

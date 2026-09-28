@@ -1,17 +1,9 @@
-{# Feature detail — rendered server-side and dropped straight into
-   #di-feature-detail-body by digital_innovation_board.js's
-   openDiFeatureDetail(), the same "fetch an HTML fragment" pattern
-   Client Servicing's table-rows endpoint already uses elsewhere in the
-   app, rather than hand-building this markup in JS from JSON. Every
-   mutating action below (tick/add/delete a step, advance, close) POSTs
-   and swaps this same fragment back in, so the modal always reflects the
-   feature's true current state.
+{# Feature detail fragment, loaded into #di-feature-detail-body by
+   openDiFeatureDetail(). Every action (tick/add/delete a step, move, close, reopen)
+   returns this fragment again.
 
-   can_edit_board (lib/access.py's can_edit_di_board) gates every
-   interactive control below — a step's clickability and delete button,
-   the add-step form, and the advance/close banner's button. Anyone it's
-   False for gets a genuinely read-only view: the controls aren't
-   rendered at all, not just disabled. #}
+   can_edit_board (can_edit_di_board) gates every control; without it the
+   controls are not rendered at all. #}
 <div class="di-feature-detail-header">
     <div>
         <span class="di-feature-badge">{{ project.name }} · Feature</span>
@@ -35,6 +27,10 @@
 
 {% if is_closed %}
 <p class="di-feature-closed-note">Closed {{ feature.closed_at.strftime('%d %b %Y') if feature.closed_at else '' }}</p>
+{% if can_edit_board %}
+{# Back to the last stage with its steps as left (step_engine.reopen_feature). #}
+<button type="button" class="btn-secondary di-reopen-feature-btn">Reopen feature</button>
+{% endif %}
 {% else %}
 <span class="di-status-label">Status</span>
 <div class="di-status-row">
@@ -82,9 +78,7 @@
 </div>
 {% endif %}
 
-{# Move-to-stage picker: any stage in DI_STAGES, forward or backward, at
-   any time — no completion gate (step_engine.move_to_stage). Always shown alongside the
-   checklist, since movement isn't tied to completion. #}
+{# Move to any stage, either direction, any time (step_engine.move_to_stage). #}
 <div class="di-stage-picker">
     <label class="di-stage-picker-label" for="di-stage-picker-select">Move to stage</label>
     <div class="di-stage-picker-row">

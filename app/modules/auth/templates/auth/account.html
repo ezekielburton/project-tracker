@@ -6,15 +6,13 @@
 <div class="page-container">
     <h1 class="hidden">My Account</h1>
 
-    {# Embed current email prefs as a JS constant — read by the toggle init script below #}
+    {# Saved notification + sound prefs, read by the scripts below. #}
     <script>
         window.NOTIF_PREFS = {{ notification_prefs | tojson }};
     </script>
 
-    {# Section list (left) + one panel visible at a time (right) — per the
-       Settings wireframe. All four panels are already in the DOM (this is
-       all one fetch, loaded once into the overlay), so switching sections
-       is just show/hide, no extra round-trip. See the switcher script below. #}
+    {# Section list (left), one panel shown at a time (right). All panels
+       arrive in one fetch (settings-overlay.js), so switching is show/hide. #}
     <div class="settings-layout">
 
         <nav class="settings-nav">
@@ -128,46 +126,30 @@
                         </div>
                         {% endmacro %}
 
-                        {# Every role test in this block is a literal on purpose.
-                           These gate which notification TOGGLES are worth showing
-                           someone, not what they may do — a person only sees the
-                           switches for notifications they can actually receive.
-                           can() would be wrong here: admin holds every capability
-                           through the wildcard and would see designer-only rows. #}
+                        {# Role literals on purpose: these show only the toggles a role
+                           can receive. can() would be wrong, since admin's wildcard
+                           would show every designer-only row. #}
 
                         {# Designer / Team Lead #}
                         {% if current_user.role in ['designer', 'team_lead'] %}
-                            {{ pref_row('New project for my team', 'new_project') }}
-                            {{ pref_row('Assigned as lead designer', 'lead_assigned') }}
                             {{ pref_row('Assigned to Concept / KV', 'concept_kv_assigned') }}
-                            {{ pref_row('Project was started', 'project_started') }}
-                            {{ pref_row('Deliverable flagged for revision', 'revision_flag') }}
-                            {# 23 Aug 2026, per Ezekiel — notify_designer_of_stream_approved in
-                            notifications.py, fired from approve_stream() in
-                            project_preproduction.py: until Production has its own access to
-                            file storage/the app, the designer has to manually email the files
-                            over once approved, so they need to know the moment that happens. #}
+                            {# notify_designer_of_stream_approved (approve_stream): the designer
+                               sends the approved files to Production by hand. #}
                             {{ pref_row('Pre-Production stream approved (share files)', 'preprod_stream_approved') }}
                         {% endif %}
 
                         {# CS / Management / Admin #}
                         {% if current_user.role in ['cs', 'admin', 'management'] %}
                             {{ pref_row('Designer raised a flag', 'brief_flag') }}
-                            {{ pref_row('Designer resubmitted for review', 'revision_submitted') }}
-                            {{ pref_row('Project was started', 'project_started') }}
-                            {{ pref_row('Deliverable status changed', 'deliverable_status') }}
                         {% endif %}
 
-                        {# Project Owner (23 Aug 2026, per Ezekiel — notify_project_owner_of_
-                        stream_uploaded in notifications.py, fired from mark_stream_done in
-                        project_preproduction.py). project_owner is its own role, separate
-                        from cs/admin/management, so it needs its own gate even though a
-                        project's actual Project Owner is very often also one of those. #}
+                        {# notify_project_owner_of_stream_uploaded (mark_stream_done). A
+                           project's owner may hold any of these roles. #}
                         {% if current_user.role in ['project_owner', 'cs', 'admin', 'management'] %}
                             {{ pref_row('Pre-Production stream ready for review', 'preprod_stream_uploaded') }}
                         {% endif %}
 
-                        {# Client Servicing table writeback notifications (Chunk 5) #}
+                        {# Client Servicing table writeback notifications #}
                         {% if current_user.role in ['designer', 'team_lead', 'cs', 'admin', 'management', 'project_owner'] %}
                             {{ pref_row('Due date changed', 'due_date_changed') }}
                         {% endif %}
@@ -200,7 +182,7 @@
                 <div class="settings-subsection">
                     <div class="settings-subsection-title">Browser &amp; sound</div>
                     <p class="settings-subsection-desc">
-                        These settings are saved in your browser. Enabling desktop notifications will trigger a browser permission prompt.
+                        Sound settings are saved to your account. Desktop notifications are switched on per browser, and turning them on triggers a browser permission prompt.
                     </p>
 
                     <div class="settings-toggle-row">
@@ -250,8 +232,7 @@
                 <h2 class="settings-panel-title">Appearance</h2>
                 <div class="settings-toggle-row">
                     <span class="settings-toggle-label">Dark Mode</span>
-                    {# Mirrors the header's toggle — see the sync script below.
-                       Purely visual stub; real theming is Brief 2. #}
+                    {# Mirrors the header's toggle; see the sync script below. #}
                     <button type="button" id="settings-dark-mode-toggle" class="theme-toggle theme-toggle--light" title="Toggle dark mode">
                         <span class="theme-toggle-icon theme-toggle-icon--sun">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -280,22 +261,19 @@
 
 <script>
 // ── Email notification preferences ─────────────────────────────
-// On load: set each toggle to the saved server-side value (default on if absent).
-// On change: auto-save all prefs to /account/notification-prefs via AJAX.
+// Toggles load from NOTIF_PREFS and auto-save on change.
 (function () {
     var toggles = document.querySelectorAll('.notif-pref-toggle');
     var saveStatus = document.getElementById('pref-save-status');
     var saveTimer = null;
 
-    // Initialise each checkbox from the NOTIF_PREFS constant embedded above.
-    // Absent key = true (default on) so new notification types arrive enabled.
+    // A missing key counts as on, so new notification types start enabled.
     toggles.forEach(function (toggle) {
         var key = toggle.dataset.key;
         toggle.checked = (NOTIF_PREFS[key] !== false);
     });
 
     function savePrefs() {
-        // Collect every visible toggle into a plain object
         var prefs = {};
         toggles.forEach(function (toggle) {
             prefs[toggle.dataset.key] = toggle.checked;
@@ -309,7 +287,6 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.success) {
-                    // Show "Preferences saved." briefly then fade it out
                     saveStatus.style.display = 'block';
                     clearTimeout(saveTimer);
                     saveTimer = setTimeout(function () {
@@ -322,13 +299,12 @@
             });
     }
 
-    // Auto-save on any toggle change
     toggles.forEach(function (toggle) {
         toggle.addEventListener('change', savePrefs);
     });
 }());
 
-// ── Account page: browser / sound notification preference toggles ──────────────
+// ── Browser / sound notification toggles ──────────────
 (function () {
     var browserToggle = document.getElementById('toggle-browser-notif');
     var audioToggle   = document.getElementById('toggle-audio-notif');
@@ -341,11 +317,8 @@
     var ICON_ON  = '/static/images/notiftoggle2.png';
     var ICON_OFF = '/static/images/notiftoggle1.png';
 
-    // Sound prefs (on/off, chosen sound, volume) now live server-side, in the
-    // same NOTIF_PREFS blob the email toggles above already use — so they follow
-    // the user between devices. Desktop-notification permission stays in
-    // localStorage below: it's a per-browser permission grant, which genuinely
-    // can never be synced from the server.
+    // Sound prefs are server-side (NOTIF_PREFS). The desktop-notification
+    // switch is per browser, so it lives in localStorage.
     var audioOn = NOTIF_PREFS.sound_enabled !== false;
     var browserOn = localStorage.getItem('helix_browser_notifications') !== 'off';
 
@@ -353,7 +326,7 @@
     var volumeSlider = document.getElementById('sound-volume');
     var volumeLabel = document.getElementById('sound-volume-label');
 
-    // Initialise picker + slider from saved prefs (nothing saved yet = default chime, 100%)
+    // Nothing saved yet = default chime at 100%.
     soundChoice.value = NOTIF_PREFS.sound_id || '';
     var initialVolume = (NOTIF_PREFS.sound_volume != null) ? Math.round(NOTIF_PREFS.sound_volume * 100) : 100;
     volumeSlider.value = initialVolume;
@@ -380,14 +353,16 @@
     }
 
     function syncUI() {
-        var isOn = browserOn && Notification.permission === 'granted';
+        // iOS Safari and some embedded browsers have no Notification at all.
+        var permission = ('Notification' in window) ? Notification.permission : 'default';
+        var isOn = browserOn && permission === 'granted';
         audioToggle.checked = audioOn;
         browserToggle.checked = isOn;
         audioStatus.textContent = audioOn ? 'On' : 'Off';
         browserStatus.textContent = getBrowserNotifLabel();
         browserIcon.src = isOn ? ICON_ON : ICON_OFF;
 
-        if (Notification.permission === 'denied') {
+        if (permission === 'denied') {
             browserToggle.disabled = true;
         } else {
             browserToggle.disabled = false;
@@ -396,13 +371,12 @@
 
     syncUI();
 
-    // Re-sync whenever the user changes the permission from browser settings
-    // (e.g. unblocks after previously denying). Without this the toggle stays
-    // permanently greyed out even after the user grants the permission.
+    // Re-sync when the permission changes in browser settings, or an unblocked
+    // toggle stays disabled.
     if ('permissions' in navigator) {
         navigator.permissions.query({ name: 'notifications' }).then(function (status) {
             status.addEventListener('change', function () { syncUI(); });
-        }).catch(function () { /* permissions API not available — silent */ });
+        }).catch(function () { /* permissions API not available */ });
     }
 
     audioToggle.addEventListener('change', function () {
@@ -413,8 +387,7 @@
 
     soundChoice.addEventListener('change', saveSoundPrefs);
 
-    // 'input' fires continuously while dragging — just update the % label live.
-    // 'change' fires once, on release — that's when we actually save.
+    // 'input' updates the label while dragging; 'change' (on release) saves.
     volumeSlider.addEventListener('input', function () {
         volumeLabel.textContent = this.value + '%';
     });
@@ -447,8 +420,10 @@
     testBtn.addEventListener('click', function () {
         if (window.helixPlayNotificationSound) {
             var selected = soundChoice.selectedOptions[0];
-            var url = selected ? selected.dataset.url : '';
-            window.helixPlayNotificationSound(url || undefined, parseInt(volumeSlider.value, 10) / 100);
+            // Always a string: '' previews the default chime; undefined would
+            // mean "use the saved sound, respecting the off toggle".
+            var url = (selected && selected.dataset.url) || '';
+            window.helixPlayNotificationSound(url, parseInt(volumeSlider.value, 10) / 100);
         }
     });
 
@@ -461,7 +436,7 @@
             showToast('Desktop notifications are not enabled. Toggle them on first.', 'warning');
             return;
         }
-        // Fire directly — no fetch, no backend, no email, no in-app record
+        // Local only: no server call, no email, no in-app record.
         new Notification('OVP', {
             body: 'Test notification',
             icon: '/static/images/notiftoggle2.png'
@@ -469,7 +444,7 @@
     });
 })();
 
-// ── Settings section switcher — left nav swaps which panel shows ───────────────
+// ── Settings section switcher ───────────────
 (function () {
     var navItems = document.querySelectorAll('.settings-nav-item');
     var panels = document.querySelectorAll('.settings-panel');

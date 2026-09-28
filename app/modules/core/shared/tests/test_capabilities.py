@@ -1,8 +1,5 @@
-"""Coverage for the role to capability map and its helpers.
-
-Locks down the role x capability table, the admin wildcard, emulation
-awareness, both route decorators, and the dashboard's scoping fallback so a
-role with no module of its own does not land on an empty page by accident.
+"""Role to capability map and its helpers: the role x capability table, the
+admin wildcard, emulation, both route decorators, and dashboard scoping.
 """
 import pytest
 from flask import session
@@ -52,8 +49,7 @@ def test_every_granted_capability_is_recognised():
 
 
 def test_every_capability_reaches_a_role():
-    """A capability nobody holds is dead vocabulary. Admin's wildcard does not
-    count, so anything only admin reaches has to say so in ADMIN_ONLY."""
+    """Every capability is granted to some non-admin role or listed in ADMIN_ONLY."""
     granted = set()
     for caps in ROLE_CAPABILITIES.values():
         granted |= {c for c in caps if c != '*'}
@@ -123,7 +119,6 @@ _TABLE = [
     ('hr', 'create_projects', False),
     ('hr', 'close_projects', False),
     ('hr', 'review_submissions', False),
-    ('hr', 'transfer_projects', False),
     ('hr', 'raise_flags', False),
     ('hr', 'admin_panel', False),
     ('production', 'view_all_projects', True),
@@ -150,9 +145,7 @@ def test_an_unknown_role_holds_nothing(db_session):
 
 
 def test_a_user_without_a_role_holds_nothing(app):
-    """An object with no .role holds nothing, an explicit None holds nothing,
-    and neither does a logged-out visitor. Omitting the argument entirely is
-    the only form that asks for the effective user."""
+    """No .role, an explicit None, and a logged-out visitor all hold nothing."""
     assert can('view_cs', object()) is False
     assert can('view_cs', None) is False
 

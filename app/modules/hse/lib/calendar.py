@@ -1,15 +1,9 @@
 """
-The calendar's view model: schedules, entries and expiry dates turned into
-days.
+The calendar's view model (Month and Agenda views).
 
-Three different things land on the same grid and they are not the same
-underneath — a planned occurrence is computed, a logged entry is a row, an
-expiry is a date on a row. This module is where they become one shape, so
-the templates only loop.
-
-Nothing here writes. The calendar is a view and a way in; the only thing
-that ever gets stored is an ordinary HseEntry, filed through the normal
-entry form.
+Computed schedule occurrences, logged entries and expiry dates are turned
+into one item shape, grouped by day, so templates only loop. Read-only:
+work is stored as an ordinary HseEntry through the normal entry form.
 """
 
 from calendar import Calendar
@@ -24,23 +18,20 @@ from app.modules.hse.lib.schedules import cadence_text
 # schedules; 'logged' is unplanned work; 'expiring' is a due date.
 STATES = ('overdue', 'expiring', 'planned', 'logged', 'done')
 
-# Which state colours a day cell when several land on it. Worst wins — the
-# same rule the CS calendar uses for risk.
+# Sort rank; the worst state on a day colours its cell.
 _STATE_RANK = {'overdue': 4, 'expiring': 3, 'planned': 2, 'logged': 1, 'done': 0}
 
-# Twenty-one registers can flood a month, so a cell shows a few and says how
-# many more. The drawer has all of them.
+# Chips per month cell; the rest show as "+N more" and are listed in the drawer.
 MAX_CHIPS_PER_DAY = 3
 
 AGENDA_DAYS = 30
 
-# Monday. The officer's week starts Monday and so does the grid.
+# Weeks start on Monday.
 FIRST_WEEKDAY = 0
 
-# Keys a view-model dict may not use, because Jinja resolves an attribute
-# before a subscript: {{ day.items }} hands the template dict.items, the
-# bound method, not the list. It renders as a TypeError three files away
-# from the cause. test_hse_calendar.py guards every dict built here.
+# Keys a view-model dict must not use: Jinja resolves attributes before
+# subscripts, so {{ day.items }} returns the dict.items method, not the list.
+# test_hse_calendar.py checks every dict built here.
 _SHADOWED_KEYS = frozenset(dir({}))
 
 
@@ -68,13 +59,11 @@ def _item(state, day, label, detail=None, **extra):
         'targets': (),
         'done': None,
         'due': None,
-        # The records behind the item. The month cell never touches these;
-        # the drawer builds its cards from them.
+        # Source records; the drawer builds its cards from these.
         'entry': None,
         'schedule': None,
-        # Hollow means still to do, filled means settled or shouting. The
-        # month grid reads this rather than deciding per state in a
-        # template, so a new state cannot quietly render as a hole.
+        # Hollow = still to do; filled = settled or urgent. Set here so
+        # templates never decide it per state.
         'filled': state in ('overdue', 'done', 'logged'),
     }
     item.update(extra)
@@ -82,8 +71,8 @@ def _item(state, day, label, detail=None, **extra):
 
 
 def occurrence_items(schedules, entries, start, end, today=None):
-    """One item per schedule per due date. The per-asset detail rides along
-    so the drawer can tick them off without a second pass."""
+    """One item per schedule per due date, carrying its per-asset targets
+    for the drawer."""
     out = []
     for occ in occurrences(schedules, entries, start, end, today):
         out.append(_item(
@@ -101,12 +90,8 @@ def occurrence_items(schedules, entries, start, end, today=None):
 
 
 def logged_items(entries, start, end):
-    """Work with no plan behind it — an incident, a near miss, a talk.
-
-    An entry that satisfies an occurrence is skipped: it is already drawn
-    inside that occurrence, and showing it twice would double every count
-    on the day it was done.
-    """
+    """Unplanned work (incidents, near misses, talks). Entries that satisfy
+    an occurrence are skipped; they are already counted inside it."""
     out = []
     for entry in entries:
         if _is_expiry(entry.register):
@@ -128,8 +113,8 @@ def logged_items(entries, start, end):
 
 
 def expiry_items(entries, start, end):
-    """Certificates, permits, registrations, PPE replacements — drawn on the
-    day they run out, from a due date rather than from any schedule."""
+    """Entries in expiry registers (certificates, permits, PPE), placed on
+    their due date."""
     out = []
     for entry in entries:
         if not _is_expiry(entry.register) or entry.due_at is None:
@@ -153,7 +138,7 @@ def expiry_items(entries, start, end):
 
 def items_by_day(schedules, entries, start, end, today=None, state=None):
     """Everything on the grid, keyed by date. `state` narrows to one of
-    STATES; an unknown value is ignored rather than emptying the page."""
+    STATES; an unknown value is ignored."""
     items = (occurrence_items(schedules, entries, start, end, today)
              + logged_items(entries, start, end)
              + expiry_items(entries, start, end))
@@ -171,10 +156,29 @@ def items_by_day(schedules, entries, start, end, today=None, state=None):
 
 
 def grid_bounds(year, month):
-    """The first and last day the month grid actually renders — the weeks
-    overhang the month at both ends, and work shown there must be loaded."""
+    """First and last day the month grid renders, including the overhang
+    weeks, so work shown there gets loaded."""
     weeks = Calendar(firstweekday=FIRST_WEEKDAY).monthdatescalendar(year, month)
     return weeks[0][0], weeks[-1][-1]
+
+
+def _is_daily(item):
+    schedule = item.get('schedule')
+    return schedule is not None and getattr(schedule, 'frequency', None) == 'daily'
+
+
+def _cell_chips(items):
+    """Chips a month cell shows, and how many are left for the drawer.
+    One-off items go first; two or more daily items fold into one line
+    coloured by the worst of them."""
+    daily = [i for i in items if _is_daily(i)]
+    others = [i for i in items if not _is_daily(i)]
+    if len(daily) > 1:
+        # items arrive worst-first, so the first daily item is the worst.
+        daily = [_item(daily[0]['state'], daily[0]['date'],
+                       f'Daily checks · {len(daily)}')]
+    room = MAX_CHIPS_PER_DAY - len(daily)
+    return others[:room] + daily, max(0, len(others) - room)
 
 
 def month_grid(grouped, year, month, today):
@@ -186,14 +190,15 @@ def month_grid(grouped, year, month, today):
         for day in week:
             items = grouped.get(day, [])
             worst = items[0]['state'] if items else None
+            shown, more = _cell_chips(items)
             days.append({
                 'date': day,
                 'in_month': day.month == month,
                 'is_today': day == today,
                 # Not 'items' — see _SHADOWED_KEYS.
                 'day_items': items,
-                'shown': items[:MAX_CHIPS_PER_DAY],
-                'more': max(0, len(items) - MAX_CHIPS_PER_DAY),
+                'shown': shown,
+                'more': more,
                 'count': len(items),
                 'worst': worst,
             })
@@ -202,8 +207,8 @@ def month_grid(grouped, year, month, today):
 
 
 def agenda_groups(grouped, today, days_ahead=AGENDA_DAYS):
-    """Days with something on them, from today forward. Empty days are left
-    out — an agenda is a list of what is coming, not a second grid."""
+    """Days with items, from today to `days_ahead` out. Empty days are
+    skipped."""
     horizon = today + timedelta(days=days_ahead)
     out = []
     for day in sorted(grouped):
@@ -216,8 +221,7 @@ def agenda_groups(grouped, today, days_ahead=AGENDA_DAYS):
         out.append({
             'date': day,
             'day_items': items,
-            # The agenda renders the same cards the drawer does, so a day
-            # cannot read one way in one view and another way in the other.
+            # Same cards as the drawer, so both views read the same.
             'cards': cards,
             'summary': day_summary(cards),
             'count': len(items),
@@ -227,30 +231,27 @@ def agenda_groups(grouped, today, days_ahead=AGENDA_DAYS):
 
 
 def _short(day):
-    """5 Sep. Not strftime('%-d %b') — that flag does not exist on Windows,
-    and this runs on his machine."""
+    """'5 Sep'. Avoids strftime('%-d'), which fails on Windows."""
     return f'{day.day} {day:%b}'
 
 
 def _logged_meta(entry):
-    """Who filed it and when, from created_at rather than entry_date: the
-    officer wants to know when it was written down, not the day it covers."""
+    """'Logged HH:MM by <name>'. The time is the entry's own Time field when
+    set, else when it was filed (created_at)."""
     who = getattr(getattr(entry, 'created_by', None), 'name', None)
-    when = getattr(entry, 'created_at', None)
+    created = getattr(entry, 'created_at', None)
+    when = (getattr(entry, 'data', None) or {}).get('entry_time') or (
+        f'{created:%H:%M}' if created else None)
     if when and who:
-        return f'Logged {when:%H:%M} by {who}'
+        return f'Logged {when} by {who}'
     if who:
         return f'Logged by {who}'
     return 'Logged'
 
 
 def _target_card(item, target, today):
-    """One asset on one occurrence — the unit the officer actually acts on.
-
-    The drawer is flat on purpose: a card per thing to do, rather than a
-    schedule with its assets nested underneath. Every line is then one
-    action, and how late it is sits next to it.
-    """
+    """Card for one asset on one occurrence: a single action and how late
+    it is."""
     asset, entry = target['asset'], target['entry']
     day = item['date']
 
@@ -282,8 +283,7 @@ def _target_card(item, target, today):
 
 
 def _entry_card(item, today):
-    """Work with no occurrence behind it — something logged, or something
-    running out."""
+    """Card for a logged or expiring entry (no occurrence behind it)."""
     entry = item['entry']
     if item['state'] == 'expiring':
         left = (item['date'] - today).days
@@ -299,8 +299,7 @@ def _entry_card(item, today):
     return {
         'state': item['state'],
         'title': item['label'],
-        # A logged entry's label IS its register, so repeating it underneath
-        # printed the same words twice.
+        # A logged entry's label is its register name; don't repeat it.
         'subtitle': (None if item['label'] == item['register_label']
                      else item['register_label']),
         'meta': meta,
@@ -315,13 +314,8 @@ def _entry_card(item, today):
 
 
 def drawer_cards(day_items, today=None):
-    """A day, flattened into one card per thing.
-
-    An occurrence covering six vehicles becomes six cards, because six
-    vehicles is six jobs. Anything already done keeps its place in the list
-    rather than disappearing — he should be able to see what he has done
-    today, not only what is left.
-    """
+    """A day flattened into one card per job (an occurrence covering six
+    vehicles gives six cards), worst first. Done cards stay in the list."""
     today = today or date.today()
     cards = []
     for item in day_items:
@@ -334,11 +328,8 @@ def drawer_cards(day_items, today=None):
 
 
 def day_summary(cards):
-    """"3 due · 1 done · 1 overdue" — the line under the drawer's date.
-
-    Due counts what is still outstanding, so due and done never double-count
-    the same card.
-    """
+    """"3 due · 1 done · 1 overdue", shown under the drawer's date. Due
+    counts outstanding cards only, so it never overlaps done."""
     parts = []
     due = sum(1 for c in cards if c['state'] in ('planned', 'overdue', 'expiring'))
     done = sum(1 for c in cards if c['state'] == 'done')
@@ -353,23 +344,17 @@ def day_summary(cards):
 
 
 def kpis(schedules, entries, month_start, month_end, today=None):
-    """The header counts.
-
-    Due, done and overdue come straight from coverage() — the same function
-    the performance page reads — so the calendar header and the performance
-    page can never disagree about what a month looked like.
-    """
+    """Header counts. Due, done and overdue come from coverage(), the same
+    source as the performance page, so the two always agree."""
     cov = coverage(schedules, entries, month_start, month_end, today)
     return {
         'due': cov['due'],
         'done': cov['done'],
         'overdue': cov['outstanding'],
-        # None when nothing was due. Rendered as an em dash, never as 0%.
+        # None when nothing was due; rendered as an em dash, never 0%.
         'percent': cov['percent'],
-        # Work he did that nobody planned — incidents, near misses, talks.
-        # It sits beside coverage on purpose: a low percentage next to a
-        # high unplanned count is a month that went sideways, not a month
-        # of neglect, and the tile row should let a manager see that.
+        # Unplanned logged work, shown beside coverage so a low percentage
+        # can be read in context.
         'unplanned': len(logged_items(entries, month_start, month_end)),
     }
 
@@ -377,18 +362,14 @@ def kpis(schedules, entries, month_start, month_end, today=None):
 STATE_LABELS = {'overdue': 'Overdue', 'expiring': 'Expiring',
                 'planned': 'Planned', 'logged': 'Logged', 'done': 'Done'}
 
-# The legend reads in the order work moves through, not in the worst-first
-# order the grid sorts by: planned, then done, then the two that need him.
+# Legend follows workflow order, not the grid's worst-first sort.
 LEGEND_ORDER = ('planned', 'done', 'overdue', 'expiring', 'logged')
 
 
 def state_chips(grouped_all, active_state):
-    """The legend, which doubles as the filter: clicking a state narrows to
-    it, clicking it again clears. Counted over everything in view, and every
-    state renders even at zero so the row does not jump about.
-
-    `filled` matches the month grid, so the legend reads as a key to it.
-    """
+    """The legend, which is also the state filter (click to narrow, click
+    again to clear). Counts cover everything in view; every state shows,
+    even at zero. `filled` matches the month grid."""
     counts = {}
     total = 0
     for items in grouped_all.values():
@@ -400,8 +381,7 @@ def state_chips(grouped_all, active_state):
         'value': s,
         'count': counts.get(s, 0),
         'filled': s in ('overdue', 'done', 'logged'),
-        # Clicking the state already showing clears the filter, so the
-        # legend needs no separate "All".
+        # Clicking the active state clears the filter; no separate "All".
         'href_state': None if s == active_state else s,
         'active': s == active_state,
     } for s in LEGEND_ORDER]

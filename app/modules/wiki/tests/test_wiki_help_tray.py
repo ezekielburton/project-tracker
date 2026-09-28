@@ -41,7 +41,7 @@ def _section(db_session, slug, published=True):
 # ------ The shell the tray mounts into ------
 
 def test_dock_offers_a_help_launcher():
-    """HelixTrays.open() does nothing without a launcher, so the pill is load-bearing."""
+    """The dock has a Help launcher; HelixTrays.open() does nothing without one."""
     markup = open(TRAY_DOCK, encoding='utf-8').read()
     assert 'data-tray="help"' in markup
 
@@ -51,7 +51,7 @@ def test_base_loads_the_help_tray_script():
 
 
 def test_help_button_macro_stamps_the_key_attribute():
-    """The delegated click handler and the registry guard both read this attribute."""
+    """help_button stamps data-help-key, which the click handler and the registry test read."""
     macros = open(SHARED_MACROS, encoding='utf-8').read()
     assert 'macro help_button' in macros
     assert 'data-help-key=' in macros

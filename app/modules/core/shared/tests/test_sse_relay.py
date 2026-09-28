@@ -1,0 +1,69 @@
+"""sse_relay._listen_loop: a dropped LISTEN connection is closed before the
+loop reconnects. Driven with a fake psycopg2 connection; the loop is broken
+out of by making the reconnect back-off sleep raise."""
+import logging
+import types
+
+import pytest
+
+from app.modules.core.shared.services import sse_relay
+
+
+class _StopLoop(BaseException):
+    """BaseException so _listen_loop's `except Exception` doesn't catch it."""
+
+
+class _FailingCursor:
+    def execute(self, sql):
+        raise RuntimeError('connection dropped')
+
+
+class _FakeConn:
+    def __init__(self, close_raises=False):
+        self.closed = False
+        self.close_raises = close_raises
+
+    def set_isolation_level(self, level):
+        pass
+
+    def cursor(self):
+        return _FailingCursor()
+
+    def close(self):
+        self.closed = True
+        if self.close_raises:
+            raise RuntimeError('already gone')
+
+
+def _fake_app():
+    return types.SimpleNamespace(
+        config={'SQLALCHEMY_DATABASE_URI': 'postgresql://unused'},
+        logger=logging.getLogger('test_sse_relay'),
+    )
+
+
+def _raise_stop(seconds):
+    raise _StopLoop()
+
+
+@pytest.mark.parametrize('close_raises', [False, True])
+def test_listen_loop_closes_the_dropped_connection(monkeypatch, close_raises):
+    conn = _FakeConn(close_raises=close_raises)
+    monkeypatch.setattr(sse_relay.psycopg2, 'connect', lambda uri: conn)
+    monkeypatch.setattr(sse_relay.time, 'sleep', _raise_stop)
+
+    with pytest.raises(_StopLoop):
+        sse_relay._listen_loop(_fake_app())
+    assert conn.closed
+
+
+def test_listen_loop_survives_a_failed_connect(monkeypatch):
+    def _refuse(uri):
+        raise RuntimeError('database is down')
+
+    monkeypatch.setattr(sse_relay.psycopg2, 'connect', _refuse)
+    monkeypatch.setattr(sse_relay.time, 'sleep', _raise_stop)
+
+    # Reaches the back-off sleep instead of failing on an unbound connection.
+    with pytest.raises(_StopLoop):
+        sse_relay._listen_loop(_fake_app())

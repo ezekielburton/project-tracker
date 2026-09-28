@@ -6,7 +6,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import (
-    User, Client, Customer, Project, ProjectFile,
+    User, Client, Customer, Project,
     DeliverableType, DeliverableTypeDiscipline,
     DesignType, DesignDirection, ActivityLog, NotificationSound, OvpChampion
 )
@@ -16,7 +16,6 @@ from app.modules.core.shared.lib.capabilities import can, require, require_api
 from app.modules.core.shared.lib.champions import (
     CHAMPION_DEPARTMENTS, DEPARTMENT_LABELS, champion_for_week, current_champions, week_start_for,
 )
-from app.modules.core.shared.services.notifications import broadcast_update_email
 from werkzeug.security import generate_password_hash
 
 DUBAI_TZ = timezone(timedelta(hours=4))
@@ -89,15 +88,15 @@ def create_user():
     return jsonify({'success': True, 'user': {'id': user.id, 'name': user.name, 'role': user.role, 'team': user.team}})
 
 # ── OVP champion ──────────────────────────────────────────────────────────
-# The weekly-rotating designation. Set here manually; read by the Friction Log
-# write gate and, later, the Adoption panel.
+# One champion per department, set weekly by an admin. The Friction Log write
+# gate (feedback/routes/signal_tray.py) reads it.
 
 @admin_bp.route('/admin/api/ovp-champion', methods=['GET'])
 @login_required
 @admin_required
 def get_ovp_champion():
-    """Every department, who holds it, and whether that was set this week or
-    carried over from an earlier one."""
+    """Every department, its current champion, and whether that was set this
+    week or carried over from an earlier week."""
     holders = current_champions()
     week_start = week_start_for()
     set_this_week = champion_for_week(week_start)
@@ -146,14 +145,16 @@ def set_ovp_champion():
                     'week_start': week_start.isoformat()})
 
 
-SOUND_UPLOAD_FOLDER = os.path.join('app', 'static', 'sounds')
+# Absolute (app/static/sounds) so saves don't depend on the working directory.
+SOUND_UPLOAD_FOLDER = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), '..', '..', '..', 'static', 'sounds'))
 ALLOWED_SOUND_EXTENSIONS = {'mp3', 'wav', 'ogg', 'm4a', 'aac'}
 
 @admin_bp.route('/admin/api/sounds', methods=['GET'])
 @login_required
 @admin_required
 def list_sounds():
-    """List all admin-uploaded notification sounds, newest first."""
+    """All uploaded notification sounds, newest first."""
     sounds = NotificationSound.query.order_by(NotificationSound.created_at.desc()).all()
     return jsonify([{
         'id': s.id,
@@ -166,7 +167,7 @@ def list_sounds():
 @login_required
 @admin_required
 def upload_sound():
-    """Upload a new notification sound file. Admin only."""
+    """Upload a notification sound file."""
     name = (request.form.get('name') or '').strip()
     if not name:
         return jsonify({'success': False, 'error': 'Please provide a name for this sound'}), 400
@@ -179,8 +180,7 @@ def upload_sound():
     if ext not in ALLOWED_SOUND_EXTENSIONS:
         return jsonify({'success': False, 'error': f'File type .{ext} not allowed'}), 400
 
-    # Prefix with a short uuid so two admins uploading "chime.mp3" never collide
-    # or silently overwrite each other's file.
+    # Short uuid prefix so two uploads with the same name never overwrite each other.
     stored_filename = f'{uuid.uuid4().hex[:8]}_{secure_filename(file.filename)}'
     os.makedirs(SOUND_UPLOAD_FOLDER, exist_ok=True)
     file.save(os.path.join(SOUND_UPLOAD_FOLDER, stored_filename))
@@ -199,9 +199,9 @@ def upload_sound():
 @login_required
 @admin_required
 def delete_sound(sound_id):
-    """Delete a notification sound — removes the DB row and the file on disk."""
+    """Delete a notification sound: the DB row and the file on disk."""
     sound = NotificationSound.query.get_or_404(sound_id)
-    name = sound.name  # capture before delete — attributes clear post-commit
+    name = sound.name  # read before delete; attributes expire on commit
 
     file_path = os.path.join(SOUND_UPLOAD_FOLDER, sound.filename)
     if os.path.exists(file_path):
@@ -255,19 +255,22 @@ def update_user(user_id):
 @login_required
 @admin_required
 def admin_reset_password(user_id):
+    """Set a random temporary password and return it once, for the admin to pass on."""
+    from app.modules.auth.routes.auth import generate_temp_password
     user = User.query.get_or_404(user_id)
-    user.set_password('Vitamin2026!')
+    temp_password = generate_temp_password()
+    user.set_password(temp_password)
     db.session.commit()
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'temp_password': temp_password})
 
 
 @admin_bp.route('/admin/api/users/<int:user_id>/active', methods=['POST'])
 @login_required
 @admin_required
 def set_user_active(user_id):
-    """Activate or deactivate an account. A deactivated user stays in the DB so
-    existing project ties still resolve, but is hidden from every picker and
-    blocked from login. Body: {"active": true|false}."""
+    """Activate or deactivate an account. Body: {"active": true|false}.
+    A deactivated user keeps their DB row (so project links still resolve) but
+    cannot log in and drops out of user pickers."""
     if user_id == current_user.id:
         return jsonify({'success': False, 'error': 'Cannot deactivate your own account'}), 400
     user = User.query.get_or_404(user_id)
@@ -285,8 +288,7 @@ def set_user_active(user_id):
 @login_required
 @admin_required
 def set_user_avatar(user_id):
-    """Admin sets/replaces any user's profile photo via the shared helper.
-    Works for deactivated users too (they still show in the admin list)."""
+    """Set or replace any user's profile photo, deactivated users included."""
     user = User.query.get_or_404(user_id)
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
@@ -315,8 +317,8 @@ def delete_user(user_id):
 
     user = User.query.get_or_404(user_id)
 
-    # Hard blocks — these columns are NOT NULL so we can't null them out.
-    # The admin must reassign/delete those records manually first.
+    # Refused while the user is on NOT NULL project columns; the admin must
+    # reassign or delete those projects first.
     cs_lead_count = Project.query.filter_by(cs_lead_id=user_id).count()
     if cs_lead_count:
         return jsonify({'success': False,
@@ -366,13 +368,25 @@ def delete_user(user_id):
 
     except IntegrityError as exc:
         db.session.rollback()
-        # Surface which table is still holding a reference
+        # Name the table still holding a reference, when it is a known one.
         msg = str(exc.orig) if hasattr(exc, 'orig') else str(exc)
         table = 'unknown table'
+        # Substring match, so 'projects' stays last ('chat_tray_projects' holds it).
         for t_name in ['project_files', 'project_submissions', 'project_revisions',
                         'brief_flags', 'brief_flag_messages', 'blog_posts',
                         'feature_requests', 'bug_reports', 'deliverable_assignments',
-                        'clients']:
+                        'clients', 'ovp_champions', 'chat_tray_projects',
+                        'decision_flags', 'decision_flag_messages',
+                        'deliverable_preproduction_events', 'deliverable_status_logs',
+                        'deliverables', 'friction_log_entries', 'notification_sounds',
+                        'project_activity_seen', 'project_customer_status_logs',
+                        'project_customers', 'project_edit_access_requests',
+                        'project_note_reactions', 'project_notes', 'project_overlay_views',
+                        'project_status_logs', 'project_submission_events',
+                        'project_submission_files', 'project_table_views', 'site_visits',
+                        'technical_submissions', 'user_achievements',
+                        'user_display_settings', 'user_pinned_achievements',
+                        'user_table_layouts', 'projects']:
             if t_name in msg:
                 table = t_name.replace('_', ' ')
                 break
@@ -411,6 +425,28 @@ def create_client():
 def delete_client(client_id):
     client = Client.query.get_or_404(client_id)
     name = client.name
+
+    # Refused while in use: projects (directly or via one of its contacts) and
+    # deliverable types hold FKs that can't be nulled or cascaded safely.
+    contact_ids = [c.id for c in client.contacts]
+    project_filter = Project.client_id == client_id
+    if contact_ids:
+        project_filter = project_filter | Project.contact_id.in_(contact_ids)
+    project_count = Project.query.filter(project_filter).count()
+    if project_count:
+        return jsonify({'success': False,
+                        'error': f'"{name}" is used by {project_count} project(s). '
+                                 f'Move or delete those projects before deleting the client.'}), 400
+
+    type_count = DeliverableType.query.filter_by(client_id=client_id).count()
+    if type_count:
+        return jsonify({'success': False,
+                        'error': f'"{name}" has {type_count} deliverable type(s). '
+                                 f'Delete those before deleting the client.'}), 400
+
+    # Contacts belong only to this client (client_id is NOT NULL), so they go with it.
+    for contact in client.contacts:
+        db.session.delete(contact)
     db.session.delete(client)
     db.session.commit()
     log_activity('client_deleted', f'Client "{name}" deleted', user=current_user, entity_type='client', entity_name=name)
@@ -460,13 +496,12 @@ def list_projects():
 @login_required
 @admin_required
 def delete_project(project_id):
-    import os
     from flask import current_app
 
     project = Project.query.get_or_404(project_id)
     name = project.name
 
-    # Remove uploaded reference files from disk — cascade handles the DB rows
+    # Remove reference files from disk; the DB rows go by cascade.
     upload_folder = current_app.config['UPLOAD_FOLDER']
     for ref_file in project.reference_files:
         file_path = os.path.join(upload_folder, ref_file.filename)
@@ -482,7 +517,7 @@ def delete_project(project_id):
 @login_required
 @admin_required
 def list_drafts():
-    # Include job_number so the admin drafts panel can display and distinguish them.
+    # job_number is shown so the admin can tell which number a delete frees.
     drafts = Project.query.filter_by(project_status='draft').order_by(Project.name).all()
     return jsonify([{
         'id': d.id,
@@ -497,8 +532,7 @@ def list_drafts():
 def delete_draft_admin(draft_id):
     draft = Project.query.get_or_404(draft_id)
     name = draft.name
-    # Deleting the project row also removes the job_number (UNIQUE column lives on
-    # the same row), so no separate step is needed to free the number.
+    # Deleting the row also frees its unique job_number.
     db.session.delete(draft)
     db.session.commit()
     log_activity('draft_deleted', f'Draft "{name}" deleted', user=current_user, entity_type='project', entity_name=name)
@@ -506,15 +540,14 @@ def delete_draft_admin(draft_id):
 
 
 # ── Job Numbers ────────────────────────────────────────────────────────────────
-# Admin can see every project that has a job number assigned and clear individual
-# numbers (set to NULL) without deleting the project itself.  Useful when a
-# draft was abandoned without being deleted, leaving its number reserved.
+# Lists projects with a job number and clears one (sets it to NULL) without
+# deleting the project, so an abandoned draft's number can be reused.
 
 @admin_bp.route('/admin/api/job-numbers', methods=['GET'])
 @login_required
 @admin_required
 def list_job_numbers():
-    """Return every project that has a job_number set, sorted by number."""
+    """Every project with a job_number, sorted by number."""
     projects = (
         Project.query
         .filter(Project.job_number != None)  # noqa: E711 — SQLAlchemy IS NOT NULL
@@ -534,10 +567,8 @@ def list_job_numbers():
 @login_required
 @admin_required
 def clear_job_number(project_id):
-    """Clear (set to NULL) the job_number field on a project.
-    The project itself is NOT deleted — only the number is freed so it can be
-    reassigned.  Use the Projects or Drafts tab to delete the project itself.
-    """
+    """Set a project's job_number to NULL so the number can be reused.
+    The project itself is kept."""
     project = Project.query.get_or_404(project_id)
     old_number = project.job_number
     if not old_number:
@@ -583,13 +614,10 @@ def update_deliverable_type(type_id):
     if not name:
         return jsonify({'success': False, 'error': 'Name is required'}), 400
     dt.name = name
-    # Only touch reference_image if the key was actually sent. Without this
-    # check, saving a plain name/discipline edit (no new image chosen) would
-    # send reference_image as absent/None and silently wipe out whatever
-    # image was already set — the admin isn't re-uploading one every time
-    # they save, so "not present" has to mean "leave it alone."
+    # File fields change only when their key is sent; a missing key means
+    # "leave alone", so a plain name edit does not wipe the image.
     if 'reference_image' in data:
-        dt.reference_image = data['reference_image'] # a filename, or None to explicitly clear it  
+        dt.reference_image = data['reference_image'] # a filename, or None to clear it  
     if 'template_filename' in data:
         dt.template_filename = data['template_filename']  
     DeliverableTypeDiscipline.query.filter_by(deliverable_type_id=dt.id).delete()
@@ -603,14 +631,9 @@ def update_deliverable_type(type_id):
 @login_required
 @admin_required
 def upload_deliverable_type_template():
-    """
-    Uploads a template file (.ai) for a deliverable type. Same two-step
-    pattern as upload_deliverable_type_image() in projects_brief.py:
-    upload first, get back a filename, then include that filename in the
-    create/update payload below. Stored on local disk (app/file_templates/),
-    not the NAS — these are small per-store template files.
-    """
-    import os, uuid
+    """Upload a deliverable type's template file to app/file_templates/ (local
+    disk, not the NAS) and return its filename. The caller then sends that
+    filename in the create/update request, as with the reference image below."""
     from app.modules.core.shared.lib.paths import template_upload_folder
 
     if 'file' not in request.files:
@@ -621,7 +644,7 @@ def upload_deliverable_type_template():
         return jsonify({'success': False, 'error': 'No file provided'}), 400
 
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if ext not in ('ai', 'zip'):
+    if ext != 'ai':
         return jsonify({'success': False, 'error': 'Only .ai files are supported'}), 400
 
     stored_filename = f'{uuid.uuid4().hex[:8]}.{ext}'
@@ -692,12 +715,10 @@ def list_activity():
     search = request.args.get('search', '').strip()
     from_date = request.args.get('from', '').strip()
     to_date = request.args.get('to', '').strip()
-    category = request.args.get('category', '').strip()  # Creation / Flags / Deletions / Assignments / Edits / Other
+    category = request.args.get('category', '').strip()  # a CATEGORY_KEYWORDS key, 'other' or 'all'
 
-    # Category → action keyword mapping.
-    # Each category maps to a list of action strings that belong to it.
-    # "Other" is a special sentinel handled below — it matches anything NOT
-    # in any of the other categories.
+    # Category -> substrings matched against ActivityLog.action. "other" (below)
+    # matches actions that hit none of them.
     CATEGORY_KEYWORDS = {
         'creation':    ['created', 'uploaded', 'added', 'internal_review_submitted', 'submission_uploaded'],
         'flags':       ['flagged', 'submission_flagged'],
@@ -706,7 +727,6 @@ def list_activity():
         'edits':       ['updated', 'changed', 'status_changed', 'deliverable_status_changed',
                         'submitted_to_client', 'internal_review_submitted'],
     }
-    # Collect every keyword that belongs to a named category (used to invert for "Other")
     ALL_NAMED_KEYWORDS = [kw for kws in CATEGORY_KEYWORDS.values() for kw in kws]
 
     if search:
@@ -717,17 +737,19 @@ def list_activity():
                 ActivityLog.entity_name.ilike(pattern)
             )
         )
-    if from_date:
-        from_dt_utc = datetime.fromisoformat(from_date) - timedelta(hours=4)
-        query = query.filter(ActivityLog.created_at >= from_dt_utc)
-    if to_date:
-        to_dt_utc = datetime.fromisoformat(to_date + ' 23:59:59') - timedelta(hours=4)
-        query = query.filter(ActivityLog.created_at <= to_dt_utc)
+    try:
+        from_dt = datetime.fromisoformat(from_date) if from_date else None
+        to_dt = datetime.fromisoformat(to_date + ' 23:59:59') if to_date else None
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Dates must be YYYY-MM-DD'}), 400
+    if from_dt:
+        query = query.filter(ActivityLog.created_at >= from_dt - timedelta(hours=4))
+    if to_dt:
+        query = query.filter(ActivityLog.created_at <= to_dt - timedelta(hours=4))
 
     if category and category != 'all':
         cat_lower = category.lower()
         if cat_lower == 'other':
-            # "Other" = actions that don't match any keyword in any named category
             query = query.filter(
                 ~db.or_(*[ActivityLog.action.ilike(f'%{kw}%') for kw in ALL_NAMED_KEYWORDS])
             )
@@ -888,150 +910,48 @@ def delete_design_direction(dir_id):
     return jsonify({'success': True})
 
 
-# ── CS quick-add (Design Types + Directions) ─────────────────────────────────
-
-@admin_bp.route('/admin/api/design-types/quick-add', methods=['POST'])
-@login_required
-def quick_add_design_type():
-    """CS, management and admin can quickly add a design type from the brief form."""
-    if not can('manage_reference_data', current_user):
-        return jsonify({'error': 'Forbidden'}), 403
-    data = request.get_json()
-    name = (data.get('name') or '').strip()
-    if not name:
-        return jsonify({'error': 'Name is required'}), 400
-    existing = DesignType.query.filter_by(name=name).first()
-    if existing:
-        return jsonify({'id': existing.id, 'name': existing.name})
-    t = DesignType(name=name)
-    db.session.add(t)
-    db.session.commit()
-    return jsonify({'id': t.id, 'name': t.name})
-
-@admin_bp.route('/admin/api/design-directions/quick-add', methods=['POST'])
-@login_required
-def quick_add_design_direction():
-    """CS, management and admin can quickly add a design direction from the brief form."""
-    if not can('manage_reference_data', current_user):
-        return jsonify({'error': 'Forbidden'}), 403
-    data = request.get_json()
-    name = (data.get('name') or '').strip()
-    if not name:
-        return jsonify({'error': 'Name is required'}), 400
-    existing = DesignDirection.query.filter_by(name=name).first()
-    if existing:
-        return jsonify({'id': existing.id, 'name': existing.name})
-    d = DesignDirection(name=name)
-    db.session.add(d)
-    db.session.commit()
-    return jsonify({'id': d.id, 'name': d.name})
-
-
 # ── Dev Tools ────────────────────────────────────────────────────────────────
-# These routes are gated by DEV_TOOLS_ENABLED in config.py.
-# That flag must NEVER be set on the production server.
-# Double-gated: even if someone hits the URL directly on prod, the config check
-# returns 403 before any data is touched.
+# Gated by DEV_TOOLS_ENABLED in config.py, which must NEVER be set in
+# production. The route checks the flag itself, so a direct call on prod gets 403.
 
 @admin_bp.route('/admin/api/dev/wipe-projects', methods=['POST'])
 @login_required
 @admin_required
 def dev_wipe_projects():
-    """
-    DEV ONLY — wipes every project and all related data, then resets the
-    FOC job number counter (which is computed from existing rows, so wiping
-    projects automatically brings it back to FOC-001).
-
-    WHY TRUNCATE CASCADE instead of Project.query.delete():
-      .query.delete(synchronize_session=False) issues a raw SQL
-      DELETE FROM projects, which bypasses SQLAlchemy's ORM cascade logic.
-      PostgreSQL then enforces FK constraints on every child table
-      (project_designers, deliverables, project_customers, notifications, etc.)
-      and raises a ForeignKeyViolation error.
-
-      TRUNCATE projects CASCADE tells Postgres to truncate the projects table
-      AND every table that has a FK pointing at it — all in one atomic
-      operation, with no explicit ordering needed.
-    """
+    """DEV ONLY: wipe every project and all related rows.
+    Uses TRUNCATE ... CASCADE because a bulk Project.query.delete() skips the
+    ORM cascades and fails on child-table foreign keys."""
     from flask import current_app
     from sqlalchemy import text
 
-    # Guard: refuse entirely if the dev tools flag is off — this is the
-    # server-side safety net independent of whether the UI is shown.
+    # Server-side guard, whether or not the UI is shown.
     if not current_app.config.get('DEV_TOOLS_ENABLED'):
         return jsonify({'error': 'Dev tools are not enabled on this server'}), 403
 
-    # TRUNCATE projects CASCADE:
-    #   - Wipes the projects table.
-    #   - Automatically cascades to all tables with a FK referencing projects:
-    #     project_designers, project_customers, project_regions, deliverables,
-    #     deliverable_assignments, brief_flags, brief_flag_messages,
-    #     project_files, project_submissions, project_revisions,
-    #     project_posm_channels, project_posm_customers, and notifications
-    #     (where project_id is not null).
-    #   - RESTART IDENTITY resets any auto-increment sequences on those tables
-    #     back to 1 — keeps IDs tidy for a fresh dev environment.
+    # CASCADE also empties every table with a FK to projects (deliverables,
+    # submissions, flags, files, notifications, ...); RESTART IDENTITY resets
+    # their ID sequences to 1.
     db.session.execute(text('TRUNCATE TABLE projects RESTART IDENTITY CASCADE'))
     db.session.commit()
 
-    # The FOC counter is computed from existing job_number values
-    # (see generate_job_number in projects.py), so it resets to FOC-001
-    # automatically now that the projects table is empty.
+    # generate_job_number derives the FOC counter from existing rows, so it
+    # restarts at FOC-001 with no extra step.
     return jsonify({'success': True, 'message': 'All projects wiped. FOC counter reset.'})
-
-
-@admin_bp.route('/admin/api/broadcast-update', methods=['POST'])
-@login_required
-@admin_required
-def broadcast_update():
-    """
-    Fire a one-off update announcement email + in-app notification to every
-    active user. Called from the admin panel.
-
-    Expected JSON body:
-    {
-      "version":     "v1.2",
-      "subject":     "Vitamin-E has been updated — v1.3",
-      "intro":       "Vitamin-E v1.3 is now live. ...",
-      "blog_url":    "https://app.vitamin-e.work/blog-post1-v1.2update"
-    }
-    """
-    data = request.get_json(silent=True) or {}
-
-    version  = data.get('version',  'v1.2')
-    subject  = data.get('subject',  f'[Vitamin-E] App Update — {version}')
-    intro    = data.get('intro',    'A new update is live on Vitamin-E.')
-    blog_url = data.get('blog_url', 'https://app.vitamin-e.work/blog-post1-v1.2update')
-
-    sent = broadcast_update_email(
-        version=version,
-        subject_line=subject,
-        intro_line=intro,
-        blog_url=blog_url
-    )
-    return jsonify({'success': True, 'sent': sent})
 
 
 # ─────────────────────────────────────────────────────────────────────────
 # Deliverable-type reference image upload
 #
-# Backs the Admin Panel's Deliverable Types form (base.html's global
-# pt-add-del-form, wired up in admin.js). Keeps the
-# manage_reference_data gate deliberately — not the
-# stricter admin-only gate used elsewhere in this file — since narrowing it
-# would be a real permission regression for CS and management, who this
-# route has always allowed.
+# Used by the admin panel's Deliverable Types form (admin.js). Gated on
+# manage_reference_data, which is wider than admin_panel (CS, management).
 # ─────────────────────────────────────────────────────────────────────────
 
 @admin_bp.route('/projects/deliverable-types/upload-image', methods=['POST'])
 @login_required
 @require('manage_reference_data', real_user=True)
 def upload_deliverable_type_image():
-    """Upload a reference image for a DeliverableType. This route only
-    saves the file and hands back its filename; it doesn't touch the DB
-    itself, since it has no idea yet which DeliverableType (new or
-    existing) the image belongs to - the caller folds the returned
-    filename into its own create/update request."""
+    """Save a deliverable type's reference image and return its filename.
+    No DB write: the caller sends the filename in its create/update request."""
     from flask import current_app
 
     file = request.files.get('file')

@@ -1,8 +1,7 @@
 """
-Client Servicing's feed for the global Dashboard. The one function the global
-Dashboard imports from this module — it decides relevance and who sees each
-item, so the global side filters nothing. The computation lives in
-lib/dashboard.py; this is just the public seam.
+Client Servicing's feed for the global Dashboard: the one function it imports
+from this module. Relevance and visibility are decided here, so the global side
+filters nothing. The logic lives in lib/dashboard.py.
 """
 from app.modules.client_servicing.lib.dashboard import feed_items
 

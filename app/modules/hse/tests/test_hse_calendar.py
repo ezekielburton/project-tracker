@@ -1,11 +1,6 @@
-"""Three different things landing on one grid, and staying distinguishable.
+"""Calendar view model: occurrences, logged entries and expiries on one grid, each counted once.
 
-A planned occurrence is computed, a logged entry is a row, an expiry is a
-date on a row. The bug this file exists to stop is any of them being
-counted twice, or one quietly turning into another.
-
-Plain stubs again — lib/calendar.py reads attributes and never queries, so
-none of this needs the app fixture.
+Plain stubs: lib/calendar.py reads attributes and never queries, so no app fixture.
 """
 from datetime import date, datetime
 
@@ -88,7 +83,7 @@ def test_an_occurrence_carries_its_state_and_its_per_asset_detail():
 
 
 def test_a_single_target_occurrence_shows_no_count():
-    """"1 of 1" is noise on a tool box talk."""
+    """A single-target occurrence has no "x of y" detail."""
     talk = _Schedule(id=9, register='toolbox_talk', label='Tool box talk',
                      frequency='weekly', interval=1, weekday=2, active=True,
                      starts_on=date(2026, 9, 1))
@@ -97,8 +92,7 @@ def test_a_single_target_occurrence_shows_no_count():
 
 
 def test_work_that_satisfies_an_occurrence_is_not_also_drawn_as_logged():
-    """Otherwise the day it was done would count it twice — once inside the
-    occurrence and once beside it."""
+    """An entry filed against an occurrence is not also drawn as logged (no double count)."""
     filed = _Entry(id=1, register='vehicle_inspection', ref='VIN-0001',
                    entry_date=date(2026, 9, 14), schedule_id=5,
                    occurrence_date=date(2026, 9, 14), asset_id=11)
@@ -116,9 +110,7 @@ def test_unplanned_work_is_drawn_as_logged():
 
 
 def test_an_expiry_is_drawn_on_the_day_it_runs_out_not_the_day_it_was_filed():
-    """A certificate issued in June and expiring in September belongs on
-    the September date. Drawing it on both would put a certificate on the
-    calendar twice."""
+    """An expiring entry appears once, on its due date, not on its entry date."""
     cert = _Entry(id=3, register='compliance_renewal', ref='COM-0004',
                   entry_date=date(2026, 6, 1), due_at=date(2026, 9, 30),
                   compliance_item=_Ref(3, 'ISO 45001 Certification'))
@@ -149,9 +141,7 @@ def test_the_grid_starts_on_monday_and_overhangs_the_month():
 
 
 def test_every_day_in_view_is_loaded_by_the_bounds():
-    """The weeks overhang the month, so work on the 31st of August must be
-    inside the window the route queries — otherwise the first row of the
-    grid renders empty and looks like a data loss."""
+    """grid_bounds covers the overhang days too, so the route loads every cell shown."""
     start, end = grid_bounds(2026, 9)
     weeks = month_grid({}, 2026, 9, TODAY)
     for week in weeks:
@@ -172,8 +162,7 @@ def test_a_day_shows_a_few_items_and_counts_the_rest():
 
 
 def test_the_worst_state_colours_the_day():
-    """An overdue inspection and a logged near miss on the same day: the
-    cell reads overdue."""
+    """A cell's colour and first item come from its worst state (overdue beats logged)."""
     day = date(2026, 9, 7)
     incident = _Entry(id=1, register='incidents', ref='INC-0001', entry_date=day)
     grouped = items_by_day([vehicles()], [incident], day, day, TODAY)
@@ -207,27 +196,25 @@ def test_an_unknown_state_is_ignored_rather_than_emptying_the_page():
 
 
 def test_the_legend_shows_every_state_even_at_zero():
-    """So the row does not jump about as work is filed."""
+    """Zero-count states stay in the legend so it keeps a stable layout."""
     chips = state_chips({}, None)
     assert [c['value'] for c in chips] == list(LEGEND_ORDER)
     assert all(c['count'] == 0 for c in chips)
 
 
 def test_the_legend_covers_every_state_the_grid_can_draw():
-    """Ordered for reading rather than worst-first, but nothing may be
-    missing — a state with no key is a colour nobody can decode."""
+    """LEGEND_ORDER holds exactly the states in STATES."""
     assert set(LEGEND_ORDER) == set(STATES)
 
 
 def test_the_legend_dots_match_the_grid():
-    """It is the key to the calendar, so hollow and filled have to agree
-    with what the cells draw."""
+    """Legend dots are filled for exactly the states the grid draws filled."""
     filled = {c['value'] for c in state_chips({}, None) if c['filled']}
     assert filled == {'overdue', 'done', 'logged'}
 
 
 def test_clicking_the_active_state_clears_the_filter():
-    """Which is why the legend needs no separate All."""
+    """The active legend chip links back to no filter."""
     chips = {c['value']: c for c in state_chips({}, 'overdue')}
     assert chips['overdue']['active'] is True
     assert chips['overdue']['href_state'] is None
@@ -265,8 +252,7 @@ def test_the_agenda_stops_at_its_horizon():
 # --- the header -----------------------------------------------------------
 
 def test_the_header_reads_coverage_rather_than_recomputing_it():
-    """Due, done and overdue come from coverage() so the calendar header
-    and the performance page can never disagree."""
+    """Header due/done/overdue come from coverage(), matching the performance page."""
     filed = [
         _Entry(id=1, register='vehicle_inspection', ref='VIN-0001',
                entry_date=date(2026, 9, 7), schedule_id=5,
@@ -283,8 +269,7 @@ def test_the_header_reads_coverage_rather_than_recomputing_it():
 
 
 def test_unplanned_work_is_counted_beside_coverage_not_inside_it():
-    """A low percentage next to a high unplanned count is a month that went
-    sideways, not a month of neglect. Coverage must not absorb it."""
+    """Unplanned work has its own count and does not change coverage."""
     incident = _Entry(id=9, register='incidents', ref='INC-0009',
                       entry_date=date(2026, 9, 10))
     head = kpis([vehicles()], [incident], date(2026, 9, 1), date(2026, 9, 30), TODAY)
@@ -302,9 +287,7 @@ def test_coverage_reads_as_a_dash_not_zero_when_nothing_was_due():
 # --- the drawer, flattened ------------------------------------------------
 
 def test_an_occurrence_becomes_one_card_per_asset():
-    """Six vehicles is six jobs, so it is six cards. The nested version —
-    a schedule with its assets underneath — made every line a heading
-    rather than an action."""
+    """A multi-asset occurrence becomes one drawer card per asset."""
     grouped = items_by_day([vehicles()], [], date(2026, 9, 21), date(2026, 9, 21), TODAY)
     cards = drawer_cards(grouped[date(2026, 9, 21)], TODAY)
     assert [c['title'] for c in cards] == ['D-55831', 'GMC Sierra']
@@ -339,9 +322,20 @@ def test_a_done_card_says_who_filed_it_and_when():
     assert cards['GMC Sierra']['state'] == 'planned'
 
 
+def test_a_logged_card_shows_the_entrys_own_time_when_it_has_one():
+    timed = _Entry(id=2, register='incidents', ref='INC-0001', entry_date=TODAY,
+                   data={'entry_time': '07:15'}, created_by=_User('M. Dube'),
+                   created_at=datetime(2026, 9, 14, 11, 5))
+    untimed = _Entry(id=3, register='incidents', ref='INC-0002', entry_date=TODAY,
+                     created_by=_User('M. Dube'), created_at=datetime(2026, 9, 14, 11, 5))
+    grouped = items_by_day([], [timed, untimed], TODAY, TODAY, TODAY)
+    metas = {c['ref']: c['meta'] for c in drawer_cards(grouped[TODAY], TODAY)}
+    assert metas['INC-0001'] == 'Logged 07:15 by M. Dube'
+    assert metas['INC-0002'] == 'Logged 11:05 by M. Dube', 'falls back to the filing time'
+
+
 def test_work_already_done_keeps_its_place_in_the_day():
-    """He should be able to see what he has done today, not only what is
-    left."""
+    """Done cards stay in the day's drawer alongside outstanding ones."""
     filed = _Entry(id=1, register='vehicle_inspection', ref='VIN-0001',
                    entry_date=TODAY, schedule_id=5, occurrence_date=TODAY,
                    asset_id=11, created_by=_User('M. Dube'))
@@ -361,8 +355,7 @@ def test_a_card_carries_what_log_it_needs():
 
 
 def test_a_logged_card_does_not_print_its_register_twice():
-    """The label of a logged entry IS its register, so a subtitle underneath
-    said the same words again."""
+    """A logged card has no subtitle, since its title is already the register name."""
     incident = _Entry(id=9, register='incidents', ref='INC-0009',
                       entry_date=TODAY)
     grouped = items_by_day([], [incident], TODAY, TODAY, TODAY)
@@ -372,8 +365,7 @@ def test_a_logged_card_does_not_print_its_register_twice():
 
 
 def test_an_expiring_card_keeps_its_register_line():
-    """There the two differ — "ISO 45001 Certification" under "Compliance &
-    renewal" — so the subtitle earns its place."""
+    """An expiring card keeps the register name as its subtitle."""
     cert = _Entry(id=3, register='compliance_renewal', ref='COM-0004',
                   entry_date=date(2026, 6, 1), due_at=date(2026, 9, 30),
                   compliance_item=_Ref(3, 'ISO 45001 Certification'))
@@ -393,7 +385,7 @@ def test_an_expiring_card_counts_down():
 
 
 def test_the_day_summary_never_double_counts():
-    """Due is what is still outstanding, so a done card is not also due."""
+    """The day summary counts a done card as done only, not also due."""
     filed = _Entry(id=1, register='vehicle_inspection', ref='VIN-0001',
                    entry_date=TODAY, schedule_id=5, occurrence_date=TODAY,
                    asset_id=11)
@@ -408,7 +400,7 @@ def test_the_day_summary_calls_out_overdue():
 
 
 def test_the_agenda_renders_the_same_cards_as_the_drawer():
-    """A day must not read one way in one view and another in the other."""
+    """Agenda groups use the same cards and summary as the drawer."""
     grouped = items_by_day([vehicles()], [], TODAY, date(2026, 10, 14), TODAY)
     group = agenda_groups(grouped, TODAY)[0]
     assert group['cards'] == drawer_cards(grouped[group['date']], TODAY)
@@ -418,15 +410,9 @@ def test_the_agenda_renders_the_same_cards_as_the_drawer():
 # --- the Jinja shadowing trap ---------------------------------------------
 
 def test_no_view_model_uses_a_key_jinja_would_read_as_a_dict_method():
-    """This one reached the browser.
+    """No template dict uses a key like `items` that Jinja resolves to a dict method.
 
-    The drawer dict had an `items` key, and Jinja resolves an attribute
-    before a subscript — so {{ drawer.items }} handed the template
-    dict.items, the bound method, and the page died with "object of type
-    'builtin_function_or_method' has no len()" three files away from the
-    cause. Renaming it to day_items fixed it; this stops the next one.
-
-    Every dict this module hands a template is checked.
+    Jinja tries attributes before subscripts, so {{ d.items }} gives the bound method.
     """
     day = date(2026, 9, 7)
     incident = _Entry(id=1, register='incidents', ref='INC-0001', entry_date=day)
@@ -471,3 +457,19 @@ def test_day_parsing_rejects_nonsense():
     assert parse_day('2026-09-14') == date(2026, 9, 14)
     assert parse_day('not a day') is None
     assert parse_day(None) is None
+
+
+def test_daily_checks_fold_into_one_line_after_the_one_off_items():
+    """Daily schedules fold into one "Daily checks" chip, after one-off items; the drawer keeps all."""
+    day = date(2026, 9, 10)
+    daily = [_Schedule(id=20 + n, register='forklift_inspection', label=f'Daily {n}',
+                       frequency='daily', interval=1, active=True,
+                       starts_on=date(2026, 9, 1)) for n in range(2)]
+    incident = _Entry(id=1, register='incidents', ref='INC-0001', entry_date=day)
+    grouped = items_by_day(daily, [incident], day, day, TODAY)
+    cell = next(d for week in month_grid(grouped, 2026, 9, TODAY) for d in week
+                if d['date'] == day)
+    labels = [i['label'] for i in cell['shown']]
+    assert labels[-1] == 'Daily checks · 2'
+    assert len(labels) == 2 and cell['more'] == 0
+    assert len(cell['day_items']) == 3   # the drawer still has all of them

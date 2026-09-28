@@ -1,10 +1,9 @@
 """
-Single choke point for who can see the Client Servicing page — every route
-gates through @require_cs, never an inline role check. The role sets now live
-in core/shared's capabilities map; what stays here is the review lock, which is
-a temporary config state rather than part of the role model.
+Access checks for Client Servicing. Every route gates through @require_cs,
+never an inline role check. Role sets live in core/shared's capabilities map;
+this file adds only the review lock, a temporary config switch.
 
-All three helpers accept a possibly-None user and answer False for it.
+The can_* helpers accept a None user and return False for it.
 """
 from functools import wraps
 
@@ -13,16 +12,13 @@ from flask import abort, current_app
 from app.modules.core.shared.lib.capabilities import can, effective_user
 
 
-# While the review lock is on the module narrows to these two roles.
+# The only roles let in while the review lock is on.
 _REVIEW_ROLES = {'admin', 'management'}
 
 
 def can_access_client_servicing(user):
-    """True if `user` may view/use the Client Servicing page. Pass the
-    effective_user() result.
-
-    While config CLIENT_SERVICING_REVIEW_ONLY is on, the module is under
-    management review and only _REVIEW_ROLES get in."""
+    """True if `user` may use the Client Servicing page. Pass effective_user().
+    While config CLIENT_SERVICING_REVIEW_ONLY is on, only _REVIEW_ROLES get in."""
     if not can('view_cs', user):
         return False
     if current_app.config.get('CLIENT_SERVICING_REVIEW_ONLY'):
@@ -43,8 +39,8 @@ def can_close_projects(user):
 
 
 def require_cs(f):
-    """Gate a CS route on page access, review lock included. 403 without it.
-    Emulation-aware, so an admin previewing as someone else is gated as them."""
+    """Gate a CS route on page access (review lock included); 403 otherwise.
+    Emulation-aware: an admin previewing as someone is gated as them."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not can_access_client_servicing(effective_user()):

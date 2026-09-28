@@ -4,9 +4,8 @@ from app.modules.core.shared.extensions import db
 
 
 class ChatTrayProject(db.Model):
-    """One person's Chat tray state for one project — added by hand, pinned to
-    the top, or hidden until someone posts again. A project with real activity
-    needs no row here at all; it surfaces on its own."""
+    """One person's Chat tray state for one project: added by hand, pinned, or
+    hidden until someone posts again. Projects with activity need no row."""
     __tablename__ = 'chat_tray_projects'
     __table_args__ = (
         db.UniqueConstraint('user_id', 'project_id', name='uq_chat_tray_projects_user_project'),

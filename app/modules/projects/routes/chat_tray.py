@@ -1,8 +1,7 @@
-"""Chat tray — the global conversation list over project chat.
+"""Chat tray: the global list of project conversations.
 
-Only the list is new. The thread itself is the overlay's chat drawer, rendered
-by project_notes.render_project_chat() and driven by ProjectChatPanel, so there
-is one chat implementation showing in two places.
+The thread pane reuses the overlay's chat drawer (project_notes.render_project_chat,
+driven by ProjectChatPanel in JS).
 """
 from datetime import datetime
 
@@ -19,23 +18,20 @@ from app.modules.core.shared.models import (
 
 chat_tray_bp = Blueprint('chat_tray', __name__)
 
-# Rows returned at once. The list is newest-activity-first, so the cut falls on
-# conversations nobody has touched in a long time.
+# Max rows returned; the list is newest-first, so the cut drops the stalest.
 _LIST_CAP = 50
 
 
 def _unread_baseline():
-    """Chat older than the unread-dot rollout never counts as unread. Read from
-    core/shared so the tray bubble and the Projects table's chat dot can never
-    disagree."""
+    """Chat older than this cutoff never counts as unread. Shared with the
+    Projects table's chat dot so the two always agree."""
     from app.modules.core.shared.lib.utils import ACTIVITY_SEEN_ROLLOUT_CUTOFF
     return ACTIVITY_SEEN_ROLLOUT_CUTOFF
 
 
 def _pool_query(user):
-    """Projects this person is actually on — CS lead, secondary CS, project
-    owner, or assigned designer. The same relationship set that decides who may
-    post in a project's chat, so what you can read and what you can say agree."""
+    """Non-draft projects the user is on: CS lead, secondary CS, owner, or
+    assigned designer. Keep in step with project_notes._can_manage_notes."""
     secondary_ids = db.session.query(ProjectSecondaryCS.project_id).filter_by(user_id=user.id).subquery()
     assigned_ids = db.session.query(ProjectDesigner.project_id).filter_by(user_id=user.id).subquery()
     return Project.query.filter(
@@ -50,9 +46,8 @@ def _pool_query(user):
 
 
 def _reachable_query(user):
-    """What you may open, as opposed to what surfaces on its own. Management and
-    admin reach any project — the same rule the chat's own post gate uses — so
-    they can pull any conversation into their tray."""
+    """Projects the user may open or add. manage_projects reaches every
+    non-draft project; everyone else gets their pool."""
     if can('manage_projects', user):
         return Project.query.filter(Project.project_status != 'draft')
     return _pool_query(user)
@@ -64,7 +59,7 @@ def _tray_state(user):
 
 
 def _tray_row(user, project_id):
-    """The tray row for this pair, created if it does not exist yet. Caller commits."""
+    """Get or create the tray row for user + project. Caller commits."""
     row = ChatTrayProject.query.filter_by(user_id=user.id, project_id=project_id).first()
     if not row:
         row = ChatTrayProject(user_id=user.id, project_id=project_id)
@@ -78,8 +73,8 @@ def _initials(name):
 
 
 def _last_notes(project_ids):
-    """The newest message per project, in two bounded queries — never one per
-    project. Ties on created_at keep the first row seen."""
+    """Newest message per project, in one query (not one per project).
+    Ties on created_at keep the first row seen."""
     if not project_ids:
         return {}
     latest = (
@@ -107,9 +102,8 @@ def _last_notes(project_ids):
 
 
 def _unread_counts(project_ids, user):
-    """Messages from other people newer than this user's chat watermark, counted
-    per project in one query. COALESCE supplies the rollout baseline for a
-    project the user has no watermark row for yet."""
+    """Per project, count others' messages newer than the user's chat watermark.
+    Projects with no watermark row fall back to the unread baseline."""
     if not project_ids:
         return {}
     seen = (
@@ -137,9 +131,8 @@ def _unread_counts(project_ids, user):
 @chat_tray_bp.route('/chat-tray/conversations')
 @login_required
 def conversations():
-    """The left pane: projects in your pool that have chat, plus anything you
-    added or pinned, minus anything you hid that has gone quiet since. Pinned
-    first, then newest activity."""
+    """Left pane: pool projects with chat, plus added or pinned ones, minus
+    hidden ones with no newer message. Pinned first, then newest activity."""
     actor = effective_user()
     state = _tray_state(actor)
 
@@ -161,8 +154,7 @@ def conversations():
         added = bool(row and row.added_at)
         pinned = bool(row and row.pinned_at)
 
-        # Hidden stays hidden until a message newer than the hide arrives.
-        # A pin overrides a hide.
+        # Hidden until a newer message arrives; a pin overrides a hide.
         if row and row.hidden_at and not pinned:
             if note is None or note.created_at is None or note.created_at <= row.hidden_at:
                 continue
@@ -185,8 +177,7 @@ def conversations():
             },
         })
 
-    # Two stable passes: newest activity first, then pinned lifted to the top
-    # keeping that order within each group.
+    # Two stable sorts: newest first, then pinned to the top keeping that order.
     rows.sort(key=lambda r: (r['last_message'] or {}).get('at') or '', reverse=True)
     rows.sort(key=lambda r: 0 if r['pinned'] else 1)
 
@@ -199,7 +190,7 @@ def conversations():
 @chat_tray_bp.route('/chat-tray/addable')
 @login_required
 def addable_projects():
-    """The ＋ picker: every project you could add, name-ordered."""
+    """The ＋ picker: every project the user could add, by name."""
     actor = effective_user()
     projects = _reachable_query(actor).order_by(Project.name).all()
     return jsonify({'projects': [
@@ -211,7 +202,7 @@ def addable_projects():
 @chat_tray_bp.route('/chat-tray/projects', methods=['POST'])
 @login_required
 def add_project():
-    """Adds a conversation by hand, and lifts any previous hide."""
+    """Add a conversation to the tray and clear any hide."""
     actor = effective_user()
     project_id = (request.get_json() or {}).get('project_id')
     project = _reachable_query(actor).filter(Project.id == project_id).first() if project_id else None
@@ -228,7 +219,7 @@ def add_project():
 @chat_tray_bp.route('/chat-tray/projects/<int:project_id>', methods=['DELETE'])
 @login_required
 def hide_project(project_id):
-    """Drops a conversation off your list until someone posts in it again."""
+    """Hide a conversation until someone posts in it again. Clears add and pin."""
     actor = effective_user()
     project = _reachable_query(actor).filter(Project.id == project_id).first()
     if not project:
@@ -245,7 +236,7 @@ def hide_project(project_id):
 @chat_tray_bp.route('/chat-tray/projects/<int:project_id>/pin', methods=['POST'])
 @login_required
 def pin_project(project_id):
-    """Holds a conversation at the top of your list, or releases it."""
+    """Pin or unpin a conversation. Pinning clears any hide."""
     actor = effective_user()
     project = _reachable_query(actor).filter(Project.id == project_id).first()
     if not project:
@@ -263,9 +254,8 @@ def pin_project(project_id):
 @chat_tray_bp.route('/chat-tray/projects/<int:project_id>/thread')
 @login_required
 def project_thread(project_id):
-    """The right pane. Pool-gated, then renders the same drawer the overlay uses
-    — which also advances the chat watermark, clearing every unread marker for
-    this project at once."""
+    """Right pane: the overlay's chat drawer, gated to reachable projects.
+    Rendering it advances the chat watermark, clearing this project's unread."""
     from app.modules.projects.routes.project_notes import render_project_chat
 
     actor = effective_user()

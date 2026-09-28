@@ -5,12 +5,7 @@
 {% block content %}
 <div class="page-container">
 
-    {# Outer wrapper — no border styling yet, this div just exists so the future #}
-    {# "customize profile border" feature has something to attach a border to. #}
-    {# active_border_class comes from the profile owner's UserDisplaySettings —
-    applied to the OUTER wrapper (not just the banner), matching the div
-    Ezekiel asked for back when the layout was first sketched: "make sure
-    there is a surrounding div as we will make cool borders later." #}
+    {# Outer wrapper carries the profile owner's active achievement border. #}
     <div class="profile-border-wrap {{ active_border_class or '' }}">
         <div class="profile-card">
 
@@ -18,10 +13,9 @@
                 {% if profile_user.banner_filename %}
                 <img src="{{ url_for('static', filename='banners/' + profile_user.banner_filename) }}" alt="">
                 {% endif %}
-                {# Edit controls only make sense on your OWN profile — viewing #}
-                {# someone else's page should never show a pencil that would  #}
-                {# secretly edit YOUR data while looking at THEIRS. #}
-                {% if is_own_profile %}
+                {# Edit routes write to current_user, so show them only when this is the #}
+                {# logged-in user's profile (not while an admin views as someone else). #}
+                {% if can_edit %}
                 <button type="button" class="profile-banner-edit-btn" id="edit-banner-btn" title="Change banner">✎</button>
                 {% endif %}
             </div>
@@ -34,7 +28,7 @@
                     {% else %}
                     <div class="profile-avatar profile-avatar--initials">{{ profile_user.name[0].upper() }}</div>
                     {% endif %}
-                    {% if is_own_profile %}
+                    {% if can_edit %}
                     <button type="button" class="profile-avatar-edit-btn" id="edit-avatar-btn" title="Change photo">✎</button>
                     {% endif %}
                 </div>
@@ -46,21 +40,19 @@
                         {% if profile_badge %}
                         <img src="{{ url_for('static', filename='achievements/' + profile_badge) }}" class="profile-name-badge" alt="">
                         {% endif %}
-                        {% if is_own_profile %}
+                        {% if can_edit %}
                         <button type="button" class="profile-edit-details-btn" id="edit-details-btn"
                             title="Edit details">✎</button>
                         {% endif %}
                     </div>
                     <div class="profile-meta-row">
-                        {# Each detail gets its own tag color so they're visually distinct at a #}
-                        {# glance, not just a run of same-looking text separated by gaps. #}
                         <span class="profile-tag profile-tag--title">{{ fun_title }}</span>
                         <span class="profile-tag profile-tag--role">{{ role_labels.get(profile_user.role, profile_user.role | replace('_', ' ') | title) }}</span>
                         {% if profile_user.favorite_food %}
                         <span class="profile-tag profile-tag--food">{{ profile_user.favorite_food }}</span>
                         {% endif %}
                         {% if profile_user.birthday %}
-                        {# %-d isn't portable to Windows' strftime — build "Month D, YYYY" manually instead #}
+                        {# %-d isn't portable to Windows' strftime, so build "Month D, YYYY" by hand #}
                         <span class="profile-tag profile-tag--birthday">{{ profile_user.birthday.strftime('%B') }} {{
                             profile_user.birthday.day }}, {{ profile_user.birthday.year }}</span>
                         {% endif %}
@@ -72,21 +64,16 @@
                 <div class="profile-bio-card">
                     <div class="profile-section-header">
                         <h2>Bio</h2>
-                        {% if is_own_profile %}
+                        {% if can_edit %}
                         <button type="button" class="profile-edit-bio-btn" id="edit-bio-btn" title="Edit bio">✎</button>
                         {% endif %}
                     </div>
 
-                    {# data-raw holds the actual saved value (possibly empty) so Cancel #}
-                    {# can restore it exactly — textContent shows "No bio yet." instead #}
-                    {# of an empty string when there's nothing saved, which we don't    #}
-                    {# want to put back into the textarea on Cancel.                    #}
+                    {# data-raw is the saved value; Cancel restores it (the text may be the placeholder). #}
                     <p id="profile-bio-text" data-raw="{{ profile_user.bio or '' }}">{{ profile_user.bio or 'No bio yet.' }}</p>
 
-                    {# Hidden by default — swapped in for the <p> above when editing. #}
-                    {# Only rendered at all for your own profile: a visitor viewing   #}
-                    {# someone else's page has no business ever seeing an edit form.  #}
-                    {% if is_own_profile %}
+                    {# Swapped in for the <p> above while editing. #}
+                    {% if can_edit %}
                     <div id="profile-bio-edit-wrap" class="hidden">
                         <textarea id="profile-bio-textarea" class="form-input" rows="4"
                             maxlength="1000">{{ profile_user.bio or '' }}</textarea>
@@ -99,10 +86,7 @@
                 </div>
 
                 {# ── Achievement tile macro ─────────────────────────────── #}
-                {# Shared by the Recent tab, the Pinned tab, and the        #}
-                {# pinned-only view on someone else's profile — every tile  #}
-                {# here is always an EARNED achievement, so it always has a #}
-                {# name/badge/earned date, never a locked "???" state.      #}
+                {# Earned achievements only, so never a locked state.       #}
                 {% macro achievement_tile(tile) %}
                 <div class="achievement-tile">
                     <div class="achievement-tile-badge">
@@ -111,9 +95,7 @@
                             class="achievement-badge-img{% if tile.badge_type == 'animated' %} achievement-badge-img--animated{% endif %}"
                             alt="">
                         {% else %}
-                        {# No image uploaded for this achievement yet (Phase 7 admin #}
-                        {# upload doesn't exist until later) — fall back to a generic #}
-                        {# trophy so the tile still renders sensibly. #}
+                        {# No badge image uploaded: generic trophy. #}
                         <span class="achievement-badge-fallback">🏆</span>
                         {% endif %}
                     </div>
@@ -126,15 +108,14 @@
                     <div class="profile-section-header">
                         <h2>Achievements</h2>
                         <span class="achievement-unlock-count">{{ achievement_earned_count }} / {{ achievement_total_count }}</span>
-                        {% if is_own_profile %}
+                        {% if can_edit %}
                         <button type="button" class="btn-secondary btn-sm" id="edit-achievements-btn"
                             style="margin-left:auto;">Customize</button>
                         {% endif %}
                     </div>
 
                     {% if is_own_profile %}
-                    {# Recent / Pinned toggle — own profile only. Other users only #}
-                    {# ever see the Pinned set, so there's nothing to toggle for them. #}
+                    {# Recent / Pinned toggle, own profile only. #}
                     <div class="achievement-tabs">
                         <button type="button" class="achievement-tab-btn active"
                             data-achievement-tab="recent">Recent</button>
@@ -158,9 +139,8 @@
                         {% endif %}
                     </div>
 
-                    {# Full checklist — every non-hidden achievement in every category, #}
-                    {# earned or not, with a progress bar. Hidden ones show "???" until #}
-                    {# earned. Collapsed by default; achievements.js toggles it. #}
+                    {# Full checklist: every achievement by category with progress. Hidden #}
+                    {# ones show "???" until earned. achievements.js toggles it. #}
                     <button type="button" class="achievement-show-more-btn" id="achievement-show-more-btn">Show
                         more ↓</button>
 
@@ -208,8 +188,7 @@
                     </div>
 
                     {% else %}
-                    {# Other user's profile — pinned tiles only, no tabs, no expand, #}
-                    {# no progress bars (Phase 4 spec). #}
+                    {# Other user's profile: pinned tiles only. #}
                     <div class="achievement-tile-row">
                         {% if pinned_tiles %}
                         {% for tile in pinned_tiles %}{{ achievement_tile(tile) }}{% endfor %}
@@ -226,7 +205,7 @@
 
 </div>
 
-{% if is_own_profile %}
+{% if can_edit %}
 <script>
 {% set ds = customize_context.display_settings %}
 window.PROFILE_CUSTOMIZE = {
@@ -249,26 +228,12 @@ window.PROFILE_CUSTOMIZE = {
 </script>
 {% endif %}
 
-{# Loaded unconditionally (not inside the is_own_profile block below) —     #}
-{# the Recent/Pinned tab toggle and Show more/less button only exist on     #}
-{# your own profile, but achievements.js just no-ops via querySelector      #}
-{# misses when those elements aren't on the page, same as any other        #}
-{# optional-element-not-found JS pattern already used elsewhere in the app. #}
+{# Loaded on every profile; achievements.js skips elements that are absent. #}
 <script src="{{ url_for('achievements_assets.static', filename='js/achievements.js') }}"></script>
 
-{# Crop modal, file inputs, and Edit Details modal are all editing tools —   #}
-{# none of them are reachable from the page unless is_own_profile is true   #}
-{# (the buttons that open them are gone above), but we still gate the       #}
-{# markup itself so a visitor's page source never even contains the other   #}
-{# user's editable-form scaffolding (e.g. hidden file inputs). #}
-
 {# ── Edit Details modal ────────────────────────────────────────────────── #}
-{# One popup edits Name, Favourite Food, and Birthday together (Phase 4).   #}
-{# Role and Fun Title are shown here too, but as disabled inputs — purely   #}
-{# for context. Role changes stay admin-only (Admin Panel > Account Tools) #}
-{# and Fun Title is derived from role via RoleTitle (see Phase 6), so       #}
-{# neither field is ever read by the save route even if someone tampers    #}
-{# with the request. #}
+{# Rendered on every profile, only opened on your own. Role and Fun Title  #}
+{# are display-only; the save route never reads them.                      #}
 <div id="edit-details-modal" class="modal-overlay hidden">
     <div class="modal-box">
         <h3 class="modal-title">Edit Details</h3>
@@ -309,11 +274,9 @@ window.PROFILE_CUSTOMIZE = {
 </div>
 
 {# ── Customize achievements modal ──────────────────────────────────────── #}
-{# Opened by the ✎ button on the achievements card. Lets the user pick     #}
-{# their active badge and manage their pinned achievements (max 5) without #}
-{# leaving the profile page. achievements.js populates both sections from   #}
-{# window.PROFILE_CUSTOMIZE and saves via the existing display-settings and #}
-{# pinned-achievements routes.                                              #}
+{# Opened by the Customize button. Active badge + up to 5 pins; filled     #}
+{# from window.PROFILE_CUSTOMIZE by achievements.js, which saves via       #}
+{# /account/display-settings and /account/pinned-achievements.            #}
 <div id="achievement-customize-modal" class="modal-overlay hidden">
     <div class="modal-box achievement-customize-box">
         <h3 class="modal-title">Customize Achievements</h3>

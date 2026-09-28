@@ -6,11 +6,8 @@
 
 <div class="auth-container">
 
-    {# Dark-mode toggle (2.4.1 follow-up, per Ezekiel) — same #dark-mode-toggle
-    id/markup as the authenticated topbar's, so sidebar.js's existing
-    getElementById('dark-mode-toggle') listener + localStorage persistence
-    just work here too, with no auth required (the account-side POST it
-    also fires 401s harmlessly for a logged-out visitor, see sidebar.js). #}
+    {# Same #dark-mode-toggle id/markup as the topbar, so sidebar.js wires it
+       on this logged-out page too (its account POST 401s harmlessly). #}
     <button type="button" id="dark-mode-toggle" class="theme-toggle theme-toggle--light auth-theme-toggle"
         title="Toggle dark mode">
         <span class="theme-toggle-icon theme-toggle-icon--sun">

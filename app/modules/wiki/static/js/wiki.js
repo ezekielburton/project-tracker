@@ -2,7 +2,7 @@
     'use strict';
 
     function loadArticle(articleId) {
-        // Looked up per call: an SPA swap replaces the panel without re-running this file.
+        // Looked up per call: the document click handler is bound once and outlives SPA swaps.
         var contentPanel = document.getElementById('wiki-content-panel');
         if (!contentPanel) return;
 
@@ -13,7 +13,11 @@
         contentPanel.innerHTML = '<p style="padding:2rem;color:var(--text-muted);">Loading…</p>';
 
         fetch('/wiki/article/' + articleId)
-            .then(function (r) { return r.text(); })
+            .then(function (r) {
+                // An error page must not land in the panel; the catch shows a short message instead.
+                if (!r.ok) { throw new Error('article fetch failed'); }
+                return r.text();
+            })
             .then(function (html) { contentPanel.innerHTML = html; })
             .catch(function () {
                 contentPanel.innerHTML = '<p style="padding:2rem;color:var(--rose);">Failed to load article.</p>';
@@ -22,13 +26,16 @@
         history.replaceState(null, '', '#article-' + articleId);
     }
 
-    // Delegated to document so the binding outlives an SPA swap.
-    document.addEventListener('click', function (e) {
-        var a = e.target.closest('.wiki-nav-article');
-        if (!a) return;
-        e.preventDefault();
-        loadArticle(a.dataset.articleId);
-    });
+    // Bound once per page load: the SPA router re-runs this file on every visit.
+    if (!window.__wikiNavClickBound) {
+        window.__wikiNavClickBound = true;
+        document.addEventListener('click', function (e) {
+            var a = e.target.closest('.wiki-nav-article');
+            if (!a) return;
+            e.preventDefault();
+            loadArticle(a.dataset.articleId);
+        });
+    }
 
     function autoLoadWiki() {
         if (!document.getElementById('wiki-content-panel')) return;
@@ -41,8 +48,8 @@
         }
     }
 
+    // Runs on full loads and on every SPA visit, since the router re-runs this file.
     autoLoadWiki();
-    document.addEventListener('helix:navigated', autoLoadWiki);
 
     document.querySelectorAll('.wiki-section-publish-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {

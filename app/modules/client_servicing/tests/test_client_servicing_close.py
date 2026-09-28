@@ -1,5 +1,6 @@
 """Closing a project from Client Servicing — the gate, the normal close,
 and the cancelled project's two-step invoicing answer."""
+import re
 from datetime import date, datetime
 
 from flask import url_for
@@ -18,8 +19,7 @@ def _user(db_session, tag, role='cs'):
 
 
 def _project(db_session, user, name='Closable Project', cancelled=False, value=None):
-    # value is the shared project value (a Float on Project, not a CS field) —
-    # seed it when a test needs the close-out NOT to stop and ask for one.
+    # value lives on Project, not CS. Seed it so the close-out doesn't ask for one.
     project = Project(
         name=name, cs_lead_id=user.id, created_by_id=user.id, project_status='briefed',
     )
@@ -43,8 +43,7 @@ def _table_url(app):
 
 
 def test_project_owner_cannot_close(app, client, db_session):
-    """Page access is wider than the close gate — a project owner can open
-    the module but not close anything."""
+    """A project owner can open the module but cannot close a project."""
     owner = _user(db_session, 'a', role='project_owner')
     project = _project(db_session, owner)
     login_as(client, app, owner, 'password123')
@@ -171,3 +170,20 @@ def test_close_out_strip_hidden_from_a_role_that_cannot_close(app, client, db_se
     html = client.get(_table_url(app)).get_data(as_text=True)
     assert 'cs-closeout-btn' not in html
     assert 'cs-close-btn' not in html
+
+
+def test_close_out_skips_the_value_question_when_the_project_has_one(app, client, db_session):
+    """The close-out prompt asks for a value only when Project.value is empty."""
+    user = _user(db_session, 'm')
+    _project(db_session, user, name='Valued Cancelled Job', cancelled=True, value=12000)
+    _project(db_session, user, name='Unvalued Cancelled Job', cancelled=True)
+    login_as(client, app, user, 'password123')
+
+    html = client.get(_table_url(app)).get_data(as_text=True)
+
+    def has_value(name):
+        match = re.search(r'data-has-value="(\d)"\s+data-project-name="[^"]*\b' + name + '"', html)
+        return match.group(1)
+
+    assert has_value('Valued Cancelled Job') == '1'
+    assert has_value('Unvalued Cancelled Job') == '0'

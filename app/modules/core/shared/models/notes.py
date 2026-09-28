@@ -3,24 +3,21 @@ from datetime import datetime
 
 
 class ProjectNote(db.Model):
-    """A project chat message. Human-written, unlike the machine-written
-    ActivityLog. reply_to_id/is_pinned back the reply-quote and pin features."""
+    """A project chat message (human-written; ActivityLog is machine-written)."""
     __tablename__ = 'project_notes'
 
     id = db.Column(db.Integer, primary_key=True)
-    # Indexed: the unread-dots feature runs a MAX(created_at) GROUP BY project_id
-    # over this table on every Projects page load (_bulk_activity_and_chat_at in
-    # project_list.py), and Postgres doesn't index a bare FK automatically.
+    # Indexed: every Projects page load runs MAX(created_at) GROUP BY project_id
+    # here (_bulk_activity_and_chat_at), and Postgres does not index FKs itself.
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False, index=True)
     author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     body = db.Column(db.Text, nullable=False)
     file_link = db.Column(db.String(500), nullable=True)
     tags = db.Column(db.JSON, nullable=True)  # {'mentions': [user_id, ...]}
-    # SET NULL: deleting the quoted message orphans the reply, doesn't delete it.
+    # SET NULL: deleting the quoted message keeps the reply.
     reply_to_id = db.Column(db.Integer, db.ForeignKey('project_notes.id', ondelete='SET NULL'), nullable=True)
     is_pinned = db.Column(db.Boolean, nullable=False, default=False)
-    # attachment_filename is the UUID-based name on the NAS; original_filename is
-    # the sender's own filename, kept for display only.
+    # attachment_filename is the stored name on the NAS; the original name is for display only.
     attachment_filename = db.Column(db.String(255), nullable=True)
     attachment_original_filename = db.Column(db.String(255), nullable=True)
     attachment_type = db.Column(db.String(10), nullable=True)
@@ -31,8 +28,7 @@ class ProjectNote(db.Model):
     reply_to = db.relationship('ProjectNote', remote_side=[id], foreign_keys=[reply_to_id])
 
     def display_text(self):
-        """Text for the bubble/quote when there's no caption — 'Photo'/'Video'
-        placeholder for a caption-less attachment."""
+        """The message body, or a Photo/Video placeholder for a caption-less attachment."""
         if self.body:
             return self.body
         if self.attachment_type == 'image':
@@ -46,8 +42,8 @@ class ProjectNote(db.Model):
 
 
 class ProjectNoteReaction(db.Model):
-    """One person's emoji reaction to one chat message. Unique (note_id, user_id)
-    caps it at one reaction per person per message — toggled, not stacked."""
+    """One person's emoji reaction to a chat message; at most one per person
+    per message."""
     __tablename__ = 'project_note_reactions'
     __table_args__ = (
         db.UniqueConstraint('note_id', 'user_id', name='uq_project_note_reactions_note_user'),

@@ -1,10 +1,5 @@
-"""Coverage for CS access after the move to the capabilities map.
-
-The module's three helpers now read the map instead of their own role sets.
-What is worth pinning here is the part the map cannot express — the
-config-driven review lock — and that the read-only roles land where intended:
-in the page, out of the money.
-"""
+"""CS access helpers: the config-driven review lock (which the capabilities
+map cannot express) and what the read-only roles can and cannot do."""
 from contextlib import contextmanager
 
 from flask import url_for
@@ -28,8 +23,8 @@ def _user(db_session, tag, role):
 
 @contextmanager
 def _review_lock(app, on):
-    """Flip CLIENT_SERVICING_REVIEW_ONLY for one test. The app fixture is
-    session-scoped, so the previous value has to go back."""
+    """Set CLIENT_SERVICING_REVIEW_ONLY for one block, then restore it (the
+    app fixture is session-scoped)."""
     key = 'CLIENT_SERVICING_REVIEW_ONLY'
     previous = app.config.get(key)
     app.config[key] = on
@@ -83,8 +78,7 @@ def test_the_read_only_roles_see_the_page_and_the_money_but_cannot_close(app, db
 
 
 def test_an_hr_user_can_open_the_cs_page(app, client, db_session):
-    """End-to-end proof that @require_cs reads the map: hr holds view_cs and
-    did not exist as a role before this refactor."""
+    """@require_cs reads the capabilities map: hr holds view_cs and gets in."""
     user = _user(db_session, 'route-hr', 'hr')
     login_as(client, app, user, 'password123')
 

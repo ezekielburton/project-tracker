@@ -1,18 +1,23 @@
 """
-Contract test for HSE_REGISTERS.
-
-The declaration drives forms, tables, filters and the importer, and
-nothing in Python checks it. A mistyped column name or an unhandled field
-type would render a dead form with no traceback and no failing test —
-these assertions are what turns that into a red build.
-
-If one of these fails: fix the declaration in lib/registers.py, or, if
-the model genuinely changed, update the declaration to match it.
+Contract test for HSE_REGISTERS: catches declaration mistakes that would otherwise
+render a broken form silently. On failure, fix lib/registers.py to match the model.
 """
+from pathlib import Path
+
 from app.modules.hse.lib.registers import (
-    FIELD_TYPES, HSE_REGISTERS, RAIL_GROUPS, STATUS_SOURCES, jsonb_fields,
+    BY_KEY, FIELD_TYPES, HSE_REGISTERS, RAIL_GROUPS, STATUS_SOURCES, jsonb_fields,
 )
 from app.modules.hse.models import HseEntry
+
+
+ENTRY_FORM = Path(__file__).resolve().parents[1] / 'templates' / 'hse' / '_entry_modal.html'
+
+# Registers that record when on the day something happened.
+TIMED_REGISTERS = (
+    'daily_log', 'incidents', 'first_aid', 'ppe_non_conformity', 'lost_time_injury',
+    'general_inspection', 'vehicle_inspection', 'forklift_inspection',
+    'induction_training', 'toolbox_talk',
+)
 
 
 def _entry_columns():
@@ -83,10 +88,7 @@ def test_status_source_is_consistent_with_the_declared_statuses():
 
 
 def test_only_registers_that_can_be_logged_against_are_schedulable():
-    """A schedule generates occurrences someone must tick off, so its
-    register has to be one he files entries into on a date. Vehicle service
-    is mileage-driven and preventive maintenance is called when a machine
-    stops — neither has a calendar due date, and neither may be scheduled."""
+    """Every schedulable register has an entry_date field for occurrences to land on."""
     bad = [
         reg.key for reg in HSE_REGISTERS
         if reg.schedulable
@@ -97,8 +99,7 @@ def test_only_registers_that_can_be_logged_against_are_schedulable():
 
 
 def test_an_expiry_register_actually_captures_an_expiry_date():
-    """Its whole status comes from due_at, so a form that never sets it
-    would render every row as having no status at all."""
+    """Every expiry-status register has a due_at field."""
     bad = [
         reg.key for reg in HSE_REGISTERS
         if reg.status_source == 'expiry'
@@ -116,11 +117,44 @@ def test_jsonb_fields_are_the_ones_with_no_column():
 
 
 def test_a_person_or_asset_field_is_always_a_foreign_key():
-    """An id inside JSONB has no referential integrity. Person and asset
-    fields must map to a real FK column."""
+    """Person and asset fields map to an FK column, never JSONB."""
     bad = [
         f'{reg.key}.{fl.name}'
         for reg in HSE_REGISTERS for fl in reg.fields
         if fl.type in ('person', 'asset') and fl.column is None
     ]
     assert not bad, 'Person/asset fields not mapped to a column: ' + ', '.join(bad)
+
+
+def test_the_entry_form_has_a_control_for_every_bespoke_field_type():
+    """Types without their own branch fall back to a plain text box, which
+    is only right for 'text'."""
+    template = ENTRY_FORM.read_text()
+    fallback = {'text'}
+    missing = [t for t in FIELD_TYPES
+               if t not in fallback and f"'{t}'" not in template]
+    assert not missing, 'No form control for field types: ' + ', '.join(missing)
+
+
+def test_the_timed_registers_ask_for_a_time_right_after_the_date():
+    for key in TIMED_REGISTERS:
+        names = [fl.name for fl in BY_KEY[key].fields]
+        assert 'entry_time' in names, f'{key}: no time field'
+        assert names.index('entry_time') == names.index('entry_date') + 1, (
+            f'{key}: the time should sit right after the date')
+        field = BY_KEY[key].fields[names.index('entry_time')]
+        assert field.type == 'time'
+        assert field.column is None, 'the time lives in data, not a column'
+        assert not field.required
+        assert not field.in_table, 'the time stays out of the table'
+
+
+def test_default_and_closed_statuses_are_declared_statuses():
+    for reg in HSE_REGISTERS:
+        for name in ('default_status', 'closed_status'):
+            value = getattr(reg, name)
+            assert value is None or value in reg.statuses, (
+                f'{reg.key}: {name} {value!r} is not one of its statuses')
+        if reg.closed_status:
+            assert any(fl.column == 'closed_at' for fl in reg.fields), (
+                f'{reg.key}: closed_status needs a field mapped to closed_at')

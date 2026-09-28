@@ -3,9 +3,8 @@
 {% block title %}Client Servicing — Closed{% endblock %}
 
 {% block content %}
-{# Closed Projects — history, read-only apart from marking a pending
-   project invoiced. Filters are server-side GET selects (same pattern as
-   the Monthly Summary); the search box filters the loaded rows. #}
+{# Closed Projects: read-only apart from marking a pending project invoiced.
+   Selects filter server-side (GET); the search box filters loaded rows. #}
 <div class="module-page cs-page">
     <div class="module-shell">
         {% with active_nav = 'closed' %}
@@ -76,9 +75,8 @@
     </div>
 </div>
 {% endif %}
-{# Page-specific JS, inside the content block with the modal it wires.
-   The shell above is a <div class="module-main">, not a nested <main> — the SPA
-   slice stops at the first </main> and would cut this out. #}
+{# Page JS stays in the content block. Never nest a <main> above it:
+   spa_strip_response() cuts at the first </main> and would drop this. #}
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_closed.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {# Scrolls to and flashes the row the Dashboard linked to (?project=). #}
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_focus.js') }}?v={{ config.STATIC_VERSION }}"></script>

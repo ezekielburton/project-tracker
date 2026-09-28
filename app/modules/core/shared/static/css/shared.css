@@ -1,18 +1,9 @@
-/*  app/static/css/shared.css
-    Shared componenet library for the Project/Detail/Briefing sections of the app.
-    Extracted from dashboard.css, rebuilt on density tokens in main.css's: :root block.
-    Dashboard.css/dashboard.html are unchanged by this file. The dashboard has its 
-    own dash-* classes untouched, this is in parallel.
+/*  shared.css — shared components: card, person chip, mini-stat, tag,
+    status pill, tab strip, avatar/status pickers, module shell and rail.
+    Built on the density tokens in main.css's :root. The dashboard's own
+    dash-* classes are separate. */
 
-    Minor roundings have been applied to  for the token scale (all <0.05rem).
-    Card padding 1.4rem -> var(--space-5)
-    tag front-size 0.72rem -> var(--text-cs)
-    mini-stat value 1.3rem -> var (--text-1g) */
-
-/*  ---- Card
-    Generalized .dash-priority-card + .dash-toggle-box in dashboard.css.
-    Both independentely dfefined the identical background/radius/shadow
-    under two different names, now collapsed into one */
+/*  ---- Card */
 
 .card {
     background: var(--white);
@@ -33,9 +24,7 @@
     color: var(--tangerine);
 }
 
-/*  ---- Person Chip
-    Generalized .dash-person-chip/-dash-person-avatar/.dash-person-avatar-initials/.dash-person-name
-    Values already match the token scale exactly. */
+/*  ---- Person Chip */
 
 .person-chip {
     display: inline-flex;
@@ -81,8 +70,7 @@
 }
 
 /*  ---- Mini-Stat
-    Generalizes .dash-mini-stat family - coloured dot + big value + small label
-    E.G. A projects page rollup ("4 of 7 Approved"). */
+    Coloured dot + big value + small label, e.g. "4 of 7 Approved". */
 
 .mini-stat {
     display: inline-flex;
@@ -129,9 +117,8 @@
 }
 
 /*  ---- Tag
-    Generalized .dash-action-tag/.dash-owner-tag/.dash-risk-tag - all three were identical in shape, the only difference was in colour.
-    New variants (team tags, revision count tags etc.) get added here as the pages need them, instead of each one copying the base
-    shape again */
+    One base shape; variants only change colour. The tag() macro renders
+    tag--<variant>, and some variants come from data (team, urgency). */
 
 .tag {
     display: inline-flex;
@@ -149,11 +136,6 @@
 .tag--action {
     background: rgba(148, 180, 187, 0.22);
     color: var(--tint-3e5e66);
-}
-
-.tag--owner {
-    background: rgba(242, 127, 85, 0.14);
-    color: var(--tangerine);
 }
 
 .tag--risk {
@@ -183,12 +165,8 @@
     color: var(--tint-e60000);
 }
 
-/* Team tags — same colors as the .discipline-tag.tag--2d/3d/technical
-   variants already used elsewhere in the app (main.css), so a project's
-   team badge looks the same whether you're looking at it here or on the
-   deliverable/detail page. Kept as separate rules (rather than reusing
-   .discipline-tag directly) because the shared tag() macro only ever
-   renders the base .tag class, never .discipline-tag. */
+/* Team tags. Same colours as .discipline-tag.tag--2d/3d/technical in
+   main.css, repeated here because the tag() macro never adds .discipline-tag. */
 .tag--2d {
     background: var(--gray-e8f0e8);
     color: var(--pine);
@@ -205,21 +183,9 @@
 }
 
 /*  ---- Status Pill
-    The status vocabulary from the Detail+Briefing overlay rework — see
-    Projects Redesign Architecture.md §4 for the original three-tier
-    version, and app/status_vocabulary.py for the 22 Aug 2026
-    simplification (per Ezekiel) that collapsed it down to one Deliverable
-    pill + one Project pill, no separate "Design Completed" label.
-    One base shape + a color modifier per distinct pill color (not per status label),
-    since several statuses intentionally share the same color (e.g.
-    "Handed to Production" is --clover everywhere it appears — project,
-    deliverable, and a C&CM per-customer row alike). "Client Approved" is
-    not one of these labels anywhere anymore as of 23 Aug 2026 (per
-    Ezekiel) — status_vocabulary.py's _pipeline_stage_for() was the one
-    remaining place it still rendered (a C&CM per-customer row), fixed to
-    read "Pre-Production" (--oak) like everything else.
-    Which label maps to which modifier is decided server-side (M2 backend derivation) —
-    this file only owns shape + color. */
+    One modifier per pill colour, not per label: several statuses share a
+    colour. Which label gets which modifier is decided server-side
+    (status_vocabulary.py); this file owns shape and colour only. */
 
 .status-pill {
     display: inline-flex;
@@ -228,14 +194,9 @@
     font-size: var(--text-sm);
     font-weight: 700;
     padding: var(--space-2) var(--space-3);
-    /* Full pill shape instead of the old --radius-sm square-cornered badge
-       (21 Aug 2026, per Ezekiel — the sharp-cornered solid-fill look read as
-       dated). Kept the flat-fill/mono-font language as-is; just the corners
-       and (see main.css) --clover's exact shade changed this pass. */
     border-radius: 999px;
     white-space: nowrap;
     color: var(--black);
-    /* placeholder — per-pill text colors TBD, you said ignore these for now */
 }
 
 .status-pill--sky {
@@ -274,10 +235,7 @@
     background: var(--salmon);
 }
 
-/* ── Dark-mode status pills (2.4.1) — tinted, not solid-fill.
-   The 5 named project statuses use the brief's exact values; the remaining
-   modifiers (Briefed/sky, Submitted to Client/sage, canary, lavender) get
-   the same tinted treatment for visual consistency, brightened the same way. */
+/* ── Dark-mode status pills: tinted fill with coloured text, not solid. */
 :root[data-theme="dark"] .status-pill--coral {   /* In Design */
     background: rgba(255, 133, 89, 0.16);
     color: var(--tone-coral);
@@ -316,11 +274,7 @@
 }
 
 /*  ---- Tab Strip
-    The Projects-list page's tab-selector look (tangerine text + tangerine
-    underline on .active), generalized so any page can use it — first reused
-    by the Detail+Briefing overlay's rail (30 Jul 2026). Values are pixel-
-    identical to the old .project-list-tabs/.project-list-tab rules they
-    replace; only the names changed. */
+    Tab selector: tangerine text and underline on .active. */
 
 .tab-strip {
     display: flex;
@@ -356,12 +310,8 @@
 }
 
 /* ------- Avatar picker: button + popover list of avatar+name rows -------
-   Same toggle-button + absolute-positioned-popover recipe as the Projects
-   page's .project-filter-panel/.project-sort-panel (project_list.css) —
-   reused here rather than invented fresh, just sized for a short list.
-   Lives in shared.css (not project_list.css) since this is used across
-   the overlay's own cards (CS Lead/Secondary CS/Project Owner so far),
-   not just the Projects list page. */
+   avatar_picker.js; the popover is fixed and parked on <body> while open
+   (popover_position.js). */
 
 .avatar-picker {
     position: relative;
@@ -437,9 +387,7 @@
     margin: 0;
 }
 
-/* Neutral at rest, color only on hover — Reassign/Assign/Transfer is a
-   plain action, not wayfinding, so it shouldn't borrow the sidebar's
-   tangerine. */
+/* Neutral at rest, darker on hover. A plain action, so no tangerine. */
 .avatar-picker-action-label {
     display: inline-block;
     font-family: var(--font-body);
@@ -457,12 +405,9 @@
     border-color: var(--black);
 }
 
-/* Admin status override (22 Aug 2026, per Ezekiel) — status_picker.js /
-_shared_macros.html's status_override_picker(). Same recipe as
-.avatar-picker* above, just triggered by a status pill instead of a
-person chip; kept as its own class family rather than reusing
-.avatar-picker* since the two components aren't interchangeable
-(different dataset key, different popover content). */
+/* Admin status override: status_picker.js and _shared_macros.html's
+status_override_picker(). Same recipe as .avatar-picker*, triggered by a
+status pill. */
 .status-picker {
     position: relative;
     display: inline-block;
@@ -519,9 +464,7 @@ person chip; kept as its own class family rather than reusing
     background: var(--surface-hover);
 }
 
-/* The status this row already reads — a quiet marker rather than a
-disabled state, since re-picking the current status is a harmless no-op
-the backend already handles fine. */
+/* The current status. Still clickable: re-picking it is a harmless no-op. */
 .status-picker-option.is-current {
     background: var(--surface-hover);
 }
@@ -561,22 +504,13 @@ the backend already handles fine. */
     min-width: 0;
 }
 
-/*  ---- Scroll panel
-    A card or list that scrolls inside itself, so the page does not. It needs
-    a height to scroll within: this max-height, or a parent that sets one. */
-.scroll-panel {
-    max-height: var(--scroll-panel-max, 60vh);
-    overflow: auto;
-    overscroll-behavior: contain;
-}
-
 /*  ---- Module rail
-    The inner left nav a module's own screens share (Client Servicing,
-    Digital Innovation, HSE, Dashboard). Markup comes from
-    _shared_macros.html's module_rail(). */
+    A module's inner left nav (Client Servicing, Digital Innovation, HSE).
+    Markup comes from _shared_macros.html's module_rail(). */
 
 .module-rail {
-    width: 220px;
+    /* Wide enough for a sub-page label like "PPE non-conformity" on one line. */
+    width: 240px;
     flex-shrink: 0;
     background: var(--surface);
     border-right: 1px solid var(--border);
@@ -584,9 +518,7 @@ the backend already handles fine. */
     position: sticky;
     top: 0;
     align-self: stretch;
-    /* A column so a module can push its own footer block to the bottom with
-       .module-rail-foot. Everything else keeps the order it had: a rail with
-       no foot renders exactly as before. */
+    /* A column, so .module-rail-foot can sit at the bottom. */
     display: flex;
     flex-direction: column;
 }
@@ -627,18 +559,14 @@ the backend already handles fine. */
     text-decoration: none;
 }
 
-/* Carries an icon or a count, so the row becomes a flex line. Text-only
-   items stay display:block, which is what they rendered as before. */
+/* Carries an icon or a count, so the row becomes a flex line. */
 .module-rail-item--rich {
     display: flex;
     align-items: center;
     gap: var(--space-2);
 }
 
-/* Tangerine, matching .settings-nav-item.active — the app already says
-   "this one is active" this way, and a grey fill cannot be picked out of a
-   rail of nine. The alpha wash reads on both grounds, which is why there is
-   no dark override here. */
+/* Tangerine wash marks the active item; it reads on both themes, so no dark override. */
 .module-rail-item--active {
     background: rgba(242, 127, 85, 0.14);
     color: var(--tangerine);
@@ -668,6 +596,34 @@ the backend already handles fine. */
 .module-rail-item--active .module-rail-count {
     background: rgba(242, 127, 85, 0.18);
     color: var(--tangerine);
+}
+
+/* Sub-pages of the open section, indented under it on a guide line. */
+.module-rail-children {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: var(--space-1) 0 var(--space-2) var(--space-3);
+    padding-left: var(--space-1);
+    border-left: 1px solid var(--border);
+}
+
+/* A section that is not the current one keeps its sub-pages hidden. */
+.module-rail-children--closed {
+    display: none;
+}
+
+.module-rail-subitem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px var(--space-2);
+}
+
+.module-rail-subitem--active {
+    background: var(--surface-hover);
+    color: var(--tangerine);
+    font-weight: 600;
 }
 
 /* A page that is planned but not built yet. */

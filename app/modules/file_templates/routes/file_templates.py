@@ -1,7 +1,6 @@
-# C&CM File Templates library — a standalone (not project-specific) browse
-# page for downloadable per-store design template files (.ai), organized
-# Region -> Customer -> DeliverableType. Templates are small files kept on
-# local server disk (app/file_templates/), not the NAS.
+# File Templates library: downloadable per-store design templates (.ai),
+# grouped Region -> Customer -> DeliverableType. Files live on local server
+# disk (template_upload_folder()), not the NAS.
 
 import os
 from flask import Blueprint, render_template
@@ -11,7 +10,7 @@ from app.modules.core.shared.lib.paths import template_upload_folder
 
 file_templates_bp = Blueprint('file_templates', __name__, template_folder='../templates')
 
-# Same region set used across the app — UAE first, then the Gulf countries.
+# Page order. Customers in any other region do not appear here.
 REGIONS = [
     ('uae', 'UAE'),
     ('kuwait', 'Kuwait'),
@@ -24,14 +23,9 @@ REGIONS = [
 @file_templates_bp.route('/file-templates')
 @login_required
 def index():
-    """
-    Builds a Region -> Customer -> DeliverableType structure for the page.
-    Inactive deliverable types are excluded (matches how is_active is
-    already treated elsewhere). Deliverable types with no uploaded
-    template still appear, as a placeholder an admin can fill in later.
-    Customers/regions with zero deliverable types at all are skipped —
-    nothing meaningful to show or click into.
-    """
+    """Renders the Region -> Customer -> active DeliverableType tree.
+    Types with no uploaded file still show; customers and regions with no
+    active types are skipped."""
     regions_data = []
     for region_key, region_label in REGIONS:
         customers = Customer.query.filter_by(region=region_key).order_by(Customer.name).all()
@@ -102,8 +96,7 @@ def download_all_customer_templates(customer_id):
 @file_templates_bp.route('/file-templates/download-all/region/<region_key>')
 @login_required
 def download_all_region_templates(region_key):
-    """Zips every uploaded template across all customers in a region,
-    nesting each customer as its own subfolder inside the zip."""
+    """Zips every uploaded template in a region, one subfolder per customer."""
     from flask import jsonify, url_for, abort
     from app.modules.core.shared.lib.zip_utils import build_zip
 
@@ -136,12 +129,8 @@ def download_all_region_templates(region_key):
 @file_templates_bp.route('/file-templates/simulatin-files-link')
 @login_required
 def get_simulation_files_link():
-    """
-    Returns a Synology Drive deep link for the fixed Simulation Files folder
-    on the NAS — not project-specific, the same folder for everyone. The link
-    is resolved through a live NAS API call rather than a static URL template
-    (see build_drive_folder_url in the shared nas service).
-    """
+    """Returns a Synology Drive link to the shared Simulation Files folder.
+    Resolved by a live NAS call, so it 502s when the NAS is unreachable."""
     from flask import jsonify
     from app.modules.core.shared.services.nas import build_drive_folder_url
 

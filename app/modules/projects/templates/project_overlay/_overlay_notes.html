@@ -1,11 +1,6 @@
-{# app/templates/project_overlay/_overlay_notes.html
-Site Visits tab (M10 chat redesign, 21 Aug 2026) — this used to also hold
-a merged Notes feed; notes now live in the persistent chat drawer instead
-(see _overlay_chat.html + project_notes.py's overlay_chat()), so this
-partial is just the site-visit log + logging form now. Filename kept as
-_overlay_notes.html (not renamed to match) since a rename needs a real
-git mv, which this session's remote file tools can't do — a safe,
-non-blocking cleanup for later. #}
+{# app/modules/projects/templates/project_overlay/_overlay_notes.html
+Site Visits page (rail tab data-main-tab="notes"): the site-visit log and
+logging form. Project notes live in the chat drawer (_overlay_chat.html). #}
 {% from '_shared_macros.html' import card, avatar_picker, person_chip %}
 <div class="overlay-notes-section">
 {% call card('Site Visits') %}

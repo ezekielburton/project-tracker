@@ -1,13 +1,7 @@
-# app/zip_utils.py
-#
-# Shared "build a zip, serve it once, then clean up" utility. Any feature
-# that needs a "Download All" button calls build_zip() with the files it
-# wants zipped, gets back a zip_id, and hands that to the frontend as a
-# download link pointing at /api/zip-download/<zip_id> (see api.py).
-#
-# Fetching the actual file bytes (from the NAS, local disk, wherever) is
-# each caller's own responsibility — this module only knows how to zip
-# bytes it's handed and serve the result once.
+# Build a zip, serve it once, then delete it. Callers pass (arcname, bytes)
+# pairs to build_zip() and link the returned zip_id to
+# /api/zip-download/<zip_id> (core/shared/routes/api.py). Callers fetch the
+# file bytes themselves.
 
 import os
 import time
@@ -15,20 +9,16 @@ import uuid
 import zipfile
 from flask import send_file, after_this_request
 
-ZIP_TEMP_FOLDER = ZIP_TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp_zips')
+ZIP_TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp_zips')
 
-# How long an unclaimed zip is allowed to sit before it's swept away.
+# How long an unclaimed zip sits before it is swept away.
 ZIP_MAX_AGE_SECONDS = 60 * 60  # 1 hour
 
 
 def _sweep_stale_zips():
     """
-    Deletes any zip (and its sidecar .name file) older than
-    ZIP_MAX_AGE_SECONDS. Called at the start of build_zip() rather than
-    from a background thread — there's no task scheduler in this stack,
-    and this app's traffic is steady enough that "clean up old ones
-    whenever someone builds a new one" keeps the temp folder bounded
-    without needing a long-lived thread.
+    Delete temp files older than ZIP_MAX_AGE_SECONDS. Runs from build_zip()
+    since the app has no task scheduler.
     """
     if not os.path.isdir(ZIP_TEMP_FOLDER):
         return
@@ -41,19 +31,9 @@ def _sweep_stale_zips():
 
 def build_zip(files, download_name):
     """
-    Builds a zip from in-memory file contents and stores it in the temp
-    folder, ready for serve_zip() to send.
-
-    Args:
-        files: list of (arcname, bytes) tuples. arcname is the filename
-            as it should appear INSIDE the zip — include '/' in it if you
-            want a folder structure, e.g. 'UAE/Carrefour/logo.ai'.
-        download_name: filename offered in the browser's save dialog,
-            e.g. 'Summer 2026 - Reference Files.zip'.
-
-    Returns:
-        zip_id: opaque token — pass this to the frontend as
-        /api/zip-download/<zip_id>.
+    Zip in-memory files into the temp folder and return an opaque zip_id for
+    serve_zip(). `files` is (arcname, bytes) pairs; '/' in an arcname makes
+    folders. `download_name` is the filename offered to the browser.
     """
     _sweep_stale_zips()
 
@@ -65,8 +45,7 @@ def build_zip(files, download_name):
         for arcname, content in files:
             zf.writestr(arcname, content)
 
-    # Sidecar file remembers the friendly download name without needing
-    # a database table just for that — simplest thing that works.
+    # Sidecar file holds the download name, so no database table is needed.
     with open(zip_path + '.name', 'w', encoding='utf-8') as f:
         f.write(download_name)
 
@@ -75,10 +54,9 @@ def build_zip(files, download_name):
 
 def serve_zip(zip_id):
     """
-    Serves a previously-built zip, then deletes it (and its .name
-    sidecar) once the response has finished sending. Returns None if
-    zip_id doesn't exist — the caller should turn that into a 404
-    (covers both "never existed" and "already downloaded/expired").
+    Send a built zip and delete it (and its .name sidecar) after the
+    response. Returns None for an unknown, used or expired zip_id; the
+    caller turns that into a 404.
     """
     zip_path = os.path.join(ZIP_TEMP_FOLDER, f'{zip_id}.zip')
     name_path = zip_path + '.name'

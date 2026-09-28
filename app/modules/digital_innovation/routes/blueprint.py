@@ -1,9 +1,5 @@
-# The one blueprint every Digital Innovation route file attaches to —
-# board.py, features.py, templates.py, archive.py, intake.py, performance.py, costs.py, projects.py all import this same
-# object rather than each declaring their own, so every DI route sits
-# under one clean /digital-innovation prefix (same discipline as the
-# projects module's overlay/preproduction/notes split, but with a single
-# blueprint instead of several).
+# The single blueprint every DI route file registers on, so all DI routes
+# share the /digital-innovation prefix.
 from flask import Blueprint
 
 digital_innovation_bp = Blueprint(

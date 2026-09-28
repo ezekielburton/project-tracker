@@ -3,6 +3,38 @@ VITAMIN HELIX — CHANGELOG
 ===============================================================================
 
 =======================================================================================
+v2.5.2 - Optimizations & Wiki Reader
+=======================================================================================
+
+New Features:
+
+- Wiki reader revamped!  Find the ? on relevant pages to immediately open the relevant help article
+- OVP is now mobile friendly! Use it on the go
+
+Adjustments:
+
+- HSE module given a polish pass to be more relevant to the work done
+- Cleaned up UI on all side rails.
+
+Bug Fixes:
+
+
+=======================================================================================
+v2.5.3 - HSE & Wiki Editor
+=======================================================================================
+New Features:
+
+- Added HSE module for Moses with performance tracking
+- Wiki editor updated to use a new framework
+
+Adjustments:
+
+- Polished the CS module to be better to use
+
+Bug Fixes:
+
+- Fixed the overlays causing performance loss by removing the blur effect
+=======================================================================================
 v2.5 - Global Chat, Signal, Accounts update & HTTPS
 =======================================================================================
 New Features:

@@ -1,34 +1,16 @@
-# app/live_events.py
+# Fires a Postgres NOTIFY for every watched project, DI project and
+# notification recipient touched by the current transaction. The single
+# choke point for live updates: routes never announce changes themselves.
 #
-# Detects which projects (and which users, for notifications) were touched
-# by the current database transaction, and fires a Postgres NOTIFY for each
-# one right before that transaction commits. This is the single choke point
-# for the whole SSE system — no route ever needs to remember to "announce"
-# a change; if it touched one of the watched models, this catches it.
+# Two hooks, because flushed objects drop out of session.new/dirty/deleted:
+#   - before_flush (every flush) collects touched IDs into session.info.
+#   - before_commit sends the NOTIFYs on the committing transaction;
+#     Postgres delivers them only if it commits.
+# SQLAlchemy runs before_commit BEFORE commit()'s own final flush, so
+# before_commit flushes first; otherwise a change committed with no flush in
+# between would never be collected.
 #
-# Two-hook design, not one, because this codebase calls db.session.flush()
-# constantly mid-request (to get auto-generated IDs before commit). By the
-# time a single end-of-transaction hook could
-# look at session.new/dirty/deleted, anything already flushed earlier in the
-# same request would already be gone from those collections — flushed
-# objects become "clean" and drop out of session.dirty. So:
-#
-#   - before_flush fires on EVERY flush (an explicit one mid-request, or the
-#     final implicit one at commit time) and accumulates touched IDs into
-#     session.info, which persists for the whole life of the Session —
-#     one request, under Flask-SQLAlchemy's scoped session.
-#
-#   - before_commit fires once, right before the transaction commits, and
-#     is where we actually issue the NOTIFY — on the SAME session/
-#     transaction that's about to commit. Postgres only delivers a NOTIFY
-#     to listeners once the issuing transaction actually commits (and
-#     silently drops it if the transaction rolls back instead), so doing
-#     this before commit rather than after is both correct and avoids
-#     needing a whole separate connection afterward.
-#
-# Stage 3 adds the per-worker background listener that actually LISTENs on
-# these channels and dispatches to local SSE subscriber queues. This file
-# only fires the NOTIFY — nothing is listening yet.
+# sse_relay.py LISTENs on these channels and wakes the SSE streams.
 
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
@@ -37,16 +19,9 @@ PROJECT_CHANGES_CHANNEL = 'project_changes'
 USER_NOTIFICATIONS_CHANNEL = 'user_notifications'
 DI_CHANGES_CHANNEL = 'di_changes'
 
-# Models whose changes matter to the dashboard/detail SSE channel, and how
-# to get from an instance of each to the project_id it affects. Matched by
-# class name (not isinstance) so this file doesn't need to import every
-# model — keeps it decoupled from app.models, avoiding import-order issues.
-#
-# ProjectFile, ProjectRegion and ProjectRevision are included here so that
-# adding a reference file, adding a region, or sending a revision request
-# actually fires a NOTIFY — without an entry here, api.py's fingerprint
-# could widen all it wants and still never see these changes, since Stage 3
-# would never even get told about them in the first place.
+# Watched models -> the project_id each change affects. Matched by class
+# name so this file needn't import the models. A model missing here fires
+# no live update at all.
 _PROJECT_ID_GETTERS = {
     'Project':                lambda obj: obj.id,
     'ProjectCustomer':        lambda obj: obj.project_id,
@@ -57,33 +32,15 @@ _PROJECT_ID_GETTERS = {
     'ProjectFile':            lambda obj: obj.project_id,
     'ProjectRegion':          lambda obj: obj.project_id,
     'ProjectRevision':        lambda obj: obj.project_id,
-    # Secondary CS add/remove/region-subscription routes only ever touch
-    # these two tables in isolation (no other model changes in the same
-    # commit) — without entries here, those actions produced ZERO live
-    # update signal, on any tab, ever.
+    # Secondary CS routes touch only these tables, so watch them directly.
     'ProjectSecondaryCS':       lambda obj: obj.project_id,
     'ProjectSecondaryCsRegion': lambda obj: obj.project_id,
-    # POSM channel approval/reset routes often also touch Deliverable rows
-    # in the same commit (already watched), so this worked by accident most
-    # of the time — but not always (e.g. resetting a channel with no linked
-    # deliverables). Watching it directly removes that fragility.
+    # Watched directly: a channel reset doesn't always touch a Deliverable.
     'ProjectPosmChannel':     lambda obj: obj.project_id,
-    # DeliverableAssignment has no project_id column of its own — it hangs
-    # off a Deliverable, which does. Assigning a designer to a specific
-    # deliverable (as opposed to the project-level ProjectDesigner) needs
-    # this to be caught too, or "assignments down to the deliverable level"
-    # would silently never trigger a live update.
+    # No project_id of its own; hop through the deliverable.
     'DeliverableAssignment': lambda obj: obj.deliverable.project_id,
-    # DecisionFlag is watched directly because raising, replying to, or
-    # resolving one never touches any OTHER watched model in the same commit
-    # (unlike POSM channels, which usually got a co-committed Deliverable
-    # row), so without this no NOTIFY would fire for any decision-flag
-    # action, for any viewer, including the acting user's own other open
-    # tabs. DecisionFlagMessage has no
-    # project_id column of its own (same shape as DeliverableAssignment
-    # above) — it hangs off a DecisionFlag via the `flag` backref
-    # (`messages = db.relationship('DecisionFlagMessage', backref='flag',
-    # ...)` on DecisionFlag), which does.
+    # Decision-flag actions touch no other watched model, so watch them
+    # directly. DecisionFlagMessage hops through its `flag` backref.
     'DecisionFlag':        lambda obj: obj.project_id,
     'DecisionFlagMessage': lambda obj: obj.flag.project_id,
     'ProjectNote': lambda obj: obj.project_id,
@@ -92,24 +49,15 @@ _PROJECT_ID_GETTERS = {
     'ProjectNoteReaction': lambda obj: obj.note.project_id,
 }
 
-# Digital Innovation models -> the di_project_id (board) each change
-# belongs to.
+# Digital Innovation models -> the di_project_id (board) each change affects.
 _DI_PROJECT_ID_GETTERS = {
     'DiProject':     lambda obj: obj.id,
     'DiFeature':     lambda obj: obj.di_project_id,
     'DiFeatureStep': lambda obj: obj.feature.di_project_id,
     'DiCostEntry':   lambda obj: obj.di_project_id,
     'DiIntakeItem':  lambda obj: obj.di_project_id,
-    # DiStepTemplate is department-wide, not scoped to any DiProject — there
-    # is no real id to key it on. -1 is a sentinel (deliberately NOT 0 —
-    # _collect_ids below does `if value: seen.add(value)`, and 0 is falsy in
-    # Python, so a 0 sentinel would silently never get collected at all).
-    # sse_relay.py's _dispatch_di_change never has a real di_project_id of
-    # -1 to confuse it with (real DiProject ids are positive autoincrement
-    # keys), so this only ever reaches the DI-wide dashboard broadcast
-    # subscribers (Performance/Templates/Archive), never a specific
-    # project's Board subscriber — which is exactly right, since a template
-    # edit has nothing to do with any one board.
+    # Templates are department-wide. -1 is a sentinel (not 0: _collect_ids
+    # skips falsy values) that reaches only the DI-wide dashboard subscribers.
     'DiStepTemplate': lambda obj: -1,
 }
 
@@ -122,9 +70,7 @@ def _collect_ids(objects, seen, getters):
         try:
             value = getter(obj)
         except Exception:
-            # Object could be mid-deletion or otherwise in an odd state —
-            # skip it rather than risk crashing someone's commit over a
-            # live-update side effect.
+            # Object may be mid-deletion; never break a commit over a live update.
             continue
         if value:
             seen.add(value)
@@ -146,6 +92,9 @@ def _before_flush(session, flush_context, instances):
 
 
 def _before_commit(session):
+    # No-op when clean; otherwise runs _before_flush so pending changes count.
+    session.flush()
+
     project_ids = session.info.get('_touched_project_ids')
     if project_ids:
         for pid in project_ids:
@@ -153,10 +102,7 @@ def _before_commit(session):
                 text('SELECT pg_notify(:channel, :payload)'),
                 {'channel': PROJECT_CHANGES_CHANNEL, 'payload': str(pid)}
             )
-        # Clear so a second commit() within the same request (the
-        # submission flow does this in a couple of places) doesn't
-        # re-notify for IDs already announced, and nothing lingers into
-        # whatever the next transaction on this same Session turns out to be.
+        # Clear so a later commit on this session doesn't re-announce them.
         session.info['_touched_project_ids'] = set()
 
     di_project_ids = session.info.get('_touched_di_project_ids')
@@ -179,9 +125,7 @@ def _before_commit(session):
 
 
 def init_live_events():
-    """Registers the before_flush/before_commit hooks above on SQLAlchemy's
-    base Session class — called once from create_app(). Registering on the
-    base class (rather than a specific instance) catches every session
-    Flask-SQLAlchemy's scoped_session factory creates, app-wide."""
+    """Register the hooks on the base Session class, so every session is
+    covered. Called once from create_app()."""
     event.listen(Session, 'before_flush', _before_flush)
     event.listen(Session, 'before_commit', _before_commit)

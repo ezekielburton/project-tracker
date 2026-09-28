@@ -1,8 +1,5 @@
-"""Route-level coverage for the Digital Innovation Cost breakdown modal
-(routes/costs.py): auth, the can_view_di_performance gate (shared by view/add/delete), validation turning into 400s,
-and the Excel export. lib/costs.py (the business logic) already has full
-unit coverage in test_costs_lib.py — these tests are about the HTTP
-layer, the same split test_feature_steps_routes.py uses for step_engine."""
+"""Route tests for routes/costs.py: auth, the view_di_performance gate on
+view/add/delete, validation 400s, and the Excel export."""
 import datetime
 
 from flask import url_for
@@ -80,8 +77,7 @@ def test_cost_breakdown_works_for_management_role(app, client, db_session):
 
 
 def test_cost_breakdown_works_for_a_closed_project(app, client, db_session):
-    # Deliberately no lifecycle filter — a closed project's cost history
-    # is still reviewable.
+    # No lifecycle filter: a closed project's costs are still viewable.
     project = DiProject(name='Closed project', lifecycle='closed')
     db_session.add(project)
     db_session.flush()

@@ -152,8 +152,12 @@
         });
     }
 
+    // Only the wiki's own overlays: base.html's modals persist across SPA visits and keep their own closing.
     function wireClosing() {
-        document.querySelectorAll('.modal-overlay').forEach(function (modal) {
+        ['wiki-section-modal', 'wiki-article-modal'].forEach(function (id) {
+            var modal = document.getElementById(id);
+            if (!modal || modal.dataset.wikiCloseBound) { return; }
+            modal.dataset.wikiCloseBound = '1';
             modal.addEventListener('click', function (event) {
                 if (event.target === modal || event.target.closest('[data-wiki-modal-close]')) {
                     close(modal);

@@ -1,14 +1,11 @@
 """
-project_overlay — the Project Details Overlay blueprint, split into a package.
+project_overlay — the Project Details Overlay blueprint.
 
-project_overlay_bp is defined in _common.py; every route submodule imports it
-and decorates its views onto it. That keeps the app factory's
-`from ...routes.project_overlay import project_overlay_bp` and every
-url_for('project_overlay.*') name unchanged from before the split.
-
-_common.py also holds the shared helpers, re-exported here so imports from
-outside the package (e.g. project_preproduction.py's
-_build_ccm_deliverable_sections) keep working unchanged.
+project_overlay_bp is defined in _common.py; each route submodule decorates
+its views onto it, so all endpoints are url_for('project_overlay.*').
+Shared helpers are re-exported here because code outside the package imports
+them from this path (e.g. project_preproduction.py uses
+_build_ccm_deliverable_sections).
 """
 
 from ._common import (

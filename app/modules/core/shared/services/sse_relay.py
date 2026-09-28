@@ -1,25 +1,12 @@
-# app/sse_relay.py
+# Per-worker pub/sub bridging Postgres LISTEN/NOTIFY to local SSE queues.
+# One background greenlet per worker holds a dedicated LISTEN connection,
+# outside the SQLAlchemy pool.
 #
-# Per-worker in-memory pub/sub for SSE, bridging Postgres LISTEN/NOTIFY
-# (cross-process) to local queues held by whichever worker has the relevant
-# SSE connection open right now. One background greenlet per worker process
-# holds a dedicated LISTEN connection — separate from the normal SQLAlchemy
-# pool, since this one needs to sit idle indefinitely waiting for
-# notifications, which isn't what a pooled request-scoped connection is for.
+# Topics: one project, the dashboard (every project change), one user
+# (notifications), one DI project, the DI dashboard (every DI change).
 #
-# Three subscription "topics":
-#   - a specific project_id  (detail page SSE connections)
-#   - the dashboard          (every project change matters here, since a
-#                              project's tab membership can change; the
-#                              client decides what to do with it, same as
-#                              today's polling already does)
-#   - a specific user_id     (notifications SSE connections)
-#
-# No locking around the subscriber dicts below — safe only because this
-# runs under gevent's cooperative scheduling. A greenlet can only be
-# switched out at an actual I/O wait point, and a plain dict/set mutation
-# with no I/O in the middle can't be interrupted partway through. This
-# would NOT be safe under real preemptive OS threads.
+# No locks on the subscriber dicts: safe only under gevent's cooperative
+# scheduling (no switch mid-mutation). NOT safe with real threads.
 
 import os
 import select
@@ -35,15 +22,7 @@ _project_subscribers = {}      # project_id (int) -> set of Queue
 _dashboard_subscribers = set()  # set of Queue
 _user_subscribers = {}         # user_id (int) -> set of Queue
 _di_project_subscribers = {}   # di_project_id (int) -> set of Queue
-_di_dashboard_subscribers = set()  # set of Queue — Performance/Templates/
-                                    # Archive aren't tied to one project (a
-                                    # rollup spans every project, templates
-                                    # aren't project-scoped at all), so they
-                                    # subscribe here instead of to a specific
-                                    # di_project_id — same "every change in
-                                    # this whole area matters" reasoning as
-                                    # _dashboard_subscribers above, just for
-                                    # DI instead of the main Projects module.
+_di_dashboard_subscribers = set()  # set of Queue; DI screens not tied to one project
 
 
 def subscribe_project(project_id):
@@ -132,27 +111,19 @@ def _dispatch_di_change(payload):
         di_project_id = int(payload)
     except (TypeError, ValueError):
         return
-    # Mirrors _dispatch_project_change's dual dispatch: a per-project
-    # subscriber (Board, watching one specific project) AND every
-    # dashboard-style subscriber (Performance/Templates/Archive, which
-    # need to hear about a change regardless of which project — or, for
-    # DiStepTemplate edits, no real project at all — it belongs to).
-    # di_project_id -1 is the sentinel live_events.py's DiStepTemplate
-    # getter uses (templates have no project of their own) — it never
-    # matches a real _di_project_subscribers key, so it only ever reaches
-    # the dashboard set below, which is exactly what should happen.
+    # Same dual dispatch as projects. The -1 template sentinel matches no
+    # project key, so it reaches only the DI dashboard set.
     targets = list(_di_project_subscribers.get(di_project_id, ())) + list(_di_dashboard_subscribers)
     for q in targets:
         q.put(di_project_id)
 
 
 def _listen_loop(app):
-    """Runs forever in a background greenlet, one per worker process.
-    Reconnects automatically (after a short pause) if the DB connection
-    drops for any reason — a network blip or a Postgres restart shouldn't
-    permanently kill live updates until the next full app restart."""
+    """LISTEN and dispatch forever (one greenlet per worker). Reconnects
+    after 3s if the connection drops."""
     db_uri = app.config['SQLALCHEMY_DATABASE_URI']
     while True:
+        conn = None
         try:
             conn = psycopg2.connect(db_uri)
             conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
@@ -160,21 +131,12 @@ def _listen_loop(app):
             cur.execute(f'LISTEN {PROJECT_CHANGES_CHANNEL};')
             cur.execute(f'LISTEN {USER_NOTIFICATIONS_CHANNEL};')
             cur.execute(f'LISTEN {DI_CHANGES_CHANNEL};')
-            # .warning() rather than .info() deliberately — Flask's app.logger
-            # defaults to WARNING level outside debug mode, so an .info() call
-            # here would be silently dropped in production even though the
-            # relay started fine. This line is really an operational status
-            # ping, not a true warning, but needs the higher severity to
-            # actually show up in journalctl.
+            # .warning so it reaches journalctl: app.logger drops .info outside debug.
             app.logger.warning('SSE relay: LISTEN connection established.')
 
             while True:
-                # select() on a psycopg2 connection blocks (cooperatively,
-                # under gevent's monkey-patched select — see Stage 1) until
-                # either the socket has data or the timeout elapses. The
-                # timeout is just a periodic wake-up so this loop can
-                # notice a dead connection reasonably promptly; it doesn't
-                # need to do anything special when it fires empty-handed.
+                # Cooperative under gevent's patched select. The 30s timeout
+                # is just a periodic wake-up.
                 select.select([conn], [], [], 30)
                 conn.poll()
                 while conn.notifies:
@@ -187,15 +149,18 @@ def _listen_loop(app):
                         _dispatch_di_change(notify.payload)
         except Exception as e:
             app.logger.warning(f'SSE relay: LISTEN connection dropped ({e}), reconnecting in 3s.')
+            # Close the dead connection so reconnects don't leak sockets.
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             time.sleep(3)
 
 
 def init_sse_relay(app):
-    """Starts the background LISTEN greenlet for this worker process.
-    Gated behind GEVENT_WORKER — same flag run.py uses for the gevent/
-    psycopg2 patching — since this loop's cooperative blocking only
-    behaves correctly once that patching is active. Under the plain local
-    dev server (no gevent), this is a no-op: live updates simply don't
-    run."""
+    """Start this worker's LISTEN greenlet. Only when GEVENT_WORKER=1 (the
+    flag run.py uses for gevent patching); otherwise a no-op and live
+    updates don't run."""
     if os.environ.get('GEVENT_WORKER') == '1':
         spawn(_listen_loop, app)

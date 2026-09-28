@@ -1,10 +1,5 @@
-"""Coverage for click-to-sort: table.py/the _columns.html
-macros emit the data-row-order and data-sort-value attributes the client-
-side sort in client_servicing.js reads. The sort/toggle behaviour itself
-is pure client-side JS (no server round trip, nothing persisted — see
-client_servicing.js's own note on why), so there's nothing for pytest to
-exercise there; these tests just lock in that the server keeps handing
-the client correct, sortable data to work with."""
+"""Server side of click-to-sort: the table emits the data-row-order and
+data-sort-value attributes that client_servicing.js sorts on (the sort itself is JS-only)."""
 import re
 from datetime import date
 
@@ -32,8 +27,7 @@ def _get_table_rows(client, app):
 
 
 def test_rows_carry_data_row_order_matching_default_name_order(app, client, db_session):
-    """table.py's default query is Project.name.asc() — data-row-order has
-    to match that exactly, since it's what a cleared sort restores to."""
+    """data-row-order follows the default name order, which a cleared sort restores."""
     user = _user(db_session, 'a')
     for name in ('Zeta Project', 'Alpha Project', 'Mid Project'):
         db_session.add(Project(name=name, cs_lead_id=user.id, created_by_id=user.id, project_status='briefed'))
@@ -55,12 +49,8 @@ def _sort_value(body, col_key):
 
 
 def test_numeric_columns_carry_raw_numbers_not_formatted_text(app, client, db_session):
-    """Value/cost/margin render formatted ("100,000") but must sort as
-    numbers — data-sort-value has to be the raw figure, not the display
-    text, or "9" would sort after "10" as strings. margin_percent is a
-    computed property (never stored — see the model's own docstring), so
-    it's derived here from cost/inward the same way the model computes
-    it, not set directly (it has no setter)."""
+    """Money and margin columns carry the raw number as data-sort-value.
+    margin_percent is computed (no setter), so it is seeded via the costs."""
     user = _user(db_session, 'b')
     project = Project(name='Numeric Sort Project', cs_lead_id=user.id, created_by_id=user.id, value=100000.5, project_status='briefed')
     db_session.add(project)
@@ -78,10 +68,7 @@ def test_numeric_columns_carry_raw_numbers_not_formatted_text(app, client, db_se
 
 
 def test_date_columns_carry_isoformat_not_display_format(app, client, db_session):
-    """Dates render as "05 Mar 2026" but data-sort-value has to be the
-    ISO form (YYYY-MM-DD) — that's the one format that sorts correctly
-    as a plain string, which is exactly how client_servicing.js compares
-    non-numeric columns."""
+    """Dates display as "05 Mar 2026" but sort on ISO form, since the JS compares them as strings."""
     user = _user(db_session, 'c')
     project = Project(name='Date Sort Project', cs_lead_id=user.id, created_by_id=user.id, briefing_date=date(2026, 3, 5), project_status='briefed')
     db_session.add(project)
@@ -94,9 +81,7 @@ def test_date_columns_carry_isoformat_not_display_format(app, client, db_session
 
 
 def test_missing_values_carry_an_empty_sort_value(app, client, db_session):
-    """No value set anywhere — data-sort-value must be '' (not "None" or
-    "—"), which is the exact sentinel client_servicing.js's applySort()
-    checks for to push blank rows to the bottom of a sort."""
+    """Blank fields carry data-sort-value="", the sentinel applySort() uses to sink blank rows."""
     user = _user(db_session, 'd')
     project = Project(name='Blank Fields Project', cs_lead_id=user.id, created_by_id=user.id, project_status='briefed')
     db_session.add(project)
@@ -109,9 +94,7 @@ def test_missing_values_carry_an_empty_sort_value(app, client, db_session):
 
 
 def test_designers_sort_value_is_comma_joined_names(app, client, db_session):
-    """The one column whose underlying value is a list, not a scalar —
-    table.py's _serialize_row builds 'designers_sort' specifically for
-    this, so the sort value and the rendered chips can't drift apart."""
+    """The designers column sorts on its names comma-joined (row['designers_sort'])."""
     user = _user(db_session, 'e')
     designer_1 = _user(db_session, 'e2', role='designer')
     designer_2 = _user(db_session, 'e3', role='designer')

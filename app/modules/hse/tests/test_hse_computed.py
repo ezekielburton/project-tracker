@@ -1,10 +1,6 @@
-"""Derived values: computed at read time, frozen once an entry closes,
-and never counting someone else's delay against the officer.
+"""Derived entry values (lib/computed.py): frozen once closed, waiting time excluded.
 
-These functions only read attributes, so the tests use a plain stub rather
-than a mapped HseEntry — instantiating a mapped class configures every
-mapper in the app, which would make date arithmetic depend on a database.
-test_the_stub_only_uses_real_columns keeps the stub honest.
+Uses a plain stub: instantiating a mapped HseEntry configures every mapper in the app.
 """
 from datetime import date
 
@@ -39,8 +35,7 @@ def entry(**kw):
 
 
 def test_the_stub_only_uses_real_columns():
-    """The stub is a stand-in, so a column rename must break it here rather
-    than leave these tests passing against a field that no longer exists."""
+    """Every stub field is a real HseEntry column, so a rename fails here."""
     columns = {c.key for c in HseEntry.__table__.columns}
     missing = [name for name in STUB_FIELDS if name not in columns]
     assert not missing, (
@@ -100,8 +95,7 @@ def test_an_entry_never_waited_on_owns_all_of_its_days():
 
 
 def test_the_sla_clock_pauses_while_parked_with_someone_else():
-    """Twelve days open on a seven-day SLA, but six of them were spent
-    waiting on someone else — that is on time."""
+    """Days spent waiting on someone else do not count against the SLA."""
     e = entry(
         entry_date=date(2026, 9, 1), severity='High',
         waiting_since=date(2026, 9, 7), closed_at=date(2026, 9, 13),

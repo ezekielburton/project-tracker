@@ -1,8 +1,5 @@
-"""Smoke tests for the feedback module, using the shared fixtures.
-
-The two standalone board pages are gone — both boards live in the Signal tray
-now — so these cover what remains: the tray's list endpoints, and the detail
-fragments the tray renders.
+"""Smoke tests for the feedback module: the Signal tray list endpoints need
+auth, and the detail fragments the tray renders resolve.
 """
 from flask import url_for
 

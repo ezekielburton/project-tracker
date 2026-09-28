@@ -1,24 +1,8 @@
-// app/static/js/client_directory.js
-//
-// Powers three things:
-//   1. The Client Directory page itself (client_directory/index.html):
-//      renders DIRECTORY_DATA into the left-panel list, live search
-//      filtering, expand/collapse, the right-panel view/edit detail, and
-//      the Projects-linked list.
-//   2. The shared Add Company / Add Contact modals - also included on the
-//      brief form (projects/create.html) via the same modal partial, so
-//      the open/close/save logic for those modals lives here once and is
-//      exposed as window.ClientDirectoryModals, callable from both pages.
-//   3. The brief form's "+ Add new company…" / "+ Add new contact…"
-//      dropdown-option wiring (initBriefFormIntegration) - this is what
-//      replaced the old per-page button + inline reveal-form that used to
-//      live in main.js (setupAddClient/setupAddContact), now that both
-//      pages share one modal instead of each having their own inline form.
-//
-// Every directory-page-specific function checks for #directoryList (and the
-// brief-form section checks for #client_id) before doing anything, so this
-// one file is safe to include on either page even though neither has the
-// other's DOM.
+// Client Directory page, the shared Add Company / Add Contact modals
+// (window.ClientDirectoryModals), and the "+ Add new…" options on the
+// project create overlay's Client/Contact selects.
+// Loaded on the directory page and the project list page; each part checks
+// for its own DOM (#directoryList, #client_id) before running.
 
 (function () {
     'use strict';
@@ -27,10 +11,8 @@
     // Shared Add Company / Add Contact modals
     // ════════════════════════════════════════════════════════════════════
 
-    // onSaved callbacks let each call site (directory page vs. brief form)
-    // decide what happens after a successful save - insert a list row vs.
-    // populate + select a dropdown option - without either modal needing
-    // to know which page it's running on.
+    // Each caller passes its own onSaved callback (add a list row, or add
+    // and select a dropdown option).
     var _addCompanyOnSaved = null;
     var _addContactOnSaved = null;
 
@@ -39,11 +21,7 @@
         if (!modal) return;
         _addCompanyOnSaved = onSaved || null;
         modal.classList.remove('hidden');
-        // Pause polling while the modal is open, per the "Polling —
-        // pause during modals" pattern - without this, the interval reload
-        // could yank the page out from under the user mid-edit. Guarded
-        // (window.helixPolling &&) because not every page that loads this
-        // file has polling running - the directory page itself doesn't.
+        // Pause polling so a reload can't wipe the modal mid-edit.
         if (window.helixPolling) window.helixPolling.pause();
         document.getElementById('addCompanyName').focus();
     }
@@ -146,21 +124,15 @@
             });
     }
 
-    // Exposed globally so both this file's own directory-page code AND
-    // create.html's brief-form-specific JS can open these modals and
-    // register their own onSaved callback, without either needing to know
-    // the other's internals - this is the one shared surface between the
-    // two pages the spec asked for.
+    // Public API; the modals partial's backdrop onclick and the project
+    // create overlay call into this.
     window.ClientDirectoryModals = {
         openAddCompanyModal: openAddCompanyModal,
         closeAddCompanyModal: closeAddCompanyModal,
         openAddContactModal: openAddContactModal,
         closeAddContactModal: closeAddContactModal,
-        // Exposed so the create-mode overlay (project_overlay_create.js,
-        // task #61) can re-run this against #client_id/#contact_id after
-        // fetching that fragment in dynamically — this file's own call at
-        // the bottom only ever sees the DOM present at real page load,
-        // before that fragment exists.
+        // project_overlay_create.js re-runs this after it fetches the
+        // create fragment, which does not exist when this file first runs.
         initBriefFormIntegration: initBriefFormIntegration
     };
 
@@ -170,10 +142,6 @@
         var cancelContact = document.getElementById('cancelAddContactModal');
         var confirmContact = document.getElementById('confirmAddContactModal');
 
-        // Each guarded individually rather than bailing out of the whole
-        // function on the first missing element - harmless if a future
-        // page includes the modals partial but only ends up using one of
-        // the two modals.
         if (cancelCompany) cancelCompany.addEventListener('click', closeAddCompanyModal);
         if (confirmCompany) confirmCompany.addEventListener('click', submitAddCompanyModal);
         if (cancelContact) cancelContact.addEventListener('click', closeAddContactModal);
@@ -185,15 +153,13 @@
     // Directory page
     // ════════════════════════════════════════════════════════════════════
 
-    // Working copy of the server data - mutated in place as companies/
-    // contacts are added or edited, so the list and detail views never
-    // need a full page reload or a re-fetch to reflect a change just saved.
+    // Working copy of the server data, updated in place after each save.
     var directoryData = (typeof DIRECTORY_DATA !== 'undefined') ? DIRECTORY_DATA : [];
     var canEdit = (typeof CAN_EDIT !== 'undefined') ? CAN_EDIT : false;
 
     function initDirectoryPage() {
         var listEl = document.getElementById('directoryList');
-        if (!listEl) return; // not on the directory page - the brief form only has the modals
+        if (!listEl) return; // not on the directory page
 
         renderDirectoryList();
         wireSearch();
@@ -228,12 +194,7 @@
             '<span class="directory-chevron">&#9656;</span>' +
             '<span class="directory-company-name">' + escapeHtml(company.name) + '</span>';
 
-        // This is the sibling that gets its "hidden" class toggled by the
-        // row's click handler below - same this.nextElementSibling
-        // mechanic used for the project table's expansion
-        // rows, so a company's contacts are always looked up structurally
-        // (via the sibling relationship) rather than by ID, avoiding any
-        // duplicate-ID collision between company blocks.
+        // Toggled via row.nextElementSibling below, so no per-company IDs are needed.
         var contactList = document.createElement('div');
         contactList.className = 'directory-contact-list hidden';
 
@@ -246,16 +207,13 @@
             addContactBtn.type = 'button';
             addContactBtn.className = 'btn-secondary btn-sm directory-add-contact-btn';
             addContactBtn.textContent = '+ Add Contact';
-            // stopPropagation here is a no-op today (this button lives
-            // inside contactList, a SIBLING of row, not a descendant of it -
-            // so a click here was never going to bubble into row's own
-            // listener). Left in defensively in case that nesting changes.
+            // Defensive: the button sits in contactList, a sibling of row,
+            // so the click would not reach row's handler anyway.
             addContactBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 window.ClientDirectoryModals.openAddContactModal(company.id, function (newContact) {
                     company.contacts.push(newContact);
-                    // Insert before the button itself, not appendChild,
-                    // so "+ Add Contact" stays the last element in the list.
+                    // Keep "+ Add Contact" last.
                     contactList.insertBefore(buildContactRow(newContact), addContactBtn);
                     contactList.classList.remove('hidden');
                     row.querySelector('.directory-chevron').classList.add('rotated');
@@ -322,8 +280,7 @@
             var contactRows = contactList.querySelectorAll('.directory-contact-row');
 
             if (!query) {
-                // Cleared search - restore the full list, collapsed, no
-                // highlights, per "Clearing the search restores the full list."
+                // Cleared search: full list, collapsed, no highlights.
                 block.classList.remove('hidden');
                 companyNameEl.innerHTML = escapeHtml(company.name);
                 contactList.classList.add('hidden');
@@ -335,9 +292,7 @@
                 return;
             }
 
-            // Match against company name, each comma-separated alias, and
-            // every contact name under this company - the three match
-            // targets called for in the spec.
+            // Match company name, each comma-separated alias, and contact names.
             var nameMatch = company.name.toLowerCase().indexOf(query) !== -1;
             var aliasMatch = (company.aliases || '').split(',').some(function (a) {
                 return a.trim().toLowerCase().indexOf(query) !== -1;
@@ -352,8 +307,6 @@
             var hasMatchingContacts = matchedContactIndexes.length > 0;
 
             if (!companyMatches && !hasMatchingContacts) {
-                // No match anywhere in this company - collapse it out of
-                // view entirely, per "Companies with no matching results collapse."
                 block.classList.add('hidden');
                 return;
             }
@@ -361,9 +314,7 @@
             block.classList.remove('hidden');
             anyVisible = true;
 
-            // Only highlight the company name itself if the match was
-            // actually in the name/alias - a contact-only match still
-            // shows the plain company name, since that's not where it hit.
+            // Highlight the name only on a name match (alias hits are not visible text).
             companyNameEl.innerHTML = nameMatch ? highlightMatch(company.name, query) : escapeHtml(company.name);
 
             contactRows.forEach(function (contactRow, i) {
@@ -373,8 +324,7 @@
             });
 
             if (hasMatchingContacts) {
-                // Auto-expand so the match is visible without an extra
-                // click, per "expand automatically and highlight the matched text."
+                // Auto-expand so matching contacts are visible.
                 contactList.classList.remove('hidden');
                 chevron.classList.add('rotated');
             }
@@ -465,12 +415,8 @@
 
     // ── Right panel: edit mode ──────────────────────────────────────────
     //
-    // COMPANY_FIELDS / CONTACT_FIELDS describe each editable field once -
-    // its data-field key (matching the wrapper built by fieldBlock above),
-    // display label, and whether it's required. Driving edit mode from the
-    // same key list used to render view mode means the two can't drift out
-    // of sync with each other (a field added to one but forgotten in the
-    // other).
+    // Keys must match the data-field wrappers built by fieldBlock() in the
+    // render*Detail functions above.
     var COMPANY_FIELDS = [
         { key: 'name', label: 'Name', required: true },
         { key: 'aliases', label: 'Aliases' },
@@ -486,7 +432,7 @@
 
     function wireEditButton(kind, record) {
         var editBtn = document.getElementById('directoryEditBtn');
-        if (!editBtn) return; // canEdit is false - no Edit button exists for a Designer
+        if (!editBtn) return; // read-only user: no Edit button
         editBtn.addEventListener('click', function () {
             enterEditMode(kind, record);
         });
@@ -504,10 +450,7 @@
                 '<input type="text" class="form-input directory-edit-input" value="' + escapeHtml(currentValue) + '">';
         });
 
-        // Swap the header's Edit button for Cancel/Save - "clicking Edit
-        // switches text fields to inputs in place" from the spec, done here
-        // by replacing the button itself since Cancel/Save need different
-        // click handlers than Edit did, not just a different label.
+        // Swap the Edit button for Cancel/Save.
         var header = panel.querySelector('.directory-detail-header');
         header.querySelector('#directoryEditBtn').outerHTML =
             '<div style="display:flex;gap:0.5rem;">' +
@@ -516,10 +459,7 @@
             '</div>';
 
         document.getElementById('directoryCancelBtn').addEventListener('click', function () {
-            // record was never mutated during edit mode (only the <input>
-            // elements held the in-progress values) - re-rendering the
-            // view straight from record is what makes Cancel "restore the
-            // previous values without saving" for free.
+            // record is untouched while editing, so re-rendering discards the edits.
             if (kind === 'company') renderCompanyDetail(record); else renderContactDetail(record);
         });
         document.getElementById('directorySaveBtn').addEventListener('click', function () {
@@ -561,10 +501,8 @@
                     return;
                 }
 
-                // Mutate the in-memory record in place with whatever the
-                // server actually stored, then re-render both the left
-                // panel (name may have changed) and the right panel detail
-                // from that same object - no page reload, no re-fetch.
+                // Take the server's stored values, then re-render both panels
+                // (the name may have changed).
                 var updated = kind === 'company' ? data.company : data.contact;
                 Object.assign(record, updated);
 
@@ -608,15 +546,12 @@
 
     function wireAddCompanyButton() {
         var btn = document.getElementById('btnAddCompanyDirectory');
-        if (!btn) return; // not rendered at all when canEdit is false
+        if (!btn) return; // not rendered for read-only users
         btn.addEventListener('click', function () {
             window.ClientDirectoryModals.openAddCompanyModal(function (newCompany) {
                 newCompany.contacts = [];
                 directoryData.push(newCompany);
-                // Keep the in-memory list sorted the same way the server
-                // originally sent it (Client.query.order_by(Client.name)),
-                // so the new company lands in alphabetical position instead
-                // of always at the bottom of the list.
+                // Match the server's order_by(Client.name).
                 directoryData.sort(function (a, b) { return a.name.localeCompare(b.name); });
                 renderDirectoryList();
                 selectCompany(newCompany);
@@ -626,62 +561,47 @@
 
 
     // ════════════════════════════════════════════════════════════════════
-    // Brief form integration: "+ Add new company…" / "+ Add new contact…"
+    // Project create overlay: "+ Add new company…" / "+ Add new contact…"
     // ════════════════════════════════════════════════════════════════════
     //
-    // The sentinel option value used by both selects to trigger a modal
-    // instead of being treated as a real selection.
+    // Option value that opens a modal; must match _details_create.html.
     var ADD_NEW_SENTINEL = '__add_new__';
 
     function initBriefFormIntegration() {
         var clientSelect = document.getElementById('client_id');
         var contactSelect = document.getElementById('contact_id');
-        if (!clientSelect || !contactSelect) return; // not on the brief form
+        if (!clientSelect || !contactSelect) return; // create overlay not open
 
-        // Remember the last real (non-sentinel) selection on each select, so
-        // choosing "+ Add new..." can be reverted to whatever was actually
-        // selected before, both while the modal is open and if the user
-        // cancels out of it without saving.
+        // Last real selection, restored when "+ Add new…" is picked.
         clientSelect.dataset.previousValue = clientSelect.value;
         contactSelect.dataset.previousValue = contactSelect.value;
 
-        clientSelect.addEventListener('change', function () {
+        // Capture phase, so the sentinel is caught before the overlay's own
+        // change listener (project_overlay_create.js) and never autosaved.
+        clientSelect.addEventListener('change', function (e) {
             if (clientSelect.value === ADD_NEW_SENTINEL) {
+                e.stopImmediatePropagation();
                 clientSelect.value = clientSelect.dataset.previousValue;
                 window.ClientDirectoryModals.openAddCompanyModal(function (newCompany) {
                     addOptionBeforeSentinel(clientSelect, newCompany.id, newCompany.name);
                     clientSelect.value = newCompany.id;
-                    clientSelect.dataset.previousValue = newCompany.id;
-                    // A brand new company has zero contacts - reset the
-                    // Contact select to just the placeholder + sentinel
-                    // rather than firing a fetch that would just come back
-                    // empty anyway.
-                    rebuildContactOptions(contactSelect, []);
-                    contactSelect.dataset.previousValue = '';
-                    // client_id changing is exactly the kind of thing the
-                    // completion bar / autosave need to know about, but a
-                    // script-set .value never fires a native 'change' event
-                    // on its own - these two are exposed on window by
-                    // main.js specifically so this callback can call them
-                    // directly, same as the old setupAddClient() used to.
-                    if (window.calculateCompletion) window.calculateCompletion();
-                    if (window.scheduleAutosave) window.scheduleAutosave();
+                    // A script-set .value fires no 'change'; dispatch one so the
+                    // overlay autosaves it and the contact list is refreshed below.
+                    clientSelect.dispatchEvent(new Event('change', { bubbles: true }));
                 });
                 return;
             }
 
             clientSelect.dataset.previousValue = clientSelect.value;
             refreshContactOptionsForClient(clientSelect.value, contactSelect);
-        });
+        }, true);
 
-        contactSelect.addEventListener('change', function () {
+        contactSelect.addEventListener('change', function (e) {
             if (contactSelect.value === ADD_NEW_SENTINEL) {
+                e.stopImmediatePropagation();
                 contactSelect.value = contactSelect.dataset.previousValue;
 
-                // A Contact must belong to a Client (Contact.client_id is
-                // required at the model level) - if none is picked yet,
-                // don't even open the modal, since saving would just come
-                // back as a 400. Same guard the old setupAddContact() had.
+                // A Contact needs a Client; the save would 400 without one.
                 if (!clientSelect.value) {
                     showToast('Please select a Client first.', 'error');
                     return;
@@ -690,26 +610,16 @@
                 window.ClientDirectoryModals.openAddContactModal(clientSelect.value, function (newContact) {
                     addOptionBeforeSentinel(contactSelect, newContact.id, newContact.name);
                     contactSelect.value = newContact.id;
-                    contactSelect.dataset.previousValue = newContact.id;
-                    if (window.calculateCompletion) window.calculateCompletion();
-                    if (window.scheduleAutosave) window.scheduleAutosave();
+                    contactSelect.dispatchEvent(new Event('change', { bubbles: true }));
                 });
                 return;
             }
 
             contactSelect.dataset.previousValue = contactSelect.value;
-            // No extra handling needed for a normal selection - #contact_id
-            // lives inside #sectionBasics, so the generic
-            // "#sectionBasics input, #sectionBasics select" change listener
-            // in main.js already calls calculateCompletion()/scheduleAutosave()
-            // for real, user-driven selections like this one.
-        });
+        }, true);
     }
 
-    // Inserts a new <option> as the second-to-last child (i.e. right before
-    // the "+ Add new..." sentinel, which must always stay last) rather than
-    // a plain appendChild - otherwise every newly added company/contact
-    // would end up sorted after the sentinel instead of among the real options.
+    // Inserts just before the sentinel, which must stay the last option.
     function addOptionBeforeSentinel(select, value, label) {
         var option = document.createElement('option');
         option.value = value;
@@ -738,11 +648,6 @@
             return;
         }
 
-        // Same GET /api/clients/<id>/contacts endpoint the old
-        // fetchContactsForClient() in main.js used to call - just rebuilt
-        // here with the sentinel option appended afterward every time,
-        // since a full rebuild (same approach showDeliverableSelector()
-        // uses elsewhere in this app) always needs that last option re-added.
         fetch('/api/clients/' + clientId + '/contacts')
             .then(function (res) { return res.json(); })
             .then(function (contacts) {
@@ -755,18 +660,8 @@
 
 
     // ════════════════════════════════════════════════════════════════════
-    // Run immediately - NOT gated behind DOMContentLoaded. This file is
-    // loaded two ways: a real page load (DOMContentLoaded fires normally,
-    // and by the time it does, this script tag - placed at the very end of
-    // the content block - has already executed anyway) and an SPA
-    // navigation via sidebar.js's execScripts(), which recreates and
-    // re-executes this exact <script> tag after the new HTML is already
-    // sitting in the DOM. DOMContentLoaded only ever fires once per real
-    // page load, so on the SPA path it would never fire again and none of
-    // this would run - same reasoning already documented in achievements.js
-    // for the same navigation mechanism. Calling these directly works for
-    // both cases because the relevant DOM (list, modals, selects) is always
-    // already present by the time THIS script runs, on either path.
+    // Run immediately: DOMContentLoaded never fires after SPA navigation, and
+    // the page's DOM is already in place when this script runs.
     wireSharedModalButtons();
     initDirectoryPage();
     initBriefFormIntegration();

@@ -71,8 +71,7 @@ def test_a_briefed_project_refuses_draft_work(app, client, db_session):
 
 
 def test_a_briefed_project_with_a_draft_already_on_it_still_accepts_work(app, client, db_session):
-    """The grandfather clause: work started before the rule stays reachable.
-    400 means the gate let it through and only the missing file stopped it."""
+    """A briefed project with a draft still accepts uploads (400 = past the gate, no file)."""
     designer = _designer(db_session, 'grandfathered')
     project = _briefed_project(db_session, 'grandfathered', designer)
     db_session.add(ProjectSubmission(
@@ -87,9 +86,32 @@ def test_a_briefed_project_with_a_draft_already_on_it_still_accepts_work(app, cl
 
 
 def test_a_role_without_manage_drafts_cannot_upload(app, client, db_session):
-    """The upload route used to have no capability check at all."""
+    """Upload is refused (403) for a role without manage_drafts."""
     owner, project = _standard_project(db_session, 'no-drafts')
     outsider = _designer(db_session, 'finance-outsider', role='finance')
     login_as(client, app, outsider, 'password123')
 
     assert client.post(_upload_url(app, project.id)).status_code == 403
+
+
+def test_submission_regions_keep_a_customer_whose_region_is_unlisted(app, db_session):
+    """A region outside the fixed list still shows, under Other."""
+    from app.modules.core.shared.models import Customer, ProjectCustomer
+    from app.modules.projects.routes.project_overlay.submissions import _build_submission_regions
+
+    user, project = _standard_project(db_session, 'rg')
+    project.brief_type = 'ccm'
+    listed = Customer(name='Listed Region Customer', region='kuwait')
+    unlisted = Customer(name='Unlisted Region Customer', region='ksa')
+    db_session.add_all([listed, unlisted])
+    db_session.flush()
+    db_session.add_all([
+        ProjectCustomer(project_id=project.id, customer_id=listed.id),
+        ProjectCustomer(project_id=project.id, customer_id=unlisted.id),
+    ])
+    db_session.flush()
+    db_session.expire(project, ['project_customers'])
+
+    sections = {r['key']: [pc.customer.name for pc in r['customers']]
+                for r in _build_submission_regions(project)}
+    assert sections == {'kuwait': ['Listed Region Customer'], 'other': ['Unlisted Region Customer']}

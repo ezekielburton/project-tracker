@@ -1,10 +1,9 @@
-// Signal tray — Bug Report and Feature Request boards in compact form, plus the
-// weekly Friction Log. Registers with HelixTrays (the B1 dock shell) and binds
-// once, outside #main-content, so SPA nav never touches it.
+// Signal tray: compact Bug Report and Feature Request boards, plus the weekly
+// Friction Log. Registers with HelixTrays and loads once, outside #main-content,
+// so SPA nav never re-runs it.
 //
-// The boards are a lean list over the feedback module's own endpoints; opening a
-// row injects that module's existing detail fragment, so there is one detail
-// view rather than two.
+// Opening a row injects the feedback module's detail fragment
+// (_bug_content.html / _feature_content.html) and wires it here.
 (function () {
     if (!window.HelixTrays) return;
 
@@ -24,8 +23,7 @@
         { key: 'friction', label: 'Friction Log' }
     ];
 
-    // Where each board's endpoints and DOM prefixes live, so one set of handlers
-    // serves both instead of two near-identical copies.
+    // Endpoints and DOM id prefix per board, so one set of handlers serves both.
     var BOARDS = {
         bug: {
             list: '/signal/bugs',
@@ -47,10 +45,9 @@
         }
     };
 
-    // Every selector this tray binds on the feedback module's detail fragments,
-    // declared rather than only used. A Python contract test reads this map and
-    // checks the templates still carry each one, so renaming an id over there
-    // fails a test instead of silently deadening a button.
+    // Every selector this tray binds on the detail fragments.
+    // test_signal_tray_contract.py parses this literal and checks the templates
+    // still carry each one; keep it plain JSON-like (see that test).
     var FRAGMENT_CONTRACT = {
         '_bug_content.html': [
             '#br-status-select', '#br-delete-btn', '#br-comment-form',
@@ -64,8 +61,8 @@
         ]
     };
 
-    // A finished item is noise on the default view, so it stays hidden until its
-    // own chip is picked. Its chip still carries the real count.
+    // Finished items are hidden from "All" until their own chip is picked;
+    // that chip still shows the real count.
     var HIDDEN_UNLESS_PICKED = { feature: 'implemented' };
 
     var activeTab = 'bug';
@@ -73,6 +70,8 @@
     var boardEl = null;
     var tabsEl = null;
     var severities = [];
+    // { key, id } from a notification link, opened by the next buildPanes.
+    var linkedItem = null;
 
     function fetchJson(url, options) {
         return fetch(url, options).then(function (r) { return r.json(); });
@@ -99,8 +98,16 @@
         tabsEl = document.getElementById('signal-tabs');
         boardEl = document.getElementById('signal-board');
 
-        renderTabs();
-        openTab(activeTab);
+        var linked = linkedItem;
+        linkedItem = null;
+        if (linked) activeTab = linked.key;
+
+        if (linked && linked.id) {
+            renderTabs();
+            openItem(linked.key, linked.id);
+        } else {
+            openTab(activeTab);
+        }
 
         // Opening the tray is what clears its bubble.
         fetch('/signal/seen', { method: 'POST' })
@@ -120,6 +127,7 @@
     }
 
     function openTab(key) {
+        if (!boardEl) return;  // tray closed while a request was in flight
         activeTab = key;
         activeStatus = 'all';
         renderTabs();
@@ -130,12 +138,16 @@
     // ── The two boards ───────────────────────────────────
 
     function loadBoard(key) {
-        boardEl.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
+        // onClose nulls boardEl and a reopen builds a new one; a reply for
+        // the old one must not render.
+        var target = boardEl;
+        target.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
         fetchJson(BOARDS[key].list).then(function (data) {
+            if (boardEl !== target) return;
             if (data.severities) severities = data.severities;
             renderBoard(key, data);
         }).catch(function () {
-            boardEl.innerHTML = '<p class="signal-tray__empty">Could not load this board.</p>';
+            if (boardEl === target) target.innerHTML = '<p class="signal-tray__empty">Could not load this board.</p>';
         });
     }
 
@@ -242,8 +254,7 @@
         return el;
     }
 
-    // Only what Digital Innovation actually records — there is no link back to a
-    // shipped version, so none is claimed.
+    // Only the states DI records; there is no link to a shipped version.
     function diLabel(state) {
         if (state === 'queued') return 'DI: queued';
         if (state === 'declined') return 'DI: declined';
@@ -253,12 +264,18 @@
     // ── One item's detail — the feedback module's own fragment ──
 
     function openItem(key, id) {
+        if (!boardEl) return;
         var board = BOARDS[key];
-        boardEl.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
+        var target = boardEl;  // see loadBoard
+        target.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
 
         fetch(board.item(id))
-            .then(function (r) { return r.text(); })
+            .then(function (r) {
+                if (!r.ok) throw new Error('item fetch failed');
+                return r.text();
+            })
             .then(function (html) {
+                if (boardEl !== target) return;
                 boardEl.innerHTML = '';
 
                 var back = document.createElement('button');
@@ -276,7 +293,7 @@
                 wireDetail(key, id, wrap);
             })
             .catch(function () {
-                boardEl.innerHTML = '<p class="signal-tray__empty">Could not open this item.</p>';
+                if (boardEl === target) target.innerHTML = '<p class="signal-tray__empty">Could not open this item.</p>';
             });
     }
 
@@ -301,12 +318,15 @@
         var deleteBtn = wrap.querySelector('#' + p + '-delete-btn');
         if (deleteBtn) {
             deleteBtn.addEventListener('click', function () {
-                fetch(board.item(id), { method: 'DELETE' })
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (data.success) { toast('Deleted.'); openTab(key); }
-                        else toast(data.error || 'Could not delete this.', 'error');
-                    });
+                window.showConfirm('Delete this ' + (key === 'bug' ? 'bug report' : 'feature request')
+                    + '? This cannot be undone.', function () {
+                    fetch(board.item(id), { method: 'DELETE' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (data.success) { toast('Deleted.'); openTab(key); }
+                            else toast(data.error || 'Could not delete this.', 'error');
+                        });
+                });
             });
         }
 
@@ -326,8 +346,8 @@
             });
         }
 
-        // Replies and comment deletion are delegated — the fragment rebuilds
-        // them on every reload, so per-node listeners would not survive.
+        // Delegated on the wrapper; openItem builds a fresh wrapper each time,
+        // so listeners never stack.
         wrap.addEventListener('click', function (e) {
             var replyBtn = e.target.closest('.' + p + '-reply-btn');
             if (replyBtn) {
@@ -343,8 +363,10 @@
             }
             var del = e.target.closest('.' + p + '-comment-delete');
             if (del) {
-                fetch(board.comment(del.dataset.commentId), { method: 'DELETE' })
-                    .then(function () { openItem(key, id); });
+                window.showConfirm('Delete this comment?', function () {
+                    fetch(board.comment(del.dataset.commentId), { method: 'DELETE' })
+                        .then(function () { openItem(key, id); });
+                });
             }
         });
 
@@ -422,9 +444,12 @@
     // ── Friction Log ─────────────────────────────────────
 
     function loadFriction() {
-        boardEl.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
-        fetchJson('/signal/friction').then(renderFriction).catch(function () {
-            boardEl.innerHTML = '<p class="signal-tray__empty">Could not load the Friction Log.</p>';
+        var target = boardEl;  // see loadBoard
+        target.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
+        fetchJson('/signal/friction').then(function (data) {
+            if (boardEl === target) renderFriction(data);
+        }).catch(function () {
+            if (boardEl === target) target.innerHTML = '<p class="signal-tray__empty">Could not load the Friction Log.</p>';
         });
     }
 
@@ -502,11 +527,37 @@
             .catch(function () { /* offline or logged out — leave the bubble alone */ });
     }
 
+    // A notification links to ?signal=feature:12 (or bug:12). Older links
+    // redirect to ?signal=feature with the id left in the #fr-12 fragment.
+    function readLinkedItem() {
+        var params = new URLSearchParams(window.location.search);
+        var raw = params.get('signal');
+        if (!raw) return null;
+        var parts = raw.split(':');
+        var board = BOARDS[parts[0]];
+        if (!board) return null;
+        var id = parseInt(parts[1], 10) || null;
+        var hash = window.location.hash.match(/^#(fr|br)-(\d+)$/);
+        if (!id && hash && hash[1] === board.prefix) id = parseInt(hash[2], 10);
+
+        // Drop the param so a reload does not reopen the item.
+        params.delete('signal');
+        var query = params.toString();
+        history.replaceState(history.state, '',
+            window.location.pathname + (query ? '?' + query : '') + (hash ? '' : window.location.hash));
+        return { key: parts[0], id: id };
+    }
+
+    // Set before register: a tray restored open on load builds its panes there.
+    linkedItem = readLinkedItem();
+
     window.HelixTrays.register('signal', {
         onOpen: buildPanes,
         onClose: function () { boardEl = tabsEl = null; },
         onSignal: loadUnread
     });
+
+    if (linkedItem) window.HelixTrays.open('signal');
 
     loadUnread();
 

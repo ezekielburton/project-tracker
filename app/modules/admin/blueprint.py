@@ -1,4 +1,4 @@
-"""Serves the admin module's own static assets (CSS/JS)."""
+"""Serves the admin module's static assets (admin.js) under /admin/static."""
 from flask import Blueprint
 
 admin_assets = Blueprint(

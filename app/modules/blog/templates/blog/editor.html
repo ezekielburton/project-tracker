@@ -77,6 +77,5 @@
     var EDIT_POST_DATA = {{ post.sections_json | tojson if post else '[]' }};
 </script>
 
-<link rel="stylesheet" href="{{ url_for('blog_assets.static', filename='css/blog.css') }}">
 <script src="{{ url_for('blog_assets.static', filename='js/blog.js') }}"></script>
 {% endblock %}

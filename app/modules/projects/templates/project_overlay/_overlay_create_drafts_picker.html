@@ -1,12 +1,8 @@
-{# app/templates/project_overlay/_overlay_create_drafts_picker.html
-   Resume-a-draft picker (task #65) — "+ New Project" fetches
-   /projects/drafts first; if any come back, this renders instead of
-   immediately starting a fresh draft. Creators always see their own
-   drafts; admin/management see everyone's too, per Ezekiel, so abandoned
-   ones can be found and cleaned up. Reuses the same modal shell and
-   list/row CSS as the Confirm-and-create summary modal
-   (_overlay_create_summary.html) rather than inventing new ones — only
-   the row content and the resume/delete affordances are new. #}
+{# app/modules/projects/templates/project_overlay/_overlay_create_drafts_picker.html
+   Resume-a-draft picker. "+ New Project" fetches /projects/overlay/drafts
+   first and shows this if any exist. Creators see their own drafts;
+   admin/management see everyone's, so abandoned ones can be cleaned up.
+   Uses the same modal classes as _overlay_create_summary.html. #}
 <div class="modal-overlay overlay-submit-summary-modal" id="overlay-create-drafts-modal">
     <div class="modal-box overlay-submit-summary-box">
         <h3 class="modal-title">Resume a draft?</h3>

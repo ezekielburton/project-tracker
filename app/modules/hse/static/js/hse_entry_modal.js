@@ -1,9 +1,7 @@
-// HSE — the entry overlay.
+// HSE entry overlay: create/edit form, file uploads, and quick-add options.
 //
-// The modal markup is fetched per open rather than rendered into the page,
-// so its dropdowns always show the reference lists as they are now. It is
-// appended to <body>, not into the table, so nothing above it can become a
-// containing block for it.
+// Markup is fetched on each open so dropdowns show current reference lists.
+// It mounts on <body> so no ancestor becomes its containing block.
 (function () {
     var MOUNT_ID = 'hse-modal-mount';
 
@@ -20,8 +18,8 @@
     function close() {
         mount().innerHTML = '';
         document.body.classList.remove('hse-modal-open');
-        // Filing or editing moves the computed columns and the chip counts,
-        // so the table is re-rendered from the server rather than patched.
+        // A save shifts computed columns and counts, so re-render the
+        // current page from the server.
         if (window._hseTableStale) {
             window._hseTableStale = false;
             if (window.navigateTo) {
@@ -37,7 +35,15 @@
         return input ? input.value : null;
     }
 
+    // The field's own label, without the required-field asterisk.
+    function fieldLabel(group) {
+        var label = group.querySelector('label');
+        return label ? label.firstChild.textContent.trim() : group.getAttribute('data-field');
+    }
+
+    // Marks invalid fields and focuses the first. Returns their labels.
     function showErrors(modal, errors) {
+        var invalid = [];
         modal.querySelectorAll('.hse-field').forEach(function (group) {
             var slot = group.querySelector('.hse-error');
             var message = errors[group.getAttribute('data-field')];
@@ -46,7 +52,32 @@
                 slot.textContent = message || '';
                 slot.hidden = !message;
             }
+            if (message) invalid.push(group);
         });
+        if (invalid.length) {
+            invalid[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+            var control = invalid[0].querySelector(
+                'select, textarea, .hse-seg, input:not([type="hidden"])');
+            if (control) control.focus({ preventScroll: true });
+        }
+        return invalid.map(fieldLabel);
+    }
+
+    // Clears a field's error state once the user edits it.
+    function clearError(group) {
+        if (!group || !group.classList.contains('has-error')) return;
+        group.classList.remove('has-error');
+        var slot = group.querySelector('.hse-error');
+        if (slot) {
+            slot.textContent = '';
+            slot.hidden = true;
+        }
+    }
+
+    function errorNote(names) {
+        if (!names.length) return 'Check the form and try again.';
+        if (names.length === 1) return 'Fix this field: ' + names[0];
+        return names.length + ' fields need fixing: ' + names.join(', ');
     }
 
     function collect(modal) {
@@ -54,9 +85,8 @@
         modal.querySelectorAll('.hse-field').forEach(function (group) {
             payload[group.getAttribute('data-field')] = fieldValue(group);
         });
-        // Opened from a planned occurrence on the calendar. Sent as a pair
-        // or not at all; the server verifies the occurrence is real before
-        // stamping it onto the entry.
+        // Set when opened from a planned calendar occurrence. Sent as a pair
+        // or not at all; the server verifies the occurrence.
         var scheduleId = modal.getAttribute('data-schedule-id');
         var occurrence = modal.getAttribute('data-occurrence-date');
         if (scheduleId && occurrence) {
@@ -70,6 +100,7 @@
         var button = modal.querySelector('#hse-modal-save');
         var note = modal.querySelector('#hse-modal-note');
         button.disabled = true;
+        note.classList.remove('is-error');
         note.textContent = 'Saving…';
 
         fetch(modal.getAttribute('data-save-url'), {
@@ -82,8 +113,7 @@
             if (result.ok) {
                 window._hseTableStale = true;
                 if (modal.getAttribute('data-method') === 'POST' && result.body.id) {
-                    // Straight into edit mode on the new entry, so attaching
-                    // the report is the next thing rather than a second trip.
+                    // Reopen the new entry in edit mode so files can be attached.
                     open('/hse/entry/' + result.body.id + '/form');
                 } else {
                     close();
@@ -91,14 +121,15 @@
                 return;
             }
             button.disabled = false;
+            note.classList.add('is-error');
             if (result.body && result.body.errors) {
-                showErrors(modal, result.body.errors);
-                note.textContent = 'Check the highlighted fields.';
+                note.textContent = errorNote(showErrors(modal, result.body.errors));
             } else {
                 note.textContent = (result.body && result.body.error) || 'Could not save.';
             }
         }).catch(function () {
             button.disabled = false;
+            note.classList.add('is-error');
             note.textContent = 'Could not reach the server.';
         });
     }
@@ -127,7 +158,7 @@
                 }
                 note('Stored on the NAS under /HSE.');
                 window._hseTableStale = true;
-                // Reopen so the list matches the server rather than a guess.
+                // Reopen so the file list matches the server.
                 var modal = document.getElementById('hse-entry-modal');
                 open('/hse/entry/' + modal.getAttribute('data-entry-id') + '/form');
             })
@@ -150,15 +181,14 @@
             .catch(function () { note('Could not remove that file.'); });
     }
 
-    // Adds a missing option without leaving the form, then selects it. The
-    // server reuses an existing name and revives a deactivated one, so
-    // typing something that already exists cannot create a duplicate the
-    // dropdown then shows twice.
+    // Adds a missing option from inside the form and selects it. The server
+    // reuses or revives a matching name, so duplicates cannot appear.
     function quickAdd(panel) {
         var input = panel.querySelector('.hse-quick-input');
         var label = input.value.trim();
         if (!label) return;
 
+        var modal = panel.closest('#hse-entry-modal');
         var group = panel.closest('.hse-field');
         var select = group.querySelector('select');
         var note = panel.querySelector('.hse-quick-save');
@@ -179,8 +209,8 @@
                 return;
             }
             var row = result.body.row;
-            // A field backed by a column stores the id; one that falls into
-            // JSONB stores the label. Same rule the form and table follow.
+            // Column-backed fields store the id; JSONB fields store the label
+            // (same rule as the form and table).
             var value = panel.getAttribute('data-stores') === 'label' ? row.label : String(row.id);
 
             if (select) {
@@ -192,9 +222,7 @@
                 }
                 select.value = value;
             } else {
-                // The list was empty, so this field rendered as a locked box
-                // rather than a dropdown. Turn it into a real select now that
-                // it has something in it.
+                // An empty list renders as a locked box; swap in a real select.
                 var box = group.querySelector('.hse-empty-choice');
                 var hidden = group.querySelector('input[type="hidden"]');
                 if (box && hidden) {
@@ -214,14 +242,40 @@
 
             input.value = '';
             panel.hidden = true;
+            clearError(group);
             releaseSaveIfNothingBlocking(modal);
         }).catch(function () {
             note.disabled = false;
         });
     }
 
-    // Save is disabled while a required list is empty. Once the last one has
-    // something in it, filing is possible again.
+    // Shows the picked machine's serial, carried on its <option>.
+    function showSerial(select) {
+        var line = select.closest('.hse-field').querySelector('[data-serial-line]');
+        if (!line) return;
+        var option = select.options[select.selectedIndex];
+        var picked = Boolean(option && option.value);
+        var serial = picked ? option.getAttribute('data-serial') : '';
+        line.hidden = !picked;
+        line.textContent = !picked ? '' : (serial ? 'Serial no. ' + serial : 'No serial on file');
+    }
+
+    // Picking the closing status fills an empty closed date with today; any
+    // other status clears it, as the server does on save.
+    function syncClosedDate(select) {
+        var closedStatus = select.getAttribute('data-closed-status');
+        var modal = select.closest('#hse-entry-modal');
+        var input = closedStatus && modal.querySelector('#hse-f-' + select.getAttribute('data-closed-field'));
+        if (!input) return;
+        if (select.value === closedStatus && !input.value) {
+            input.value = select.getAttribute('data-today');
+            clearError(input.closest('.hse-field'));
+        } else if (select.value !== closedStatus) {
+            input.value = '';
+        }
+    }
+
+    // Save stays disabled while any required list is empty.
     function releaseSaveIfNothingBlocking(modal) {
         if (modal.querySelector('.hse-empty-choice')) return;
         var blocked = modal.querySelector('.hse-modal-blocked');
@@ -245,15 +299,12 @@
             });
     }
 
-    // The one seam other HSE pages open the form through. The calendar's
-    // register picker builds its own URL (it stamps on the open day), so it
-    // cannot go through the [data-hse-form-url] delegation like everything
-    // else. Exported rather than duplicated: there must be one place that
-    // knows how this overlay is mounted.
+    // Used by hse_calendar.js, which builds its own form URL (with the open
+    // day) and cannot use the [data-hse-form-url] delegation.
     window.hseOpenEntryForm = open;
 
-    // One document-level listener for everything the overlay does, so the
-    // fetched markup needs no wiring of its own.
+    // Document-delegated so fetched markup needs no wiring; guarded so SPA
+    // re-runs never stack listeners.
     if (window._hseEntryModalWired) return;
     window._hseEntryModalWired = true;
 
@@ -283,6 +334,7 @@
                 b.classList.toggle('is-selected', b === seg);
             });
             group.querySelector('input[type="hidden"]').value = seg.getAttribute('data-value');
+            clearError(group);
             return;
         }
         if (e.target.closest('#hse-modal-save')) {
@@ -292,8 +344,7 @@
 
         var preview = e.target.closest('.hse-file-preview');
         if (preview && window.openFilePreview) {
-            // The shared modal from base.html — the same one the project
-            // reference files open. Nothing to load, nothing to duplicate.
+            // Shared file-preview modal from base.html.
             window.openFilePreview(preview.getAttribute('data-preview-url'),
                                    preview.getAttribute('data-download-url'),
                                    preview.getAttribute('data-file-name'),
@@ -323,6 +374,18 @@
 
     document.addEventListener('change', function (e) {
         if (e.target.id === 'hse-file-input') uploadFile(e.target);
+        if (e.target.tagName === 'SELECT' && e.target.closest('#hse-entry-modal')) {
+            showSerial(e.target);
+            syncClosedDate(e.target);
+        }
+    });
+
+    // Typing or picking in an invalid field clears its error.
+    ['input', 'change'].forEach(function (type) {
+        document.addEventListener(type, function (e) {
+            var modal = document.getElementById('hse-entry-modal');
+            if (modal && modal.contains(e.target)) clearError(e.target.closest('.hse-field'));
+        });
     });
 
     document.addEventListener('keydown', function (e) {

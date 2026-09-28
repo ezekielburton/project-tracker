@@ -1,7 +1,7 @@
-"""The Signal tray's two boards and the Friction Log.
+"""Signal tray boards and Friction Log.
 
-The write gate is the part that matters: read is everyone's, posting is any
-current champion plus management and admin.
+Key rule: everyone reads the Friction Log; only current champions, management
+and admin can post.
 """
 from datetime import timedelta
 
@@ -176,7 +176,7 @@ def test_an_entry_carries_its_authors_department(app, client, db_session):
 # ── The launcher bubble ────────────────────────────────────────────────────
 
 def test_a_never_opened_tray_shows_no_bubble(app, client, db_session):
-    """The whole backlog as a bubble is noise, not a signal."""
+    """A user who never opened the tray gets 0, not the whole backlog."""
     author = _user(db_session, 'bubble-fresh')
     _bug(db_session, author, 'Something old')
     login_as(client, app, author, 'password123')

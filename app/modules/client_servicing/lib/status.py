@@ -1,17 +1,14 @@
 """
-CS operational status — the CS master-sheet lifecycle laid over the platform's
-derived status. The platform models only design→approval→handoff; production,
-procurement, logistics and finance stages aren't modelled, so CS carries them
-as a manual overlay on its companion row. effective_cs_status() returns the
-manual cs_status when set (sticky), else the derived status re-labelled into CS
-vocabulary. Never touches Project.project_status.
+CS operational status: the CS lifecycle laid over the platform's derived status.
+The platform models only design, approval and handoff, so CS sets later stages
+(production, logistics, finance) by hand on its companion row. Never touches
+Project.project_status.
 """
 from app.modules.core.shared.lib.status_vocabulary import derive_project_status
 
 
-# The CS master-sheet status vocabulary, in lifecycle order. The dropdown
-# offers all of these; the first handful also derive automatically, the
-# rest are manual-only overlays (stages the platform doesn't model yet).
+# CS status dropdown, in lifecycle order. Briefing, In Production, On Hold and
+# Cancelled can also be derived; the rest are set by hand only.
 CS_STATUS_OPTIONS = [
     'Briefing',
     'Survey',
@@ -34,8 +31,7 @@ CS_STATUS_OPTIONS = [
     'Cancelled',
 ]
 
-# label -> pill colour modifier, reusing the app's existing status-pill
-# modifiers, grouped by lifecycle family.
+# label -> the app's status-pill colour modifier, grouped by lifecycle family.
 _MODIFIER_BY_LABEL = {
     'In Design': 'coral',
     'KV in Progress': 'coral',
@@ -61,10 +57,8 @@ _MODIFIER_BY_LABEL = {
 }
 _DEFAULT_MODIFIER = 'coral'
 
-# Platform-derived label -> CS display label. Only what derive_project_status
-# actually emits is re-labelled; everything past handoff is manual-only.
-# 'In Production' is a display alias — the underlying project stays
-# Handed to Production.
+# Platform-derived label -> CS display label. 'In Production' is display only;
+# the project itself stays Handed to Production.
 _AUTO_RELABEL = {
     'Briefed': 'Briefing',
     'Handed to Production': 'In Production',
@@ -76,12 +70,8 @@ def _modifier_for(label):
 
 
 def effective_cs_status(project):
-    """(label, css_modifier, is_auto) for a project's CS status cell.
-
-    Manual cs_status wins when set (is_auto False); otherwise the
-    platform-derived status re-labelled into CS vocabulary (is_auto True).
-    Never reads or writes Project.project_status beyond what
-    derive_project_status already does."""
+    """(label, css_modifier, is_auto) for a project's CS status cell. Manual
+    cs_status wins when set; otherwise the derived status in CS wording."""
     cs = project.client_servicing
     if cs and cs.cs_status:
         return (cs.cs_status, _modifier_for(cs.cs_status), False)
@@ -92,10 +82,9 @@ def effective_cs_status(project):
 
 
 def cs_design_indicator(project):
-    """Active design streams for an In-Design row, as short chip labels
-    ([] when none). Standard briefs show the open 2D/3D/Technical streams;
-    C&CM shows Concept & KV until concept approval, then Customer Artwork
-    while artwork is still in progress."""
+    """Chip labels for an In-Design row's open design streams ([] if none).
+    Standard briefs: 2D / 3D / Technical. C&CM: Concept & KV until concept
+    approval, then Customer Artwork until every deliverable is approved."""
     if project.brief_type == 'ccm':
         if project.concept_approved_at is None:
             return ['Concept & KV']

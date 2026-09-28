@@ -1,17 +1,10 @@
-# Thin streaming routes that tell the browser "something changed, go fetch"
-# — they do NOT push data themselves. All the role-based visibility logic
-# (who can see which projects, tab assignment, fingerprint diffing) lives in
-# api.py's poll endpoints and in notifications.py's poll endpoint;
-# duplicating any of it here would be a second place for it to drift out of
-# sync. So each SSE endpoint below is just a doorbell: it blocks on a
-# subscriber queue (see sse_relay.py) and emits a tiny SSE event whenever
-# that queue gets something, and the client's polling.js / notifications.js
-# fetch logic runs in response — driven by a push instead of a timer.
+# SSE "doorbell" streams: each only says "something changed" (queues from
+# sse_relay.py). The client (polling.js / notifications.js) then re-fetches
+# from the normal poll endpoints, which hold all visibility logic; pushing
+# data here would duplicate it.
 #
-# Needs gevent workers to help at any scale — see run.py / GEVENT_WORKER. On
-# the plain sync Flask dev server this works for a single connection (fine
-# for local testing) but each open SSE stream would occupy one entire sync
-# worker in production, defeating the point.
+# Needs gevent workers (GEVENT_WORKER, run.py): under sync workers each open
+# stream holds a whole worker.
 
 from flask import Blueprint, Response
 from flask_login import login_required
@@ -28,10 +21,8 @@ from app.modules.core.shared.lib.capabilities import effective_user
 
 sse_bp = Blueprint('sse', __name__, url_prefix='/sse')
 
-# How often to send a keep-alive comment when nothing's happened. SSE
-# comment lines (start with ':') are invisible to EventSource's onmessage
-# but keep the connection alive through Cloudflare Tunnel or any
-# intermediate proxy that would otherwise time out an idle socket.
+# Keep-alive interval. SSE comment lines (':') are ignored by EventSource but
+# stop Cloudflare Tunnel and other proxies closing an idle socket.
 _HEARTBEAT_SECONDS = 5
 
 
@@ -44,10 +35,7 @@ def _event_stream(queue, unsubscribe):
             except Empty:
                 yield ': keepalive\n\n'
     finally:
-        # Runs when this generator is torn down — client closed the tab,
-        # navigated away, or the connection otherwise died. Without this,
-        # the subscriber registry would grow a dead queue for every closed
-        # connection until the worker restarts.
+        # Runs when the client disconnects; without it dead queues pile up.
         unsubscribe()
 
 
@@ -87,12 +75,7 @@ def di_project_stream(di_project_id):
 @sse_bp.route('/digital-innovation')
 @login_required
 def di_dashboard_stream():
-    # For screens that aren't scoped to one project — Performance and
-    # Archive both show data spanning every DiProject, and Edit Templates
-    # isn't tied to a project at all (see live_events.py's DiStepTemplate
-    # sentinel) — so none of them can subscribe to a single di_project_id
-    # the way Board does above. Mirrors /dashboard's relationship to
-    # /projects/<id> just above it.
+    # DI screens not scoped to one project: Performance, Archive, Edit Templates.
     q = subscribe_di_dashboard()
     return _sse_response(_event_stream(q, lambda: unsubscribe_di_dashboard(q)))
 
@@ -100,9 +83,7 @@ def di_dashboard_stream():
 @sse_bp.route('/notifications')
 @login_required
 def notifications_stream():
-    # Emulation-aware actor pattern — an admin emulating
-    # another user should get a live stream of THAT user's notifications,
-    # matching what /notifications/poll already shows them.
+    # Emulation-aware: an admin emulating a user gets that user's stream.
     user_id = effective_user().id
     q = subscribe_user(user_id)
     return _sse_response(_event_stream(q, lambda: unsubscribe_user(user_id, q)))

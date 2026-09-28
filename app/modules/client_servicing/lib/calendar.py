@@ -1,11 +1,9 @@
 """
-Installation Calendar — risk derivation and the calendar data service.
+Installation Calendar data: risk derivation and the month/agenda view models.
 
-The calendar is install-date driven: a project appears on its
-Project.installation_date. Each install carries an effective risk — the
-manual ClientServicing.risk when set (sticky), else derived from the
-effective CS status vs. how close the install date is. Nothing here writes,
-and nothing touches Project.project_status.
+A project appears on its Project.installation_date. Its risk is the manual
+ClientServicing.risk when set, else derived from CS status vs. days to install.
+Read-only; never touches Project.project_status.
 """
 from calendar import Calendar
 from datetime import date, timedelta
@@ -13,8 +11,7 @@ from datetime import date, timedelta
 from app.modules.client_servicing.lib.status import effective_cs_status
 
 
-# Manual risk options (the dropdown), in severity order. Clearing reverts
-# to the derived risk.
+# Manual risk dropdown options. Clearing the field reverts to the derived risk.
 RISK_OPTIONS = ['On Track', 'Attention', 'At Risk', 'Done']
 
 _RISK_MODIFIER = {
@@ -24,17 +21,15 @@ _RISK_MODIFIER = {
     'Done': 'done',
 }
 
-# Effective-status labels that mean the install is finished (or past it) —
-# risk reads Done regardless of the date.
+# Statuses at or past install: risk reads Done whatever the date.
 _DONE_STATUSES = {
     'Installed', 'Prize Distribution', 'ED Closure',
     'Pending Invoice', 'Partial Invoicing', 'Invoiced',
 }
-# Production-ready — on track whatever the date, and what the "Ready" KPI
-# counts.
+# Production-ready: On Track whatever the date. The "Ready" KPI counts these.
 _READY_STATUSES = {'In Production', 'Installed'}
 
-# Auto-risk day thresholds (days until install, for a not-yet-ready job).
+# Auto-risk thresholds in days until install, for jobs not yet ready.
 _ATRISK_DAYS = 2
 _ATTENTION_DAYS = 7
 
@@ -63,9 +58,8 @@ def _auto_risk(project, status_label, today):
 
 
 def effective_risk(project, status_label=None, today=None):
-    """(label, css_modifier, is_auto). Manual ClientServicing.risk wins and
-    is sticky; otherwise the derived risk. status_label may be passed in to
-    avoid recomputing effective_cs_status per call."""
+    """(label, css_modifier, is_auto). Manual ClientServicing.risk wins, else
+    the derived risk. Pass status_label to skip recomputing the CS status."""
     if today is None:
         today = date.today()
     if status_label is None:
@@ -78,16 +72,14 @@ def effective_risk(project, status_label=None, today=None):
 
 
 def build_install(project, today):
-    """The per-install view model shared by the month drawer and the agenda
-    row. Reads only relationships _base_projects already eager-loads, so it
-    stays N+1-free across a list of projects."""
+    """Per-install view model for the month drawer and the agenda row. Reads
+    only relationships _base_projects eager-loads, so no N+1 queries."""
     cs = project.client_servicing
     status_label, status_class, status_is_auto = effective_cs_status(project)
     risk_label, risk_class, risk_is_auto = effective_risk(project, status_label, today)
     return {
         'id': project.id,
-        # Closed jobs stay on the calendar as history — faded, and with no
-        # editable cells rendered at all.
+        # Closed jobs stay on the calendar, faded and with no editable cells.
         'closed': cs is not None and cs.closed_at is not None,
         'client': project.client_brand.name if project.client_brand else project.name,
         'name': project.name,
@@ -110,9 +102,8 @@ def build_install(project, today):
 
 
 def _kpis(installs, today):
-    """Header counts. total/ready/attention/at-risk are over the passed
-    installs (a month); next-7-days is relative to today across the same
-    set."""
+    """Header counts over the passed installs (a month). next7 counts those
+    installing in the 7 days from today."""
     horizon = today + timedelta(days=7)
     ready = attention = atrisk = next7 = 0
     for it in installs:
@@ -138,9 +129,8 @@ _RISK_RANK = {'At Risk': 3, 'Attention': 2, 'On Track': 1, 'Done': 0}
 
 
 def month_grid(projects, year, month, today):
-    """Weeks of days (Mon-Sun) for the month, each day carrying its installs
-    and worst-risk class, plus the month KPIs. `projects` is the eager-loaded
-    base set; only those with an installation_date in the grid appear."""
+    """(weeks, kpis) for the month. Weeks run Mon-Sun; each day carries its
+    installs and worst-risk class. `projects` must be the eager-loaded base set."""
     installs_by_day = {}
     month_installs = []
     for p in projects:
@@ -172,8 +162,8 @@ def month_grid(projects, year, month, today):
 
 
 def agenda_groups(projects, today, days_ahead=30):
-    """Upcoming installs from today, grouped by day (Today / Tomorrow /
-    dated), plus the same KPIs computed over the current month."""
+    """(groups, kpis): installs from today to `days_ahead`, grouped by day,
+    plus the KPIs for the current month."""
     horizon = today + timedelta(days=days_ahead)
     groups_map = {}
     month_installs = []

@@ -1,33 +1,25 @@
-// app/static/js/project_list.js
+// app/modules/projects/static/js/project_list.js
 //
-// Projects page — row expansion. One click listener on the table handles
-// every row (event delegation), rather than attaching a listener per row —
-// consistent with the client-side performance principles locked at the
-// start of this build.
+// Projects list page: the project overlay (open/close, sidebar content,
+// live updates), the create-project entry, soft navigation for tabs/filters/
+// sort/group, client-side search, live table refresh, and the date picker.
+// Row clicks use one delegated listener on the table.
 
 (() => {
-    // ---- Detail + Briefing overlay: open/close + URL state ----
-    // Real click-to-open wiring (M3 Step 2) — replaces the old full-page
-    // navigation to project_detail.detail with an overlay fetched and
-    // injected on demand, addressable via a `project=<id>` query param so
-    // links/refreshes/back-forward all keep working (architecture doc §1).
-    // Deliberately declared above the `if (!table) return` guard below —
-    // the overlay mount isn't inside the table, so it must still work on
-    // an empty-state page (e.g. a direct link into a filtered, empty view).
+    // ---- Project overlay: open/close + URL state ----
+    // Addressable via ?project=<id> so links, refresh and back/forward work.
+    // Declared above the `if (!table) return` guard so the overlay still
+    // opens on an empty-state page.
 
     const overlayMount = document.getElementById('project-overlay-mount');
     let activeOverlay = null;
-    let activeSubTabCard = null;   // whichever sub-tab's card module is currently mounted (Details, Deliverables, ...)
-    let activeOverlayEdit = null;  // M4 edit-mode handle — reset (not destroyed) on every sub-tab switch, see loadSubTabContent
-    let activeChatPanel = null;    // M10 chat redesign — the persistent drawer's controller, independent of activeSubTabCard
+    let activeSubTabCard = null;   // card module for the page currently showing (Details, Deliverables, ...)
+    let activeOverlayEdit = null;  // Details edit-mode handle; reset (not destroyed) on every page switch
+    let activeChatPanel = null;    // chat drawer controller, independent of activeSubTabCard
 
-    // ---- Detail + Briefing overlay: remember last section + sub-tab ----
-    // Per-project localStorage, same kebab-case-plus-projectId key shape
-    // project_submissions_card.js's own scope-memory already uses. Written
-    // on every rail click (main tab or sub-tab), not just on close, so a
-    // mid-session refresh or browser-back doesn't lose the last spot. The
-    // read side (acting on this to restore the view on open) is a
-    // separate, later chunk — this one only wires up the writes.
+    // ---- Project overlay: remember last page ----
+    // Per-project localStorage, written on every sidebar click so a refresh
+    // or browser-back reopens the same page.
     function lastViewKey(projectId) {
         return 'overlay-last-view-' + projectId;
     }
@@ -36,8 +28,7 @@
         try {
             localStorage.setItem(lastViewKey(projectId), JSON.stringify({ section: section, subTab: subTab }));
         } catch (e) {
-            // localStorage unavailable (private browsing, quota, etc.) —
-            // silently falls back to today's hardcoded Design/Details default.
+            // localStorage unavailable (private browsing, quota): opens on Details.
         }
     }
 
@@ -49,10 +40,17 @@
         }
     }
 
-    // Registry of sub-tab content loaders, keyed by the subrail button's
-    // data-sub-tab value. Submissions/Pre-Production aren't built yet
-    // (later M3 steps) — clicking them just changes the active tab
-    // styling with no content swap until they get an entry here.
+    // The SPA router re-runs this file on every visit, and window/document
+    // listeners outlive the page, so each run swaps out the previous run's copy.
+    function bindGlobal(target, type, key, handler) {
+        const handlers = window.__projectListGlobalHandlers || (window.__projectListGlobalHandlers = {});
+        if (handlers[key]) target.removeEventListener(type, handlers[key]);
+        handlers[key] = handler;
+        target.addEventListener(type, handler);
+    }
+
+    // Content loaders for the Design pages, keyed by the sidebar button's
+    // data-sub-tab value. A key with no entry here loads nothing.
     const SUBTAB_LOADERS = {
         details: {
             url: (projectId) => `/projects/${projectId}/overlay/details`,
@@ -66,25 +64,28 @@
             url: (projectId) => `/projects/${projectId}/overlay/submissions`,
             module: () => window.ProjectSubmissionsCard,
         },
-        // Key is 'pre-production' (hyphenated) — matches the rail button's
-        // data-sub-tab value in _overlay.html exactly, since that value is
-        // read straight off the DOM and used as this object's key.
+        // Hyphenated to match data-sub-tab in _overlay.html, which is used as the key.
         'pre-production': {
             url: (projectId) => `/projects/${projectId}/overlay/preproduction`,
             module: () => window.ProjectPreproductionCard,
         },
     };
 
-    // Task #37 — the guard passed into ProjectOverlay.init as onBeforeNavigate.
-    // Only project_list.js knows about activeOverlayEdit, so this is where
-    // the check has to live; project_overlay.js just calls it before any
-    // navigation that would tear out the edit-mode DOM (close, sub-tab
-    // switch) and trusts it to call proceed() when it's actually safe to go.
+    // The page the overlay is showing, by the same rules openProjectOverlay
+    // restores with: nothing saved, or a page that no longer exists, is Details.
+    function shownPage(projectId) {
+        const lastView = getLastView(projectId);
+        if (lastView && lastView.section === 'notes') return 'notes';
+        if (lastView && lastView.section === 'design' && lastView.subTab && SUBTAB_LOADERS[lastView.subTab]) {
+            return lastView.subTab;
+        }
+        return 'details';
+    }
+
+    // Unsaved-edit guard, passed to ProjectOverlay.init as onBeforeNavigate.
+    // Calls proceed() straight away, or after the user confirms discarding edits.
     function guardUnsavedEdit(proceed) {
         if (activeOverlayEdit && activeOverlayEdit.isEditing() && activeOverlayEdit.hasUnsavedChanges()) {
-            // M10: showConfirm/#confirm-modal load on every page via
-            // base.html, so the native window.confirm() fallback this used
-            // to have was dead code — dropped.
             window.showConfirm(
                 'You have unsaved changes on Details. Discard them?',
                 proceed,
@@ -102,21 +103,14 @@
         const contentEl = document.getElementById('project-overlay-content');
         if (!contentEl) return;
 
-        // Any sub-tab switch invalidates edit mode — the DOM it was
-        // editing is about to be torn out from under it either way. Reset
-        // now so the header (Edit/Save/Cancel) can't end up stuck showing
-        // Save/Cancel over content that isn't actually in edit state
-        // (e.g. Edit clicked on Deliverables, then navigate back to
-        // Details). No confirm here — that's task #37's job once there's
-        // a real "unsaved changes" guard to build.
+        // A page switch replaces the edited DOM, so reset edit mode now or the
+        // header stays stuck on Save/Cancel. The unsaved-changes confirm
+        // happens earlier, in guardUnsavedEdit.
         if (activeOverlayEdit) {
             activeOverlayEdit.exitEditMode();
         }
 
-        // Edit module (M4) is scoped to Details only (17 Aug 2026) —
-        // Deliverables already has its own separate structural edit mode
-        // (Step 3), Submissions/Pre-Production don't need field editing.
-        // Hide the header's Edit control outside Details.
+        // The header's Edit button is for Details only; Deliverables has its own edit mode.
         const overlayHeader = document.getElementById('project-overlay-header');
         if (overlayHeader) {
             const editBtn = overlayHeader.querySelector('#project-overlay-edit-btn');
@@ -150,8 +144,7 @@
             activeSubTabCard = null;
         }
 
-        // Edit button only makes sense on Details — hide it here too, same as
-        // every non-Details sub-tab already does.
+        // Edit button is for Details only.
         const overlayHeader = document.getElementById('project-overlay-header');
         if (overlayHeader) {
             const editBtn = overlayHeader.querySelector('#project-overlay-edit-btn');
@@ -168,14 +161,9 @@
             });
     }
 
-    // Chat drawer (M10 chat redesign) — independent of loadNotesSection/
-    // loadSubTabContent above: the drawer is reachable from any rail tab,
-    // not a section of its own, so its content lives in its own container
-    // (#project-overlay-chat-content) and is never touched by a sub-tab
-    // switch. Called once by project_overlay.js's onChatOpened the first
-    // time someone opens the drawer for this overlay session, and again
-    // any time the panel itself needs a fresh fetch (send/delete, and —
-    // once the live-update hookup lands — an incoming SSE ping while open).
+    // Chat drawer content lives in its own container, untouched by page
+    // switches. Called once, on the drawer's first open (onChatOpened);
+    // later refreshes go through the panel's own reload/liveRefresh.
     function loadChatDrawer(projectId) {
         const contentEl = document.getElementById('project-overlay-chat-content');
         if (!contentEl) return;
@@ -190,12 +178,10 @@
             });
     }
 
-    // Cancel / Reactivate + Put on Hold / Resume — wired once per overlay
-    // open (the sidebar isn't re-rendered on sub-tab switches, so this
-    // can't live in a per-sub-tab card module like project_details_card.js).
-    // Each button pair is dual-rendered (both states in the DOM, one
-    // hidden) and toggled directly on success — cheaper than refetching
-    // the whole sidebar, and mirrors the header's Edit/Save/Cancel pattern.
+    // Sidebar actions (Flag Issue, Hold/Resume, Cancel/Reactivate, folder,
+    // edit access). Wired once per overlay open, since the sidebar persists
+    // across page switches. Each button pair is rendered in both states and
+    // toggled on success, with no sidebar refetch.
     function wireProjectLifecycleActions(sidebarEl, projectId) {
         if (!sidebarEl) return;
 
@@ -209,20 +195,15 @@
                 .catch(() => { if (onError) onError('Something went wrong. Please try again.'); });
         }
 
-        // After any lifecycle change, refresh Details content if that's
-        // the tab currently showing — it's the only sub-tab with a status
-        // pill / cancellation banner to keep in sync.
+        // Details is the only page showing status/flags, so refresh it if it is open.
         function refreshDetailsIfActive() {
-            const lastView = getLastView(projectId);
-            if (lastView && lastView.section === 'design' && (lastView.subTab || 'details') === 'details') {
+            if (shownPage(projectId) === 'details') {
                 loadSubTabContent(projectId, 'details');
             }
         }
 
-        // ── Flag Issue (project-level) — same inline reveal-form pattern
-        // as Cancel Project. Raising is the only action here; replying/
-        // resolving/history still happen on the Details tab itself (see
-        // project_flags.js), since those need the full flag list to work with. ──
+        // ── Flag Issue (project-level): raise only. Reply/resolve live on
+        // Details (project_flags.js). ──
         const flagBtn = sidebarEl.querySelector('#overlay-flag-issue-btn');
         const flagForm = sidebarEl.querySelector('#overlay-flag-issue-form');
         const flagMessageInput = sidebarEl.querySelector('#overlay-flag-issue-message');
@@ -275,7 +256,7 @@
                     if (resumeBtn) resumeBtn.classList.remove('is-hidden');
                     refreshDetailsIfActive();
                 }, (err) => alert(err || 'Could not put this project on hold.'));
-                window.showConfirm('Put this project on hold?', go); // M10: dropped dead native-confirm fallback
+                window.showConfirm('Put this project on hold?', go);
             });
         }
         if (resumeBtn) {
@@ -288,18 +269,14 @@
             });
         }
 
-        // Open Project Folder (Synology Drive, M10 NAS migration, 21 Aug 2026) —
-        // click-triggered, see main.js's openNasLink().
+        // Open Project Folder (Synology Drive), see main.js's openNasLink().
         const openFolderBtn = sidebarEl.querySelector('#overlay-open-folder-btn');
         if (openFolderBtn) {
             openFolderBtn.addEventListener('click', () => openNasLink(openFolderBtn));
         }
 
-        // Request Editing Access (26 Aug 2026, per Ezekiel) — single button,
-        // no confirm gate (unlike Cancel/Hold, this isn't destructive — it's
-        // just asking). Flips itself to the disabled "pending" state
-        // in-place on success rather than waiting for the sidebar's next
-        // full render, same optimistic-update approach as Hold/Cancel below.
+        // Request Editing Access: no confirm (not destructive). Flips to the
+        // disabled "pending" state in place on success.
         const editAccessBtn = sidebarEl.querySelector('#overlay-request-edit-access-btn');
         if (editAccessBtn) {
             editAccessBtn.addEventListener('click', () => {
@@ -342,13 +319,7 @@
                     if (cancelErrorEl) { cancelErrorEl.textContent = 'A reason is required.'; cancelErrorEl.classList.remove('hidden'); }
                     return;
                 }
-                // A reason was already required, but that's not the same as a
-                // confirmation — nothing stopped a stray click on "Confirm
-                // Cancel" from firing immediately. 24 Aug 2026 (per Ezekiel,
-                // "add redundancy to the cancel process"): gate the actual
-                // request behind window.showConfirm(), same as every other
-                // destructive action here (Put on Hold above, delete draft,
-                // etc.).
+                // A reason alone doesn't stop a stray click, so confirm too.
                 window.showConfirm('Cancel this project? This freezes it for invoicing until reactivated.', () => {
                     cancelConfirmBtn.disabled = true;
                     if (cancelErrorEl) cancelErrorEl.classList.add('hidden');
@@ -389,52 +360,28 @@
                         saveLastView(projectId, 'design', subTabKey);
                         loadSubTabContent(projectId, subTabKey);
                     },
-                    // in project_list.js, openProjectOverlay()'s onSectionSelected callback:
-                    // defaultSubTabKey is project_overlay.js's freshly-picked
-                    // FIRST sub-category for whichever section was just
-                    // clicked (null for sections with no sub-tab strip,
-                    // e.g. Notes, or Finance/Production/Logistics today).
-                    // Actually loading it here — not just remembering it —
-                    // is the fix for the "click Design, click Details,
-                    // nothing happens" bug: previously this branch only
-                    // ever called saveLastView(), never loadSubTabContent(),
-                    // so the content pane kept showing whatever the
-                    // PREVIOUS section had rendered until some other click
-                    // happened to trigger a load.
-                    function (sectionKey, defaultSubTabKey) {
-                        if (sectionKey === 'design') {
-                            const subTab = defaultSubTabKey || 'details';
-                            saveLastView(projectId, 'design', subTab);
-                            loadSubTabContent(projectId, subTab);
-                        } else {
-                            saveLastView(projectId, sectionKey, null);
-                            if (sectionKey === 'notes') {
-                                loadNotesSection(projectId);
-                            }
+                    // A section button was clicked. Site Visits is the only
+                    // one; the Design pages go through the sub-tab callback above.
+                    function (sectionKey) {
+                        saveLastView(projectId, sectionKey, null);
+                        if (sectionKey === 'notes') {
+                            loadNotesSection(projectId);
                         }
                     },
                     guardUnsavedEdit,
-                    // onChatOpened — chat is a persistent drawer, not a rail
-                    // section, so this fires once (first open only, see
-                    // project_overlay.js's chatLoaded) rather than every
-                    // section switch.
+                    // onChatOpened: fires on the drawer's first open only.
                     function () {
                         loadChatDrawer(projectId);
                     }
                 );
 
-                // Deep link into chat (chat-mention notifications — see
-                // notify_of_chat_mention() / mark_read() on the backend,
-                // and autoOpenFromUrl() below) — open the drawer right
-                // away, same as clicking the chat button ourselves.
+                // ?chat=1 deep link (chat-mention notifications): open the drawer now.
                 if (openChat && activeOverlay) {
                     activeOverlay.openChat();
                 }
 
-                // Edit mode (M4) — header (name/Edit/Save/Cancel) is part of
-                // the outer shell rendered once here, not re-injected per
-                // sub-tab like contentEl is, so it only needs initializing
-                // once per overlay open, same as ProjectOverlay itself.
+                // The header persists across page switches, so edit mode is
+                // initialised once per overlay open.
                 const overlayHeader = document.getElementById('project-overlay-header');
                 if (overlayHeader && window.ProjectOverlayEdit) {
                     activeOverlayEdit = window.ProjectOverlayEdit.init(overlayHeader, contentEl, projectId, function () {
@@ -442,62 +389,42 @@
                     });
                 }
 
-                // Cancel/Hold sidebar actions (task #56) — lives in the
-                // persistent shell alongside the header, so wire it once
-                // here too, not per sub-tab load.
+                // Sidebar actions also persist, so wire them once here.
                 const sidebarEl = document.getElementById('project-overlay-sidebar');
                 wireProjectLifecycleActions(sidebarEl, projectId);
 
-                // Live updates (task #35) — someone else saving an edit to
-                // this same project (or any other watched change — see
-                // live_events.py's _PROJECT_ID_GETTERS) pings this stream.
-                // Skipped while THIS viewer is mid-edit, so an incoming
-                // refresh can never wipe out fields they're actively
-                // typing into — the concurrent-edit check from task #34
-                // already covers that case safely at Save time instead.
+                // SSE live updates for this project (see live_events.py's
+                // _PROJECT_ID_GETTERS). The page refresh is skipped while this
+                // viewer is editing so it can't wipe their fields; the
+                // concurrent-edit check catches conflicts at Save.
                 if (window.helixPolling) {
                     window.helixPolling.startOverlayStream(projectId, function () {
-                        // Chat drawer — independent of whichever rail section is showing underneath.
+                        // Chat drawer refreshes regardless of the page underneath.
                         if (activeChatPanel && activeOverlay && activeOverlay.isChatOpen && activeOverlay.isChatOpen()) {
                             activeChatPanel.liveRefresh();
                         }
 
                         if (activeOverlayEdit && activeOverlayEdit.isEditing()) return;
-                        const lastView = getLastView(projectId);
-                        if (lastView && lastView.section === 'notes') {
-                            // Notes & Visits (M9) has real content behind it,
-                            // same as the Design sub-tabs below — not a
-                            // placeholder section, so it needs its own live
-                            // refresh instead of silently falling through to
-                            // the "nothing to do" branch placeholders use.
+                        const page = shownPage(projectId);
+                        if (page === 'notes') {
                             loadNotesSection(projectId);
-                            return;
+                        } else {
+                            loadSubTabContent(projectId, page);
                         }
-                        const subTab = (lastView && lastView.section === 'design') ? (lastView.subTab || 'details') : null;
-                        if (subTab) loadSubTabContent(projectId, subTab);
                     });
                 }
 
                 const lastView = getLastView(projectId);
                 if (lastView && lastView.section === 'design' && lastView.subTab && lastView.subTab !== 'details' && SUBTAB_LOADERS[lastView.subTab]) {
-                    // Remembered a real sub-tab other than the default —
-                    // fetch its content fresh and sync the rail to match.
+                    // Remembered a Design page other than Details: fetch it and sync the sidebar.
                     activeOverlay.restoreView('design', lastView.subTab);
                     loadSubTabContent(projectId, lastView.subTab);
                 } else if (lastView && lastView.section === 'notes') {
-                    // Notes has real content behind it (unlike Finance/Production/
-                    // Logistics, still placeholders) — sync the rail AND actually fetch
-                    // it, same shape as the Design-sub-tab branch above.
                     activeOverlay.restoreView('notes', null);
                     loadNotesSection(projectId);
                 } else {
-                    // Nothing remembered, remembered view was already 'details', or
-                    // it's a still-placeholder section (Finance/Production/Logistics —
-                    // no real content yet) — just sync the rail's visual state and fall
-                    // back to the embedded Details content underneath.
-                    if (lastView && lastView.section && lastView.section !== 'design') {
-                        activeOverlay.restoreView(lastView.section, null);
-                    }
+                    // Nothing remembered, Details, or a section that no longer
+                    // exists — show the Details content already in the page.
                     activeSubTabCard = window.ProjectDetailsCard.init(contentEl, projectId, function () {
                         loadSubTabContent(projectId, 'details');
                     });
@@ -511,23 +438,16 @@
             });
     }
 
-    // Create-mode overlay (task #61) — deliberately its own pair of
-    // open/close functions rather than reusing openProjectOverlay/
-    // closeProjectOverlay above: those wire up ProjectOverlay.init's
-    // sub-tab rail, SSE live-updates stream, and the edit-mode header,
-    // none of which exist in the create-mode shell (no sub-tabs, no
-    // Cancel/Hold sidebar, no lifecycle actions yet — see
-    // _overlay_create.html). Keeping the two paths separate means neither
-    // has to guard against the other's DOM not being there.
+    // Create-mode overlay has its own open/close: its shell
+    // (_overlay_create.html) has no sidebar pages, SSE stream or edit
+    // header, which openProjectOverlay expects.
     function openCreateShellForDraft(projectId) {
         return fetch(`/projects/${projectId}/overlay/create`)
             .then((res) => res.text())
             .then((html) => {
                 overlayMount.innerHTML = html;
                 if (window.ProjectOverlayCreate) {
-                    // onFinalized: after a successful Confirm on the create
-                    // summary modal, open the newly-created project straight
-                    // into the full live overlay.
+                    // onFinalized: after Confirm, open the new project in the full overlay.
                     window.ProjectOverlayCreate.init(projectId, closeNewProjectOverlay, openProjectOverlay);
                 }
             });
@@ -550,13 +470,9 @@
             .catch(() => alert('Could not start a new project.'));
     }
 
-    // Resumable drafts (task #65) — "+ New Project" checks for any open
-    // drafts first (the creator's own, or — for admin/management —
-    // anyone's) and, if there are some, shows a picker instead of
-    // immediately starting a fresh one. Mirrors the confirm-summary
-    // modal's append-to-body/remove-on-close pattern in
-    // project_overlay_create.js rather than reusing overlayMount, since
-    // this picker has to exist BEFORE any create-mode shell is loaded.
+    // Drafts picker: "+ New Project" shows this when open drafts exist (own,
+    // or anyone's for admin/management). Appended to body, not overlayMount,
+    // because it exists before any create-mode shell is loaded.
     function openDraftsPicker(html) {
         const wrapper = document.createElement('div');
         wrapper.innerHTML = html;
@@ -593,7 +509,7 @@
         modal.querySelectorAll('.overlay-create-draft-delete').forEach((btn) => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                window.showConfirm('Delete this draft? This cannot be undone.', () => { // M10: was bare window.confirm()
+                window.showConfirm('Delete this draft? This cannot be undone.', () => {
                     const draftId = btn.getAttribute('data-draft-id');
                     btn.disabled = true;
                     fetch(`/projects/${draftId}/draft`, { method: 'DELETE' })
@@ -607,11 +523,8 @@
                             const row = modal.querySelector(`.overlay-create-draft-row[data-draft-id="${draftId}"]`);
                             if (row) row.remove();
                             if (!modal.querySelector('.overlay-create-draft-row')) {
-                                // Last one just got deleted — leave the picker
-                                // open (don't presume they want a new project
-                                // right now just because they cleaned up an old
-                                // one) with just Cancel / Start New left to
-                                // choose from.
+                                // Last draft deleted: keep the picker open with
+                                // just Cancel / Start New.
                                 const list = modal.querySelector('.overlay-create-drafts-list');
                                 if (list) list.remove();
                                 const intro = modal.querySelector('.overlay-submit-summary-intro');
@@ -669,10 +582,16 @@
         }
     }
 
-    // Browser Back/Forward: re-derive open/closed state from the URL
-    // rather than trusting the popstate event's direction, since the user
-    // could navigate multiple steps at once.
-    window.addEventListener('popstate', () => {
+    // Back/Forward: re-derive overlay state from the URL, since the user may
+    // jump several steps at once.
+    bindGlobal(window, 'popstate', 'popstate', () => {
+        if (!overlayMount || !overlayMount.isConnected) return;
+        // Back to another page: the router swaps it in; just drop the overlay
+        // (and its SSE stream) without syncing this page's state.
+        if (!window.location.pathname.startsWith('/projects-new')) {
+            if (activeOverlay) closeProjectOverlay(false);
+            return;
+        }
         const params = new URLSearchParams(window.location.search);
         const projectId = params.get('project');
         if (projectId) {
@@ -680,12 +599,8 @@
         } else {
             closeProjectOverlay(false);
         }
-        // Re-sync the tab strip / filter+sort panels / table from wherever
-        // Back/Forward just landed — a soft-navigated view/filter/sort
-        // change is a history entry too (see softNavigate below), so this
-        // has to cover it the same way the overlay branch above does.
-        // No history write here — the browser already moved; this only
-        // patches the DOM to match.
+        // Soft-nav changes are history entries too, so re-sync tabs, panels
+        // and table. No pushState: the browser already moved.
         syncPageStateFromLocation(window.location.pathname + window.location.search, {
             onDone: (finalQuery, failed) => {
                 if (!failed && finalQuery && finalQuery !== window.location.search) {
@@ -695,9 +610,8 @@
         });
     });
 
-    // Direct load / refresh with `?project=<id>` already in the URL —
-    // every inbound link (notifications, achievements, escalations) will
-    // depend on this once the old detail page is deleted at M10.
+    // Direct load with ?project=<id> (and optional &chat=1). Every inbound
+    // project link (notifications, achievements, escalations) relies on this.
     (function autoOpenFromUrl() {
         const params = new URLSearchParams(window.location.search);
         const projectId = params.get('project');
@@ -705,42 +619,22 @@
         if (projectId) openProjectOverlay(projectId, false, openChat);
     })();
 
-    // ---- Row expansion + row-click-to-open (existing table, unchanged structure) ----
+    // ---- Row expansion + row-click-to-open ----
 
     const table = document.querySelector('.project-table');
 
-    // ---- Soft navigation: tabs / filters / sort / group / search / show-cancelled ----
-    // Added 28 Aug 2026, per Ezekiel: "can we have this spa injected too?"
-    // — every one of these previously did `window.location.href = url`, a
-    // full page reload (the original complaint was specifically about
-    // switching view tabs, but every other toolbar control did the exact
-    // same full-reload thing, so this covers all of them). Now they fetch
-    // /projects-new/page-state and patch the existing DOM instead.
+    // ---- Soft navigation: tabs / filters / sort / group / show-cancelled ----
+    // These controls fetch /projects-new/page-state and patch the DOM
+    // instead of reloading the page.
     //
     // #filter-panel, #sort-panel and .tab-strip only ever get their
-    // INNERHTML replaced below — never the elements themselves — so the
-    // delegated listeners already bound directly on them (chip clicks and
-    // #filter-clear-all on filterPanel; sort/group option clicks and
-    // #sort-clear-all on sortPanel; tab/menu/confirm clicks on tabStrip)
-    // keep working with no re-binding needed, exactly the same reasoning
-    // _table_rows.html's swap into #project-table has always relied on.
+    // innerHTML replaced, never the elements, so the delegated listeners
+    // bound on them keep working without re-binding.
     const tabStrip = document.querySelector('.tab-strip');
 
-    // Bug fix (28 Aug 2026, found via console error after Ezekiel reported
-    // a reload-flash on soft navigation): sortToggle/sortPanel/
-    // showCancelledToggle/saveNewViewBtn/toolbarSearch are declared again
-    // further down, but INSIDE the nested `if (filterToggle &&
-    // filterPanel) { ... }` block that wires up their listeners — a
-    // block-scoped `const`, invisible up here. applyPageState() below
-    // referencing that inner `sortPanel` threw "ReferenceError: sortPanel
-    // is not defined" on every call, which softNavigate's catch() silently
-    // swallowed before falling back to a full page reload — the actual
-    // cause of the flash. These are separate, harmless duplicate
-    // getElementById lookups (cheap, and this file already does the same
-    // "unconditional lookup + guarded listener attachment" split for
-    // filterToggle/filterPanel above) purely so applyPageState() has its
-    // own outer-scope reference; the inner block's own `const` of the same
-    // name still shadows these within its own listener-wiring code, untouched.
+    // Outer-scope lookups for applyPageState(). The same names are declared
+    // again inside the `if (filterToggle && filterPanel)` block below; those
+    // block-scoped consts are invisible here, so do not remove these.
     const sortToggle = document.getElementById('sort-toggle');
     const sortPanel = document.getElementById('sort-panel');
     const showCancelledToggle = document.getElementById('show-cancelled-toggle');
@@ -763,9 +657,8 @@
         }
     })();
 
-    // Renumber the visible rows in one grid container so hiding rows never
-    // leaves a gap (rows are pinned to explicit grid rows via --row-num).
-    // Header row stays at 1; matching rows get 2, 3, 4 … in order.
+    // Renumber visible rows in one grid container so hidden rows leave no
+    // gap (rows are pinned to grid rows via --row-num; header stays at 1).
     function renumberContainer(container, needle) {
         const rows = container.querySelectorAll(':scope > .project-row--link');
         let n = 2;
@@ -774,9 +667,7 @@
             const match = !needle || (row.dataset.search || '').includes(needle);
             row.hidden = !match;
 
-            // Each project owns two grid rows: its own (--row-num) and the
-            // reserved slot below for its expand panel. Step by 2 so a
-            // renumbered row never lands on the prior project's panel slot.
+            // Each project owns two grid rows (itself + its expand panel), so step by 2.
             const panel = row.nextElementSibling;
             const hasPanel = panel && panel.classList.contains('project-expand-container');
 
@@ -795,9 +686,8 @@
         return visible;
     }
 
-    // Instant client-side search: filters the rows already on screen as you
-    // type (project name + job number), no server round-trip. Re-run after any
-    // table re-render (soft-nav / live refresh) so it stays applied.
+    // Client-side search over the rows on screen (project name + job number).
+    // Re-run after any table re-render so it stays applied.
     function applyClientSearch() {
         if (!toolbarSearch || !table) return;
         const needle = (toolbarSearch.value || '').trim().toLowerCase();
@@ -836,13 +726,8 @@
     }
 
     function applyPageState(data) {
-        // Matches refreshWholeTable()'s existing guard below: a resize or
-        // reorder drag holds direct references to the exact header-cell
-        // nodes and live measurements off them, so touching the table
-        // (content, table_key, or the saved-layout globals) mid-drag would
-        // either freeze it or have it silently fail against now-detached
-        // nodes. Skip the whole table side of this update — the next
-        // soft-nav or SSE ping picks it up once the user lets go.
+        // A column drag holds references to the header cells, so skip the
+        // table update mid-drag; the next soft-nav or SSE ping catches up.
         if (!isColumnDragInProgress()) {
             table.innerHTML = data.table_html;
             table.classList.toggle('project-table--grouped', !!data.groups);
@@ -873,14 +758,11 @@
         if (saveNewViewBtn) {
             saveNewViewBtn.hidden = !data.is_dirty;
         }
-        // Search is client-side now — keep whatever the user has typed and
-        // re-apply it to the freshly rendered rows rather than overwriting it.
+        // Keep the typed search and re-apply it to the new rows.
         applyClientSearch();
     }
 
-    // requestId guards against a fast double-click (e.g. two tabs clicked
-    // before the first fetch resolves) applying stale data out of order —
-    // only the most recently issued request is allowed to touch the DOM.
+    // Only the latest request may touch the DOM, so fast clicks can't apply stale data.
     let pageStateRequestId = 0;
 
     function syncPageStateFromLocation(url, { onDone } = {}) {
@@ -888,11 +770,9 @@
         fetch(toPageStateUrl(url))
             .then((res) => {
                 if (!res.ok) throw new Error('page-state fetch failed: ' + res.status);
-                // response.url is the final URL after following any redirect
-                // — the "fresh landing on a saved view replays its saved
-                // filters" case (see page_state()'s docstring in
-                // project_list.py) — so its query string, not the one we
-                // requested, is what the address bar should end up showing.
+                // res.url is the URL after any redirect (a saved view replaying
+                // its filters, see page_state() in project_list.py); the
+                // address bar should show that query.
                 const finalQuery = new URL(res.url, window.location.origin).search;
                 return res.json().then((data) => ({ data, finalQuery }));
             })
@@ -903,34 +783,21 @@
             })
             .catch((err) => {
                 if (requestId !== pageStateRequestId) return;
-                // Logged, not swallowed (28 Aug 2026) — this catch covers
-                // both a real fetch/network failure AND any exception
-                // thrown inside applyPageState() above (a thrown error
-                // inside a .then() lands here too), and the caller's
-                // onDone(..., true) falls back to a full page reload
-                // either way. Without this log, that fallback silently
-                // masks whatever actually went wrong — the reload lands on
-                // index() and looks fine, so the only visible symptom is
-                // the flash of a real navigation where a soft one was
-                // expected. See it in the console instead of guessing.
+                // Also catches errors thrown in applyPageState(). The caller
+                // falls back to a full reload, which hides the cause, so log it.
                 console.error('page-state sync failed, falling back to a full navigation:', err);
                 if (onDone) onDone(null, true);
             });
     }
 
     function softNavigate(url) {
-        // Optimistic history entry first, same instant-feel precedent as
-        // the overlay's openProjectOverlay/closeProjectOverlay pushState
-        // calls above — corrected via replaceState below only in the rare
-        // saved-view-replay case where the resolved URL differs from what
-        // was actually clicked.
+        // Push history first; replaceState fixes it if a saved-view redirect
+        // resolved to a different query.
         history.pushState({ softNav: true }, '', url);
         syncPageStateFromLocation(url, {
             onDone: (finalQuery, failed) => {
                 if (failed) {
-                    // Something went wrong (network blip, non-OK response)
-                    // — fall back to a real navigation rather than leaving
-                    // the click looking like it silently did nothing.
+                    // Fall back to a real navigation so the click isn't lost.
                     window.location.href = url;
                     return;
                 }
@@ -943,45 +810,20 @@
 
     if (!table) return;
 
-    // ---- Live table refresh (task #55, table-side SSE) ----
-    // polling.js opens a stream to /sse/dashboard (the same generic "some
-    // project changed somewhere" doorbell the old and new dashboards
-    // already use) whenever .project-list-page is on screen, and calls
-    // this on every ping via window.helixRefreshProjectTable(projectId),
-    // projectId being whatever the SSE payload named (see polling.js's
-    // _connectLiveStream). Two paths:
+    // ---- Live table refresh (SSE) ----
+    // polling.js calls window.helixRefreshProjectTable(projectId) on every
+    // /sse/dashboard ping while .project-list-page is on screen.
+    //   - Row already showing: fetch just that row and swap its content in
+    //     place (a 204 means it left the view, so remove it). Its open
+    //     expand panel is untouched.
+    //   - Otherwise (no projectId, or a new row): re-fetch the whole view.
+    // A single-row update never moves a row or fixes a group count; the
+    // next full refresh does.
     //
-    //   - projectId is already showing (a matching [data-project-id] row
-    //     exists) — fetch just that project's row (table_row() in
-    //     project_list.py) and update the existing row node's content in
-    //     place, leaving its DOM position and its sibling
-    //     .project-expand-container (any open breakdown panel) untouched.
-    //   - anything else — no projectId (plain fallback-interval tick), or
-    //     the project isn't in the DOM yet — re-fetch the whole view
-    //     (table_rows()) and swap it into #project-table, same as before
-    //     this existed. Needed for a project entering the current view for
-    //     the first time, since a single-row fetch has nowhere to insert it.
-    //
-    // Known trade-off: a targeted update never moves a row (Group/Sort
-    // position) or corrects a group header's count — those only catch up
-    // on the next full refresh. Most pings are content-only changes to an
-    // already-visible row, so this is the common case; something that
-    // would actually reorder a row settles itself next time the page/
-    // filter/sort refreshes for any other reason.
-    //
-    // #project-overlay-mount is a SIBLING of .project-list-page's table
-    // region, not nested inside it, so replacing #project-table's content
-    // never touches an open overlay.
-    //
-    // Only #project-table's innerHTML is replaced — never the #project-table
-    // element itself — because project_list_layout.js's saved column
-    // widths/order live as CSS custom properties set directly on that
-    // element (see applyLayout()), and the row-click delegation just above
-    // this comment is bound to it too. Both survive a content-only swap for
-    // free. What does NOT survive it: the resize-handle and header-cell
-    // reorder listeners, which are bound directly to the header cells
-    // (not delegated) — bindColumnControls() has to re-run against the
-    // fresh cells afterwards, hence window.helixRebindProjectTableColumns.
+    // Only #project-table's innerHTML is replaced, never the element:
+    // project_list_layout.js keeps column CSS variables on it and the row
+    // click delegation is bound to it. Header-cell listeners do not survive,
+    // so window.helixRebindProjectTableColumns must run after a swap.
     function isColumnDragInProgress() {
         return document.body.classList.contains('is-resizing-column') ||
             document.body.classList.contains('is-reordering-column');
@@ -1008,8 +850,7 @@
                 if (newRow) existingRow.innerHTML = newRow.innerHTML;
             })
             .catch(() => {
-                // Network blip — silently skip, same as every other poll/
-                // stream callback in this app. The next ping tries again.
+                // Network blip: skip; the next ping tries again.
             });
     }
 
@@ -1025,18 +866,13 @@
                 applyClientSearch();
             })
             .catch(() => {
-                // Network blip — silently skip, same as every other poll/
-                // stream callback in this app. The next ping tries again.
+                // Network blip: skip; the next ping tries again.
             });
     }
 
     function refreshProjectTable(projectId) {
-        // A resize or reorder drag holds direct references to the exact
-        // header-cell nodes being dragged and reads live measurements off
-        // them every animation frame — replacing them mid-drag would either
-        // freeze it or have it silently fail against now-detached nodes.
-        // Simplest safe fix: skip this one refresh. Nothing is lost — the
-        // next SSE ping picks up whatever changed once the user lets go.
+        // A column drag holds live references to the header cells; skip
+        // this refresh and let the next ping catch up.
         if (isColumnDragInProgress()) return;
 
         const existingRow = projectId ? table.querySelector('[data-project-id="' + projectId + '"]') : null;
@@ -1060,11 +896,8 @@
             return;
         }
 
-        // Matches both the outer table's expand slot (.project-col-expand /
-        // .project-row) and the nested C&CM customer sub-table's expand slot
-        // (.expand-customer-col-expand / .expand-customer-row) — the two
-        // tables share the same toggle button class and expand-container
-        // pattern, they just wrap it in different column/row classes.
+        // Matches the outer table's expand slot and the nested C&CM customer
+        // sub-table's; both share the toggle and expand-container classes.
         const expandCell = e.target.closest('.project-col-expand, .expand-customer-col-expand');
         if (expandCell) {
             const toggle = expandCell.querySelector('.project-expand-toggle');
@@ -1098,15 +931,9 @@
             return;
         }
 
-        // Handed to Production pill — jumps to the Design Completed tab
-        // instead of opening the overlay, since that tab is exactly "every
-        // project currently at this status" (see project_list.py's
-        // design_complete branch). Retargeted from the old 'Design
-        // Completed' pill value (22 Aug 2026 simplification, per Ezekiel)
-        // — that separate label is gone, 'Handed to Production' is now the
-        // one pill value that lands here for both Standard and C&CM. Every
-        // other status pill still falls through to the normal
-        // row-opens-overlay behavior below.
+        // "Handed to Production" pill jumps to the Design Completed tab (every
+        // project at that status, see project_list.py's design_complete
+        // branch). Other pills fall through to opening the overlay.
         const statusCell = e.target.closest('.project-col-status');
         if (statusCell && statusCell.dataset.statusValue === 'Handed to Production') {
             e.preventDefault();
@@ -1115,8 +942,7 @@
             return;
         }
 
-        // Not the expand toggle — a click anywhere else on a project row
-        // opens the overlay instead of navigating to the old detail page.
+        // Any other click on a project row opens the overlay.
         const rowLink = e.target.closest('.project-row--link');
         if (!rowLink) return;
 
@@ -1133,10 +959,9 @@
             filterToggle.classList.toggle('is-open', !filterPanel.hidden);
         });
 
-        // Close the panel on any click outside it, so it doesn't stay open
-        // hovering over the table while someone's trying to do something else.
-        document.addEventListener('click', (e) => {
-            if (filterPanel.hidden) return;
+        // Close the panel on an outside click (the date picker counts as inside).
+        bindGlobal(document, 'click', 'filterOutsideClick', (e) => {
+            if (!filterPanel.isConnected || filterPanel.hidden) return;
             if (filterPanel.contains(e.target) || filterToggle.contains(e.target)) return;
             if (dateRangePicker && dateRangePicker.contains(e.target)) return;
             filterPanel.hidden = true;
@@ -1150,10 +975,7 @@
             const currentView = new URLSearchParams(window.location.search).get('view') || 'my';
             params.set('view', currentView);
 
-            // Multi-value chip groups: one comma-separated param per group,
-            // read from whichever chip rows currently carry .is-selected —
-            // replaces the old checkbox :checked reads now that these are
-            // buttons, not inputs.
+            // Chip groups: one comma-separated param per group, from rows with .is-selected.
             const chipGroups = ['cs_lead', 'project_owner', 'designers', 'client', 'brief_type', 'status', 'urgency', 'team', 'design_type'];
             chipGroups.forEach((name) => {
                 const selected = Array.from(
@@ -1164,11 +986,9 @@
                 }
             });
 
-            // Date-range pairs aren't editable yet (the calendar picker isn't
-            // built), but whatever's already active is sitting on the date
-            // button's own data-from/data-to attributes (rendered from
-            // active_filters on page load) — read those so toggling a chip
-            // elsewhere never silently wipes an existing date filter.
+            // Date ranges live on each date button's data-from/data-to (set by
+            // the date picker below, or rendered on load), so a chip click
+            // keeps them.
             const dateButtons = [
                 { btn: document.getElementById('initial-deadline-filter-btn'), from: 'initial_deadline_from', to: 'initial_deadline_to' },
                 { btn: document.getElementById('next-deadline-filter-btn'), from: 'next_deadline_from', to: 'next_deadline_to' },
@@ -1179,13 +999,10 @@
                 if (btn.dataset.to) params.set(to, btn.dataset.to);
             });
 
-            // Search is client-side only (filters the loaded rows live), so it
-            // is deliberately NOT added to the URL here — that keeps the full
-            // row set available to filter as the user broadens their text.
+            // Search stays out of the URL: it filters client-side and needs
+            // the full row set loaded.
 
-            // Same idea as the view tab above — this function rebuilds the
-            // whole query string from scratch, so without this, clicking any
-            // filter chip would silently wipe out whatever sort/group was active.
+            // The query is rebuilt from scratch, so carry sort/group over too.
             const currentSort = new URLSearchParams(window.location.search).get('sort');
             const currentDir = new URLSearchParams(window.location.search).get('dir');
             if (currentSort) {
@@ -1203,16 +1020,11 @@
             softNavigate(buildFilterUrl());
         }
 
-        // Clicking any chip row toggles its own selected state, then applies
-        // instantly — one delegated listener on the whole panel handles
-        // every group (and, since 28 Aug 2026, #filter-clear-all too —
-        // folded in here rather than bound separately, so it survives
-        // filterPanel.innerHTML getting replaced on every soft navigation;
-        // see applyPageState() above), rather than one listener per chip.
+        // One delegated listener for every chip and #filter-clear-all, so it
+        // survives filterPanel.innerHTML being replaced on soft navigation.
         filterPanel.addEventListener('click', (e) => {
             if (e.target.closest('#filter-clear-all')) {
-                // Clears filters only — sort/group are a separate control
-                // with its own Clear button, so they stay active across this click.
+                // Clears filters only; sort/group have their own Clear.
                 const existing = new URLSearchParams(window.location.search);
                 const params = new URLSearchParams();
                 params.set('view', existing.get('view') || 'my');
@@ -1230,8 +1042,6 @@
             applyFilters();
         });
 
-        // Search filters the loaded rows live on every keystroke — no server
-        // round-trip, so it updates instantly as you type.
         if (toolbarSearch) {
             toolbarSearch.addEventListener('input', applyClientSearch);
         }
@@ -1244,15 +1054,8 @@
         }
 
         // ---- Show Cancelled toggle ----
-        // Shortcut for "set the status filter to exactly Cancelled" — same
-        // effect as picking the Cancelled chip in the filter panel by hand,
-        // just one click instead of opening the panel. Filters to cancelled
-        // projects ONLY (replaces whatever status selection was active,
-        // rather than adding to it) — every OTHER filter dimension (client,
-        // designers, etc.) still combines on top normally, and clicking
-        // again clears status back out. Reads current URL and reloads, same
-        // "read, mutate one thing, reload" pattern as the Sort panel below,
-        // so everything else active (filters, sort, group) survives.
+        // Sets the status filter to exactly Cancelled (replacing any other
+        // status); clicking again clears status. Other URL params survive.
         const showCancelledToggle = document.getElementById('show-cancelled-toggle');
         if (showCancelledToggle) {
             showCancelledToggle.addEventListener('click', () => {
@@ -1315,10 +1118,8 @@
                     const name = input.value.trim();
                     if (!name) return;
 
-                    // Everything currently in the URL except `view` itself is
-                    // this new tab's remembered filter/sort/group selection —
-                    // replayed as real query params the moment someone lands
-                    // on this tab (see project_list.py's fresh-landing redirect).
+                    // Every URL param except `view` is saved with the tab and
+                    // replayed on landing (project_list.py's fresh-landing redirect).
                     const params = new URLSearchParams(window.location.search);
                     params.delete('view');
                     const filters = {};
@@ -1349,20 +1150,9 @@
         }
 
         // ---- Tab strip: plain tab clicks, saved-view rename / delete ----
-        // One delegated listener on tabStrip (28 Aug 2026, replacing what
-        // was a per-element .forEach(wrap => ...) bind) — tabStrip.innerHTML
-        // gets replaced on every soft navigation (see applyPageState above),
-        // which would otherwise silently drop these listeners the first
-        // time a tab, filter, sort, or search changed. Delegation means
-        // they never need re-binding.
-        //
-        // Bug fix in the same pass: the delete-confirm handler used to
-        // check `wrap.classList.contains('is-active')` to decide whether
-        // the view being deleted was the current one — but the class this
-        // markup actually sets (_tab_strip.html) is `active`, not
-        // `is-active`, so that check was always false and deleting the
-        // active saved view fell through to a full reload instead of
-        // redirecting to My Projects.
+        // One delegated listener, so it survives tabStrip.innerHTML being
+        // replaced on soft navigation. The active tab class is `active`
+        // (_tab_strip.html), not `is-active`.
         if (tabStrip) {
             tabStrip.addEventListener('click', (e) => {
                 const menuBtn = e.target.closest('.project-list-tab-menu-btn');
@@ -1418,8 +1208,7 @@
                     }
 
                     if (menuItem.dataset.action === 'delete') {
-                        // Small inline confirm, not window.confirm() — keeps
-                        // every popover on this page the same custom style.
+                        // Small inline confirm, matching this page's popovers.
                         let confirmBox = wrap.querySelector('.project-list-tab-confirm-delete');
                         if (confirmBox) return;
 
@@ -1461,12 +1250,8 @@
                     return;
                 }
 
-                // Plain tab click (My Projects / All-or-Team / Design
-                // Completed / a saved view's own link) — soft-navigate
-                // instead of a full page reload. Checked last so it never
-                // shadows the menu-btn/menu-item/confirm buttons above,
-                // all of which sit inside the same .tab-strip-item /
-                // .project-list-tab-wrap markup.
+                // Plain tab click: soft-navigate. Checked last because the
+                // menu and confirm buttons above sit inside the same tab markup.
                 const tabLink = e.target.closest('.tab-strip-item');
                 if (tabLink && tabLink.tagName === 'A') {
                     e.preventDefault();
@@ -1474,10 +1259,9 @@
                 }
             });
 
-            // Close any open tab menu on an outside click — tabStrip's own
-            // delegated handler above only sees clicks inside the tab strip.
-            document.addEventListener('click', (e) => {
-                if (tabStrip.contains(e.target)) return;
+            // Close any open tab menu on an outside click.
+            bindGlobal(document, 'click', 'tabMenuOutsideClick', (e) => {
+                if (!tabStrip.isConnected || tabStrip.contains(e.target)) return;
                 tabStrip.querySelectorAll('.project-list-tab-menu').forEach((m) => { m.hidden = true; });
             });
         }
@@ -1515,28 +1299,20 @@
                 sortToggle.classList.toggle('is-open', !sortPanel.hidden);
             });
 
-            // Same "close on outside click" pattern as the filter panel above.
-            document.addEventListener('click', (e) => {
-                if (sortPanel.hidden) return;
+            // Close on outside click.
+            bindGlobal(document, 'click', 'sortOutsideClick', (e) => {
+                if (!sortPanel.isConnected || sortPanel.hidden) return;
                 if (sortPanel.contains(e.target) || sortToggle.contains(e.target)) return;
                 sortPanel.hidden = true;
                 sortToggle.classList.remove('is-open');
             });
 
-            // Picking a direction navigates straight away — same
-            // instant-apply feel as clicking a filter chip. Built on top
-            // of whatever's already in the URL (view, filters, search)
-            // rather than rebuilding the whole query string from scratch,
-            // since sort is the only thing this needs to change.
-            //
-            // #sort-clear-all is folded into this same delegated listener
-            // (28 Aug 2026) rather than bound separately, so it survives
-            // sortPanel.innerHTML getting replaced on every soft
-            // navigation — same reasoning as #filter-clear-all above.
+            // Sort/group options apply at once, editing only their own URL
+            // params. #sort-clear-all is handled here too, so it survives
+            // sortPanel.innerHTML being replaced on soft navigation.
             sortPanel.addEventListener('click', (e) => {
                 if (e.target.closest('#sort-clear-all')) {
-                    // Clears both halves of this combined panel — Sort and
-                    // Group by — since they share this one Clear button.
+                    // Clears both sort and group; they share this button.
                     const params = new URLSearchParams(window.location.search);
                     params.delete('sort');
                     params.delete('dir');
@@ -1554,10 +1330,7 @@
                     return;
                 }
 
-                // Group by lives in the same combined panel, but is a fully
-                // independent query param from Sort — clicking a group
-                // option toggles it on, clicking the already-active one
-                // again clears it, same "click to toggle" feel as a filter chip.
+                // Group by is its own param; clicking the active option clears it.
                 const groupOption = e.target.closest('.project-group-option');
                 if (groupOption) {
                     const params = new URLSearchParams(window.location.search);
@@ -1585,19 +1358,14 @@
         if (dateRangePicker && dateRangeTitle && dateRangePrev && dateRangeNext &&
             dateRangeClear && dateRangeCancel && dateRangeApply) {
 
-            // Which trigger button (Initial Deadline / Next Deadline) opened
-            // the picker — set the moment one of them is clicked.
+            // The trigger button (Initial / Next Deadline) that opened the picker.
             let activeDateBtn = null;
 
-            // The two months currently on screen. "left" month is always
-            // one month before "right" — month is 0-indexed, same as
-            // native Date.
+            // The left-hand month on screen (0-indexed month, as in Date).
             let viewYear = null;
             let viewMonth = null;
 
-            // The in-progress selection. Nothing is written back to the
-            // triggering button until Apply is clicked — Cancel just
-            // throws these away.
+            // In-progress selection; written to the button only on Apply.
             let rangeStart = null;
             let rangeEnd = null;
 
@@ -1608,12 +1376,8 @@
                 return `${y}-${m}-${d}`;
             }
 
-            // Parses "YYYY-MM-DD" as a LOCAL date. Deliberately not using
-            // `new Date(isoString)` here — that form parses as UTC
-            // midnight, which can land on the wrong calendar day once
-            // converted back to local time depending on the visitor's
-            // timezone. Splitting and building the date manually avoids
-            // that entirely.
+            // Parses "YYYY-MM-DD" as a LOCAL date. `new Date(iso)` parses as
+            // UTC and can land on the wrong day.
             function fromISO(iso) {
                 const [y, m, d] = iso.split('-').map(Number);
                 return new Date(y, m - 1, d);
@@ -1624,10 +1388,8 @@
                     a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
             }
 
-            // Builds one month's 42-cell grid (6 weeks), starting the week
-            // on Monday to match the Mo/Tu/.../Su header, and filling in
-            // the previous/next month's trailing days so the grid is
-            // always a full rectangle — same as Google Calendar's picker.
+            // One month's 42-cell grid (6 weeks, Monday first), padded with
+            // the neighbouring months' days.
             function buildMonthCells(year, month) {
                 const firstOfMonth = new Date(year, month, 1);
                 const firstWeekday = (firstOfMonth.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
@@ -1677,8 +1439,7 @@
                 dateRangeTitle.textContent =
                     btn.dataset.paramPrefix === 'initial_deadline' ? 'Initial Deadline' : 'Next Deadline';
 
-                // Pick up whatever's already applied, so re-opening shows
-                // the existing selection instead of starting blank.
+                // Start from the range already applied, if any.
                 rangeStart = btn.dataset.from ? fromISO(btn.dataset.from) : null;
                 rangeEnd = btn.dataset.to ? fromISO(btn.dataset.to) : null;
 
@@ -1722,9 +1483,7 @@
                 renderCalendar();
             });
 
-            // One delegated listener for every day cell across both months —
-            // same event-delegation approach as the row-expand and
-            // chip-filter handlers above, rather than one listener per cell.
+            // One delegated listener for every day cell in both months.
             dateRangePicker.addEventListener('click', (e) => {
                 const cell = e.target.closest('.date-range-picker-day');
                 if (!cell) return;
@@ -1733,12 +1492,10 @@
                 const clicked = fromISO(cell.dataset.iso);
 
                 if (!rangeStart || (rangeStart && rangeEnd)) {
-                    // Starting a fresh selection.
                     rangeStart = clicked;
                     rangeEnd = null;
                 } else if (clicked < rangeStart) {
-                    // Second click landed before the first — swap so start
-                    // is always the earlier date.
+                    // Second click before the first: swap so start is earlier.
                     rangeEnd = rangeStart;
                     rangeStart = clicked;
                 } else {
@@ -1768,11 +1525,9 @@
                 applyFilters();
             });
 
-            // Close on outside click — same pattern as the filter panel
-            // itself — but ignore clicks on the two trigger buttons, which
-            // already have their own open/close/toggle logic above.
-            document.addEventListener('click', (e) => {
-                if (dateRangePicker.hidden) return;
+            // Close on outside click, ignoring the two trigger buttons (they toggle it).
+            bindGlobal(document, 'click', 'datePickerOutsideClick', (e) => {
+                if (!dateRangePicker.isConnected || dateRangePicker.hidden) return;
                 if (dateRangePicker.contains(e.target)) return;
                 if (e.target.closest('#initial-deadline-filter-btn') || e.target.closest('#next-deadline-filter-btn')) return;
                 closePicker();

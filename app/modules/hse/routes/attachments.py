@@ -1,9 +1,7 @@
 """
-HSE — files filed against an entry.
-
-Bytes go to the NAS through core/shared's service; this module owns the
-record of where they went. Uploads are synchronous so the officer knows
-whether his evidence actually landed.
+HSE entry attachments. Bytes are stored on the NAS via core/shared's
+service; this module keeps the record. Uploads are synchronous so the user
+knows the file was saved.
 """
 from flask import abort, current_app, jsonify, request, send_file
 from flask_login import login_required
@@ -59,8 +57,7 @@ def upload_attachment(entry_id):
     try:
         upload_app_file(file_bytes, folder, stored_name)
     except RuntimeError as e:
-        # The NAS service already retried and logged; the officer needs to
-        # know his evidence is not filed rather than assume it is.
+        # The NAS service already retried; report the failure to the user.
         current_app.logger.error(f'HSE attachment upload failed for {entry.ref}: {e}')
         return jsonify({'error': 'The file could not be saved to storage. Please try again.'}), 502
 
@@ -84,8 +81,8 @@ def upload_attachment(entry_id):
 @login_required
 @require_api('view_hse')
 def download_attachment(attachment_id):
-    """Streamed through the app rather than linked directly, so the NAS is
-    never exposed and view_hse is actually enforced."""
+    """Streams the file through the app so the NAS is never exposed and
+    view_hse is enforced."""
     attachment = HseAttachment.query.get_or_404(attachment_id)
     try:
         file_bytes = download_app_file(attachment.nas_path)
@@ -100,12 +97,10 @@ def download_attachment(attachment_id):
 @login_required
 @require('view_hse')
 def preview_attachment(attachment_id):
-    """The same bytes as the download route, served inline.
+    """The file served inline for preview.
 
-    Shape matches the project reference-file preview routes because
-    core/shared/js/preview.js reads them the same way: a real file when it
-    can render one, JSON when it cannot, so the modal shows a reason rather
-    than a broken viewer.
+    Response shape is read by core/shared/js/preview.js: the file when it
+    can render, else JSON {error} with 200 so the modal shows the reason.
     """
     attachment = HseAttachment.query.get_or_404(attachment_id)
     kind = extension(attachment.original_filename)
@@ -131,9 +126,8 @@ def delete_attachment(attachment_id):
     entry = attachment.entry
     actor = effective_user()
 
-    # The record goes first. delete_app_file never raises, so a NAS that is
-    # briefly unreachable leaves an orphaned file rather than a row pointing
-    # at something the officer thinks he deleted.
+    # Delete the row first. delete_app_file never raises, so a NAS outage
+    # leaves an orphaned file, never a row the user thinks is gone.
     name = attachment.original_filename
     db.session.delete(attachment)
     db.session.commit()

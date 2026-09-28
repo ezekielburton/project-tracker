@@ -1,16 +1,15 @@
 """
-Validating a submitted entry.
-
-apply_payload is all-or-nothing on purpose: an entry has required fields,
-and a per-field save would leave half-written incidents behind. These cover
-the rules without a database — the option lists are queried separately.
+Entry form validation: apply_payload is all-or-nothing. No database needed.
 """
 from datetime import date
 
 import pytest
 
 from app.modules.hse.lib.forms import ValidationError, apply_payload
-from app.modules.hse.lib.registers import COMPLIANCE_RENEWAL, INCIDENTS
+from app.modules.hse.lib.metrics import parse_money
+from app.modules.hse.lib.registers import (
+    COMPLIANCE_RENEWAL, INCIDENTS, TRAINING_EXPENSES, Register, f,
+)
 
 
 class Stub:
@@ -59,7 +58,7 @@ def test_every_missing_required_field_is_reported_at_once():
 
 
 def test_nothing_is_written_when_validation_fails():
-    """All-or-nothing: a rejected form must not half-fill the entry."""
+    """A rejected form leaves the entry untouched."""
     entry = Stub()
     payload = dict(VALID)
     payload['severity'] = ''
@@ -87,9 +86,7 @@ def test_a_severity_outside_the_closed_set_is_refused():
 
 
 def test_an_event_class_outside_the_closed_set_is_refused():
-    """Incident or near miss is a closed set, not a reference list: the
-    near-miss ratio is a reported number, and a free-text value behind it
-    would change what that number means without anyone noticing."""
+    """event_class is a closed set (it drives the near-miss ratio); other values are refused."""
     payload = dict(VALID)
     payload['event_class'] = 'Almost'
     with pytest.raises(ValidationError) as e:
@@ -98,8 +95,7 @@ def test_an_event_class_outside_the_closed_set_is_refused():
 
 
 def test_a_status_from_another_register_is_refused():
-    """'Valid' belongs to compliance. Accepting it here would file an entry
-    no filter chip on this register could ever find."""
+    """A status not declared for this register (e.g. compliance's 'Valid') is refused."""
     payload = dict(VALID)
     payload['status'] = 'Valid'
     with pytest.raises(ValidationError) as e:
@@ -113,8 +109,7 @@ def test_an_optional_field_left_blank_is_simply_none():
 
 
 def test_a_jsonb_choice_keeps_its_label_not_an_id():
-    """An id inside the blob has nothing to join back to, and the table
-    would render it as a bare number."""
+    """JSONB choice fields store the label, since an id there has nothing to join to."""
     entry = apply_payload(Stub(), INCIDENTS, dict(VALID))
     assert entry.data['incident_type'] == 'Slip/Fall'
 
@@ -128,6 +123,82 @@ def test_an_expiry_register_needs_its_dates_and_writes_no_status():
         'assigned_to': '1',
     })
     assert entry.due_at == date(2026, 6, 1)
-    assert entry.compliance_item_id == 7   # the certificate, by id now
+    assert entry.compliance_item_id == 7   # the certificate, by id
     assert 'item' not in entry.data
     assert entry.status is None, 'status is computed for this register'
+
+
+# --- time of event ------------------------------------------------------------
+
+def test_a_time_is_kept_as_hh_mm_in_the_blob():
+    payload = dict(VALID, entry_time='07:05')
+    entry = apply_payload(Stub(), INCIDENTS, payload)
+    assert entry.data['entry_time'] == '07:05'
+
+
+def test_the_time_is_optional():
+    entry = apply_payload(Stub(), INCIDENTS, dict(VALID, entry_time=''))
+    assert entry.data['entry_time'] is None
+
+
+@pytest.mark.parametrize('raw', ['7:05', '24:00', '12:60', '07:05:00', '7pm',
+                                 '07.05', ' 07:05', '0705', 7])
+def test_anything_but_a_24_hour_hh_mm_is_refused(raw):
+    with pytest.raises(ValidationError) as e:
+        apply_payload(Stub(), INCIDENTS, dict(VALID, entry_time=raw))
+    assert e.value.errors['entry_time'] == 'Not a time — use HH:MM (24-hour)'
+
+
+@pytest.mark.parametrize('raw', ['00:00', '09:30', '19:59', '23:59'])
+def test_the_whole_day_is_accepted(raw):
+    entry = apply_payload(Stub(), INCIDENTS, dict(VALID, entry_time=raw))
+    assert entry.data['entry_time'] == raw
+
+
+def test_a_required_time_left_blank_is_reported():
+    reg = Register(key='t', label='T', group='incidents', ref_prefix='T',
+                   status_source='none', statuses=(),
+                   fields=(f('entry_time', 'Time', 'time', required=True),))
+    with pytest.raises(ValidationError) as e:
+        apply_payload(Stub(), reg, {'entry_time': ''})
+    assert e.value.errors['entry_time'] == 'Required'
+
+
+# --- money ----------------------------------------------------------------
+
+EXPENSE = {'entry_date': '2026-09-14', 'expense_category': 'Course fees'}
+
+
+def _saved_amount(raw):
+    return apply_payload(Stub(), TRAINING_EXPENSES, dict(EXPENSE, amount=raw)).data['amount']
+
+
+@pytest.mark.parametrize('raw, stored', [
+    ('1,250.50', '1250.50'), ('1250.5', '1250.50'), ('1250', '1250'),
+    ('3500.00', '3500'), ('AED 300', '300'), (' aed 1,000 ', '1000'),
+    ('0', '0'), (1200, '1200'), (12.5, '12.50'),
+])
+def test_an_amount_is_stored_as_a_plain_number(raw, stored):
+    """Commas and the unit go; fils are kept only when non-zero."""
+    assert _saved_amount(raw) == stored
+    assert parse_money(stored) == parse_money(str(raw))
+
+
+@pytest.mark.parametrize('raw', [
+    '-50', 'abc', '12,50', '1,250.505', '1250.', '.5', '1e3', 'AED', True])
+def test_a_negative_or_garbage_amount_is_refused(raw):
+    entry = Stub()
+    with pytest.raises(ValidationError) as caught:
+        apply_payload(entry, TRAINING_EXPENSES, dict(EXPENSE, amount=raw))
+    assert caught.value.errors == {'amount': 'Enter an amount, e.g. 1,250.50'}
+    assert entry.data == {}, 'a refused save writes nothing'
+
+
+def test_a_blank_optional_amount_is_allowed_and_a_required_one_is_not():
+    optional = Register(key='x', label='X', group='fleet', ref_prefix='X',
+                        status_source='none', statuses=(),
+                        fields=(f('cost', 'Cost (AED)', 'money'),))
+    assert apply_payload(Stub(), optional, {'cost': ''}).data['cost'] is None
+    with pytest.raises(ValidationError) as caught:
+        apply_payload(Stub(), TRAINING_EXPENSES, dict(EXPENSE, amount=''))
+    assert caught.value.errors == {'amount': 'Required'}

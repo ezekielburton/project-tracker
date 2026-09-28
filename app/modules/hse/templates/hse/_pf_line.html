@@ -1,7 +1,5 @@
-{# Average days to close. A month with nothing closed breaks the line rather
-   than dropping it to zero — nothing closed is not instant.
-
-   No height attribute, for the same reason as the bars. #}
+{# Average days to close. A month with nothing closed breaks the line (it is
+   not zero). No height attribute, as in _pf_bars.html. #}
 <svg class="hse-pf-svg" viewBox="0 0 {{ line.width }} {{ line.height }}"
      width="100%" role="img"
      aria-label="Average days to close, by month">

@@ -1,20 +1,15 @@
-"""Single choke point for Digital Innovation access: who may view Performance
-and cost surfaces, who may view a given project, and who may edit boards or
-templates. Routes and templates gate through these functions instead of inline
-role checks; the role sets themselves live in core/shared's capabilities map.
+"""All Digital Innovation access checks. Routes and templates gate through
+these; the role grants live in core/shared/lib/capabilities.py.
 
-All checks are emulation-aware — when an admin emulates another user, the
-emulated person's role governs, resolved once in _effective_role_user(). That
-resolution is deliberately about the user PASSED IN, not the logged-in one, so
-these stay answerable for any user object a caller hands over.
+Every check is emulation-aware: when an admin emulates someone, the emulated
+user's role governs (see _effective_role_user).
 """
 from app.modules.core.shared.lib.capabilities import can
 
 
 def _effective_role_user(user):
-    """The user whose role governs DI access — the emulated user when an admin
-    is emulating, else `user`. Only swaps when `user` is genuinely an admin;
-    safe for a logged-out AnonymousUserMixin."""
+    """The emulated user when `user` is an admin who is emulating, else
+    `user`. Safe for an anonymous user."""
     from flask import session
     from app.modules.core.shared.models import User
 
@@ -31,28 +26,24 @@ def can_view_di_performance(user):
 
 
 def can_view_di_project(user, project):
-    """True if `user` may view `project` — its board, features, archive entry.
-    Every DiProject is restricted to view_all_di holders; everyone else sees
-    only the permanent OVP board (project.is_permanent). Emulation-aware."""
+    """True if `user` may view `project` (board, features, archive entry).
+    Everyone sees the permanent OVP board; other boards need view_all_di."""
     if project is not None and getattr(project, 'is_permanent', False):
         return True
     return can('view_all_di', _effective_role_user(user))
 
 
 def visible_di_projects(user, projects):
-    """Filter DiProject rows to those `user` may see, preserving order. Use for
-    any sidebar/list surface instead of a per-template role check."""
+    """The DiProjects `user` may see, in the same order."""
     return [p for p in projects if can_view_di_project(user, p)]
 
 
 def can_edit_di_templates(user):
-    """True if `user` may view/edit the department step-templates screen.
-    Emulation-aware."""
+    """True if `user` may view and edit the step-templates screen."""
     return can('manage_di_templates', _effective_role_user(user))
 
 
 def can_edit_di_board(user):
-    """True if `user` may change DI data — create a project/feature, or tick,
-    add, delete, advance or close a feature's steps. Viewing stays open to all;
-    only writes are gated. Emulation-aware."""
+    """True if `user` may change board data: projects, features, steps and
+    the Incoming tray. Viewing is gated separately by can_view_di_project."""
     return can('edit_di_board', _effective_role_user(user))

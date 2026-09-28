@@ -1,4 +1,4 @@
-"""Model-level coverage for the Client Servicing module."""
+"""Client Servicing models."""
 from decimal import Decimal
 
 import pytest

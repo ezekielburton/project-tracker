@@ -1,26 +1,24 @@
-// SPA routing for the HSE tab strips and filter chips.
+// SPA routing for HSE .hse-tab links (e.g. Month / Agenda) and filter
+// chips. The rail is routed by module_rail.js; these are plain <a href>, so
+// without this each click is a full page reload.
 //
-// The shared rail is handled by core/shared's module_rail.js. Tabs and
-// chips are plain <a href> outside that system, so without this every tab
-// click is a full page reload.
-//
-// This used to live inside hse_registers.js, which meant the lists page
-// loaded a file named "registers" for one block it happened to contain.
-// The calendar needed it too — second copy, so it was extracted rather
-// than pasted (conventions.md).
-//
-// IIFE with no DOMContentLoaded gate: page scripts re-run on every SPA
-// swap and that event never fires again (spa-navigation.md, trap 1). The
-// listener is document-delegated and guarded, so re-running never stacks
-// a second one.
+// No DOMContentLoaded gate: page scripts re-run on every SPA swap and that
+// event never fires again. The document listener is guarded so re-runs
+// never stack a second one.
 (function () {
-    // Give the page a definite height so its panels, and the table's scroll
-    // box, can fill it — .main-content is a flex item with no height of its
-    // own, so a pure CSS chain just grows to its content. Deliberately
-    // outside the wiring guard below: the listener is wired once, but every
-    // swap lands on a fresh box that has to be measured again.
+    // Give the page a definite height so panels and the table's scroll box
+    // can fill it (.main-content has no height of its own). Outside the
+    // guard: every swap brings a fresh box to measure.
     if (window.watchFillHeight) {
         window.watchFillHeight('.hse-inner--fill', '--fill-height');
+    }
+
+    // On a phone the performance charts scroll sideways (hse.css); start
+    // them at the latest month.
+    if (window.matchMedia('(max-width: 48em)').matches) {
+        document.querySelectorAll('.hse-pf-card').forEach(function (card) {
+            if (card.querySelector('.hse-pf-svg')) { card.scrollLeft = card.scrollWidth; }
+        });
     }
 
     if (window._hseTabNavWired) { return; }
@@ -29,6 +27,9 @@
     document.addEventListener('click', function (e) {
         var link = e.target.closest('.hse-tab, .hse-chip');
         if (!link) { return; }
+        // New-tab links (the report's Print / Export) and modifier-clicks
+        // are left to the browser, or the report opens inside the app shell.
+        if (link.target === '_blank' || e.ctrlKey || e.metaKey || e.shiftKey) { return; }
         var url = link.getAttribute('href');
         if (!url || url === '#') { return; }
         e.preventDefault();

@@ -1,17 +1,9 @@
-"""Coverage for the project *visibility* gate (can_view_di_project /
-visible_di_projects, lib/access.py) — every project except the permanent
-OVP board is restricted to admin, management and the future
-digital_innovation role. This is a separate
-gate from can_edit_di_board (test_board_write_access.py covers that one):
-a role can fail visibility and never even reach the write-gate question,
-since there's nothing to view in the first place.
+"""Tests for the project visibility gate (can_view_di_project,
+visible_di_projects): every board except the permanent one needs
+view_all_di (admin, management, digital_innovation). Covered at unit level
+and on project_board, board_columns_fragment and feature_detail.
 
-Every other DI test file that builds a non-permanent project for a
-restricted role now stands in for OVP via is_permanent=True so it can
-still isolate whatever *that* file is actually testing — this file is
-where the visibility rule itself gets exercised directly, at both the
-unit level (can_view_di_project, visible_di_projects) and the route
-level (project_board, board_columns_fragment, feature_detail)."""
+Other DI test files use is_permanent=True to get past this gate."""
 from flask import url_for
 
 from app.modules.core.shared.testing import login_as
@@ -34,9 +26,6 @@ def test_can_view_di_project_is_true_for_every_allowed_role_on_a_non_permanent_p
     project = _project(db_session, 'b')
     with app.test_request_context():
         for role in ('admin', 'management', 'digital_innovation'):
-            # 'digital_innovation' isn't a registerable role yet; role is a
-            # free-text column, so this exercises the gate as it will behave
-            # once that role exists.
             user = _user(db_session, f'b-{role}', role=role)
             assert can_view_di_project(user, project) is True
 
@@ -50,12 +39,8 @@ def test_can_view_di_project_is_false_for_every_other_role_on_a_non_permanent_pr
 
 
 def test_can_view_di_project_is_emulation_aware(app, db_session):
-    # Same swap every other gate in lib/access.py relies on: a real admin
-    # emulating a designer should see exactly what that designer sees.
-    # _effective_role_user reads session['emulating_user_id'] directly, so
-    # this needs a request context with that key set rather than a bare
-    # function call — the app fixture is the same Flask app the route-
-    # level tests below use via the test client.
+    # An admin emulating a designer sees what the designer sees. Needs a
+    # request context because _effective_role_user reads the session.
     from flask import session
     project = _project(db_session, 'd')
     admin = _user(db_session, 'd', role='admin')
@@ -68,9 +53,7 @@ def test_can_view_di_project_is_emulation_aware(app, db_session):
 
 
 def test_can_view_di_project_ignores_emulation_from_a_non_admin(app, db_session):
-    # Only real admins can emulate elsewhere in the app — a stray
-    # emulating_user_id on a non-admin's session should be ignored, same
-    # as every other gate here.
+    # emulating_user_id is ignored on a non-admin's session.
     from flask import session
     project = _project(db_session, 'e')
     management = _user(db_session, 'e', role='management')
@@ -183,3 +166,29 @@ def test_feature_detail_200s_for_admin_on_a_non_permanent_projects_feature(app, 
     resp = client.get(url)
 
     assert resp.status_code == 200
+
+
+# ── Performance / Edit Templates rail (route level) ──────────────────────
+
+def test_performance_and_templates_rails_hide_boards_the_user_cannot_view(app, client, db_session, monkeypatch):
+    # No role today has these screens without view_all_di, so grant a
+    # designer both screen capabilities to prove the rail is still filtered.
+    from app.modules.core.shared.lib import capabilities
+    granted = set(capabilities.ROLE_CAPABILITIES['designer']) | {'view_di_performance', 'manage_di_templates'}
+    monkeypatch.setitem(capabilities.ROLE_CAPABILITIES, 'designer', granted)
+
+    _project(db_session, 'rail-ovp', is_permanent=True)
+    _project(db_session, 'rail-hidden')
+    user = _user(db_session, 'rail', role='designer')
+    login_as(client, app, user, 'password123')
+
+    for endpoint in ('digital_innovation.performance_screen', 'digital_innovation.templates_screen'):
+        with app.test_request_context():
+            url = url_for(endpoint)
+        resp = client.get(url)
+        assert resp.status_code == 200, endpoint
+        # Only the rail's list: Performance's rollup table lists every board.
+        body = resp.get_data(as_text=True)
+        rail = body.split('class="di-project-list"', 1)[1].split('</ul>', 1)[0]
+        assert 'Test DI Project rail-ovp' in rail, endpoint
+        assert 'Test DI Project rail-hidden' not in rail, endpoint

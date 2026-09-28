@@ -1,18 +1,8 @@
-"""Route-level coverage for the Digital Innovation Performance page
-(routes/performance.py): auth, the can_view_di_performance gate, and the
-view/period querystring resolution degrading gracefully instead of
-500ing. lib/periods.py and lib/snapshots.py (the actual rollup math) have
-full unit coverage in test_periods.py/test_snapshots.py — these tests are
-about the HTTP layer, the same split test_costs_routes.py uses for the
-cost ledger.
+"""Route tests for routes/performance.py: auth, the view_di_performance
+gate, and fallback for bad view/period params.
 
-Every test that actually renders the page seeds a permanent DiProject
-first: default_project()/_sidebar.html's Board link always resolve
-against the permanent project in production (seeded by the migration,
-un-deletable — see board_data.py::default_project()'s docstring), but
-this test DB starts empty, so the sidebar has nothing to link to without
-one. Same pattern test_archive_routes.py and test_project_routes.py use
-for their own not-project-scoped pages."""
+Tests that render the full page seed a permanent DiProject, since the
+sidebar's Board link needs default_project() and the test DB starts empty."""
 from flask import url_for
 
 from app.modules.core.shared.testing import login_as
@@ -116,8 +106,7 @@ def test_performance_falls_back_to_the_current_period_for_a_garbage_period_value
 
 
 # ── export_performance ───────────────────────────────────────────────────
-# Same shape as test_costs_routes.py's export_cost_ledger coverage — this
-# route doesn't render a page, so it needs no _permanent_project() seed.
+# No page render, so no _permanent_project() seed needed.
 
 def test_export_performance_requires_auth(app, client, db_session):
     with app.test_request_context():
@@ -161,11 +150,7 @@ def test_export_performance_honours_the_view_and_period_querystring(app, client,
     assert 'di_performance_month_2026-09.xlsx' in resp.headers.get('Content-Disposition', '')
 
 
-# ── performance_table_fragment (DI-wide live SSE refresh) ────
-# Same shape as test_board_routes.py's board_columns_fragment coverage —
-# this route is a plain read, gated the same as performance_screen
-# itself, so it needs no dedicated designer-403 test beyond confirming
-# the gate is actually applied here too (not just on the full page).
+# ── performance_table_fragment (live refresh) ────
 
 def test_performance_table_fragment_requires_auth(app, client, db_session):
     with app.test_request_context():
@@ -198,8 +183,7 @@ def test_performance_table_fragment_matches_a_fresh_page_load(app, client, db_se
 
     assert 'di-perf-table-body' in page_body
     assert 'di-perf-table-body' in fragment_body
-    # The fragment is the same wrapper the full page renders, just without
-    # the surrounding tabs/period-nav/sidebar chrome around it.
+    # The fragment is the table wrapper without the page chrome.
     assert 'di-perf-stats' in fragment_body
     assert '<html' not in fragment_body
 

@@ -8,9 +8,9 @@ archived and reopened.
 ## Structure
 Vertical slice. All tables are `Di`-prefixed and self-contained; the only outward
 reference is `DiProject.linked_project_id` → the shared `Project` (read-only). The
-one inbound seam is `services/intake.py::add_feedback_item()`, which other modules
-call to file an item onto the OVP board's Incoming tray — DI never imports another
-module's models.
+one seam other modules call is `services/intake.py::declined_feature_ids()`, which
+tells the feedback module which FeatureRequests DI dismissed — only plain values
+cross it.
 
 ```
 digital_innovation/
@@ -25,9 +25,9 @@ digital_innovation/
     excel_export.py    cost + performance .xlsx exports
     periods.py         week/month/quarter math + the rollover overlap query
     snapshots.py       Performance rollup + month/quarter freeze
-  services/intake.py   the inbound seam (files items onto the OVP board)
+  services/intake.py   the seam other modules read (dismissed FeatureRequest ids)
   routes/              thin HTTP layers over lib/ (one blueprint, blueprint.py)
-  templates/           board / performance / templates / archive + fragments
+  templates/           board / performance / templates / settings / archive + fragments
 ```
 CSS: `app/static/css/digital_innovation.css`. JS: `digital_innovation_*.js` (board,
 archive, performance, templates).
@@ -37,7 +37,8 @@ archive, performance, templates).
   marks the seeded OVP board (the backend refuses to close/archive/delete it).
   `track` ∈ internal / external decides whether `management_review` reads as
   "Management Review" or "Client Review". `linked_project_id` → shared Project.
-- **DiFeature** — one card. `status` is a stage in `DI_STAGES` or `'closed'`.
+- **DiFeature** — one card. `status` is a stage in `DI_STAGES` or `'closed'`. A closed
+  feature can be reopened; it returns to `implementation` with its steps as left.
 - **DiFeatureStep** — a checklist item for one stage, copied from a DiStepTemplate
   when the feature first enters that stage. Steps from past stages are kept.
 - **DiStepTemplate** — department-wide default steps per stage. Editing a template
@@ -45,7 +46,8 @@ archive, performance, templates).
 - **DiCostEntry** — a dated ledger line. `dev_time` entries set a feature and price
   `amount` from `DiSetting.dev_hourly_rate` at save time; the other types are
   project-level. Deletable, never editable.
-- **DiSetting** — single-row department settings (hourly rate, currency).
+- **DiSetting** — single-row department settings (hourly rate, currency), edited on
+  the Settings screen. A rate change only prices Dev Time entries saved after it.
 - **DiPeriodSnapshot** — a frozen month/quarter rollup (`snapshot_data` JSON).
 - **DiIntakeItem** — one Incoming-tray item; also used as a dismissal marker for a
   FeatureRequest.
@@ -63,15 +65,17 @@ that user's role):
 - `can_view_di_project` / `visible_di_projects` — every board but the permanent OVP
   one is restricted to admin/management/future `digital_innovation`; everyone else
   sees only OVP.
-- `can_edit_di_board` — any data change (create, tick/add/delete a step, move, close).
+- `can_edit_di_board` — any data change (create, tick/add/delete a step, move, close,
+  reopen).
   Viewing stays open; only writes are gated. Admin-only for now.
-- `can_edit_di_templates` — the Edit Templates screen (admin).
+- `can_edit_di_templates` — the Edit Templates and Settings screens (admin).
 
 ## The brains
 - **step_engine.py** — the stage/step state machine. A feature's current-stage steps
   are freely editable; a feature moves to any stage forward or backward with no
   completion gate; revisiting a stage resumes its existing steps, a first visit seeds
-  from the template. Closing is separate, gated on the last stage being complete.
+  from the template. Closing is separate, gated on the last stage being complete;
+  reopening puts a closed feature back in the last stage.
 - **costs.py** — ledger rules + `cost_summary` (per-type totals, grand total,
   projected profit when a client charge is set).
 - **periods.py / snapshots.py** — a project belongs to a period if its active lifespan
@@ -80,18 +84,19 @@ that user's role):
 
 ## Routes
 One blueprint (`/digital-innovation`). Full page loads render the board / performance /
-templates / archive screens; mutating routes return the same fragment a fresh GET
+templates / settings / archive screens; mutating routes return the same fragment a fresh GET
 would, so the modal or screen always shows true current state. Fragment routes
 (`*_fragment`, `board/columns`, `intake/cards`) re-render a partial on the DI-wide
 live SSE ping so other users' changes appear without a manual reload.
 
 ## Incoming tray
-Only the permanent OVP board has one. It merges two sources oldest-first: native
-`DiIntakeItem` rows (`status='pending'`) and live `FeatureRequest` rows
-(`status='requested'`, read straight off the shared table). Promoting creates a real
-feature; a promoted FeatureRequest is set to `in_progress` (which removes it from the
+Only the permanent OVP board has one. It lists live `FeatureRequest` rows
+(`status='requested'`, read straight off the shared table), oldest first. Promoting
+creates a real feature; a promoted FeatureRequest is set to `in_progress` (which removes it from the
 tray and notifies the submitter). Dismissing a FeatureRequest only hides it here,
-recorded as a marker DiIntakeItem — the request itself is untouched.
+recorded as a marker DiIntakeItem (one per request; a repeat dismiss is a no-op) —
+the request itself is untouched. Both FeatureRequest actions return 409 if the
+permanent board is missing.
 
 ## SPA + SSE notes
 - The board wrapper is a `<div>`, **not** a `<main>`: base.html's `#main-content` is the

@@ -1,8 +1,5 @@
-"""Route-level coverage for the feature detail modal's interactive
-actions: add/tick/delete a step, advance a stage, close a
-feature. step_engine.py already has full unit coverage for the
-rules themselves — these tests are about the HTTP layer: auth, 404s,
-validation, and that a step_engine ValueError turns into a 400."""
+"""Route tests for the step actions (add, tick, delete) and closing a
+feature: auth, 404s, validation, and step_engine ValueErrors as 400s."""
 from flask import url_for
 
 from app.modules.core.shared.testing import login_as
@@ -12,11 +9,8 @@ from app.modules.digital_innovation.tests.test_features_routes import _user
 
 
 def _project(db_session, tag, lifecycle='active', is_permanent=False):
-    # is_permanent: lets callers stand in for the OVP board,
-    # which is the only DiProject visible to every role regardless of
-    # lib/access.py's can_view_di_project - defaults to False so every
-    # existing caller (there are several across this module's test files)
-    # keeps behaving exactly as it did before that gate existed.
+    # is_permanent=True stands in for the OVP board, the only board every
+    # role can view. Other test files import this helper.
     project = DiProject(name=f'Test DI Project {tag}', lifecycle=lifecycle, is_permanent=is_permanent)
     db_session.add(project)
     db_session.flush()
@@ -292,5 +286,83 @@ def test_close_feature_requires_auth(app, client, db_session):
 
     with app.test_request_context():
         url = url_for('digital_innovation.close_feature_route', feature_id=feature.id)
+    resp = client.post(url)
+    assert resp.status_code in (302, 401)
+
+
+# ── reopen feature ──────────────────────────────────────────────────────
+
+def _closed_feature(db_session, tag):
+    project = _project(db_session, tag)
+    feature = engine.create_feature(project, 'Done thing', starting_stage=DI_STAGES[-1])
+    engine.close_feature(feature)
+    db_session.flush()
+    return feature
+
+
+def test_reopen_feature_puts_it_back_in_the_last_stage(app, client, db_session):
+    user = _user(db_session, 'ro-a')
+    feature = _closed_feature(db_session, 'ro-a')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.reopen_feature_route', feature_id=feature.id)
+    resp = client.post(url)
+
+    assert resp.status_code == 200
+    assert feature.status == DI_STAGES[-1]
+    assert feature.closed_at is None
+    # The fragment is the open-feature view again: the stage picker is back.
+    assert 'di-stage-picker-select' in resp.get_data(as_text=True)
+
+
+def test_closed_feature_detail_shows_the_reopen_button_to_editors_only(app, client, db_session):
+    feature = _closed_feature(db_session, 'ro-b')
+    with app.test_request_context():
+        url = url_for('digital_innovation.feature_detail', feature_id=feature.id)
+
+    login_as(client, app, _user(db_session, 'ro-b-admin'), 'password123')
+    assert 'di-reopen-feature-btn' in client.get(url).get_data(as_text=True)
+
+    # A fresh client, so the admin's session does not carry over.
+    viewer = app.test_client()
+    login_as(viewer, app, _user(db_session, 'ro-b-mgmt', role='management'), 'password123')
+    resp = viewer.get(url)
+    assert resp.status_code == 200
+    assert 'di-reopen-feature-btn' not in resp.get_data(as_text=True)
+
+
+def test_reopen_feature_rejects_an_open_feature(app, client, db_session):
+    user = _user(db_session, 'ro-c')
+    project = _project(db_session, 'ro-c')
+    feature = engine.create_feature(project, 'Open thing')
+    db_session.flush()
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.reopen_feature_route', feature_id=feature.id)
+    resp = client.post(url)
+
+    assert resp.status_code == 400
+    assert feature.status == DI_STAGES[0]
+
+
+def test_reopen_feature_403s_without_board_write_access(app, client, db_session):
+    user = _user(db_session, 'ro-d', role='management')
+    feature = _closed_feature(db_session, 'ro-d')
+    login_as(client, app, user, 'password123')
+
+    with app.test_request_context():
+        url = url_for('digital_innovation.reopen_feature_route', feature_id=feature.id)
+    resp = client.post(url)
+
+    assert resp.status_code == 403
+    assert feature.status == 'closed'
+
+
+def test_reopen_feature_requires_auth(app, client, db_session):
+    feature = _closed_feature(db_session, 'ro-e')
+    with app.test_request_context():
+        url = url_for('digital_innovation.reopen_feature_route', feature_id=feature.id)
     resp = client.post(url)
     assert resp.status_code in (302, 401)

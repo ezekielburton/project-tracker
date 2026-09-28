@@ -1,9 +1,8 @@
-/* HSE & Compliance module. Role tokens only, per theming.md — no
-   hard-coded hex (hse.css is in test_dark_mode_css.py's SWEPT_FILES). */
+/* HSE & Compliance module. Role tokens only; hex is allowed only inside
+   :root token blocks (test_dark_mode_css.py sweeps this file). */
 
-/* The page frame and rail are shared (.module-page / .module-shell /
-   .module-main in shared.css). HSE's main column is a flex column so a
-   filled page (.hse-inner--fill) can stretch its panels. */
+/* Page frame and rail live in shared.css. The main column is a flex column
+   so .hse-inner--fill can stretch its panels. */
 .hse-main {
     display: flex;
     flex-direction: column;
@@ -14,16 +13,12 @@
     padding-bottom: 0;
 }
 
-/* Opt-in: the page fills the shell top to bottom, so its panels stretch
-   rather than leaving dead space under them, and a wide table's horizontal
-   scrollbar stays on screen instead of sliding below the fold.
-
-   The height is solved by core/shared/js/fill_height.js, not by flexbox:
-   .main-content is a flex ITEM with no definite height, so a flex child
-   here would just grow to its content and scroll the page instead. The
-   fallback is a viewport fraction rather than calc(100vh - N) — an offset
-   goes stale the moment the header changes, which is what left Digital
-   Innovation's closed strip unreachable. */
+/* Opt-in: the page fills the shell so panels stretch and a wide table's
+   horizontal scrollbar stays on screen.
+   --fill-height is set by core/shared/js/fill_height.js: .main-content has
+   no definite height, so flexbox alone would just grow and scroll the page.
+   Fallback is a viewport fraction; a calc(100vh - N) offset goes stale when
+   the header changes. */
 .hse-inner--fill {
     height: var(--fill-height, 72vh);
     display: flex;
@@ -31,13 +26,9 @@
     padding-bottom: var(--space-6);
 }
 
-/* The module's header bar — the same grey as the side rail, running the
-   full width beside it on every HSE page.
-
-   The negative margin cancels .hse-inner's padding so the bar reaches the
-   edges of .hse-main; the padding puts the title and buttons back where
-   the rest of the page's content sits. Keep the two in step: if the inner
-   padding changes, this changes with it. */
+/* Module header bar, full width beside the rail. The negative margin
+   cancels .hse-inner's padding so the bar reaches the edges; keep the two
+   in step. */
 .hse-header {
     display: flex;
     align-items: center;
@@ -63,9 +54,8 @@
 }
 
 /* ── The filter bar ──
-   What the table is filtered to on the left, the controls that change it on
-   the right. Everything in it is a link or a form GET, so a filtered view
-   survives a refresh and can be pasted to someone else. */
+   Current filter on the left, controls on the right. All links or form
+   GETs, so a filtered view survives refresh and can be shared. */
 
 .hse-filterbar {
     display: flex;
@@ -110,8 +100,7 @@
 }
 
 /* ── Status filter chips ──
-   One row, one field. Deliberately not the multi-column faceted panels
-   Projects and CS build — a different component, not a third copy. */
+   One row, one field. Not the faceted filter panels Projects and CS use. */
 
 .hse-chips {
     display: flex;
@@ -119,9 +108,7 @@
     gap: var(--space-2);
 }
 
-/* Square, not a pill: the wireframe's chips are the same shape as every
-   other control on the page, and a pill row reads as tags rather than as a
-   filter. */
+/* Square like the page's other controls; a pill row reads as tags. */
 .hse-chip {
     display: inline-flex;
     align-items: center;
@@ -140,8 +127,7 @@
     color: var(--text);
 }
 
-/* Tangerine is the app's "this one is active" colour — the same signal the
-   rail uses. A grey selected chip cannot be picked out of a row of six. */
+/* Tangerine is the app's "active" colour, as in the rail. */
 .hse-chip.is-selected {
     background: var(--surface-raised);
     border-color: var(--tangerine);
@@ -158,10 +144,8 @@
 
 /* ── Table ── */
 
-/* .data-table freezes its first column, which gives that column its own
-   background per row state while the rest stay transparent — two shades
-   side by side read as a divider (the seam found on the DI Performance
-   table). This register table is narrow enough not to need it. */
+/* Unfreeze .data-table's sticky first column: its own background reads as
+   a seam beside the transparent cells, and this table is narrow enough. */
 .hse-table th:first-child,
 .hse-table td:first-child {
     position: static;
@@ -169,8 +153,7 @@
     background-color: inherit;
 }
 
-/* The table sits on its own raised surface, the way the wireframe draws it
-   — on the page background it reads as a hole rather than a panel. */
+/* Raised surface; on the page background the table reads as a hole. */
 .hse-table-card {
     flex: 1;
     display: flex;
@@ -182,14 +165,73 @@
     overflow: hidden;
 }
 
-/* No magic offset. The card is a flex child of .hse-inner--fill, so the
-   scroller takes whatever height is left — a calc(100vh - N) here is the
-   pattern that left Digital Innovation's closed strip unreachable. */
+/* Takes the height left in .hse-inner--fill. Do not use a
+   calc(100vh - N) offset here; it goes stale. */
 .hse-table-scroll {
     flex: 1;
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
+}
+
+/* One line per row; long text is clipped and shown in full in the hover card. */
+.hse-table td {
+    white-space: nowrap;
+}
+
+/* Tighter than the app-wide table so the last columns fit on a laptop. */
+.hse-table thead th,
+.hse-table td {
+    padding: 0.6rem 0.85rem;
+}
+
+.hse-table td.hse-clip {
+    max-width: 20rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Row hover card (hse_registers.js). Sits under the modal (z-index 1000)
+   and ignores the pointer. */
+.hse-peek {
+    position: fixed;
+    z-index: 900;
+    max-width: 24rem;
+    padding: var(--space-3);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    font-size: var(--text-sm);
+    pointer-events: none;
+}
+
+.hse-peek[hidden] {
+    display: none;
+}
+
+.hse-peek-head {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+}
+
+.hse-peek-row {
+    display: grid;
+    grid-template-columns: 8rem 1fr;
+    gap: var(--space-2);
+    padding: 2px 0;
+}
+
+.hse-peek-label {
+    color: var(--text-muted);
+}
+
+.hse-peek-text {
+    color: var(--text);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 
 .hse-table-card .data-table thead th {
@@ -214,12 +256,14 @@
 .hse-pager .hse-btn { text-decoration: none; display: inline-flex; align-items: center; }
 .hse-btn.is-disabled { opacity: 0.45; cursor: default; }
 
-/* Deliberately weight, not colour. The palette's --poppy has no dark
-   override and is too light for small text on white, and the app has no
-   semantic danger-text token to reach for — so the row's severity and
-   status pills carry the colour, and this just carries emphasis. A tuned
-   token pair in main.css would be the way to make it red. */
+/* Weight only; the row's pills carry the colour. */
 .hse-overdue {
+    font-weight: 600;
+}
+
+/* Expired: red. Scoped to the table to outrank .data-table td's colour. */
+.hse-table td.hse-expired {
+    color: var(--danger-text);
     font-weight: 600;
 }
 
@@ -237,12 +281,11 @@
 }
 
 /* ── Entry overlay ──
-   Uses the app's .modal-overlay/.modal-box. That overlay carries
-   backdrop-filter, so anything floating added in here must go through
-   PopoverPosition rather than position:fixed of its own. */
+   Built on .modal-overlay/.modal-box. Floating UI inside it must use
+   PopoverPosition, not its own position:fixed. */
 
 .hse-modal-box {
-    width: 680px;
+    width: 820px;
     max-width: 92vw;
     display: flex;
     flex-direction: column;
@@ -269,6 +312,22 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: var(--space-5) 0;
+}
+
+/* Two columns; long text spans both. One column on a phone. */
+.hse-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--space-5);
+    row-gap: var(--space-4);
+}
+
+.hse-form-grid .form-group {
+    margin-bottom: 0;
+}
+
+.hse-field--wide {
+    grid-column: 1 / -1;
 }
 
 .hse-modal-foot {
@@ -322,8 +381,8 @@
     margin-left: 2px;
 }
 
-/* Severity is buttons rather than a dropdown: it drives the overview list,
-   the chart and the SLA, so it must never be left unset by accident. */
+/* Severity uses buttons so it is never left unset by accident; it drives
+   the overview, the chart and the SLA. */
 .hse-segmented {
     display: flex;
     gap: var(--space-2);
@@ -340,25 +399,41 @@
     cursor: pointer;
 }
 
+/* Filled when chosen. --text on --surface flips cleanly in dark mode. */
 .hse-seg.is-selected {
-    border-color: var(--border-strong);
-    background: var(--surface-hover);
-    color: var(--text);
+    border-color: var(--text);
+    background: var(--text);
+    color: var(--surface);
     font-weight: 600;
 }
 
 .hse-error {
     display: block;
     font-size: var(--text-xs);
-    color: var(--text);
+    color: var(--danger-text);
     font-weight: 600;
     margin-top: var(--space-1);
 }
 
+/* Invalid field outline; --danger-text reads in both themes. */
 .hse-field.has-error .form-input,
 .hse-field.has-error select,
-.hse-field.has-error textarea {
-    border-color: var(--border-strong);
+.hse-field.has-error textarea,
+.hse-field.has-error .hse-seg,
+.hse-field.has-error .hse-empty-choice {
+    border-color: var(--danger-text);
+    box-shadow: 0 0 0 1px var(--danger-text);
+}
+
+/* The quick-add box sits inside the field but is not the field. */
+.hse-field.has-error .hse-quick-input {
+    border-color: var(--border);
+    box-shadow: none;
+}
+
+.hse-modal-note.is-error {
+    color: var(--danger-text);
+    font-weight: 600;
 }
 
 /* The page behind the overlay must not scroll with it. */
@@ -366,10 +441,7 @@ body.hse-modal-open {
     overflow: hidden;
 }
 
-/* ── Attachments ──
-   Files live on the NAS under /HSE; these rows are the record of where.
-   Downloads stream through the app so view_hse is actually enforced and
-   the NAS is never exposed to the browser. */
+/* ── Attachments ── */
 
 .hse-file-list {
     display: flex;
@@ -443,9 +515,8 @@ body.hse-modal-open {
 
 /* ── Lists & people ── */
 
-/* Pinned to the bottom by .module-rail-foot (shared.css). The top margin
-   it used to carry is gone: the rule that pushes it down is margin-top:auto,
-   and a second margin there would just fight it. */
+/* Pinned down by .module-rail-foot's margin-top:auto (shared.css); do not
+   add a top margin here. */
 .hse-rail-foot {
     padding-top: var(--space-4);
     border-top: 1px solid var(--border-subtle);
@@ -505,8 +576,7 @@ body.hse-modal-open {
     font-size: var(--text-sm);
 }
 
-/* Deactivated stays visible — entries already filed still point at it, so
-   it has to be findable, just clearly not on offer. */
+/* Deactivated items stay visible: filed entries still point at them. */
 .hse-list-row.is-off {
     opacity: 0.55;
 }
@@ -550,6 +620,23 @@ body.hse-modal-open {
     margin-left: auto;
 }
 
+/* Refs and serials read as codes, like the register's ref column. */
+.hse-list-row .mono {
+    font-family: var(--font-mono);
+}
+
+/* A machine's serial, edited in place on its row. */
+.hse-list-row .hse-list-serial {
+    flex: 0 1 180px;
+    min-width: 0;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+}
+
+.hse-list-row .hse-list-label + .hse-list-serial {
+    margin-left: auto;
+}
+
 .hse-list-add {
     display: flex;
     flex-wrap: wrap;
@@ -557,9 +644,19 @@ body.hse-modal-open {
     gap: var(--space-2);
 }
 
+/* One row where it fits; the fields share the width and match the Add
+   button's height. Anything that doesn't fit wraps with Add on the right. */
 .hse-list-add .form-input {
-    min-width: 180px;
-    flex: 0 1 220px;
+    flex: 1 1 7rem;
+    min-width: 0;
+    max-width: 18rem;
+    height: 30px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-sm);
+}
+
+.hse-list-add .hse-list-add-btn {
+    margin-left: auto;
 }
 
 .hse-add-check {
@@ -593,22 +690,62 @@ body.hse-modal-open {
     display: none;
 }
 
+/* Dropdown with a small quick-add button beside it. */
+.hse-select-row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: stretch;
+}
+
+.hse-select-row > select,
+.hse-select-row > .hse-empty-choice {
+    flex: 1;
+    min-width: 0;
+}
+
 .hse-quick-link {
-    background: none;
-    border: none;
+    flex: 0 0 auto;
+    width: 2.4rem;
     padding: 0;
-    margin-top: var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
     color: var(--text-muted);
-    font-size: var(--text-xs);
-    text-decoration: underline;
+    font-size: 1.1rem;
+    line-height: 1;
     cursor: pointer;
 }
 
 .hse-quick-link:hover {
     color: var(--text);
+    border-color: var(--border-strong);
 }
 
-/* ── Schedule tab ── */
+/* The picked machine's serial, read-only under the picker; styled by .hse-hint. */
+.hse-serial[hidden] {
+    display: none;
+}
+
+/* The time field matches the date field beside it (main.css styles only
+   date): same icon tint, and no icon padding, which made it taller. */
+.hse-modal input[type="time"] {
+    cursor: pointer;
+}
+
+.hse-modal input[type="time"]::-webkit-calendar-picker-indicator {
+    padding: 0;
+    opacity: 0.5;
+    filter: invert(0.3);
+    cursor: pointer;
+}
+
+/* Light native icons and pickers on the dark theme. */
+:root[data-theme="dark"] .hse-modal input[type="date"],
+:root[data-theme="dark"] .hse-modal input[type="time"] {
+    color-scheme: dark;
+}
+
+/* ── Schedule page ── */
 
 .hse-sched-layout {
     display: flex;
@@ -618,10 +755,8 @@ body.hse-modal-open {
     margin-top: var(--space-4);
 }
 
-/* Capped and scrolled, per conventions — but deliberately NOT a
-   calc(100vh - <magic number>): that is the pattern behind Digital
-   Innovation's closed-strip bug, where the offset silently stops matching
-   the chrome above it. A plain fraction of the viewport cannot go stale. */
+/* Capped and scrolled. A viewport fraction, not calc(100vh - N), which
+   goes stale when the chrome above changes. */
 .hse-sched-table-wrap {
     flex: 1 1 520px;
     min-width: 0;
@@ -632,8 +767,7 @@ body.hse-modal-open {
 
 .hse-sched-what { color: var(--text); }
 
-/* The register, in the accent: it answers "what does this file into?"
-   without a second column. */
+/* Target register, in the accent, under the task name. */
 .hse-sched-reg {
     font-size: var(--text-xs);
     color: var(--tangerine);
@@ -641,9 +775,8 @@ body.hse-modal-open {
 
 .hse-sched-due.is-overdue { color: var(--text); font-weight: 600; }
 
-/* Bold rather than red: --poppy is ~3.4:1 on the light surface and there is
-   no semantic danger-text token yet — the same call the register tables
-   make for overdue counts. */
+/* Overdue badge: red border, bold text. --poppy is too light for small
+   text on the light surface. */
 .hse-sched-badge {
     display: inline-block;
     margin-left: var(--space-2);
@@ -661,8 +794,7 @@ body.hse-modal-open {
     font-weight: 600;
 }
 
-/* A retired schedule stays visible — it explains occurrences already on the
-   calendar — but reads as past. */
+/* Retired schedules stay visible (they explain past calendar items), muted. */
 .hse-sched-table tr.is-off td { color: var(--text-muted); }
 
 .hse-sched-empty td {
@@ -705,8 +837,7 @@ body.hse-modal-open {
 .hse-sched-row > .hse-field { flex: 1 1 140px; min-width: 0; }
 .hse-sched-row > .hse-field--narrow { flex: 0 0 96px; }
 
-/* Capped and scrolled: a long fleet must not push the save button off the
-   panel. Contained so the scroll does not chain to the page behind it. */
+/* Capped so a long fleet cannot push the save button off the panel. */
 .hse-sched-asset-list {
     display: flex;
     flex-direction: column;
@@ -756,8 +887,7 @@ body.hse-modal-open {
     color: var(--text-muted);
 }
 
-/* Shared by the schedule panel, the register picker and the drawer — an
-   action that is a link in weight but a button in job. */
+/* A button styled as a link (schedule panel, register picker). */
 .hse-link-btn {
     background: none;
     border: none;
@@ -783,16 +913,10 @@ body.hse-modal-open {
 .hse-sched-spacer { flex: 1 1 auto; }
 
 /* ── Calendar ──
-   Theming trap 1: these five states are coloured, so each needs an explicit
-   dark value rather than inheriting the light palette. They are declared
-   once as tokens and used everywhere below, so a state can never be
-   half-themed.
-
-   Pick the dark counterpart by COLOUR, not by name. --poppy is #FF4F4F
-   (red) and its dark tone is --tone-salmon (#FF7A7A); --tone-poppy is
-   #FFC24D, an amber, and belongs to a different pill. The names in
-   main.css do not line up and following them would flip overdue to yellow
-   in dark mode. */
+   The five state colours are tokens with explicit dark values, so a state
+   is never half-themed.
+   Pick dark tones by COLOUR, not name: --poppy (red) pairs with
+   --tone-salmon; --tone-poppy is amber and would turn overdue yellow. */
 
 :root {
     --hse-overdue: var(--poppy);
@@ -810,9 +934,8 @@ body.hse-modal-open {
     --hse-logged: var(--tone-oak);
 }
 
-/* The state dot. Hollow means still to do, filled means settled or
-   shouting — the grid, the legend and the cards all use this one element,
-   so the key on the month bar genuinely is the key. */
+/* State dot, shared by grid, legend and cards. Hollow = still to do;
+   filled = settled or urgent. */
 .hse-cal-dot {
     flex: 0 0 auto;
     width: 8px;
@@ -839,11 +962,8 @@ body.hse-modal-open {
 
 /* ── Header ── */
 
-/* .btn-primary and .btn-secondary are page actions: mono, uppercase, 2px
-   border, 1.5rem of padding. Three of them side by side at different
-   heights read as a pile rather than a set, so this module's header, month
-   bar and cards share one compact button instead. Same colours, one
-   height, sentence case. */
+/* Compact module button for header, month bar and cards: same colours as
+   .btn-primary/.btn-secondary, one height, sentence case. */
 .hse-btn {
     display: inline-flex;
     align-items: center;
@@ -873,20 +993,32 @@ body.hse-modal-open {
 
 .hse-btn--primary:hover { border-color: var(--tangerine); opacity: 0.9; }
 
-/* Committing a form deserves more presence than a control in a header
-   bar, without going back to the 2px uppercase page button. */
+/* Form actions are a little larger. */
 .hse-modal-actions .hse-btn,
 .hse-sched-panel-actions .hse-btn {
     height: 34px;
     padding: 0 var(--space-4);
 }
 
-/* Reads as a label, not an action — but keeps the height so the row of
-   controls sits on one line. */
+/* Reads as a label but keeps button height so the row lines up. */
 .hse-btn--quiet {
     color: var(--text-muted);
     border-color: var(--border-subtle);
     cursor: default;
+}
+
+/* ‹ period › on My performance. */
+.hse-pf-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.hse-pf-step {
+    min-width: 2rem;
+    justify-content: center;
+    font-size: 1.1rem;
+    line-height: 1;
 }
 
 .hse-month-chip {
@@ -903,11 +1035,8 @@ body.hse-modal-open {
 
 /* ── The five tiles ── */
 
-/* One bar with hairline dividers, not five cards in a row. Five borders
-   and four gaps turn a summary into a toolbar. */
-/* --surface-raised, not --surface: the tile bar and the month sit a step
-   above the page, and the drawer beside them sits on --surface. Three
-   levels, deliberately — sunken page, raised panels, plain drawer. */
+/* One bar with hairline dividers. Raised like the month grid; the drawer
+   sits on plain --surface. */
 .hse-cal-kpis {
     display: grid;
     grid-auto-flow: column;
@@ -987,7 +1116,7 @@ body.hse-modal-open {
 
 .hse-cal-arrow:hover { color: var(--text); }
 
-/* Smaller still: inside a card these sit beside two lines of text. */
+/* Smaller, for use inside cards. */
 .hse-cal-btn {
     height: 26px;
     font-size: var(--text-xs);
@@ -1014,8 +1143,7 @@ body.hse-modal-open {
 
 .hse-cal-legend-item:hover { color: var(--text); }
 
-/* The active state is underlined rather than boxed — a box here competes
-   with the grid right below it. */
+/* Underlined when active; a box competes with the grid below. */
 .hse-cal-legend-item.is-selected {
     color: var(--text);
     text-decoration: underline;
@@ -1024,9 +1152,7 @@ body.hse-modal-open {
 
 /* ── Grid ── */
 
-/* A grid, not a flex row: grid stretches both columns to one height, so
-   the month and the day beside it end on the same line instead of one
-   trailing off below the other. */
+/* Grid so the month and the drawer stretch to the same height. */
 .hse-cal-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 300px;
@@ -1038,9 +1164,8 @@ body.hse-modal-open {
     .hse-cal-layout { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* One frame around the weekday band and the cells, so the header reads as
-   part of the calendar rather than floating above it. The background is
-   the hairline colour; the 1px gaps let it through between cells. */
+/* One frame round weekdays and cells. The background is the hairline
+   colour, showing through the 1px grid gaps. */
 .hse-cal-grid-wrap {
     min-width: 0;
     display: flex;
@@ -1060,9 +1185,8 @@ body.hse-modal-open {
 
 .hse-cal-weekdays { border-bottom: 1px solid var(--border-subtle); }
 
-/* Rows share the height left over, so the month fills its frame instead of
-   stopping short with dead space under it. The minmax floor keeps a sparse
-   month from collapsing to nothing. */
+/* Rows share the leftover height; the minmax floor stops a sparse month
+   collapsing. */
 .hse-cal-grid {
     flex: 1 1 auto;
     grid-auto-rows: minmax(96px, 1fr);
@@ -1095,8 +1219,7 @@ body.hse-modal-open {
 .hse-cal-day:hover { background: var(--surface-hover); }
 .hse-cal-day.is-out { opacity: 0.45; }
 
-/* Inset rather than a border: the cells have no borders of their own now,
-   and adding one back would shift every neighbour by a pixel. */
+/* Inset shadow: a real border would shift neighbouring cells. */
 .hse-cal-day.is-selected { box-shadow: inset 0 0 0 2px var(--text); }
 .hse-cal-day.is-today { box-shadow: inset 0 0 0 1px var(--tangerine); }
 .hse-cal-day.is-today.is-selected { box-shadow: inset 0 0 0 2px var(--text); }
@@ -1113,9 +1236,7 @@ body.hse-modal-open {
     color: var(--text-muted);
 }
 
-/* Today is a filled badge, not a border: at a glance the eye finds a solid
-   shape far faster than a one-pixel outline. The accent, not the overdue
-   red — today is not a problem, and colouring it red would say it was. */
+/* Today: filled accent badge (not red, which means overdue). */
 .hse-cal-day.is-today .hse-cal-daynum {
     display: inline-flex;
     align-items: center;
@@ -1162,9 +1283,8 @@ body.hse-modal-open {
 
 /* ── Drawer ── */
 
-/* A flex column so the footer can sit at the bottom of whatever height the
-   grid beside it ends up being. The max-height is a runaway guard, not the
-   usual case — normally the month decides how tall this is. */
+/* Flex column so the footer sits at the bottom. The month sets the
+   height; max-height is only a runaway guard. */
 .hse-cal-drawer {
     display: flex;
     flex-direction: column;
@@ -1240,8 +1360,7 @@ body.hse-modal-open {
     color: var(--text);
 }
 
-/* The register, in the accent: it answers "where will this be filed?"
-   without another line of prose. */
+/* Target register, in the accent. */
 .hse-cal-card-sub {
     font-size: var(--text-xs);
     color: var(--tangerine);
@@ -1273,15 +1392,14 @@ body.hse-modal-open {
 
 .hse-cal-tick { font-size: var(--text-sm); }
 
-/* Pinned to the bottom of the drawer rather than trailing the last card:
-   it is the way out of the list, not the end of it. */
+/* Pinned to the bottom of the drawer. */
 .hse-cal-drawer-foot {
     margin-top: auto;
     padding-top: var(--space-3);
     border-top: 1px solid var(--border-subtle);
 }
 
-/* Dashed, because it starts something rather than confirming it. */
+/* Dashed: it starts something new. */
 .hse-cal-logmore {
     width: 100%;
     padding: var(--space-2);
@@ -1358,8 +1476,7 @@ body.hse-modal-open {
 
 /* ── Agenda ── */
 
-/* A list, not a grid: full bleed strands every row at the left edge of a
-   wide screen. Each day gets a surface so it reads as a card. */
+/* Width-capped list of day cards. */
 .hse-cal-agenda {
     display: flex;
     flex-direction: column;
@@ -1495,8 +1612,7 @@ body.hse-modal-open {
     white-space: nowrap;
 }
 
-/* Bold rather than red — the same call the register tables make. --poppy
-   is ~3.4:1 on the light surface and there is no danger-text token yet. */
+/* Bold only, like the register tables' overdue text. */
 .hse-ov-late {
     font-size: var(--text-xs);
     font-weight: 600;
@@ -1516,13 +1632,8 @@ body.hse-modal-open {
 .hse-ov-more { font-size: var(--text-xs); }
 
 /* ══ My performance ══════════════════════════════════════════════════════
-   The two chart series and the gridline. Declared as a pair with an explicit
-   dark override, same rule as the calendar's state tokens: a series that is
-   themed in one mode and not the other is the trap this module keeps hitting.
-
-   These are the handoff's validated series colours, deliberately NOT the UI
-   accent — OVP's coral is too light against the light surface and sits
-   outside the lightness band on dark. */
+   Chart series colours and gridline, each with an explicit dark value.
+   Not the UI accent: the coral is too light on the light surface. */
 :root {
     --hse-s1: #D95F2E;
     --hse-s2: #2F6FA8;
@@ -1534,8 +1645,7 @@ body.hse-modal-open {
     --hse-s2: #3F8BCC;
 }
 
-/* stretch, not flex-start: the two columns run the full height of the page
-   so the charts and the ageing panel grow into it. */
+/* Columns stretch to full height so the charts and ageing panel grow. */
 .hse-pf-body {
     flex: 1;
     min-height: 0;
@@ -1585,9 +1695,8 @@ body.hse-modal-open {
     color: var(--text);
 }
 
-/* An improvement is green whichever direction the number moved: lower is
-   better for time-to-close, and an arrow that does not know that is worse
-   than no arrow at all. */
+/* .is-up means "improved", not "number went up": lower is better for
+   time-to-close. */
 .hse-pf-delta {
     display: flex;
     align-items: center;
@@ -1622,8 +1731,7 @@ body.hse-modal-open {
     flex-direction: column;
 }
 
-/* A chart sits in the middle of the height it is given; a panel of rows
-   starts at the top like every other panel. */
+/* Charts centre vertically; row panels start at the top. */
 .hse-pf-card--chart { justify-content: center; }
 
 .hse-pf-cardhead {
@@ -1664,9 +1772,8 @@ body.hse-modal-open {
 
 /* ── the charts ── */
 
-/* height:auto lets the viewBox aspect set the height. With a fixed pixel
-   height the browser scales the drawing down to fit it and centres it, so
-   the chart sat 1:1 in the middle of the card with dead space each side. */
+/* height:auto lets the viewBox set the height; a fixed height shrinks and
+   centres the drawing with dead space each side. */
 .hse-pf-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .hse-pf-grid { stroke: var(--hse-grid); stroke-width: 1; }
 .hse-pf-bar--planned { fill: var(--hse-s2); }
@@ -1709,8 +1816,7 @@ body.hse-modal-open {
 .hse-pf-line--last { border-bottom: none; }
 
 .hse-pf-fig { font-size: var(--text-med); font-weight: 700; color: var(--text); }
-/* Bold, not red — the register surface made the same call: --poppy is ~3.4:1
-   on the light surface and there is no danger-text token. */
+/* Bold only, like the register tables' overdue text. */
 .hse-pf-fig.is-bad { color: var(--text); font-weight: 700; }
 
 .hse-pf-foot {
@@ -1781,9 +1887,7 @@ body.hse-modal-open {
 }
 
 /* ══ Overview ════════════════════════════════════════════════════════════
-   The tiles are cards with a number, what it counts, and what that number
-   is *of* — the sub-line is what stops "13" being read as thirteen of
-   anything. */
+   Tiles: a number, what it counts, and a sub-line saying what it is of. */
 
 .hse-ov-tiles {
     display: flex;
@@ -1827,8 +1931,7 @@ body.hse-modal-open {
     color: var(--text-faint, var(--text-muted));
 }
 
-/* Two columns that run the full height of the page, so the panels stretch
-   rather than leaving dead space under them. */
+/* Two full-height columns so the panels stretch. */
 .hse-ov-body {
     flex: 1;
     min-height: 0;
@@ -1856,8 +1959,7 @@ body.hse-modal-open {
     color: var(--text-muted);
 }
 
-/* Which register a row came from, so the panel reads as one list of work
-   rather than six lists stacked. */
+/* The register a row came from. */
 .hse-ov-tag {
     flex: 0 0 auto;
     align-self: center;
@@ -1923,6 +2025,255 @@ body.hse-modal-open {
 .hse-ov-fill--late { background: var(--tangerine); }
 .hse-ov-fill--bad { background: var(--poppy); }
 
+/* ── Spend (Overview panel and cost-register strip) ──
+   Series colours, not severity tones: spend is neither good nor bad. */
+
+.hse-spend-lab {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.hse-spend-val {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.hse-spend-figs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+    padding: var(--space-2) 0 var(--space-3);
+    margin-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.hse-spend-fig .hse-spend-val {
+    margin-top: 2px;
+    font-size: var(--text-med);
+}
+
+/* A narrow panel (pinned sidebar, phone) lists the figures as lines: three
+   amounts side by side would collide. */
+.hse-spend-panel { container-type: inline-size; }
+
+@container (max-width: 560px) {
+    .hse-spend-figs {
+        grid-template-columns: 1fr;
+        gap: 0;
+        padding-top: 0;
+    }
+
+    .hse-spend-fig {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .hse-spend-fig:last-child { border-bottom: none; }
+    .hse-spend-fig .hse-spend-val { grid-column: 2; grid-row: 1 / 3; margin: 0; }
+}
+
+.hse-spend-sub {
+    margin-top: 2px;
+    font-size: var(--text-xs);
+    color: var(--text-faint, var(--text-muted));
+}
+
+.hse-spend-subhead {
+    margin: 0 0 var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-spend-amt {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.hse-spend-share {
+    display: inline-block;
+    min-width: 4ch;
+    margin-left: var(--space-2);
+    text-align: right;
+    font-size: var(--text-xs);
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.hse-spend-fill { height: 100%; border-radius: 4px; background: var(--hse-s1); }
+
+/* A register inside its area: indented, thinner, the second series colour. */
+.hse-spend-reg { margin: var(--space-2) 0 0 var(--space-4); }
+.hse-spend-reg .hse-ov-barhead { font-size: var(--text-xs); color: var(--text-muted); }
+.hse-spend-reg .hse-spend-amt { font-size: var(--text-xs); font-weight: 400; color: var(--text-muted); }
+.hse-spend-track--reg { height: 4px; }
+.hse-spend-fill--reg { background: var(--hse-s2); }
+
+/* The strip: one line over the table; opens to the chosen year by month.
+   The month grid follows the strip's own width (rail and sidebar vary). */
+.hse-spend {
+    flex: 0 0 auto;
+    container-type: inline-size;
+    margin-bottom: var(--space-3);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.hse-spend-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--space-2) var(--space-4);
+    cursor: pointer;
+    list-style: none;
+}
+
+.hse-spend-bar::-webkit-details-marker { display: none; }
+.hse-spend-bar:focus-visible { outline: 2px solid var(--tangerine); outline-offset: -2px; }
+
+.hse-spend-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.hse-spend-filtered {
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.hse-spend-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-2);
+}
+
+.hse-spend-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.hse-spend-toggle::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+}
+
+.hse-spend[open] .hse-spend-toggle::after { transform: translateY(2px) rotate(225deg); }
+.hse-spend-bar:hover .hse-spend-toggle { color: var(--text); }
+
+/* 1px gaps over a border-coloured grid draw the cell lines. */
+.hse-spend-months {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr)) auto;
+    gap: 1px;
+    background: var(--border-subtle);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.hse-spend-month {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-raised);
+}
+
+.hse-spend-mval {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.hse-spend-mval.is-empty { font-weight: 400; color: var(--text-faint, var(--text-muted)); }
+.hse-spend-month--total { background: var(--surface); white-space: nowrap; }
+.hse-spend-month--total .hse-spend-mval { font-weight: 700; }
+
+@container (max-width: 1180px) {
+    .hse-spend-months { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    .hse-spend-month--total { grid-column: span 2; }
+}
+
+/* Mid width: kicker and toggle on top, the three figures below. */
+@container (max-width: 720px) {
+    .hse-spend-bar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-2) var(--space-3);
+        padding: var(--space-3);
+    }
+
+    .hse-spend-kicker { grid-column: 1 / 3; }
+    .hse-spend-toggle { grid-row: 1; grid-column: 3; justify-self: end; }
+
+    .hse-spend-item {
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+}
+
+@container (max-width: 640px) {
+    .hse-spend-months { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .hse-spend-month--total { grid-column: 1 / -1; }
+}
+
+/* Phone width: figures and months as lines, label left and amount right. */
+@container (max-width: 420px) {
+    .hse-spend-bar { grid-template-columns: 1fr auto; row-gap: 0; }
+    .hse-spend-kicker { grid-column: 1; padding-bottom: var(--space-2); }
+    .hse-spend-toggle { grid-column: 2; padding-bottom: var(--space-2); }
+
+    .hse-spend-item {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: var(--space-1) 0;
+    }
+
+    .hse-spend-months { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hse-spend-month {
+        flex-direction: row;
+        align-items: baseline;
+        justify-content: space-between;
+    }
+}
+
 @media (max-width: 1100px) {
     .hse-ov-body { flex-direction: column; }
     .hse-ov-side { flex: 1 1 auto; width: 100%; }
@@ -1930,19 +2281,14 @@ body.hse-modal-open {
     .hse-ov-tile { flex: 1 1 180px; }
 }
 
-/* The row is space-between across tag · title · meta. Without this the
-   title centres itself in the leftover space instead of sitting against
-   its tag. */
+/* The row is space-between; without flex:1 the title floats to the middle
+   instead of sitting against its tag. */
 .hse-ov-row .hse-ov-row-main { flex: 1; min-width: 0; }
 
 /* ── Attachment preview ──
-   Opens the shared preview modal from base.html — the same one the project
-   reference files use. A button rather than a thumbnail: there is no
-   thumbnailing service, so a thumbnail would fetch every photo at full
-   size just to sit in a list.
-
-   xs is the in-row size of the module's button family. Header buttons are
-   30px and modal-footer buttons 34px; both would tower over a file row. */
+   A button that opens the shared preview modal (base.html). No thumbnails:
+   there is no thumbnail service, so each would load the full-size photo.
+   --xs is the in-row button size. */
 .hse-btn--xs {
     height: 22px;
     padding: 0 var(--space-2);
@@ -1951,6 +2297,347 @@ body.hse-modal-open {
 
 .hse-file-preview { flex: 0 0 auto; }
 
-/* A flex item only shrinks below its content when min-width is zeroed, so
-   without this a long filename widens the row instead of ellipsing. */
+/* min-width:0 lets a long filename ellipsis instead of widening the row. */
 .hse-file .hse-file-name { min-width: 0; }
+
+/* Dashboard pages (Overview, My performance) fill at least the shell, then
+   grow so the page scrolls; a fixed height squeezes their panels on a
+   laptop. Registers keep the fixed fill so the table scrolls in its box. */
+.hse-inner--page {
+    height: auto;
+    min-height: var(--fill-height, 72vh);
+}
+
+.hse-inner--page .hse-ov-body,
+.hse-inner--page .hse-pf-body {
+    flex: 1 0 auto;
+    min-height: auto;
+    overflow: visible;
+}
+
+.hse-inner--page .hse-ov-panel--grow {
+    flex: 1 0 auto;
+    min-height: auto;
+}
+
+/* ── Readable labels (HSE only) ──
+   Form labels and table headers in sentence case and the body font,
+   overriding the app-wide small uppercase mono. */
+.hse-main .form-group label,
+.hse-modal .form-group label {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text);
+}
+
+.hse-table thead th {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text-muted);
+}
+
+/* ══ Phone ═══════════════════════════════════════════════════════════════
+   HSE pages on a small screen. App-wide phone rules (drawers, bottom
+   action button, tables as cards) live in core/shared/css/mobile.css. */
+
+/* Phones only: the button that shows the severity and year dropdowns. */
+.hse-filters-toggle {
+    display: none;
+}
+
+@media (max-width: 48em) {
+    .hse-inner {
+        padding: var(--space-4);
+        padding-bottom: 0;
+    }
+
+    /* Filled pages scroll as a page: a phone has no room for inner scroll. */
+    .hse-inner--fill {
+        height: auto;
+        padding-bottom: var(--space-4);
+    }
+
+    .hse-header {
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+    }
+
+    /* The app header already names the page. */
+    .hse-header .hse-title {
+        display: none;
+    }
+
+    .hse-header-actions {
+        flex-wrap: wrap;
+        margin: 0;
+    }
+
+    /* ── Filter bar: chips scroll sideways, search takes the row, the
+       dropdowns open from the Filters button. ── */
+    /* nowrap matters: a wrapping column sizes to its widest child, and the
+       chip row would push the page wider than the screen. */
+    .hse-filterbar {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        gap: var(--space-3);
+    }
+
+    .hse-chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        margin-right: calc(var(--space-4) * -1);
+        padding-right: var(--space-4);
+    }
+
+    .hse-chip {
+        flex-shrink: 0;
+        height: 44px;
+    }
+
+    .hse-filters {
+        flex-wrap: wrap;
+    }
+
+    /* A 200px basis keeps the dropdowns off the search row when they open. */
+    .hse-search-input {
+        order: -2;
+        flex: 1 1 200px;
+        min-width: 0;
+        height: 44px;
+        font-size: 16px;
+    }
+
+    .hse-filters-toggle {
+        order: -1;
+        display: inline-flex;
+        height: 44px;
+    }
+
+    .hse-filters .hse-select {
+        display: none;
+        flex: 1 1 40%;
+        height: 44px;
+        font-size: 16px;
+    }
+
+    .hse-filters.is-open .hse-select {
+        display: block;
+    }
+
+    /* ── Register: the cards sit straight on the page. ── */
+    .hse-table-card {
+        background: none;
+        border: 0;
+        overflow: visible;
+    }
+
+    .hse-table-scroll {
+        overflow: visible;
+    }
+
+    .hse-table-foot {
+        padding: var(--space-2) 0;
+        border-top: 0;
+    }
+
+    /* Schedule card: the title is the schedule's name, so the top line
+       only needs the register it files into. */
+    .hse-sched-table .card-kicker .hse-sched-what {
+        display: none;
+    }
+
+    .hse-sched-table-wrap {
+        max-height: none;
+        overflow: visible;
+    }
+
+    /* ── Overview: the tiles scroll sideways, the panels stack. ── */
+    .hse-ov-tiles {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        margin-right: calc(var(--space-4) * -1);
+        padding-right: var(--space-4);
+    }
+
+    .hse-ov-tile {
+        flex: 0 0 150px;
+        scroll-snap-align: start;
+    }
+
+    /* A list row: the title gets the width, the register sits under it. */
+    .hse-ov-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "main meta" "tag meta";
+        column-gap: var(--space-3);
+        row-gap: var(--space-1);
+        align-items: center;
+    }
+
+    .hse-ov-row-main { grid-area: main; }
+    .hse-ov-row-meta { grid-area: meta; }
+
+    .hse-ov-tag {
+        grid-area: tag;
+        justify-self: start;
+    }
+
+    .hse-ov-row-title {
+        white-space: normal;
+    }
+
+
+    /* ── Entry form: the whole screen, one column, buttons at the bottom. ── */
+    .hse-modal {
+        align-items: stretch;
+    }
+
+    .hse-modal-box {
+        width: 100vw;
+        min-width: 0;
+        max-width: none;
+        height: 100dvh;
+        max-height: none;
+        padding: 0;
+        border-radius: 0;
+    }
+
+    .hse-modal-head {
+        align-items: center;
+        padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+    }
+
+    .hse-modal-head .modal-close {
+        width: 44px;
+        height: 44px;
+    }
+
+    .hse-modal-body {
+        padding: var(--space-4);
+    }
+
+    .hse-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hse-modal-blocked {
+        margin: var(--space-4) var(--space-4) 0;
+    }
+
+    .hse-modal-foot {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    }
+
+    .hse-modal-actions .hse-btn {
+        flex: 1;
+        height: 52px;
+        justify-content: center;
+        font-size: 1rem;
+    }
+
+    .hse-modal-actions .hse-btn--primary {
+        flex: 2;
+    }
+
+    /* 16px stops an iPhone zooming into the field; 44px fits a thumb. */
+    .hse-modal .form-input,
+    .hse-modal select,
+    .hse-modal textarea {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    .hse-seg {
+        min-height: 44px;
+    }
+
+    .hse-quick-link {
+        width: 44px;
+    }
+
+    /* ── Lists: a machine's serial takes its own line under the name. ── */
+    .hse-list-row--serial {
+        flex-wrap: wrap;
+    }
+
+    .hse-list-row--serial .hse-list-meta {
+        white-space: nowrap;
+    }
+
+    .hse-list-row .hse-list-serial {
+        order: 1;
+        flex: 1 1 100%;
+        margin-left: 0;
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    .hse-list-row .hse-list-label + .hse-list-serial + .hse-list-toggle {
+        margin-left: auto;
+    }
+
+    /* The add form stacks: full-width fields, full-width Add. */
+    .hse-list-add {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .hse-list-add .form-input {
+        flex: 0 0 auto;
+        max-width: none;
+        height: 44px;
+        font-size: 16px;
+    }
+
+    .hse-list-add .hse-list-add-btn {
+        margin-left: 0;
+        height: 44px;
+        justify-content: center;
+    }
+
+    /* ── My performance: the tiles pair up, the charts keep a readable size
+       and scroll sideways. ── */
+    .hse-pf-tile {
+        flex: 1 1 140px;
+    }
+
+    .hse-pf-card:has(.hse-pf-svg) {
+        overflow-x: auto;
+    }
+
+    .hse-pf-svg {
+        min-width: 560px;
+    }
+
+    /* The heading stays put while the chart scrolls under it. */
+    .hse-pf-card:has(.hse-pf-svg) > :not(.hse-pf-svg) {
+        position: sticky;
+        left: 0;
+    }
+}
+
+/* Touch screens of any size: tap-sized controls. */
+@media (pointer: coarse) {
+    .hse-btn:not(.hse-btn--xs),
+    .hse-chip,
+    .hse-select,
+    .hse-search-input,
+    .hse-list-add .form-input {
+        min-height: 44px;
+    }
+}

@@ -1,9 +1,9 @@
 """
 Per-register reference generation — INC-0031, INS-0042, COM-0001.
 
-One atomic statement bumps the counter and returns the new value, so two
-concurrent saves cannot take the same number. The unique constraint on
-(register, ref) is the backstop, not the mechanism.
+One atomic upsert bumps the counter and returns the new value, so
+concurrent saves cannot share a number. The unique (register, ref)
+constraint is only a backstop.
 """
 
 from sqlalchemy import text
@@ -25,7 +25,7 @@ _NEXT_VALUE = text("""
 
 def next_ref(register_key):
     """Allocate the next reference for a register. Raises ValueError on an
-    unknown key so a typo fails loudly rather than minting a stray prefix."""
+    unknown key."""
     reg = register(register_key)
     if reg is None:
         raise ValueError(f'Unknown register: {register_key}')
@@ -34,5 +34,5 @@ def next_ref(register_key):
 
 
 def format_ref(prefix, value):
-    """PREFIX-0031. Numbers past the pad width simply grow."""
+    """PREFIX-0031. Numbers wider than the pad are not truncated."""
     return f'{prefix}-{str(value).zfill(REF_PAD)}'

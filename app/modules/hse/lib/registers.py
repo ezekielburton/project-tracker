@@ -1,47 +1,75 @@
 """
-HSE_REGISTERS — the one declaration every register is built from.
+HSE_REGISTERS — the declaration every register is built from.
 
-Forms, tables, filters, validation and the importer all render from this,
-so adding a register is one entry here rather than a feature. A field
-either maps to a promoted column on HseEntry or falls into `data`.
+Forms, tables, filters, validation and the importer all read this, so a new
+register is one entry here. A field maps to a promoted HseEntry column or
+falls into `data`.
 
-This is a declared-contract seam: tests/test_hse_registers_contract.py
-checks every column name and field type against reality, so a typo fails
-CI instead of rendering a dead form.
+tests/test_hse_registers_contract.py checks every column name and field
+type against the model, so a typo fails CI.
 """
 
 from collections import namedtuple
 
 
-# Field types the form and table renderers handle.
+# Field types the form and table renderers handle. 'time' is 'HH:MM',
+# 24-hour, kept as text in `data`.
 FIELD_TYPES = ('text', 'textarea', 'date', 'number', 'money', 'choice',
-               'severity', 'event_class', 'person', 'asset', 'status')
+               'severity', 'event_class', 'person', 'asset', 'status', 'time')
 
-# How a register's status is arrived at. 'stored' means the officer sets
-# it; 'expiry' means it is computed from due_at and nothing writes it;
-# 'none' is a log — mileage, spend, a talk that happened — which has no
-# workflow and must not be given a fake one.
+# Where a register's status comes from. 'stored': the officer sets it.
+# 'expiry': computed from due_at, never written. 'none': a log (mileage,
+# spend, a talk held) with no workflow.
 STATUS_SOURCES = ('stored', 'expiry', 'none')
 
-# Rail groups. The tab strip inside a group is its registers, in order.
-RAIL_GROUPS = ('incidents', 'inspections', 'compliance', 'fleet',
+# Rail groups, in rail order. A group's registers show as its sub-pages.
+RAIL_GROUPS = ('daily_log', 'incidents', 'inspections', 'compliance', 'fleet',
                'machines', 'stores', 'training')
 
 
-Field = namedtuple('Field', 'name label type column choices_kind required')
-Field.__new__.__defaults__ = (None, None, False)  # column, choices_kind, required
+Field = namedtuple('Field', 'name label type column choices_kind required in_table')
+# column, choices_kind, required, in_table
+Field.__new__.__defaults__ = (None, None, False, True)
 
 Register = namedtuple(
     'Register',
-    'key label group ref_prefix status_source statuses fields schedulable')
-# Most registers record things as they happen. Only the ones that genuinely
-# recur can carry a schedule, so it is opt-in.
-Register.__new__.__defaults__ = (False,)
+    'key label group ref_prefix status_source statuses fields schedulable '
+    'default_status closed_status')
+# schedulable is opt-in: only registers for recurring work can carry a schedule.
+# default_status: a new entry's status. closed_status: saving it with no
+# closed date stamps today; saving any other status clears the closed date.
+Register.__new__.__defaults__ = (False, None, None)
 
 
-def f(name, label, type_, column=None, choices_kind=None, required=False):
-    return Field(name, label, type_, column, choices_kind, required)
+def f(name, label, type_, column=None, choices_kind=None, required=False,
+      in_table=True):
+    """One field. in_table=False hides it from the register table only; it
+    is still in the form, still searched, and shown in the row's hover card."""
+    return Field(name, label, type_, column, choices_kind, required, in_table)
 
+
+DAILY_LOG = Register(
+    key='daily_log',
+    label='Daily log',
+    group='daily_log',
+    ref_prefix='DL',
+    status_source='stored',
+    statuses=('Open', 'Resolved'),
+    default_status='Open',
+    closed_status='Resolved',
+    fields=(
+        f('entry_date', 'Date', 'date', column='entry_date', required=True),
+        f('entry_time', 'Time', 'time', in_table=False),
+        f('location', 'Location', 'choice', column='location_id',
+          choices_kind='location', required=True),
+        f('description', 'What you found', 'textarea', required=True),
+        f('severity', 'Severity', 'severity', column='severity', required=True),
+        f('reported_by', 'Logged by', 'person', column='reported_by_id', required=True),
+        f('assigned_to', 'Owner', 'person', column='assigned_to_id'),
+        f('status', 'Status', 'status', column='status', required=True),
+        f('closed_at', 'Resolved date', 'date', column='closed_at', in_table=False),
+    ),
+)
 
 INCIDENTS = Register(
     key='incidents',
@@ -52,22 +80,21 @@ INCIDENTS = Register(
     statuses=('Open', 'In Progress', 'Escalated', 'Resolved'),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
-        # What kind of event it was, kept apart from what caused it — an
-        # electrical near miss is still electrical. Without this split the
-        # register cannot answer the question its own name asks.
+        f('entry_time', 'Time', 'time', in_table=False),
+        # Incident vs near miss, kept separate from incident_type (the cause).
         f('event_class', 'Incident or near miss', 'event_class', required=True),
         f('location', 'Location', 'choice', column='location_id',
           choices_kind='location', required=True),
         f('department', 'Department', 'choice', column='department_id',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('incident_type', 'Incident type', 'choice',
           choices_kind='incident_type', required=True),
         f('description', 'What happened', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
-        f('reported_by', 'Reported by', 'person', column='reported_by_id', required=True),
+        f('reported_by', 'Reported by', 'person', column='reported_by_id', required=True, in_table=False),
         f('assigned_to', 'Owner', 'person', column='assigned_to_id'),
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Resolution date', 'date', column='closed_at'),
+        f('closed_at', 'Resolution date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -81,16 +108,16 @@ GENERAL_INSPECTION = Register(
     statuses=('Open', 'In Progress', 'Closed'),
     fields=(
         f('entry_date', 'Date of inspection', 'date', column='entry_date', required=True),
-        # The workbook calls this Area on inspections and Location on
-        # incidents. They are the same list of places, so they share one.
+        f('entry_time', 'Time', 'time', in_table=False),
+        # "Area" here and "Location" on incidents share one list of places.
         f('location', 'Area', 'choice', column='location_id',
           choices_kind='location', required=True),
-        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True),
+        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True, in_table=False),
         f('issue_type', 'Type of issue found', 'choice', choices_kind='issue_type'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
         f('assigned_to', 'Reported to', 'person', column='assigned_to_id'),
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Closed date', 'date', column='closed_at'),
+        f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -99,8 +126,7 @@ COMPLIANCE_RENEWAL = Register(
     label='Compliance & renewal',
     group='compliance',
     ref_prefix='COM',
-    # Valid / Expiring soon / Expired is a pure function of the expiry
-    # date, so it is computed and nothing writes `status` here.
+    # Valid / Expiring soon / Expired is computed from the expiry date.
     status_source='expiry',
     statuses=(),
     fields=(
@@ -125,17 +151,17 @@ FIRST_AID = Register(
     statuses=('Open', 'Closed'),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
+        f('entry_time', 'Time', 'time', in_table=False),
         f('subject', 'Employee', 'person', column='subject_id', required=True),
         f('department', 'Department', 'choice', column='department_id',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('injury_type', 'Injury type', 'choice', choices_kind='injury_type',
           required=True),
         f('treatment', 'Treatment given', 'textarea'),
-        f('reported_by', 'Treated by', 'person', column='reported_by_id', required=True),
-        # The workbook's "Follow-up required? Yes/No" is dropped: an open
-        # case IS the follow-up, so the two columns could disagree.
+        f('reported_by', 'Treated by', 'person', column='reported_by_id', required=True, in_table=False),
+        # No "follow-up required" field: an open case is the follow-up.
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Closed date', 'date', column='closed_at'),
+        f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -143,22 +169,23 @@ PPE_NON_CONFORMITY = Register(
     key='ppe_non_conformity',
     label='PPE non-conformity',
     group='incidents',
-    # Not PPE — that prefix belongs to the PPE issue register.
+    # 'PPE' is taken by the PPE register.
     ref_prefix='PNC',
     status_source='stored',
     statuses=('Open', 'In Progress', 'Closed'),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
+        f('entry_time', 'Time', 'time', in_table=False),
         f('subject', 'Employee', 'person', column='subject_id', required=True),
         f('department', 'Department', 'choice', column='department_id',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('ppe_type', 'PPE type', 'choice', choices_kind='ppe_type', required=True),
         f('description', 'What was wrong', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
-        f('corrective_action', 'Corrective action', 'textarea'),
+        f('corrective_action', 'Corrective action', 'textarea', in_table=False),
         f('assigned_to', 'Owner', 'person', column='assigned_to_id'),
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Closed date', 'date', column='closed_at'),
+        f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -171,18 +198,18 @@ LOST_TIME_INJURY = Register(
     statuses=('Open', 'Closed'),
     fields=(
         f('entry_date', 'Date of injury', 'date', column='entry_date', required=True),
+        f('entry_time', 'Time', 'time', in_table=False),
         f('subject', 'Employee', 'person', column='subject_id', required=True),
         f('department', 'Department', 'choice', column='department_id',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('description', 'Injury description', 'textarea'),
         f('body_part', 'Body part affected', 'choice', choices_kind='body_part',
           required=True),
-        # The workbook offers Low/Medium/High/Fatality here. Severity is the
-        # app-wide closed set that drives the SLA clock, so a fatality is
-        # recorded as Critical rather than forking the scale.
+        # Uses the shared severity scale (it drives the SLA clock), so a
+        # fatality is recorded as Critical.
         f('severity', 'Severity', 'severity', column='severity', required=True),
         f('status', 'Status', 'status', column='status', required=True),
-        # Days lost is closed_at - entry_date, computed like every duration.
+        # Days lost is computed as closed_at - entry_date.
         f('closed_at', 'Return to work date', 'date', column='closed_at'),
     ),
 )
@@ -199,19 +226,19 @@ VEHICLE_INSPECTION = Register(
     statuses=('Open', 'In Progress', 'Closed'),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
-        # One asset field covers the workbook's Vehicle No. AND Make/Model:
-        # both live on the asset record, said once.
+        f('entry_time', 'Time', 'time', in_table=False),
+        # Plate and make/model both come from the asset record.
         f('asset', 'Vehicle', 'asset', column='asset_id', required=True),
         f('subject', 'Driver', 'person', column='subject_id'),
         f('department', 'Department', 'choice', column='department_id',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('inspection_type', 'Inspection type', 'choice',
           choices_kind='inspection_type', required=True),
         f('issues_found', 'Issues found', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
-        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True),
+        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True, in_table=False),
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Closed date', 'date', column='closed_at'),
+        f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -225,14 +252,15 @@ FORKLIFT_INSPECTION = Register(
     statuses=('Open', 'In Progress', 'Closed'),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
+        f('entry_time', 'Time', 'time', in_table=False),
         f('asset', 'Forklift', 'asset', column='asset_id', required=True),
         f('subject', 'Operator', 'person', column='subject_id'),
-        f('checklist', 'Checklist summary', 'text'),
+        f('checklist', 'Checklist summary', 'text', in_table=False),
         f('issues_found', 'Issues found', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
-        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True),
+        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True, in_table=False),
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Closed date', 'date', column='closed_at'),
+        f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -243,10 +271,8 @@ VEHICLE_SERVICE = Register(
     label='Vehicle service',
     group='fleet',
     ref_prefix='SRV',
-    # A service record is a completed event. The workbook's OK/Due status is
-    # computed from mileage, not a workflow the officer drives — next-due is
-    # derived from mileage at service plus the interval, so it is never
-    # stored and this register never appears as a planned calendar tile.
+    # Next service due is derived from mileage at service plus the interval,
+    # so it is not stored, and this register is not schedulable.
     status_source='stored',
     statuses=('Scheduled', 'Completed'),
     fields=(
@@ -255,9 +281,9 @@ VEHICLE_SERVICE = Register(
         f('service_type', 'Service type', 'choice', choices_kind='service_type',
           required=True),
         f('mileage_at_service', 'Mileage at service (km)', 'number'),
-        f('service_interval', 'Service interval (km)', 'number'),
+        f('service_interval', 'Service interval (km)', 'number', in_table=False),
         f('cost', 'Cost (AED)', 'money'),
-        f('reported_by', 'Logged by', 'person', column='reported_by_id'),
+        f('reported_by', 'Logged by', 'person', column='reported_by_id', in_table=False),
         f('status', 'Status', 'status', column='status', required=True),
     ),
 )
@@ -267,9 +293,8 @@ VEHICLE_REG_INSURANCE = Register(
     label='Reg & insurance',
     group='fleet',
     ref_prefix='VRI',
-    # One entry per document, not one row per vehicle with two expiry dates:
-    # there is one due_at, and splitting keeps expiry status, the calendar
-    # and Compliance health working with no exception carved out here.
+    # One entry per document (registration, insurance), since an entry has
+    # a single due_at.
     status_source='expiry',
     statuses=(),
     fields=(
@@ -277,7 +302,7 @@ VEHICLE_REG_INSURANCE = Register(
         f('document_type', 'Document', 'choice', choices_kind='vehicle_document',
           required=True),
         f('provider', 'Issuer / insurer', 'text'),
-        f('policy_number', 'Policy or document no.', 'text'),
+        f('policy_number', 'Policy or document no.', 'text', in_table=False),
         f('entry_date', 'Issued', 'date', column='entry_date', required=True),
         f('due_at', 'Expires', 'date', column='due_at', required=True),
         f('assigned_to', 'Responsible person', 'person', column='assigned_to_id'),
@@ -289,8 +314,7 @@ VEHICLE_MILEAGE = Register(
     label='Mileage',
     group='fleet',
     ref_prefix='MIL',
-    # A log. No workflow, so no status and no filter chips — see
-    # STATUS_SOURCES. Totals per vehicle and per period are computed.
+    # A log: no status, no filter chips. Totals are computed.
     status_source='none',
     statuses=(),
     fields=(
@@ -299,7 +323,7 @@ VEHICLE_MILEAGE = Register(
         f('km', 'Kilometres', 'number', required=True),
         f('odometer', 'Odometer reading (km)', 'number'),
         f('subject', 'Driver', 'person', column='subject_id'),
-        f('notes', 'Notes', 'textarea'),
+        f('notes', 'Notes', 'textarea', in_table=False),
     ),
 )
 
@@ -319,11 +343,11 @@ MACHINE_MAINTENANCE = Register(
         f('maintenance_type', 'Maintenance type', 'choice',
           choices_kind='maintenance_type', required=True),
         f('description', 'Description', 'textarea'),
-        f('reported_by', 'Technician', 'person', column='reported_by_id'),
+        f('reported_by', 'Technician', 'person', column='reported_by_id', in_table=False),
         f('cost', 'Cost (AED)', 'money'),
         f('downtime_hrs', 'Downtime (hrs)', 'number'),
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Completed date', 'date', column='closed_at'),
+        f('closed_at', 'Completed date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -332,21 +356,18 @@ MACHINE_PREVENTIVE = Register(
     label='Preventive maintenance',
     group='machines',
     ref_prefix='PM',
-    # The status here is the machine's condition, which the officer sets.
-    # The workbook is explicit that there is no calendar due date — PM is
-    # called when a machine stops — so this register feeds no schedule.
+    # Status is the machine's condition. PM has no calendar due date, so
+    # this register is not schedulable.
     status_source='stored',
     statuses=('Working', 'Not Working', 'Under Maintenance'),
     fields=(
         f('entry_date', 'Last maintenance date', 'date', column='entry_date',
           required=True),
         f('asset', 'Machine', 'asset', column='asset_id', required=True),
-        # The workbook's "Maintenance Type" here is a frequency (Weekly,
-        # Monthly, …), not the Preventive/Corrective list next door. Two
-        # different lists deserve two different kinds.
+        # A frequency list (Weekly, Monthly…), separate from maintenance_type.
         f('pm_frequency', 'Frequency', 'choice', choices_kind='pm_frequency'),
         f('cost', 'Cost (AED)', 'money'),
-        f('notes', 'Notes', 'textarea'),
+        f('notes', 'Notes', 'textarea', in_table=False),
         f('status', 'Machine status', 'status', column='status', required=True),
     ),
 )
@@ -373,14 +394,13 @@ PPE_REGISTER = Register(
     label='PPE register',
     group='stores',
     ref_prefix='PPE',
-    # Active / Due for replacement / Expired is exactly the expiry ladder,
-    # so it is computed from the replacement date rather than typed.
+    # Status is computed from the replacement date.
     status_source='expiry',
     statuses=(),
     fields=(
         f('subject', 'Employee', 'person', column='subject_id', required=True),
         f('department', 'Department', 'choice', column='department_id',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('ppe_type', 'PPE type', 'choice', choices_kind='ppe_type', required=True),
         f('entry_date', 'Issue date', 'date', column='entry_date', required=True),
         f('due_at', 'Replacement due', 'date', column='due_at', required=True),
@@ -420,11 +440,11 @@ MATERIAL_REQUEST = Register(
         f('reported_by', 'Requested by', 'person', column='reported_by_id',
           required=True),
         f('department', 'Department', 'choice', column='department_id',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('qty_requested', 'Qty requested', 'number', required=True),
         f('qty_issued', 'Qty issued', 'number'),
         f('status', 'Status', 'status', column='status', required=True),
-        f('closed_at', 'Issued date', 'date', column='closed_at'),
+        f('closed_at', 'Issued date', 'date', column='closed_at', in_table=False),
     ),
 )
 
@@ -433,9 +453,8 @@ MATERIALS_IN_STOCK = Register(
     label='Materials in stock',
     group='stores',
     ref_prefix='HSM',
-    # Closing stock and the OK/Reorder flag are both arithmetic on the three
-    # quantity fields, so neither is stored and neither can be a filter chip
-    # yet. Low stock surfaces on the Overview instead.
+    # Closing stock and the reorder flag would be arithmetic on the quantity
+    # fields, so neither is stored; there is no status or filter chip.
     status_source='none',
     statuses=(),
     fields=(
@@ -464,6 +483,7 @@ INDUCTION_TRAINING = Register(
     statuses=('Scheduled', 'Completed', 'Cancelled', 'Overdue'),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
+        f('entry_time', 'Time', 'time', in_table=False),
         f('training_type', 'Type of training', 'choice',
           choices_kind='training_type', required=True),
         f('topic', 'Training topic', 'text', required=True),
@@ -471,10 +491,9 @@ INDUCTION_TRAINING = Register(
           choices_kind='department'),
         f('attendees', 'Attendees', 'number', required=True),
         f('reported_by', 'Trainer', 'person', column='reported_by_id', required=True),
-        # Shares the department list but lands in JSONB, so it stores the
-        # label rather than the id — the promoted-column rule, both ways.
+        # Department list, but stored in JSONB, so it holds the label, not the id.
         f('trainer_department', 'Trainer department', 'choice',
-          choices_kind='department'),
+          choices_kind='department', in_table=False),
         f('status', 'Status', 'status', column='status', required=True),
     ),
 )
@@ -485,11 +504,12 @@ TOOLBOX_TALK = Register(
     group='training',
     ref_prefix='TBT',
     schedulable=True,
-    # A talk either happened or was never logged. No workflow.
+    # A log of talks held; no workflow.
     status_source='none',
     statuses=(),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
+        f('entry_time', 'Time', 'time', in_table=False),
         f('topic', 'Topic', 'text', required=True),
         f('reported_by', 'Conducted by', 'person', column='reported_by_id',
           required=True),
@@ -498,7 +518,7 @@ TOOLBOX_TALK = Register(
         f('attendees', 'Attendees', 'number', required=True),
         f('location', 'Location', 'choice', column='location_id',
           choices_kind='location'),
-        f('notes', 'Notes', 'textarea'),
+        f('notes', 'Notes', 'textarea', in_table=False),
     ),
 )
 
@@ -516,12 +536,13 @@ TRAINING_EXPENSES = Register(
         f('description', 'Description', 'textarea'),
         f('vendor', 'Vendor / paid to', 'text'),
         f('amount', 'Amount (AED)', 'money', required=True),
-        f('notes', 'Notes', 'textarea'),
+        f('notes', 'Notes', 'textarea', in_table=False),
     ),
 )
 
 
 HSE_REGISTERS = (
+    DAILY_LOG,
     # Incidents
     INCIDENTS, FIRST_AID, PPE_NON_CONFORMITY, LOST_TIME_INJURY,
     # Inspections
@@ -547,13 +568,28 @@ def register(key):
 
 
 def registers_in_group(group):
-    """Registers behind one rail entry, in tab-strip order."""
+    """Registers in one rail group, in declaration order."""
     return tuple(r for r in HSE_REGISTERS if r.group == group)
+
+
+def table_fields(reg):
+    """Fields shown as table columns, in declaration order."""
+    return tuple(fl for fl in reg.fields if fl.in_table)
 
 
 def jsonb_fields(reg):
     """Fields that land in HseEntry.data rather than a column."""
     return tuple(fl for fl in reg.fields if fl.column is None)
+
+
+def money_fields(reg):
+    """The register's money fields; its spend is their sum."""
+    return tuple(fl for fl in reg.fields if fl.type == 'money')
+
+
+def money_registers():
+    """Registers that declare a money field, in rail order."""
+    return tuple(r for r in HSE_REGISTERS if money_fields(r))
 
 
 def schedulable_registers():
@@ -563,8 +599,14 @@ def schedulable_registers():
 
 def asset_field(reg):
     """The register's asset field, or None. A schedule is due once per
-    asset when there is one, and once overall when there is not."""
+    asset when there is one, otherwise once overall."""
     for fl in reg.fields:
         if fl.type == 'asset':
             return fl
     return None
+
+
+def shows_asset_serial(reg):
+    """Whether the register shows the picked asset's serial number: the
+    machine registers, where the serial identifies the machine."""
+    return reg.group == 'machines' and asset_field(reg) is not None

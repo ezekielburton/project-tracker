@@ -1,8 +1,6 @@
-"""The global tray dock in the app shell.
-
-The load-bearing assertion is the last one: the dock must render outside
-<main id="main-content">, because that is the block SPA navigation replaces.
-Inside it, every page swap would destroy the dock and its handlers.
+"""The global tray dock in the app shell. It must render outside
+<main id="main-content">, which SPA navigation replaces; inside it, every page
+swap would destroy the dock and its handlers.
 """
 from flask import url_for
 

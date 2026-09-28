@@ -1,19 +1,13 @@
-{# Drop-in replacement for #client-servicing-table-body's innerHTML — the
-   whole table (header + rows), same "re-render byte-identical markup on a
-   live refresh" approach as project_list/_table_rows.html.
+{# The whole table (header + rows): the innerHTML of
+   #client-servicing-table-body, re-rendered on each live refresh.
 
-   Columns are data-driven: `columns` (from table.py's COLUMNS)
-   says which columns appear and in what order; each column's actual <td>
-   markup lives in one macro in _columns.html. The "Open in Projects"
-   column is pinned — not in `columns`, always first, never resizable or
-   reorderable, same as the Projects page's own Expand column.
+   `columns` (table.py's COLUMNS) sets which columns show and their order;
+   each <td> comes from a macro in _columns.html. "Open in Projects" is
+   pinned first and is not in `columns`, so it cannot be resized or moved.
 
-   The <colgroup> carries each column's saved width
-   (column_widths, keyed by column key) so a returning user's resize
-   choices apply on first paint, no flash of the wrong width. Resizing
-   itself — dragging a header's .cs-resize-handle — is client_servicing.js,
-   delegated on the table's container since this whole <table> gets
-   replaced wholesale on every live refresh. #}
+   The <colgroup> applies saved widths (column_widths) on first paint. The
+   resize JS (client_servicing.js) is delegated on the container because
+   this <table> is replaced on every refresh. #}
 {% from 'client_servicing/_columns.html' import
     cell_client, cell_project, cell_brief_date, cell_designers, cell_client_approval, cell_status,
     cell_job_number, cell_cs_lead, cell_project_owner, cell_client_spoc, cell_installation_date,
@@ -45,11 +39,8 @@
     </thead>
     <tbody>
         {% for row in rows %}
-        {# data-row-order: this row's position in the server's default
-           order (Project.name.asc(), from table.py's _page_context()) —
-           click-to-sort is entirely client-side, so
-           clearing a sort has to restore rows to this order without a
-           round trip; loop.index is that order, captured once at render. #}
+        {# data-row-order: the server's default order (by name). Sorting is
+           client-side, so clearing a sort restores rows from this. #}
         <tr data-project-id="{{ row.id }}" data-row-order="{{ loop.index }}">
             <td class="cs-col-open">
                 <a class="btn-secondary cs-open-btn" href="{{ url_for('project_list.index', project=row.id) }}">Open in Projects</a>

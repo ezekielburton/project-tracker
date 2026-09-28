@@ -32,10 +32,8 @@
                     value="{{ d.design_deadline.isoformat() if d.design_deadline else '' }}">
                 <select class="overlay-deliverables-edit-time">
                     <option value="">Time…</option>
-                    {# Safety net: a stored time that isn't one of the on-the-hour
-                    options below (older data, set some other way) still needs a
-                    matching selected option — otherwise it'd show blank here and
-                    an unrelated Save would silently wipe the real time. #}
+                    {# A stored time that isn't one of the options below needs its
+                    own selected option, or Save would silently wipe it. #}
                     {% if d.edit_time_extra %}
                     <option value="{{ d.edit_time_extra[0] }}" selected>{{ d.edit_time_extra[1] }}</option>
                     {% endif %}

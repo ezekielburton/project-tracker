@@ -10,12 +10,8 @@ def slugify(text):
     return _re.sub(r'-+', '-', text).strip('-')
 
 def file_type_label(ext):
-    """Return a human-readable label for a file extension.
-
-    Used in activity log entries so they read like
-    "Rehan added an image as a reference file to 'Project X'"
-    instead of exposing raw filenames.
-    """
+    """Human label for a file extension ('an image', 'a PDF', ...), used in
+    activity log sentences."""
     ext = (ext or '').lower()
     if ext in {'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'}:
         return 'an image'
@@ -33,9 +29,8 @@ def file_type_label(ext):
 
 
 def strip_html(html_text):
-    """Strip HTML tags and decode entities for use in plain-text contexts
-    (notifications, activity logs). Rich-text fields may contain <img> tags
-    and other markup that must not leak into notification strings."""
+    """Rich text to plain text for notifications and activity logs: drops tags,
+    decodes entities, collapses whitespace."""
     if not html_text:
         return ''
     text = _re.sub(r'<[^>]+>', '', html_text)
@@ -44,35 +39,23 @@ def strip_html(html_text):
 
 
 def get_actor():
-    """Return the effective acting user.
-
-    When an admin is emulating another user, actions like posting comments
-    or submitting requests should be recorded as that user, not the admin.
-    Admin-only write routes (delete, publish, status change) should use
-    current_user directly — they don't call this helper.
+    """The user to record an action as: the emulated user while an admin
+    emulates someone. Admin-only write routes use current_user instead.
     """
     from app.modules.core.shared.lib.capabilities import effective_user
     return effective_user()
 
-# The instant the unread dots shipped. A user with no watermark row for a given
-# project is treated as having seen it at this fixed moment, not as never having
-# seen it — otherwise every project's entire history would light up unread on
-# rollout. Lives here, beside the watermark helper, because the Projects table
-# and the Chat tray both read it and must never disagree.
+# A user with no watermark row for a project counts as having seen it at this
+# moment, so old history never shows as unread. The Projects table and the
+# Chat tray both read it and must agree.
 ACTIVITY_SEEN_ROLLOUT_CUTOFF = _datetime(2026, 8, 27, 6, 15, 0)
 
 def mark_project_activity_seen(project, user, kind):
-    """Advance one of a user's two per-project unread watermarks — the
-    Projects table's "new updates" and "new chat" dots (see
-    ProjectActivitySeen in core/shared/models/projects.py).
-
-    kind is 'update' (set by the overlay() route on open) or 'chat' (set
-    by overlay_chat() when the Chat drawer opens); the two clear
-    independently. Upserts the row, and is best-effort — a failure never
-    breaks the caller, the dot just clears on the next successful visit."""
+    """Set one of a user's per-project unread watermarks to now: kind 'update'
+    (overlay opened) or 'chat' (chat drawer rendered). Upserts the
+    ProjectActivitySeen row; best-effort, errors are printed and rolled back."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectActivitySeen
-    from datetime import datetime
 
     column = {'update': 'last_seen_update_at', 'chat': 'last_seen_chat_at'}[kind]
     try:
@@ -80,7 +63,7 @@ def mark_project_activity_seen(project, user, kind):
         if not seen:
             seen = ProjectActivitySeen(project_id=project.id, user_id=user.id)
             db.session.add(seen)
-        setattr(seen, column, datetime.utcnow())
+        setattr(seen, column, _datetime.utcnow())
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -89,11 +72,9 @@ def mark_project_activity_seen(project, user, kind):
 
 
 def log_activity(action, description, user=None, entity_type=None, entity_name=None, entity_id=None, changes=None):
-    """description stays the free-text sentence shown everywhere (dashboard's
-    What Changed card renders it as-is, deliberately no diff UI there — see
-    what_changed.html). changes is an optional structured old/new diff,
-    stored on the side for callers that want it later (e.g. an audit view);
-    must already be JSON-safe (dates as ISO strings, etc.) before calling."""
+    """Write an ActivityLog row. `description` is the sentence shown in the UI;
+    `changes` is an optional old/new diff that must already be JSON-safe
+    (dates as ISO strings). Best-effort: errors are printed and rolled back."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ActivityLog
     try:

@@ -1,17 +1,15 @@
 """
-One place to turn a stored money figure into a Decimal.
+Turns a stored money figure into a Decimal.
 
-Project.value is a Float column while the CS finance fields are Numeric, so
-any total that mixes them raises TypeError. Everything in this module that
-adds money up reads through here.
+Project.value is a Float but the CS finance fields are Numeric, so mixing them
+in a sum raises TypeError. All money totals in this module go through here.
 """
 from decimal import Decimal
 
 
 def money(value):
-    """`value` as a Decimal, with None counting as zero. Floats convert via
-    str so the Decimal matches the figure as written, not the binary float
-    behind it."""
+    """`value` as a Decimal; None counts as zero. Floats go via str so the
+    Decimal matches the written figure, not the binary float."""
     if value is None:
         return Decimal('0')
     if isinstance(value, Decimal):

@@ -1,15 +1,8 @@
-// Solve a box's height so its bottom edge meets the footer.
+// Sizes a box so its bottom edge meets the footer, via a CSS variable.
 //
-// Flexbox fill does not work in this shell: .main-content is a flex ITEM
-// with no definite height, so a flex child just grows to its content and
-// the page scrolls instead of the box. That matters for more than looks —
-// a scroll box taller than the viewport takes its own horizontal scrollbar
-// off screen with it, so you have to scroll the page to the bottom before
-// you can scroll a wide table sideways.
-//
-// Client Servicing solved this first, inside syncTableScrollHeight(). HSE
-// needed the same solve — second copy, so it moved here (conventions.md)
-// rather than being pasted a second time.
+// Flexbox can't do this here: .main-content has no definite height, so a
+// flex child grows to its content and the page scrolls instead. A scroll
+// box taller than the viewport also hides its own horizontal scrollbar.
 //
 // Loaded once from base.html. Page scripts call watchFillHeight() on every
 // SPA swap; the resize listener is registered once.
@@ -20,10 +13,7 @@
 
     function fillHeightToFooter(el, varName) {
         if (!el) { return; }
-        // The box's top and the footer's height are both independent of the
-        // box's own height, so this solves the target directly instead of
-        // nudging a delta and hoping it settles. With no footer on the page
-        // it fills to the bottom of the viewport rather than collapsing.
+        // With no footer it fills to the bottom of the viewport.
         var footer = document.querySelector('.footer');
         var footerHeight = footer ? footer.getBoundingClientRect().height : 0;
         var target = window.innerHeight

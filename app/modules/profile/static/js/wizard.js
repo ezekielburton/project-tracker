@@ -1,6 +1,6 @@
 (function () {
     var overlay = document.getElementById('wizard-overlay');
-    if (!overlay) return; // Wizard_completed is already true, nothing to do on this page.
+    if (!overlay) return; // wizard already done
 
     if (window.helixPolling) window.helixPolling.pause();
 
@@ -11,8 +11,8 @@
     var backBtn = document.getElementById('wizard-back-btn');
     var nextBtn = document.getElementById('wizard-next-btn');
     var finishBtn = document.getElementById('wizard-finish-btn');
-    // Existing accounts who already finished the wizard before the avatar
-    // step existed land straight on the last step instead of replaying 1-3.
+    // avatarStepOnly: the user has finished steps 1-3 but not the photo
+    // step, so start on the last step.
     var firstIndex = avatarStepOnly ? (steps.length - 1) : (showNameStep ? 0 : 1);
     var currentIndex = firstIndex;
 
@@ -62,7 +62,7 @@
       
     })
 
-    //Prefill sound controls from the same server-side prefs the account page uses.
+    // Prefill sound controls from the saved prefs (HELIX_SOUND_PREFS in base.html).
     var volumeSlider = document.getElementById('wizard-sound-volume');
     var volumeLabel = document.getElementById('wizard-sound-volume-label');
     var initialVolume = (HELIX_SOUND_PREFS.volume != null) ? Math.round(HELIX_SOUND_PREFS.volume * 100) : 100;
@@ -79,17 +79,30 @@
     var wizardAvatarPreview = document.getElementById('wizard-avatar-preview');
     var wizardAvatarInitials = document.getElementById('wizard-avatar-initials');
 
-    wizardAvatarBtn.addEventListener('click', function () {
-        wizardAvatarInput.click();
-    });
+    // avatar-cropper.js re-runs with a new crop modal on every SPA swap, but
+    // the wizard stays; wire the input to the current instance on each pick,
+    // swapping in a fresh input so the old instance's listener goes with it.
+    var wizardAvatarCropper = null;
+    function wireWizardAvatar() {
+        var cropperApi = window.HelixAvatarCropper;
+        if (!cropperApi || cropperApi === wizardAvatarCropper) return;
+        if (wizardAvatarCropper) {
+            var fresh = wizardAvatarInput.cloneNode(false);
+            wizardAvatarInput.parentNode.replaceChild(fresh, wizardAvatarInput);
+            wizardAvatarInput = fresh;
+        }
+        wizardAvatarCropper = cropperApi;
+        // No reload: the other steps are not submitted yet. Swap the preview only.
+        cropperApi.wireFileInput(wizardAvatarInput, 'avatar', function (data) {
+            wizardAvatarPreview.src = data.url;
+            wizardAvatarPreview.classList.remove('hidden');
+            wizardAvatarInitials.classList.add('hidden');
+        });
+    }
 
-    // No page reload here (unlike the profile page) — the wizard isn't done
-    // yet and the other steps' data hasn't been submitted. Just swap the
-    // preview image in place.
-    HelixAvatarCropper.wireFileInput(wizardAvatarInput, 'avatar', function (data) {
-        wizardAvatarPreview.src = data.url;
-        wizardAvatarPreview.classList.remove('hidden');
-        wizardAvatarInitials.classList.add('hidden');
+    wizardAvatarBtn.addEventListener('click', function () {
+        wireWizardAvatar();
+        wizardAvatarInput.click();
     });
 
     finishBtn.addEventListener('click', function () {
@@ -99,10 +112,14 @@
             password_confirm: showNameStep ? document.getElementById('wizard-password-confirm').value : '',
             birthday: document.getElementById('wizard-birthday').value,
             favorite_food: document.getElementById('wizard-food').value,
-            email_enabled: document.getElementById('wizard-email-toggle').checked,
             sound_enabled: document.getElementById('wizard-sound-toggle').checked,
             sound_volume: parseInt(volumeSlider.value, 10) / 100
         };
+        // The avatar-only wizard skips the email step; sending its default
+        // (checked) would wipe the user's saved email opt-outs.
+        if (!avatarStepOnly) {
+            payload.email_enabled = document.getElementById('wizard-email-toggle').checked;
+        }
 
         finishBtn.disabled = true;
 

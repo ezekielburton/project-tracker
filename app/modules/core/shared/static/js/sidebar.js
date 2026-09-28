@@ -1,14 +1,12 @@
-/* sidebar.js — Vitamin-E v1.3
-   All sidebar behaviour: expand/collapse, pin, active state,
-   click tracking, and SPA navigation for internal links.
-   Loaded in base.html after main.js. No external dependencies. */
+/* sidebar.js — sidebar expand/collapse/pin, active item, click tracking,
+   the header theme toggle, and the SPA router (navigateTo).
+   Loaded in base.html after main.js. */
 
 (function () {
     'use strict';
 
     /* ── 1. Elements ──────────────────────────────────────────────────
-       Grab every DOM node we'll need. If #sidebar doesn't exist
-       (unauthenticated pages), bail out immediately — nothing to do. */
+       Logged-out pages have no #sidebar; only the theme toggle runs there. */
     var sidebar     = document.getElementById('sidebar');
     var expandTab   = document.getElementById('sidebar-expand-tab');
     var toggleBtn   = document.getElementById('sidebar-toggle-btn');
@@ -18,19 +16,11 @@
     var pageNameEl = document.getElementById('app-header-page-name');
     var themeToggle = document.getElementById('dark-mode-toggle');
 
-    /* Dark-mode toggle wiring lives here, ABOVE the `if (!sidebar) return`
-       bail-out below (2.4.1 follow-up, per Ezekiel) — it used to sit further
-       down with the rest of the sidebar setup, so on any unauthenticated
-       page (no #sidebar, e.g. login/register) the whole script exited
-       before ever reaching it and the toggle silently did nothing. Doesn't
-       reference `sidebar` at all, so it's safe to run unconditionally.
-       Exposed on window so Settings > Appearance's own toggle can drive
-       the same state — repaints every .theme-toggle currently on the
-       page, header's included, so both stay in sync. Persisted both ways:
-       localStorage for instant no-flash reload, and a fire-and-forget POST
-       to the account so it follows the user cross-device (same auto-save
-       pattern as the notification/sound prefs elsewhere in this file) —
-       that POST 401s harmlessly when logged out. */
+    /* Theme toggle. Must stay above the `if (!sidebar) return` below so it
+       also works on logged-out pages (login/register).
+       helixSetThemeStub is also called by Settings > Appearance; it repaints
+       every .theme-toggle on the page, saves to localStorage (no-flash
+       reload) and POSTs to the account (401s harmlessly when logged out). */
     window.helixSetThemeStub = function (isDark) {
         var theme = isDark ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', theme);
@@ -46,10 +36,8 @@
         }).catch(function () {});
     };
 
-    // Sync the toggle's own visual state to whatever data-theme is already
-    // on <html> (set by the server render or the no-flash inline script,
-    // before this file ever runs) — just a repaint, not a user action, so
-    // it doesn't touch localStorage or POST.
+    // Paint the toggles to match the data-theme already on <html>.
+    // A repaint only: no localStorage write, no POST.
     (function () {
         var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         document.querySelectorAll('.theme-toggle').forEach(function (btn) {
@@ -67,21 +55,16 @@
     if (!sidebar) return;
 
     /* ── 2. localStorage key ─────────────────────────────────────────
-       We persist the pinned state across page loads so the user's
-       preference is remembered between sessions. */
+       Pinned state persists across page loads. */
     var PINNED_KEY = 'helix_sidebar_pinned';
 
-    /* ── 3. State helpers ────────────────────────────────────────────
-       Two tiny functions so we're never checking classList directly
-       throughout the code — easier to read and change later. */
+    /* ── 3. State helpers ──────────────────────────────────────────── */
     function isPinned()   { return sidebar.classList.contains('sidebar--pinned'); }
     function isExpanded() { return sidebar.classList.contains('sidebar--expanded'); }
 
     /* ── 4. Expand / Collapse / Pin ──────────────────────────────────
-       expand() and collapse() toggle the --expanded class.
-       setPin() handles the --pinned class and saves to localStorage.
-       Pinned and expanded are mutually exclusive class names:
-       expanded = temporary open; pinned = permanently open. */
+       --expanded is a temporary open; --pinned stays open. They are
+       never set together. */
     function expand() {
         sidebar.classList.add('sidebar--expanded');
     }
@@ -97,50 +80,44 @@
         pinBtn.title = shouldPin ? 'Unpin sidebar' : 'Pin sidebar';
     }
 
-    /* ── 5. Restore pin state on page load ───────────────────────────
-       On every page load, check if the user had the sidebar pinned.
-       If yes, immediately add --pinned so there's no flash of the
-       minimized state before JS runs. */
+    /* ── 5. Restore pin state on page load ─────────────────────────── */
     if (localStorage.getItem(PINNED_KEY) === '1') {
         sidebar.classList.add('sidebar--pinned');
     }
 
     /* ── 6. Click listeners ──────────────────────────────────────────
-       e.stopPropagation() on buttons prevents the click from also
-       bubbling up to the sidebar body or document listeners below. */
+       Buttons stop propagation so the sidebar-body and document
+       listeners below don't also react. */
 
-    // The tab sticking out from the right edge → expand
     expandTab.addEventListener('click', function (e) {
         e.stopPropagation();
         expand();
     });
 
-    // Chevron toggle button (visible when expanded) → collapse or unpin
+    // Chevron: unpins if pinned, otherwise collapses.
     toggleBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         if (isPinned()) {
-            setPin(false); // unpin also collapses (CSS handles the transition)
+            setPin(false);
         } else {
             collapse();
         }
     });
 
-    // Pin button → toggle pin state
     pinBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         setPin(!isPinned());
     });
 
-    // Clicking a non-nav area of the sidebar when minimized → expand.
-    // Nav link clicks (icons included) navigate directly without expanding first.
+    // A click on a collapsed sidebar expands it, unless it hit a link,
+    // which navigates straight away.
     sidebar.addEventListener('click', function (e) {
         if (isExpanded() || isPinned()) return;
-        // If the click target is inside a nav or external link, let it navigate — don't expand.
         if (e.target.closest('.sidebar-item--nav, .sidebar-item--external')) return;
         expand();
     });
 
-    // Click anywhere outside the sidebar → collapse (unless pinned)
+    // Any click outside an unpinned sidebar collapses it.
     document.addEventListener('click', function (e) {
         if (isPinned()) return;
         if (!sidebar.contains(e.target) && e.target !== expandTab) {
@@ -149,9 +126,7 @@
     });
 
     /* ── 7. Active item highlighting ─────────────────────────────────
-       On every page load (and after SPA navigation), mark the sidebar
-       item whose href matches the current URL path as active.
-       We use startsWith so /projects/123 still highlights /projects. */
+       Prefix match, so /projects/123 still highlights /projects. */
     function setActiveItem(path) {
         document.querySelectorAll('.sidebar-item--active').forEach(function (el) {
             el.classList.remove('sidebar-item--active');
@@ -167,9 +142,7 @@
     setActiveItem(window.location.pathname);
 
     /* ── 8. Click tracking ───────────────────────────────────────────
-       Fire-and-forget POST to /sidebar/track for every sidebar item
-       click. We catch errors silently — analytics should never break
-       the UI. The catch(() => {}) swallows network failures. */
+       Fire-and-forget POST to /sidebar/track; failures are ignored. */
     function trackClick(linkName) {
         fetch('/sidebar/track', {
             method: 'POST',
@@ -186,31 +159,37 @@
     });
 
     /* ── 9. SPA navigation ───────────────────────────────────────────
-       Internal nav links (class sidebar-item--nav) are intercepted.
-       Instead of a full page reload we:
-         1. Fetch the URL with the X-Nav-Request header
-         2. Flask sees that header and returns only the content block
-            (via base_fragment.html) — no full HTML shell
-         3. Fade out → swap innerHTML → fade back in
-         4. Push the new URL into the browser history bar
-       If the fetch fails for any reason we fall back to a normal
-       page load so navigation never breaks. */
+       Links with .sidebar-item--nav are intercepted:
+         1. Fetch the URL with the X-Nav-Request header.
+         2. The server (app/__init__.py) strips the response to the
+            inside of #main-content plus the page's extra_js block.
+         3. Fade out, swap innerHTML, re-run its scripts, fade in.
+         4. Push the URL and fire helix:navigated.
+       Any failure falls back to a normal page load. */
 
+    // Scripts set via innerHTML never run; replace each with a fresh copy.
+    // One at a time in document order, as on a full load: an external
+    // script finishes loading before the next one (often inline code that
+    // uses it) runs. The chain stops if a newer swap removed the content.
     function execScripts(container) {
-        container.querySelectorAll('script').forEach(function(old) {
+        var scripts = Array.prototype.slice.call(container.querySelectorAll('script'));
+        (function next() {
+            var old = scripts.shift();
+            if (!old || !old.isConnected) return;
             var fresh = document.createElement('script');
             if (old.src) {
-                // External script — set src so the browser loads and runs the file
                 fresh.src = old.src;
+                fresh.onload = fresh.onerror = next;
+                old.parentNode.replaceChild(fresh, old);
             } else {
-                // Inline script — copy the code directly
                 fresh.textContent = old.textContent;
+                old.parentNode.replaceChild(fresh, old);
+                next();
             }
-            old.parentNode.replaceChild(fresh, old);
-        });
+        })();
     }
-    /* Navigation control: Fixed the hanging on the browser 6 open connection limit.
-       Closes any old navigation requests */
+    /* One navigation at a time: a new one aborts the previous fetch, so
+       quick clicks can't pile up against the browser's connection limit. */
     var _navToken = 0;
     var _navAbort = null;
     var _navSafetyTimer = null;
@@ -256,7 +235,7 @@
                         document.title = _ta.value;
                         setHeaderPageName(_ta.value);
                     }
-                    if (push !== false) { history.pushState(null, '', url); }
+                    markEntry(push !== false, url);
                     document.dispatchEvent(new CustomEvent('helix:navigated'));
                     mainContent.style.opacity = '1';
                     setActiveItem(url);
@@ -265,44 +244,69 @@
                 }, 150);
             })
             .catch(function (err) {
-                // Intentional abort (superseded by a newer nav) or simply no
-                // longer current: stay silent — the current nav owns the bar
-                // and the page. Only a genuine failure of the CURRENT nav
-                // falls back to a full reload.
+                // A superseded nav stays silent; only a failure of the
+                // current one falls back to a full reload.
                 if ((err && err.name === 'AbortError') || myToken !== _navToken) return;
                 if (_navSafetyTimer) { clearTimeout(_navSafetyTimer); }
                 finishLoadingBar();
-                window.location.href = url; // graceful fallback
+                window.location.href = url;
             });
     }
 
     window.navigateTo = navigateTo;
-    window.helixExecScripts = execScripts; // reused by settings-overlay.js to load account.html into a modal
+    window.helixExecScripts = execScripts; // used by settings-overlay.js
 
     document.addEventListener('click', function (e) {
         var item = e.target.closest('.sidebar-item--nav');
         if (!item) return;
+        // Modified and non-left clicks keep the browser's new tab/window behaviour.
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         e.preventDefault();
         e.stopPropagation();
         var url = item.getAttribute('href');
         if (url) navigateTo(url);
     });
 
-    // Keep SPA working when the user hits Back/Forward in the browser
-    window.addEventListener('popstate', function () {
-        navigateTo(window.location.pathname, false);
+    /* Each render tags its history entry with a key (state.helixNav), so
+       Back/Forward can tell the router's entries from ones a page pushed
+       itself (project_list.js's overlay and filter states). */
+    var _docKey = Date.now().toString(36);
+    var _renderSeq = 0;
+    var _renderKey = null;
+    var _renderedPath = window.location.pathname;
+
+    function markEntry(push, url) {
+        _renderKey = _docKey + '-' + (++_renderSeq);
+        if (push) {
+            history.pushState({ helixNav: _renderKey }, '', url);
+        } else {
+            var s = history.state;
+            history.replaceState(Object.assign({}, (s && typeof s === 'object') ? s : null, { helixNav: _renderKey }), '');
+        }
+        _renderedPath = window.location.pathname;
+    }
+
+    markEntry(false);
+
+    // Back/Forward. The page on screen re-syncs its own entries (this
+    // render's, or a same-path one it pushed); anything else loads the
+    // entry's full URL, query and hash included.
+    window.addEventListener('popstate', function (e) {
+        var s = e.state;
+        if (s && s.helixNav === _renderKey) return;
+        if (s && typeof s === 'object' && !s.helixNav && window.location.pathname === _renderedPath) return;
+        navigateTo(window.location.pathname + window.location.search + window.location.hash, false);
     });
 
-    /* ── 10. Header: loading bar, page name, dark-mode toggle stub ────
-   Loading bar and page name live outside #main-content so they
-   survive SPA swaps — navigateTo() above drives them directly. */
+    /* ── 10. Header: loading bar and page name ─────────────────────────
+   Both live outside #main-content, so they survive SPA swaps. */
 
     function startLoadingBar() {
         if (!loadingBar) return;
         loadingBar.style.transition = 'none';
         loadingBar.style.width = '0%';
         loadingBar.style.opacity = '1';
-        loadingBar.offsetHeight; // force reflow so the width transition below actually animates
+        loadingBar.offsetHeight; // force reflow so the reset to 0% applies before animating
         loadingBar.style.transition = '';
         loadingBar.style.width = '80%';
     }
@@ -317,8 +321,7 @@
         if (pageNameEl && title) pageNameEl.textContent = title;
     }
 
-    // Full page load has no fetch to hook into — just mirror the <title>
-    // the server already rendered. SPA nav updates this itself, above.
+    // Full page load: mirror the server-rendered <title>. SPA nav sets it in navigateTo.
     setHeaderPageName(document.title);
 
 })();

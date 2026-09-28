@@ -1,7 +1,6 @@
-/* Global trays — the always-on dock (Chat + Signal) and the panel shell both
-   trays mount into. Deliberately above modals: the trays stay reachable from
-   anywhere in the app. Toast containers sit above these again, so feedback is
-   never buried (see main.css). */
+/* Global trays: the always-on dock and the panel shell every tray mounts
+   into. Stacked above modals so trays stay reachable; toasts sit above these
+   (main.css). */
 
 /* How far the dock sits off the bottom. Raised by trays.js whenever the page
    footer scrolls into view, so the dock never covers it. */

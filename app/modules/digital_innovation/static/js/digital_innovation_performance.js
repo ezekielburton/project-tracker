@@ -1,18 +1,8 @@
-// Digital Innovation — Performance page. The Weekly/Monthly/Quarterly
-// tabs and the prev/next period arrows are plain links (SPA-nav swaps
-// the whole page, same as any other DI sidebar link — see
-// spa-navigation.md); this file's own job is expanding/collapsing a
-// project row's already-rendered feature list, plus (3 Sep 2026) a live
-// refresh of the stat cards + table on a DI-wide SSE ping, since other
-// users' cost entries, feature moves and project closes/archives should
-// show up here without a manual reload — see digital_innovation_live.js
-// for the shared connection-watching helper this calls into.
+// Digital Innovation Performance page: expands/collapses a project's feature
+// rows, and live-refreshes the stat cards + table on a DI-wide SSE ping.
+// Tabs and period arrows are plain links (digital_innovation_nav.js).
 //
-// Delegated + guarded against double-wiring on repeat SPA-nav visits to
-// this page, same pattern digital_innovation_board.js uses for its own
-// dispatcher (per spa-navigation.md's Trap 1 — this file's <script> tag
-// re-executes on every visit, so re-adding the same document-level
-// listener each time would fire every handler N times after N visits).
+// SPA nav re-runs this script, so the click listener is wired once behind a flag.
 (function () {
     if (!window._diPerfDispatcherWired) {
         window._diPerfDispatcherWired = true;
@@ -24,10 +14,7 @@
             var row = expandBtn.closest('.di-perf-project-row');
             var projectId = row && row.getAttribute('data-di-project-row');
             if (!projectId) return;
-            // One <tr> per feature now (they render as their own rows
-            // under the project's own columns, not a single subrow
-            // holding a nested table) — toggle every row in the group,
-            // not just the first match.
+            // Each feature is its own <tr>, so toggle every row in the group.
             var featureRows = document.querySelectorAll('[data-di-project-features="' + projectId + '"]');
             if (!featureRows.length) return;
 
@@ -35,28 +22,21 @@
             featureRows.forEach(function (featureRow) {
                 featureRow.classList.toggle('hidden', expanded);
             });
-            // The glyph itself doesn't change — digital_innovation.css
-            // rotates it 90° on [aria-expanded="true"] instead.
+            // CSS rotates the glyph on [aria-expanded="true"].
             expandBtn.setAttribute('aria-expanded', String(!expanded));
         });
     }
 })();
 
 
-// Re-fetches _performance_table.html fresh for whatever view/period is
-// currently on screen (read straight off the URL, same querystring
-// routes/performance.py::_resolve_view_and_period() already reads) and
-// swaps #di-perf-table-body wholesale — same "replace the whole wrapper
-// node, don't touch innerHTML" reasoning digital_innovation_board.js's
-// diRefreshBoard uses, so there's no risk of ending up with the wrapper
-// nested inside itself.
+// Re-fetches _performance_table.html for the view/period in the URL's
+// querystring and replaces #di-perf-table-body. The fragment is its own
+// wrapper, so the node is replaced, not its innerHTML.
 function diRefreshPerformanceTable() {
     var container = document.getElementById('di-perf-table-body');
     if (!container) return;
 
-    // A fresh render always starts every project row collapsed — capture
-    // which ones are currently expanded so a live ping doesn't quietly
-    // close a row someone's actually looking at.
+    // Fresh renders arrive collapsed; remember expanded rows to re-open them.
     var expandedIds = Array.prototype.map.call(
         document.querySelectorAll('.di-perf-expand-btn[aria-expanded="true"]'),
         function (btn) {
@@ -86,9 +66,7 @@ function diRefreshPerformanceTable() {
             });
         })
         .catch(function () {
-            // A failed live refresh isn't worth surfacing to the user —
-            // the page just stays showing what it last successfully
-            // loaded, same as if the ping had never arrived.
+            // Silent: the page keeps its last state.
         });
 }
 

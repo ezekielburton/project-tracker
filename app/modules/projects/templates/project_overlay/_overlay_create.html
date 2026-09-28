@@ -1,16 +1,8 @@
-{# app/templates/project_overlay/_overlay_create.html
-   Create-mode overlay shell (task #61) — the "+ New Project" flow's Details
-   step lands here, followed by Deliverables (#62), then a confirm summary
-   (#64). Deliberately its own shell rather than reusing _overlay.html: the
-   tab set (Details/Deliverables only — no Submissions/Pre-Production/
-   Finance/Production/Logistics, none of which make sense before the
-   project is confirmed) and the footer (a forward-moving step rail +
-   eventual "Add New Project" action, no lifecycle sidebar — Cancel/Hold/
-   Flag don't apply to something that isn't a real project yet) differ too
-   much from the live overlay to share markup usefully. Same outer wrapper
-   classes as _overlay.html though (project-overlay-backdrop/-sheet/
-   -header/-body/-content), so it reads as the same surface, not a
-   different UI bolted on. #}
+{# app/modules/projects/templates/project_overlay/_overlay_create.html
+   Create-mode overlay for "+ New Project": Details step, then Deliverables,
+   then a confirm summary. Its own shell because the rail is a step list and
+   there are no lifecycle actions, but it shares _overlay.html's outer
+   wrapper classes. Wired by project_overlay_create.js. #}
 
 <div class="project-overlay-backdrop" id="project-overlay-backdrop">
     <div class="project-overlay-sheet" id="project-overlay-sheet">
@@ -36,8 +28,8 @@
         <div class="project-overlay-create-footer" id="project-overlay-create-footer">
             <span class="project-overlay-create-autosave-status" id="project-overlay-create-autosave-status">Draft
                 saved</span>
-            {# Wired fully in #64 — for now this just advances the step rail
-            to a Deliverables placeholder (built for real in #62). #}
+            {# On the Deliverables step the JS relabels this "Add New Project"
+            and it opens the confirm summary. #}
             <button type="button" class="project-toolbar-new-item" id="project-overlay-create-continue">
                 Continue to Deliverables →
             </button>

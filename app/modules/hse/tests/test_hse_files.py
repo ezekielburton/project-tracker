@@ -1,9 +1,5 @@
 """
-Where an attachment lands, and what is allowed through.
-
-The path is shared with anyone browsing the drive, so it has to stay
-readable and predictable — and it must never let a filename climb out of
-the officer's own folder.
+Attachment paths (readable, no escaping the entry's folder) and allowed file types.
 """
 from app.modules.hse.lib import files
 
@@ -20,7 +16,7 @@ def test_the_path_is_readable_for_someone_browsing_the_drive():
 
 
 def test_an_unknown_register_still_gets_a_folder():
-    """A register removed from the declaration must not strand its files."""
+    """An undeclared register falls back to its key as the folder name."""
     assert files.folder_for(Entry('retired_thing', 'OLD-0001')) \
         == '/HSE/retired_thing/OLD-0001'
 

@@ -1,12 +1,8 @@
 """
-HSE — the Overview. The module's front page.
+HSE Overview: the module's front page, showing what needs attention today.
 
-It answers one question in its first screen: what needs him today. The
-tiles are counts of things elsewhere, and every panel row links to the
-entry behind it, so nothing here is a dead end.
-
-No metric is defined in this file. Compliance health, coverage and the SLA
-clock all come from lib/metrics.py, which My performance reads too.
+No metric is defined here; compliance health, coverage and the SLA clock
+come from lib/metrics.py, shared with My performance.
 """
 from datetime import date, timedelta
 
@@ -20,8 +16,11 @@ from app.modules.hse.lib.overview import (
     expiring_panel, needs_you_now, severity_breakdown, this_week, tiles,
     waiting_on_others,
 )
-from app.modules.hse.lib.query import dashboard_entries, open_counts_by_group
+from app.modules.hse.lib.query import (
+    dashboard_entries, open_counts_by_register, spend_entries,
+)
 from app.modules.hse.lib.rail import rail_items
+from app.modules.hse.lib.spend import spend_panel
 from app.modules.hse.models import HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
 
@@ -40,13 +39,11 @@ def overview():
     month_end = date(*shift_month(today.year, today.month, 1), 1) - timedelta(days=1)
     counts, health = tiles(schedules, entries, month_start, month_end, today)
 
-    # The week he is in, Monday to Sunday — the same week the calendar
-    # draws and the weekly HSC report covers.
+    # Monday to Sunday, matching the calendar week and the weekly HSC report.
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
-    # Severity reads over the year: a month is too few incidents for the
-    # shape of the bars to mean anything.
+    # Severity covers the year: a month has too few incidents to be meaningful.
     year_start = date(today.year, 1, 1)
 
     return render_template(
@@ -59,9 +56,11 @@ def overview():
         week=this_week(schedules, entries, week_start, week_end, today),
         week_label=week_start.strftime('%d %b'),
         severity=severity_breakdown(entries, year_start, today),
+        # All time, so not dashboard_entries: the register strips share this loader.
+        spend=spend_panel(spend_entries(), today),
         year_label=today.year,
         month_label=month_start.strftime('%B'),
         today=today,
-        rail=rail_items(open_counts_by_group(today), active_group='overview'),
+        rail=rail_items(open_counts_by_register(today), active_group='overview'),
         active_group='overview',
     )

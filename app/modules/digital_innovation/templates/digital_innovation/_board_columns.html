@@ -1,13 +1,8 @@
-{# Digital Innovation — the board's Kanban columns + the closed-features
-   strip below them. Its own partial (rather than inlined in board.html)
-   so board.html's initial render and routes/board.py's GET
-   .../board/columns fragment route render from the exact same source —
-   same "one template, two callers" shape as _incoming_cards.html and
-   _feature_detail.html. Needs columns/closed_features/stages/
-   stage_colours/stage_labels/can_edit_board/project in context either
-   way. Wrapped in #di-board-body so the live-refresh JS (see
-   digital_innovation_board.js::diRefreshBoard) has one element to swap
-   rather than two siblings. #}
+{# Board columns + closed-features strip. Rendered by board.html and by the
+   .../board/columns fragment route (routes/board.py) for live refresh.
+   Needs columns, closed_features, stages, stage_colours, stage_labels,
+   can_edit_board and project. Wrapped in #di-board-body, the single node
+   diRefreshBoard replaces. #}
 <div id="di-board-body">
 <div class="di-columns">
     {% for stage in stages %}
@@ -51,11 +46,8 @@
             </div>
             {% endfor %}
             {% if loop.first and can_edit_board %}
-            {# New features always start in the first stage, so
-               this is the only column that gets an add control —
-               not repeated on the other 6. View-only users
-               (lib/access.py's can_edit_di_board) don't get it
-               at all. #}
+            {# One add control, under the first column; the modal picks
+               the starting stage. Editors only (can_edit_di_board). #}
             <button type="button" class="di-add-feature-btn" id="di-add-feature-trigger" data-di-project-id="{{ project.id }}">+ Add feature</button>
             {% endif %}
         </div>

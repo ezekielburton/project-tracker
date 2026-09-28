@@ -52,8 +52,8 @@ def overlay_create_flag(project_id):
     if flag_type not in ('project', 'deliverable', 'concept', 'kv') or not message_text:
         return jsonify({'success': False, 'error': 'A message is required.'}), 400
 
-    # A 'deliverable' flag needs a target on this project, or it renders
-    # invisibly in both scopes. Guard server-side.
+    # A 'deliverable' flag needs a target on this project, or it shows in
+    # neither scope.
     if flag_type == 'deliverable':
         from app.modules.core.shared.models import Deliverable
         deliverable = Deliverable.query.get(deliverable_id) if deliverable_id else None

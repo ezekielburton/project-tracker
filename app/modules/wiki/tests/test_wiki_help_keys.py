@@ -57,10 +57,8 @@ def test_label_for_falls_back_to_the_key():
 # ------ The contract with the app's templates ------
 
 def test_every_help_key_used_in_a_template_is_registered():
-    """
-    A key used on a page but missing from the registry renders a dead "?" with
-    no error anywhere. This catches it at test time instead.
-    """
+    """Every literal help key in a template is registered; an unregistered one
+    is a silently dead "?"."""
     unregistered = []
     for root, _, files in os.walk(os.path.join(APP_DIR, 'modules')):
         for name in files:
@@ -129,7 +127,7 @@ def test_an_unregistered_key_is_refused(app, client, db_session):
 
 
 def test_a_key_moves_rather_than_being_shared(app, client, db_session):
-    """Two articles on one key would make the "?" ambiguous, so the newer wins."""
+    """Saving a key held by another article moves it to the saved article."""
     _user(app, client, db_session, 'key-move@example.com')
     section = WikiSection(title='S', slug='k-move')
     db_session.add(section)
@@ -148,7 +146,7 @@ def test_a_key_moves_rather_than_being_shared(app, client, db_session):
     assert WikiArticle.query.get(first.id).help_key is None
 
 def test_the_article_losing_a_key_keeps_its_updated_at(app, client, db_session):
-    """Losing a key is not an edit, so the reader's Last Updated must not move."""
+    """The article that loses a key keeps its updated_at (the reader's Last updated)."""
     _user(app, client, db_session, 'key-move-date@example.com')
     section = WikiSection(title='S', slug='k-move-date')
     db_session.add(section)

@@ -1,7 +1,5 @@
-"""Coverage for board_data.py's _feature_progress — specifically the
-current_step_number / progress_pct fields the board card's new progress
-bar reads (the bar's width and the "Step N of total" text share this one
-number so they can never disagree)."""
+"""Tests for board_data._feature_progress: current_step_number and
+progress_pct, which the card's progress bar and "Step N of M" text share."""
 from app.modules.digital_innovation.models import DiProject
 from app.modules.digital_innovation.lib import step_engine as engine
 from app.modules.digital_innovation.lib.board_data import _feature_progress, build_board_context
@@ -48,7 +46,7 @@ def test_current_step_number_equals_total_once_every_step_is_done(db_session):
 def test_progress_pct_is_zero_for_an_unconfigured_stage(db_session):
     project = _project(db_session, 'c')
     feature = engine.create_feature(project, 'New thing')
-    # Wipe out whatever the template seeded, to exercise the empty case.
+    # Remove the template-seeded steps to test the empty case.
     for step in list(feature.steps):
         feature.steps.remove(step)
 

@@ -1,7 +1,5 @@
-"""Coverage for the Digital Innovation Performance rollup + the
-month/quarter freeze (lib/snapshots.py, brain C). No routes/HTTP here —
-exercises get_period_rollup() directly against the database, same split
-test_costs_lib.py/test_periods.py use for their pieces of this module."""
+"""Tests for lib/snapshots.py: the Performance rollup and the
+month/quarter freeze, called directly (no HTTP)."""
 import datetime
 
 from app.modules.digital_innovation.models import DiProject, DiSetting, DiPeriodSnapshot
@@ -112,9 +110,7 @@ def test_get_period_rollup_cost_type_labels_only_lists_types_present_in_the_peri
 def test_get_period_rollup_cost_type_labels_follow_di_cost_types_order(db_session):
     project = _project(db_session, 'p', created_at=datetime.datetime(2026, 1, 1))
     feature = engine.create_feature(project, 'Some feature')
-    # Added out of DI_COST_TYPES order (licensing, then dev_time) — the
-    # caption should still read in the canonical dev/Claude/hardware/
-    # licensing order, not insertion order.
+    # Added out of order; the caption still follows DI_COST_TYPES order.
     costs.add_cost_entry(project, datetime.date(2026, 8, 18), 'licensing', amount=20)
     costs.add_cost_entry(project, datetime.date(2026, 8, 19), 'dev_time', hours=1, feature=feature)
     db_session.commit()
@@ -186,10 +182,7 @@ def test_get_period_rollup_only_lists_active_features_when_expanded(db_session):
 
 
 def test_get_period_rollup_status_label_is_track_aware(db_session):
-    # Track is board-level (DiProject.track, models.py) - an external
-    # project's active feature sitting in management_review should
-    # report the Client Review label here too (stage_label()), the
-    # same relabeling the board and feature detail view get.
+    # An external board's management_review feature reads 'Client Review'.
     project = DiProject(
         name='Test DI Project track', lifecycle='active',
         created_at=datetime.datetime(2026, 1, 1), track='external',
@@ -208,8 +201,7 @@ def test_get_period_rollup_status_label_is_track_aware(db_session):
 
 
 def test_get_period_rollup_current_month_is_never_snapshotted(db_session):
-    # The month containing "today" has, by definition, not ended yet —
-    # computed live every call, exactly like a week.
+    # The current month hasn't ended, so it is computed live.
     current_month = periods.current_period_key('month')
     start, _ = periods.period_bounds('month', current_month)
     project = _project(db_session, 'i', created_at=datetime.datetime.combine(start, datetime.time()))

@@ -118,22 +118,7 @@
     justify-content: center;
 }
 
-/* ── Inner two-panel (section nav + article) ─────────────── */
-.blog-inner {
-    display: flex;
-    align-items: stretch;
-    height: 100%;
-    overflow: hidden;
-}
-
-.blog-section-nav {
-    width: 200px;
-    flex-shrink: 0;
-    padding: 2rem 0;
-    overflow-y: auto;
-    background: var(--white);
-}
-
+/* ── Section nav items ───────────────────────────────────── */
 .blog-nav-item {
     display: flex;
     align-items: center;
@@ -242,7 +227,7 @@
 }
 
 .blog-post-title {
-    font-family: var(--font-heading);
+    font-family: var(--font-headline);
     font-size: 2rem;
     margin: 0 0 0.25rem;
     text-transform: uppercase;
@@ -268,7 +253,7 @@
 }
 
 .blog-h2 {
-    font-family: var(--font-heading);
+    font-family: var(--font-headline);
     font-size: 1.4rem;
     color: var(--tangerine);
     margin: 0 0 1rem;
@@ -501,12 +486,6 @@
     font-size: 0.85rem;
     color: var(--grey-mid);
     margin: 0 0 1.25rem;
-}
-
-/* ── Small button variant ────────────────────────────────── */
-.btn-sm {
-    font-size: 0.775rem;
-    padding: 0.3rem 0.75rem;
 }
 
 /* ── Editor ──────────────────────────────────────────────── */

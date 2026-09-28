@@ -1,6 +1,6 @@
-/* Invoicing page JS — the Days Pending threshold modal (admin/management)
-   and inline finance-cell editing (admin/cs/finance). IIFE + direct init
-   so it re-runs on SPA nav; each feature no-ops if its DOM isn't present. */
+/* Invoicing page: Days Pending threshold modal (admin/management), inline
+   finance-cell editing (admin/cs/finance), and search. Init runs inline because
+   the SPA router re-runs this on every visit; each part no-ops without its DOM. */
 (function () {
     var VALIDATION = {
         valid: ['Valid', 'clover'],
@@ -162,8 +162,8 @@
     }
 
     // ── Toolbar search ────────────────────────────────────────────────
-    /* Filters the loaded rows as you type — the two selects next to it are
-       server-side, since the Export link reuses their filtering. */
+    /* Filters the loaded rows as you type. The selects beside it filter
+       server-side because the Export link reuses them. */
     function initSearch() {
         var input = document.getElementById('cs-inv-search');
         var table = document.querySelector('.cs-inv-table');

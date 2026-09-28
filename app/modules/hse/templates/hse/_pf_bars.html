@@ -1,8 +1,6 @@
-{# Planned against completed, drawn server-side so it survives into the PDF.
-   Shared by the page and the report — neither draws its own.
-
-   No height attribute: the viewBox aspect sets the height, so the chart
-   fills the card's width instead of being letterboxed inside it. #}
+{# Planned vs completed bars, drawn server-side so they print to PDF. Shared
+   by the page and the report. No height attribute: the viewBox sets it, so
+   the chart fills the card's width. #}
 <svg class="hse-pf-svg" viewBox="0 0 {{ bars.width }} {{ bars.height }}"
      width="100%" role="img"
      aria-label="Inspections planned against completed, by month">

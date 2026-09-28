@@ -1,6 +1,6 @@
-{# Cancelled projects nobody has closed out yet. table.py pulls them out of
-   the table rows and queues them here so none gets scrolled past. Renders
-   nothing when the queue is empty or the viewer cannot close. #}
+{# Cancelled projects not yet closed out. table.py moves them out of the
+   table rows into this queue. Empty when there are none or the viewer
+   cannot close. #}
 {% if can_close and to_close_out %}
 <div class="cs-closeout">
     <div class="cs-closeout-head">

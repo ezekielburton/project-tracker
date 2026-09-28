@@ -27,7 +27,7 @@ def convert_pptx_to_pdf(file_bytes):
             timeout=60,
         )
 
-        # --- TEMPORARY DIAGNOSTICS — remove once we know what's happening ---
+        # --- Temporary diagnostics: remove once conversion failures are understood ---
         print('RETURN CODE:', result.returncode)
         print('STDOUT:', result.stdout.decode(errors='replace'))
         print('STDERR:', result.stderr.decode(errors='replace'))

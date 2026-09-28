@@ -1,7 +1,6 @@
 """
-Client Servicing — Installation Calendar. Month grid + Agenda, both driven
-by each project's installation_date and the effective CS status/risk. Own
-route file, same one-concern-per-file convention as the other CS routes.
+Client Servicing — Installation Calendar. Month grid and Agenda views, both
+driven by each project's installation_date and effective CS status/risk.
 """
 from datetime import date
 
@@ -93,7 +92,7 @@ def calendar():
 @login_required
 @require_cs
 def calendar_day(datestr):
-    """Drawer fragment for one day — fetched when the user clicks a day cell."""
+    """Drawer fragment for one day, fetched when a day cell is clicked."""
     try:
         target = date.fromisoformat(datestr)
     except (TypeError, ValueError):

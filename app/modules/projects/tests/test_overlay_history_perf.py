@@ -1,7 +1,6 @@
 """
-Regression test: the overlay Submissions history now loads its files and
-included deliverables in bulk. This proves the query count no longer grows with
-the number of revisions, and that the rendered history is unchanged.
+Submissions history renders every revision, and its query count stays flat
+as revisions grow.
 """
 
 from datetime import datetime, timedelta
@@ -98,6 +97,4 @@ def test_overlay_submissions_history_query_count_does_not_scale_with_revisions(a
         resp = _get_submissions_page(app, client, user_big, project_big)
     assert resp.status_code == 200
 
-    # Before the A1 fix this scaled with revision count (extra queries per
-    # revision for files + included deliverables). After the fix it's flat.
     assert big_count[0] == small_count[0]     

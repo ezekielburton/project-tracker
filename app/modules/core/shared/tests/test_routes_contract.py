@@ -1,12 +1,7 @@
 """
-Route contract: the live url_map must match the commited baseline
-(refactor/route_baseline.txt). This is the refactor's automated
-safety net - any step that drops, renames or unexpectedly adds a
-route fails here.
-
-The route set and the baseline path both come from regen_route_baseline,
-the script that writes the file, so the reader and the writer can never
-drift apart. Regenerate deliberately when routes change:
+The live url_map must match the committed refactor/route_baseline.txt; a
+dropped, renamed or unexpected route fails. Reads through regen_route_baseline,
+the script that writes the file. Regenerate when routes change on purpose:
   python -m app.modules.core.shared.tests.regen_route_baseline
 """
 

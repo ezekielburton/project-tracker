@@ -1,9 +1,6 @@
-// Client Servicing — Installation Calendar (Month + Agenda). Like
-// client_servicing.js, this file's tag lives in the page's own
-// {% block extra_js %}, so it re-executes on every SPA navigation onto the
-// page. Everything binds on elements inside the swapped-in content
-// (.cs-cal-page and below), never on document, so listeners can't stack
-// across navigations.
+// Client Servicing Installation Calendar (Month + Agenda). The SPA router
+// re-runs this script on every visit and DOMContentLoaded never fires again.
+// Listeners bind inside .cs-cal-page, never on document, so they can't stack.
 (function () {
     var page = document.querySelector('.cs-cal-page');
     if (!page) return;
@@ -15,7 +12,7 @@
     // ── Month: day cell → drawer fragment ─────────────────────────
     var grid = page.querySelector('.cs-cal-grid');
     var drawer = document.getElementById('cs-cal-drawer');
-    // The open day, kept across live-refresh swaps so it can be restored.
+    // The open day, restored after live-refresh swaps.
     var selectedDate = null;
 
     function loadDay(dateStr) {
@@ -23,7 +20,7 @@
         fetch('/client-servicing/calendar/day/' + dateStr)
             .then(function (r) { return r.ok ? r.text() : null; })
             .then(function (html) { if (html !== null) drawer.innerHTML = html; })
-            .catch(function () { /* network blip — leave the drawer as-is */ });
+            .catch(function () { /* network blip: leave the drawer as-is */ });
     }
 
     function markSelected(dateStr) {
@@ -84,8 +81,8 @@
     // ── Inline edit (risk / action_owner / next_action) ───────────
     var FLAG_SVG = '<svg class="cs-cal-flag" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
 
-    // Next-action footer: flag icon + amber when a warning risk is active,
-    // plain "Next:" otherwise. Text set via textContent (never innerHTML).
+    // Next-action footer: flag icon when a warning risk is active, else "Next:".
+    // User text goes in via textContent, never innerHTML.
     function renderNext(cell, value) {
         var flagged = cell.classList.contains('cs-cal-na--flag');
         cell.dataset.value = value || '';
@@ -102,7 +99,7 @@
         cell.appendChild(document.createTextNode(value || '—'));
     }
 
-    // Install qty — an empty value renders the dashed 'Set qty' prompt.
+    // An empty qty renders the dashed "Set qty" prompt.
     function renderQty(cell, value) {
         var has = value !== null && value !== undefined && value !== '';
         cell.dataset.value = has ? value : '';
@@ -124,7 +121,7 @@
             cell.appendChild(au);
         }
         if (job) {
-            // Risk is the card's frame — swap the left-border modifier class.
+            // Risk sets the card's left-border colour.
             job.className = 'cs-cal-job cs-cal-job--' + risk.modifier;
             job.dataset.riskClass = risk.modifier;
             var na = job.querySelector('.cs-cal-na');
@@ -137,9 +134,8 @@
         }
     }
 
-    // Status pill — writes the same cs_status the CS table edits, so a
-    // change here shows on the table and vice versa. Response carries the
-    // recomputed effective status (manual override or derived).
+    // Status pill. Edits the same cs_status as the CS table; the response
+    // carries the effective status (manual override or derived).
     function renderStatus(cell, status) {
         cell.dataset.value = status.is_auto ? '' : status.label;
         cell.innerHTML = '';
@@ -224,8 +220,7 @@
         });
     }
 
-    // Delegated on the page root (re-created each SPA nav) so it also covers
-    // drawer content swapped in after a day click.
+    // Delegated on the page root so it also covers drawer content loaded later.
     page.addEventListener('click', function (e) {
         var cell = e.target.closest('.cs-editable');
         if (!cell || cell.classList.contains('cs-cell-editing')) return;
@@ -233,9 +228,9 @@
         startEdit(cell);
     });
 
-    // Live refresh (SSE doorbell via polling.js): re-fetch this same view and
-    // swap only the data regions in place, so the open day and the agenda
-    // search/filter survive. Skipped mid-edit — the next ping catches up.
+    // Called by polling.js on each SSE ping. Re-fetches this view and swaps
+    // only the data regions, so the open day and agenda filter survive.
+    // Skipped mid-edit; the next ping catches up.
     window.helixRefreshClientServicingCalendar = function () {
         if (page.querySelector('.cs-cell-editing')) return;
         fetch(window.location.pathname + window.location.search, { headers: { 'X-Nav-Request': '1' } })
@@ -260,6 +255,6 @@
                     applyAgendaFilter();
                 }
             })
-            .catch(function () { /* transient — next doorbell retries */ });
+            .catch(function () { /* transient; the next ping retries */ });
     };
 })();

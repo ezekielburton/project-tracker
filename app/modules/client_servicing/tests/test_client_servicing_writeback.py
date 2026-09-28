@@ -1,10 +1,5 @@
-"""Coverage for the writeback fields: CS Lead, Project Owner,
-Job No, Client SPOC, Installation Date, Project Value, Due Date — all
-routed through app/modules/projects/services/mutations.py.
-
-Also covers the notify-on-change behaviour for Due Date, Job No
-and Client SPOC (designers + secondary CS + Project Owner, excluding the
-actor and de-duplicated)."""
+"""Project fields written back from CS via projects/services/mutations.py,
+and the change notifications they send (actor excluded, de-duplicated)."""
 import json
 
 from flask import url_for
@@ -169,8 +164,6 @@ def test_job_number_change_notifies_secondary_cs_and_owner(app, client, db_sessi
 
     for recipient_id in (secondary.id, owner.id):
         assert Notification.query.filter_by(recipient_id=recipient_id, notification_type='job_number_changed').first()
-    # due-date-only recipient list (designers) shouldn't apply here — nothing to assert
-    # beyond the two above, since no designer was assigned.
 
 
 def test_client_spoc_change_notifies_secondary_cs_and_owner(app, client, db_session):
@@ -209,9 +202,7 @@ def test_secondary_cs_who_is_also_owner_only_notified_once(app, client, db_sessi
 
 
 def test_cs_lead_reassign_response_includes_avatar_chip_data(app, client, db_session):
-    """The save response carries the new lead's person info so
-    the cell can show the real avatar chip immediately, not plain text
-    until the next refresh."""
+    """The save response carries the new lead's person data for the avatar chip."""
     lead = _user(db_session, 'lead13')
     new_lead = _user(db_session, 'newlead13')
     project = _project(db_session, 'n', lead)

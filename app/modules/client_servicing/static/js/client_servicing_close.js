@@ -1,12 +1,9 @@
-/* Close / close-out prompts on the CS table. IIFE + direct init, and the
-   tag lives inside the content block so an SPA swap re-runs it; no-ops when
-   the modals aren't on the page (a viewer who can't close never gets them
-   rendered). Closing is final, so both prompts confirm before posting, and
-   a success just reloads the page. */
+/* Close / close-out prompts on the CS table. The SPA router re-runs this on
+   every visit, so init runs inline. No-ops when the modals aren't rendered
+   (viewer can't close). Closing is final: both prompts confirm, then reload. */
 (function () {
-    // Scoped to .cs-page, not document: this file re-executes on every SPA
-    // swap, and a listener on the swapped-in element dies with it instead of
-    // stacking a fresh copy each visit.
+    // Listeners go on .cs-page, not document, so they die with the page
+    // instead of stacking each visit.
     var page = document.querySelector('.cs-page');
     var closeModal = document.getElementById('cs-close-modal');
     var outModal = document.getElementById('cs-closeout-modal');
@@ -115,9 +112,8 @@
         post(pending, { invoice_needed: false }, error1, [noBtn, yesBtn]);
     });
 
-    /* Both step-2 answers mean the project is invoiceable, so both need a
-       value when it hasn't got one. Returns null when the field is asking
-       and empty, having shown the error. */
+    /* Both step-2 answers need a project value if it has none. Returns null
+       (after showing the error) when the value is required and empty. */
     function valuePayload(errorBox) {
         if (valueField.hidden) return {};
         if (!valueInput.value) {

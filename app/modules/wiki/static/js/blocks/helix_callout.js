@@ -1,6 +1,6 @@
 /**
  * Editor.js block for the wiki's two callout styles.
- * Assigned to window rather than declared globally, so it survives SPA re-runs.
+ * Exposed on window from an IIFE: a top-level class would throw when the SPA re-runs this file.
  */
 (function () {
     'use strict';

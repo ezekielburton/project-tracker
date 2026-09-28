@@ -1,9 +1,5 @@
-// app/static/js/project_preproduction_card.js
-//
-// Design > Pre-Production sub-tab. Same init(rootEl, projectId, onChanged)
-// / destroy() shape every other sub-tab card module uses (see
-// project_details_card.js) so project_list.js's SUBTAB_LOADERS registry
-// can mount/unmount it identically to the others.
+// Pre-Production page. Standard init(rootEl, projectId, onChanged) /
+// destroy() card shape, mounted via project_list.js's SUBTAB_LOADERS.
 
 window.ProjectPreproductionCard = (function () {
     function init(rootEl, projectId, onChanged) {
@@ -17,8 +13,7 @@ window.ProjectPreproductionCard = (function () {
             }).then(function (r) { return r.json(); });
         }
 
-        // ── C&CM customer scope select — same panel-switch pattern as
-        // Deliverables/Submissions (project_deliverables_card.js). ──
+        // ── C&CM customer scope select: shows the matching panels. ──
         var scopeSelect = rootEl.querySelector('#overlay-preprod-scope-select');
         if (scopeSelect) {
             scopeSelect.addEventListener('change', function () {
@@ -28,8 +23,8 @@ window.ProjectPreproductionCard = (function () {
             });
         }
 
-        // ── Completed section collapse (same recipe as .overlay-inc-toggle
-        // — button.nextElementSibling is the list it reveals). ──
+        // ── Completed section collapse. The list must be the button's
+        // next sibling. ──
         rootEl.querySelectorAll('.overlay-preprod-completed-toggle').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var list = btn.nextElementSibling;
@@ -39,22 +34,14 @@ window.ProjectPreproductionCard = (function () {
             });
         });
 
-        // ── Open this deliverable's folder (Synology Drive, M10 NAS
-        // migration, 21 Aug 2026) — click-triggered, see main.js's
-        // openNasLink(). ──
+        // ── Open the deliverable's NAS folder (main.js openNasLink()). ──
         rootEl.querySelectorAll('.overlay-preprod-nas-link').forEach(function (btn) {
             btn.addEventListener('click', function () { openNasLink(btn); });
         });
 
-        // ── Stream Assignment picker (21 Aug 2026, per Ezekiel; folded into
-        // every stream's own box 23 Aug 2026) — every stream (2D/3D/
-        // Technical alike) now gets an interactive picker, scoped to that
-        // stream's own team (see _preproduction_row.html). Same
-        // AvatarPicker.init(el, onSelect) recipe as the Design Leads
-        // per-team picker in project_details_card.js — the containing
-        // .overlay-preprod-stream carries both data-deliverable-id and
-        // data-stream already, so both come straight off the same element
-        // the picker lives in. ──
+        // ── Stream assignment picker, one per stream, scoped to that
+        // stream's team. The enclosing .overlay-preprod-stream carries
+        // data-deliverable-id and data-stream. ──
         var pickerHandles = [];
         rootEl.querySelectorAll('.overlay-preprod-stream .avatar-picker').forEach(function (pickerEl) {
             var streamEl = pickerEl.closest('.overlay-preprod-stream');
@@ -70,11 +57,7 @@ window.ProjectPreproductionCard = (function () {
             }));
         });
 
-        // ── Mark Done (the assignee marking their own upload ready). Every
-        // stream lives inside a .overlay-preprod-stream card again (21 Aug
-        // 2026, per Ezekiel — the idle-stream quick-action extraction was
-        // reverted), so this just reads deliverable-id/stream off the
-        // containing card, same as Approve/Flag below. ──
+        // ── Mark Done (the assignee marks their upload ready). ──
         rootEl.querySelectorAll('.overlay-preprod-markdone-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var streamEl = btn.closest('.overlay-preprod-stream');
@@ -105,8 +88,9 @@ window.ProjectPreproductionCard = (function () {
             });
         });
 
-        // ── Flag for Reupload — opens a comment form, same show/hide
-        // pattern as Mark Approved / Request Client Revision. ──
+        // ── Flag for Reupload: swaps the action buttons for a comment form.
+        // Cancel assumes the actions span is the form's previous sibling
+        // (_preproduction_row.html). ──
         rootEl.querySelectorAll('.overlay-preprod-flag-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var streamEl = btn.closest('.overlay-preprod-stream');
@@ -153,11 +137,8 @@ window.ProjectPreproductionCard = (function () {
             });
         });
 
-        // ── Active / History view toggle — swaps the whole view, same
-        // pattern as Submissions' Current/History toggle, not a reveal-a-
-        // panel-underneath button. Flag history is fetched once on first
-        // switch into it, then filtered client-side by the deliverable
-        // dropdown (no re-fetch per filter change). ──
+        // ── Active / History view toggle. Flag history is fetched once,
+        // then filtered client-side by the deliverable dropdown. ──
         var viewToggleBtns = rootEl.querySelectorAll('.overlay-submissions-view-toggle-btn');
         var activeView = rootEl.querySelector('#overlay-preprod-active-view');
         var historyView = rootEl.querySelector('#overlay-preprod-history-view');

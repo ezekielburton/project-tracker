@@ -1,9 +1,6 @@
 """
-The sanctioned way another module reads HSE numbers.
-
-Nothing calls this yet. It exists from day one so that when the dashboard
-or Digital Innovation wants an HSE figure, it comes through here and never
-through this module's models.
+The sanctioned way for other modules to read HSE numbers; they must not
+query this module's models directly. No callers yet.
 """
 
 from datetime import date

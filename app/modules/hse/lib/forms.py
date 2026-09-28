@@ -1,24 +1,27 @@
 """
-The entry form — built from the same declaration the table is built from.
-
-A register gaining a field gains a form row, a validation rule and a saved
-value without anything here changing. What a field cannot do is invent a
-value the module computes: the ref and every duration are rendered locked.
+The entry form: view models, parsing and validation, all driven by the
+register declaration. The ref is allocated on save and durations are
+computed at read time, so neither is a form field.
 """
 
+import re
 from datetime import date, datetime
 
-from app.modules.hse.lib.registers import register
+from app.modules.hse.lib.metrics import parse_money
+from app.modules.hse.lib.registers import register, shows_asset_serial
+from app.modules.hse.lib.spend import stored_amount
 from app.modules.hse.models import (
     EVENT_CLASSES, SEVERITIES, HseAsset, HsePerson, HseReference,
 )
 
 
-# Rendered read-only, with the reason. The ref is allocated on save and the
-# durations are computed at read time — neither is ever typed.
-LOCKED_FIELDS = (
-    {'name': 'ref', 'label': 'Reference', 'note': 'Generated on save'},
-)
+# 'HH:MM', 24-hour: what <input type="time"> submits.
+TIME_PATTERN = re.compile(r'([01]\d|2[0-3]):[0-5]\d')
+
+# An amount: optional "AED", thousands commas in groups of three, up to 2
+# decimals. No sign, so a negative is refused.
+MONEY_PATTERN = re.compile(r'(?:AED\s*)?(\d{1,3}(?:,\d{3})+|\d+)(\.\d{1,2})?', re.IGNORECASE)
+MONEY_ERROR = 'Enter an amount, e.g. 1,250.50'
 
 
 class ValidationError(Exception):
@@ -30,16 +33,14 @@ class ValidationError(Exception):
 
 
 def _options(field):
-    """The choices behind one field, newest lists first. An empty list is
-    returned as-is — the form says so rather than showing a blank select."""
+    """The active choices behind one field, as value/label dicts. May be
+    empty; the form flags that case."""
     if field.type == 'choice':
         rows = (HseReference.query
                 .filter_by(kind=field.choices_kind, active=True)
                 .order_by(HseReference.sort_order, HseReference.label).all())
-        # A choice mapped to a column is a foreign key, so the id is the
-        # value. One that falls into JSONB stores the label instead — an id
-        # in the blob has nothing to join back to and would render as a
-        # number in the table.
+        # A column-backed choice is a foreign key, so its value is the id. A
+        # JSONB choice stores the label: an id there has nothing to join to.
         if field.column is None:
             return [{'value': r.label, 'label': r.label} for r in rows]
         return [{'value': r.id, 'label': r.label} for r in rows]
@@ -49,7 +50,8 @@ def _options(field):
                 for r in rows]
     if field.type == 'asset':
         rows = HseAsset.query.filter_by(active=True).order_by(HseAsset.label).all()
-        return [{'value': r.id, 'label': f'{r.label} ({r.ref})' if r.ref else r.label}
+        return [{'value': r.id, 'label': f'{r.label} ({r.ref})' if r.ref else r.label,
+                 'serial': r.serial_no}
                 for r in rows]
     if field.type == 'severity':
         return [{'value': s, 'label': s} for s in SEVERITIES]
@@ -59,9 +61,8 @@ def _options(field):
 
 
 def _current(entry, field, prefill=None):
-    """The value already on an entry, in the shape the input wants — or, on
-    a new entry opened from the calendar, the value the day and the
-    occurrence already decided."""
+    """The entry's current value in input format, or the prefill value for
+    a new entry."""
     if entry is None:
         return (prefill or {}).get(field.name)
     if field.column is None:
@@ -73,12 +74,15 @@ def _current(entry, field, prefill=None):
 
 
 def form_fields(reg, entry=None, prefill=None):
-    """View models for the form, in declaration order.
-
-    `prefill` is keyed by field name and only applies to a new entry: the
-    calendar's "Log it" already knows the date and the asset, and making
-    him retype them is how the wrong vehicle ends up on the record.
-    """
+    """View models for the form, in declaration order. `prefill` (keyed by
+    field name) applies to new entries only, e.g. the date and asset from
+    the calendar's "Log it"."""
+    if entry is None and reg.default_status:
+        prefill = dict(prefill or {})
+        for field in reg.fields:
+            if field.type == 'status':
+                prefill.setdefault(field.name, reg.default_status)
+    closed_field = next((f.name for f in reg.fields if f.column == 'closed_at'), None)
     out = []
     for field in reg.fields:
         options = _options(field)
@@ -92,17 +96,22 @@ def form_fields(reg, entry=None, prefill=None):
             'statuses': list(reg.statuses) if field.type == 'status' else [],
             # A choice field with nothing behind it cannot be filled in yet.
             'empty_list': field.type == 'choice' and not options,
-            # Quick-add needs both: which list to add to, and whether this
-            # field stores the new row's id or its label (see _options).
+            # For quick-add: which list to add to, and whether the field
+            # stores the new row's id or its label (see _options).
             'choices_kind': field.choices_kind,
             'stores_label': field.column is None,
+            # Machine registers show the picked asset's serial under the picker.
+            'show_serial': field.type == 'asset' and shows_asset_serial(reg),
+            # Picking this status fills the closed date (hse_entry_modal.js).
+            'closed_status': reg.closed_status if field.type == 'status' else None,
+            'closed_field': closed_field if field.type == 'status' else None,
         })
     return out
 
 
 def _parse(field, raw, errors):
-    """One submitted value, coerced. Anything unparseable records an error
-    rather than silently becoming None."""
+    """One submitted value, coerced. An unparseable value records an error
+    in `errors` and returns None."""
     if raw in (None, '', []):
         if field.required:
             errors[field.name] = 'Required'
@@ -115,9 +124,14 @@ def _parse(field, raw, errors):
             errors[field.name] = 'Not a date'
             return None
 
+    if field.type == 'time':
+        if not isinstance(raw, str) or not TIME_PATTERN.fullmatch(raw):
+            errors[field.name] = 'Not a time — use HH:MM (24-hour)'
+            return None
+        return raw
+
     if field.type in ('choice', 'person', 'asset'):
-        # Only a field backed by a foreign-key column is an id. A JSONB
-        # choice keeps the label it was picked as.
+        # A JSONB choice keeps its label; column-backed fields are ids.
         if field.type == 'choice' and field.column is None:
             return raw
         try:
@@ -138,6 +152,15 @@ def _parse(field, raw, errors):
             return None
         return raw
 
+    if field.type == 'money':
+        # A JSON number is accepted as its text; True would read as 1.
+        valid = isinstance(raw, (str, int, float)) and not isinstance(raw, bool)
+        text = str(raw).strip() if valid else ''
+        if not MONEY_PATTERN.fullmatch(text):
+            errors[field.name] = MONEY_ERROR
+            return None
+        return stored_amount(parse_money(text))
+
     if field.type == 'number':
         try:
             return int(raw)
@@ -149,25 +172,30 @@ def _parse(field, raw, errors):
 
 
 def apply_payload(entry, reg, payload):
-    """Validate a whole submitted form, then write it onto `entry`.
-
-    Whole-form, not field-by-field: an entry has required fields, and a
-    per-field save would leave half-written records behind. Nothing is
-    written unless every field passes.
-    """
+    """Validate the whole submitted form, then write it onto `entry`.
+    Raises ValidationError and writes nothing if any field fails."""
     errors = {}
     parsed = {}
 
     for field in reg.fields:
         parsed[field.name] = _parse(field, payload.get(field.name), errors)
 
-    # A status this register does not recognise would sail past the chips.
+    # A status outside this register's set would match no filter chip.
     status_field = next((f for f in reg.fields if f.type == 'status'), None)
     if status_field and parsed.get(status_field.name) not in (None, *reg.statuses):
         errors[status_field.name] = 'Not a status for this register'
 
     if errors:
         raise ValidationError(errors)
+
+    # Closed with no date: it closed today. Any other status: it is not
+    # closed, so the date goes and the entry counts as open again.
+    closed = next((f for f in reg.fields if f.column == 'closed_at'), None)
+    if status_field and reg.closed_status and closed:
+        if parsed.get(status_field.name) != reg.closed_status:
+            parsed[closed.name] = None
+        elif parsed.get(closed.name) is None:
+            parsed[closed.name] = date.today()
 
     data = dict(entry.data or {})
     for field in reg.fields:
@@ -181,7 +209,7 @@ def apply_payload(entry, reg, payload):
 
 
 def blocking_empty_lists(reg):
-    """Required choice fields with no options yet. Saving is refused rather
-    than filing an entry with a hole where a location should be."""
+    """Labels of required choice fields with no options yet. Saving is
+    refused while any exist."""
     return [f.label for f in reg.fields
             if f.type == 'choice' and f.required and not _options(f)]

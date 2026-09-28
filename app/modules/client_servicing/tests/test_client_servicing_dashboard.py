@@ -1,6 +1,5 @@
-"""Dashboard aggregations, finance gating, the module feed, and the
-landing/rename — for the CS Dashboard (lib/dashboard.py + services/
-dashboard_feed.py + routes/dashboard.py)."""
+"""CS Dashboard: aggregations, finance gating, the module feed, and the
+landing route (lib/dashboard.py, services/dashboard_feed.py, routes/dashboard.py)."""
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -157,8 +156,7 @@ def test_feed_for_hides_finance_from_non_finance(app, db_session):
     lead = _user(db_session, 'ff', role='cs')
     owner = _user(db_session, 'ffo', role='project_owner')
     _project(db_session, 'ff_ins', lead, install=today + timedelta(days=3), cs_status='Briefing')
-    # Billed by its invoice month — first_output_deadline is the design
-    # deadline and no longer buckets anything.
+    # Finance buckets by invoice_month_date; first_output_deadline is the design deadline.
     _project(db_session, 'ff_fin', lead, invoice_month_date=today.replace(day=1),
              project_value=Decimal('500'), validation_status='overdue')
     with app.test_request_context():
@@ -245,8 +243,7 @@ def test_dashboard_context_is_n_plus_1_free(app, db_session):
 
 
 def test_dashboard_panels_fragment_renders_and_gates(app, client, db_session):
-    """The SSE refresh fragment renders the panels for an allowed role and
-    403s for a role without access."""
+    """The SSE refresh fragment renders the panels for allowed roles and 403s otherwise."""
     lead = _user(db_session, 'frag', role='cs')
     _project(db_session, 'frag1', lead, install=date.today() + timedelta(days=1), cs_status='Briefing')
     with app.test_request_context():

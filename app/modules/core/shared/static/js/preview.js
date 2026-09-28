@@ -1,9 +1,7 @@
-// preview.js — in-app file preview modal.
-// Opens a modal, fetches a file from one of the /preview routes (reference
-// files or submission decks), and renders it inline as a PDF or image.
-// If the route responds with JSON instead of a file (unsupported file type,
-// or a pptx that failed to convert), shows a fallback message with a
-// download link instead of a broken viewer.
+// preview.js — in-app file preview modal (window.openFilePreview).
+// Renders a /preview route's file inline as PDF, image, video or audio.
+// A JSON response means no preview (unsupported type, failed pptx
+// conversion) and shows a message with a download link.
 
 (function () {
     var modal = document.getElementById('file-preview-modal');
@@ -11,21 +9,28 @@
     var bodyEl = document.getElementById('file-preview-body');
     var closeBtn = document.getElementById('file-preview-close');
 
-    // Tracks the current blob URL so we can free it on close — blob URLs
-    // are never automatically garbage collected, so without this, opening
-    // many previews in one session would slowly leak memory.
+    // Revoked on close; blob URLs are never garbage collected on their own.
     var currentBlobUrl = null;
 
     function showLoading() {
         bodyEl.innerHTML = '<div class="file-preview-loading">Loading preview…</div>';
     }
 
+    // Built with DOM nodes: the message comes from the server's JSON and the
+    // URL from the caller, so neither may be parsed as HTML.
     function showFallback(message, downloadUrl) {
-        bodyEl.innerHTML =
-            '<div class="file-preview-fallback">' +
-            '<p>' + message + '</p>' +
-            '<a href="' + downloadUrl + '" class="btn btn--primary">Download instead</a>' +
-            '</div>';
+        var wrap = document.createElement('div');
+        wrap.className = 'file-preview-fallback';
+        var p = document.createElement('p');
+        p.textContent = message;
+        var link = document.createElement('a');
+        link.href = downloadUrl;
+        link.className = 'btn btn--primary';
+        link.textContent = 'Download instead';
+        wrap.appendChild(p);
+        wrap.appendChild(link);
+        bodyEl.innerHTML = '';
+        bodyEl.appendChild(wrap);
     }
 
     function showPdf(blobUrl) {
@@ -39,15 +44,13 @@
     // previewUrl:  the /preview route to fetch from
     // downloadUrl: the matching /download route — used as the fallback link
     // filename:    shown in the modal header
-    // fileType:    the file's extension, used to decide video/audio vs pdf/image
+    // fileType:    the file's extension; picks video/audio vs pdf/image
     window.openFilePreview = function (previewUrl, downloadUrl, filename, fileType) {
         titleEl.textContent = filename;
         showLoading();
         modal.classList.remove('hidden');
 
-        // Same convention every other modal in the app follows — without
-        // this, live polling could reload the page out from under someone
-        // mid-preview.
+        // Pause live polling so it can't refresh the page mid-preview.
         if (window.helixPolling) window.helixPolling.pause();
 
         var MEDIA_KIND_BY_EXT = {
@@ -63,9 +66,8 @@
             bodyEl.innerHTML = '<audio src="' + url + '" controls></audio>';
         }
 
-        // Video/audio point straight at the route instead of pre-fetching —
-        // the browser drives its own range requests for seeking. A fetch()
-        // here would download the whole file before playback could start.
+        // Video/audio point straight at the route so the browser can use
+        // range requests; a fetch() would download the whole file first.
         var mediaKind = MEDIA_KIND_BY_EXT[(fileType || '').toLowerCase()];
         if (mediaKind) {
             if (mediaKind === 'video') showVideo(previewUrl); else showAudio(previewUrl);
@@ -82,11 +84,7 @@
             .then(function (res) {
                 var contentType = res.headers.get('Content-Type') || '';
 
-                // Our preview routes return real JSON (not a file) when
-                // something's gone wrong — wrong file type, or a pptx that
-                // failed to convert. Checking content-type up front lets us
-                // tell "here's your file" apart from "here's why there
-                // isn't one," without guessing from the HTTP status alone.
+                // JSON means "no preview, here's why"; anything else is the file.
                 if (contentType.indexOf('application/json') !== -1) {
                     return res.json().then(function (data) {
                         showFallback(data.error || 'Preview unavailable.', downloadUrl);
@@ -121,47 +119,8 @@
 
     closeBtn.addEventListener('click', closePreview);
 
-    // Clicking the dark backdrop (not the box itself) also closes it —
-    // same pattern the quick-add modal already uses elsewhere in the app.
+    // A click on the backdrop (not the box) closes it.
     modal.addEventListener('click', function (e) {
         if (e.target === modal) closePreview();
     });
-
-    // Rather than hand-edit the ~30 near-identical reference-file blocks
-    // scattered across detail.html, find every existing Download link on
-    // the page and inject a matching Preview button next to it. Runs once
-    // on load, and again after SPA navigation (same event polling.js
-    // already listens for), so it stays correct without upkeep.
-    function injectPreviewButtons() {
-        document.querySelectorAll('.reference-file-actions a.btn-secondary').forEach(function (link) {
-            var href = link.getAttribute('href');
-            if (!href || link.dataset.previewAdded) return;
-
-            // Only the two routes we've actually built a /preview
-            // counterpart for. "Extra" submission files use a different
-            // route we haven't wired up yet — leave those Download-only.
-            var isReferenceFile = href.indexOf('/projects/files/') !== -1;
-            var isSubmissionDeck = href.indexOf('/projects/submission/') !== -1;
-            if (!isReferenceFile && !isSubmissionDeck) return;
-
-            var previewUrl = href.replace('/download', '/preview');
-            var item = link.closest('.reference-file-item');
-            var filenameEl = item ? item.querySelector('.reference-file-name') : null;
-            var filename = filenameEl ? filenameEl.textContent.trim() : 'file';
-
-            var previewBtn = document.createElement('button');
-            previewBtn.type = 'button';
-            previewBtn.className = 'btn-secondary btn-sm';
-            previewBtn.textContent = 'Preview';
-            previewBtn.addEventListener('click', function () {
-                openFilePreview(previewUrl, href, filename);
-            });
-
-            link.parentNode.insertBefore(previewBtn, link);
-            link.dataset.previewAdded = 'true';  // marks it done, in case this ever runs twice
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', injectPreviewButtons);
-    document.addEventListener('helix:navigated', injectPreviewButtons);
 })();

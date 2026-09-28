@@ -9,14 +9,14 @@ from app.modules.wiki.lib.blocks import (
 
 
 def _render(app, old_blocks):
-    """Convert an old block array and render it through the article partial."""
+    """Convert a legacy block array and render it through the article partial."""
     blocks = load_blocks(json.dumps(to_editorjs(old_blocks)))
     article = SimpleNamespace(title='T', updated_at=datetime.now(timezone.utc))
     template = app.jinja_env.get_template('wiki/_article_content.html')
     return template.render(article=article, blocks=blocks)
 
 
-# ------ One test per old block type ------
+# ------ One test per legacy block type ------
 
 def test_body_keeps_text_and_line_breaks(app):
     html = _render(app, [{'type': 'body', 'content': 'One\nTwo'}])
@@ -122,7 +122,7 @@ def test_allowed_hosts_become_player_urls():
 
 
 def test_a_lookalike_host_is_refused_at_save():
-    """A substring check would pass this, which is the whole reason the host is parsed."""
+    """A lookalike host is refused; a substring check would let it through."""
     cleaned = sanitize_document(_video_document('https://youtube.com.attacker.net/watch?v=x'))
     assert cleaned['blocks'] == []
 
@@ -137,7 +137,7 @@ def test_an_allowed_host_is_kept_at_save():
 
 
 def test_a_url_already_stored_on_a_bad_host_renders_as_a_link(app):
-    """Content migrated from the old format never went through the save gate."""
+    """A stored URL on an unframed host renders as a link, even if it skipped the save check."""
     import json as _json
     blocks = load_blocks(_json.dumps(_video_document('https://dailymotion.com/video/x')))
     article = SimpleNamespace(title='T', updated_at=datetime.now(timezone.utc))
@@ -170,3 +170,42 @@ def test_a_normal_block_id_is_kept():
         {'id': 'aB3_-x', 'type': 'paragraph', 'data': {'text': 'Hi'}}
     ]}
     assert sanitize_document(document)['blocks'][0]['id'] == 'aB3_-x'
+
+
+# ------ Content that skipped the save check is cleaned on read ------
+
+def _render_document(app, document):
+    blocks = load_blocks(json.dumps(document))
+    article = SimpleNamespace(title='T', updated_at=datetime.now(timezone.utc))
+    return app.jinja_env.get_template('wiki/_article_content.html').render(article=article, blocks=blocks)
+
+
+def test_unsanitised_text_and_images_are_cleaned_on_read(app):
+    document = {'time': 0, 'version': '2.30.7', 'blocks': [
+        {'type': 'paragraph', 'data': {'text': 'Hi<script>alert(1)</script> <a href="javascript:alert(2)">x</a>'}},
+        {'type': 'header', 'data': {'text': '<img src=x onerror="alert(3)">Head', 'level': 2}},
+        {'type': 'helixCallout', 'data': {'text': '<b onclick="alert(4)">Note</b>'}},
+        {'type': 'list', 'data': {'items': ['<script>alert(5)</script>ok']}},
+        {'type': 'image', 'data': {'file': {'url': '/static/x.png'},
+                                   'caption': '<img src=x onerror="alert(6)">Cap'}},
+        {'type': 'image', 'data': {'file': {'url': 'javascript:alert(7)'}, 'caption': 'Bad'}},
+    ]}
+    html = _render_document(app, document)
+
+    assert '<script' not in html
+    assert 'onerror' not in html and 'onclick' not in html
+    assert 'javascript:' not in html
+    assert 'Hi' in html and 'Head' in html and 'Note' in html and 'ok' in html
+    assert '<figcaption>Cap</figcaption>' in html
+
+
+def test_a_clean_document_reads_back_unchanged():
+    document = sanitize_document({'time': 0, 'version': '2.30.7', 'blocks': [
+        {'id': 'p1', 'type': 'paragraph', 'data': {'text': 'Hi <b>you</b> <a href="https://x.com">x</a>'}},
+        {'id': 'h1', 'type': 'header', 'data': {'text': 'Head', 'level': 3}},
+        {'id': 'c1', 'type': 'helixCallout', 'data': {'text': 'Note', 'variant': 'pine'}},
+        {'id': 'l1', 'type': 'list', 'data': {'style': 'ordered', 'items': ['a', '<i>b</i>']}},
+        {'id': 'i1', 'type': 'image', 'data': {'file': {'url': '/static/x.png'}, 'caption': 'Cap'}},
+    ]})
+    blocks = load_blocks(json.dumps(document))
+    assert blocks == [{'type': b['type'], 'data': b['data']} for b in document['blocks']]

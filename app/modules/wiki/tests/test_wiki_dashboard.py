@@ -179,7 +179,7 @@ def test_section_edit_keeps_its_slug(app, client, db_session):
 
 
 def test_dropping_an_article_into_another_section_moves_it(app, client, db_session):
-    """The list a row lands in owns it, and arriving there is not an edit."""
+    """Dropping a row into another section moves it without changing updated_at."""
     _user(app, client, db_session, 'wiki-move@example.com')
     home = _section(db_session, 'move-home', title='Home')
     away = _section(db_session, 'move-away', title='Away')
@@ -196,7 +196,7 @@ def test_dropping_an_article_into_another_section_moves_it(app, client, db_sessi
 
 
 def test_an_empty_section_still_renders_a_drop_target():
-    """Without the list element there is nowhere to drag the first article to."""
+    """An empty section still renders its article list, so it stays a drop target."""
     markup = open(DASHBOARD_TEMPLATE, encoding='utf-8').read()
     assert '{% if section.articles %}' not in markup
     assert 'wiki-editor-article-list' in markup

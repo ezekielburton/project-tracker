@@ -72,3 +72,26 @@ def test_save_new_type_lands_on_the_real_customer(app, client, db_session):
     saved = Deliverable.query.filter_by(project_id=project.id, name='Roll up banner').one()
     assert saved.project_customer_id == link.id
     assert saved.deliverable_type_id == created.id
+
+
+def test_ccm_sections_keep_a_customer_whose_region_is_unlisted(app, db_session):
+    """A region outside the fixed list still shows, under Other."""
+    from app.modules.core.shared.models import Customer, ProjectCustomer
+    from app.modules.projects.routes.project_overlay._common import _build_ccm_deliverable_sections
+
+    user, project, _ = _project_with_deliverable(db_session, 'rg')
+    project.brief_type = 'ccm'
+    listed = Customer(name='Listed Region Customer', region='uae')
+    unlisted = Customer(name='Unlisted Region Customer', region='ksa')
+    db_session.add_all([listed, unlisted])
+    db_session.flush()
+    db_session.add_all([
+        ProjectCustomer(project_id=project.id, customer_id=listed.id),
+        ProjectCustomer(project_id=project.id, customer_id=unlisted.id),
+    ])
+    db_session.flush()
+    db_session.expire(project, ['project_customers'])
+
+    sections = {s['key']: [e['project_customer'].customer.name for e in s['customers']]
+                for s in _build_ccm_deliverable_sections(project)}
+    assert sections == {'uae': ['Listed Region Customer'], 'other': ['Unlisted Region Customer']}

@@ -1,8 +1,5 @@
-"""Coverage for the small pure helpers models.py added alongside the
-revision stage and internal/external track: DI_STAGES/DI_STAGE_LABELS
-picking up 'revision', DI_PROJECT_TRACKS, and stage_label() - the
-internal-vs-external relabeling used everywhere a stage name is shown
-(board.py, feature_detail.py, snapshots.py)."""
+"""Tests for the stage constants in models.py and stage_label()'s
+internal/external relabeling."""
 from app.modules.digital_innovation.models import (
     DI_STAGES, DI_STAGE_LABELS, DI_PROJECT_TRACKS, stage_label,
 )

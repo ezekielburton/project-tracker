@@ -6,20 +6,15 @@ from flask import current_app
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Module-level session with trust_env=False — prevents requests from reading
-# Windows system proxy / HTTPS_PROXY env vars, which cause HTTP 407 errors when
-# trying to reach the local NAS over LAN. verify=False handles the self-signed cert.
+# trust_env=False: ignore system/env proxies (they cause HTTP 407 reaching the
+# NAS on the LAN). verify=False: the NAS has a self-signed cert.
 _NAS_SESSION = requests.Session()
 _NAS_SESSION.trust_env = False
 _NAS_SESSION.verify = False
 
-# Sticky NAS host, set the first time _get_session() successfully connects
-# (LAN IP or the NAS_WEB_URL fallback). (host, port) tuple, port is None
-# for the fallback path (NAS_WEB_URL is used as a full base URL, not a
-# bare host — no port to append). None until the first login. Kept for
-# the life of the process, not per-request — Ezekiel's call: a confirmed-
-# unreachable LAN IP shouldn't eat a fresh ~10s timeout on every single
-# NAS call for the rest of the run when running off the office network.
+# (host, port) of the last NAS login that worked; port is None for
+# NAS_TUNNEL_HOST. Kept for the process life so an unreachable LAN IP
+# doesn't cost a ~10s timeout on every call.
 _NAS_HOST_OVERRIDE = None
 
 from app.modules.core.shared.models import ProjectRegion, ProjectCustomer, Customer, Deliverable
@@ -37,51 +32,24 @@ REGION_DISPLAY = {
 # --------- Authentication ---------------
 
 def _nas_url(host, port, path):
-    """Build a NAS webapi URL from _get_session()'s (host, port). port is
-    None when running against NAS_WEB_URL (a QuickConnect base URL already
-    carries its own host + ID path segment, e.g. quickconnect.to/vitaminNAS26,
-    and never needs an explicit port appended) — port is only appended for
-    the LAN-IP case."""
+    """Build a NAS webapi URL. port is None for the NAS_TUNNEL_HOST
+    fallback (a bare hostname)."""
     if port:
         return f'https://{host}:{port}{path}'
     return f'https://{host}{path}'
 
 def _get_session():
-    """Login to Synology File Station API, return (sid, host, port).
-
-    Tries NAS_HOST/NAS_PORT (the office LAN IP) first — server and NAS share
-    the office LAN in production, so this is the fast, expected path. Falls
-    back to NAS_WEB_URL (a Synology QuickConnect URL, e.g.
-    https://quickconnect.to/vitaminNAS26) only on a connection-level failure
-    (ConnectionError/Timeout) — the real case this covers is the app running
-    off the office network (a local dev instance elsewhere), where NAS_HOST
-    is simply unreachable. NAS_WEB_URL is used as a full base URL, no port
-    appended — see _nas_url() above.
-
-    A bad login (wrong credentials) is NOT a connection failure — it still
-    raises the existing RuntimeError below without ever trying the fallback,
-    since QuickConnect wouldn't fix bad credentials either.
-
-    Whichever host succeeds is cached in _NAS_HOST_OVERRIDE for the rest of
-    this process's life — so a confirmed-unreachable LAN IP
-    doesn't eat a fresh ~10s timeout on every single NAS call for the rest
-    of the run.
-    """
+    """Log in to File Station; returns (sid, host, port). See
+    _login_with_session for the LAN / tunnel fallback."""
     return _login_with_session('FileStation')
 
 
 def _login_with_session(session_name):
-    """
-    Shared LAN-IP/NAS_TUNNEL_HOST fallback + _NAS_HOST_OVERRIDE caching
-    logic behind _get_session() — shared so
-    resolve_drive_file_id() (Synology Drive) can reuse the exact same
-    tested fallback path instead of a second inline copy that could drift
-    out of sync. session_name is the Synology 'session' login param —
-    'FileStation' for _get_session()'s callers, 'SynologyDrive' for Drive
-    calls (Synology scopes which app an sid authorizes by this param, so
-    a FileStation sid isn't assumed to also work for Drive calls).
-    Returns (sid, host, port); raises RuntimeError on failure.
-    """
+    """Log in to the NAS webapi; returns (sid, host, port), raises
+    RuntimeError. Tries NAS_HOST/NAS_PORT (office LAN) first, then
+    NAS_TUNNEL_HOST on a connection failure only (bad credentials never fall
+    back). The working host is cached in _NAS_HOST_OVERRIDE. session_name
+    scopes the sid to an app: 'FileStation' or 'SynologyDrive'."""
     global _NAS_HOST_OVERRIDE
 
     if _NAS_HOST_OVERRIDE is not None:
@@ -108,20 +76,14 @@ def _login_with_session(session_name):
     try:
         resp = _attempt_login(host, port)
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as conn_exc:
-        # Fallback: NAS_TUNNEL_HOST is a Cloudflare Tunnel hostname (e.g.
-        # nas.vitamin-e.work) that reverse-proxies straight to the NAS —
-        # same tech as app.vitamin-e.work / ssh.vitamin-e.work, gated by a
-        # Cloudflare Access Service Token instead of the interactive login
-        # those use, since this is a script talking to it, not a browser.
-        # (QuickConnect only serves a browser-oriented relay landing page to
-        # plain HTTP clients, not a usable webapi proxy, so this tunnel host
-        # is used instead.)
+        # Fallback: NAS_TUNNEL_HOST is a Cloudflare Tunnel to the NAS, gated
+        # by a Cloudflare Access service token. (QuickConnect has no webapi
+        # proxy usable from a script.)
         tunnel_host = current_app.config.get('NAS_TUNNEL_HOST')
         client_id = current_app.config.get('CF_ACCESS_CLIENT_ID')
         client_secret = current_app.config.get('CF_ACCESS_CLIENT_SECRET')
-        # Nothing left to try if there's no fallback configured, or if
-        # (host, port) we just failed on WAS already the fallback (cached
-        # from _NAS_HOST_OVERRIDE) — don't loop between two dead ends.
+        # Give up if no fallback is configured or we just failed on the
+        # (cached) fallback itself.
         if not tunnel_host or port is None:
             raise RuntimeError(f'NAS unreachable (tried {host}): {conn_exc}')
         if client_id and client_secret:
@@ -136,11 +98,8 @@ def _login_with_session(session_name):
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as conn_exc2:
             raise RuntimeError(f'NAS unreachable on both LAN IP and NAS_TUNNEL_HOST ({host}): {conn_exc2}')
 
-    # A successful connection doesn't guarantee a JSON webapi response — a
-    # misconfigured Access policy or bad service token hands back an HTML
-    # error page instead of proxying to auth.cgi (see the CF-Access-Client-*
-    # env vars above). Surface what came back instead of letting a raw
-    # JSONDecodeError bubble up as an unhandled 500.
+    # A bad Access policy or service token returns an HTML page; raise a
+    # clear error instead of a JSONDecodeError 500.
     try:
         data = resp.json()
     except ValueError:
@@ -154,15 +113,15 @@ def _login_with_session(session_name):
     _NAS_HOST_OVERRIDE = (host, port)
     return data['data']['sid'], host, port
 
-def _logout(host, port, sid):
-    """Logout and invalidate the session token."""
+def _logout(host, port, sid, session_name='FileStation'):
+    """Log out a sid; session_name must match the one it logged in with."""
     _NAS_SESSION.get(
         _nas_url(host, port, '/webapi/auth.cgi'),
         params={
             'api':     'SYNO.API.Auth',
             'version': '1',
             'method':  'logout',
-            'session': 'FileStation',
+            'session': session_name,
             '_sid':    sid,
         },
         timeout=5
@@ -170,36 +129,8 @@ def _logout(host, port, sid):
 
 # ------ Folder Operations --------
 
-def _rename_folder(host, port, sid, folder_path, new_name):
-    """
-    Rename a single NAS folder in-place.
-    folder_path is the FULL path to the existing folder;
-    new_name is just the new folder name (not a full path).
-    Logs a warning on failure — never raises.
-    """
-    resp = _NAS_SESSION.get(
-        _nas_url(host, port, '/webapi/entry.cgi'),
-        params={
-            'api':     'SYNO.FileStation.Rename',
-            'version': '2',
-            'method':  'rename',
-            'path':    json.dumps([folder_path]),
-            'name':    json.dumps([new_name]),
-            '_sid':    sid,
-        },
-        timeout=10,
-    )
-    data = resp.json()
-    if not data.get('success'):
-        current_app.logger.warning(
-            f'NAS rename failed: {folder_path!r} → {new_name!r}: {data}'
-        )
-
 def _create_folder(host, port, sid, parent_path, folder_name):
-    """
-    Create a single folder inside parent_path.
-    Silently succeeds if folder already exists (force_parent=true).
-    """
+    """Create one folder in parent_path; no error if it already exists."""
     _NAS_SESSION.get(
         _nas_url(host, port, '/webapi/entry.cgi'),
         params={
@@ -215,11 +146,8 @@ def _create_folder(host, port, sid, parent_path, folder_name):
     )
 
 def _build_folder_tree(host, port, sid, project):
-    """
-    Build the full folder tree for a project on the NAS.
-    Determines structure based on project.brief_type (Standard or C&CM).
-    Year folder is auto-created if this is the first project of that year.
-    """
+    """Create a project's NAS folder tree: year / client / project, the
+    standard subfolders, then Design Files by brief type (Standard or C&CM)."""
     root         = current_app.config['NAS_PROJECT_ROOT']
     year         = project.created_at.year
     year_path    = f'{root}/{year}'
@@ -302,65 +230,12 @@ def _build_ccm_design_folders(host, port, sid, design_path, project):
             for d in pc.deliverables:
                 _create_folder(host, port, sid, customer_path, d.name)
 
-# ---- File Upload ----------------
-
-def upload_file_to_nas(project, subfolder, local_file_path, nas_filename):
-    """
-    Upload a single file into a project subfolder on the NAS.
-
-    Args:
-        project:         Project ORM object (needs .created_at, .client_brand, .name)
-        subfolder:       Destination subfolder, e.g. 'Reference Files' or 'Submissions'
-        local_file_path: Absolute path to the file on the Flask server's local disk
-        nas_filename:    Filename to use on the NAS (keeps the original name)
-
-    Failures are logged as warnings and never crash the calling route.
-    """
-    try:
-        sid, host, port = _get_session()
-        try:
-            root        = current_app.config['NAS_PROJECT_ROOT']
-            year        = project.created_at.year
-            client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
-            dest_path   = f'{root}/{year}/{client_name}/{project.name}/{subfolder}'
-
-            with open(local_file_path, 'rb') as f:
-                resp = _NAS_SESSION.post(
-                    _nas_url(host, port, '/webapi/entry.cgi'),
-                    params={
-                        'api':     'SYNO.FileStation.Upload',
-                        'version': '2',
-                        'method':  'upload',
-                        '_sid':    sid,
-                    },
-                    data={
-                        'path':           dest_path,
-                        'create_parents': 'true',
-                        'overwrite':      'true',
-                    },
-                    files={'file': (nas_filename, f)},
-                    timeout=60,
-                )
-            data = resp.json()
-            if not data.get('success'):
-                current_app.logger.warning(
-                    f'NAS upload failed for {nas_filename} → {dest_path}: {data}'
-                )
-        finally:
-            _logout(host, port, sid)
-    except Exception as e:
-        current_app.logger.warning(
-            f'NAS upload failed for project {project.id} / {nas_filename}: {e}'
-        )
-
 # ---- Background helpers ----------
 
 def _run_in_background(app, fn):
-    """Run fn() in a daemon thread with a fresh Flask app context.
-    Use this for all NAS calls so they never block the HTTP response.
-    The callback runs INSIDE that context — it must not push its own
-    app.app_context(), or DB queries inside it stop seeing the caller's
-    transaction."""
+    """Run fn() in a daemon thread inside a fresh app context, so NAS calls
+    never block the response. fn must not push its own app_context(): tests
+    run fn inline, and a new context would hide the test's transaction."""
     import threading
 
     def _worker():
@@ -372,11 +247,8 @@ def _run_in_background(app, fn):
 # ---- Project Interface -----------
 
 def create_project_folders(project):
-    """
-    Main entry point — call this after a project is created or edited.
-    Idempotent: safe to call multiple times (force_parent=true on all folders).
-    Failures are logged as warnings and never crash the calling route.
-    """
+    """Build the project's NAS folders; call after a project is created or
+    edited. Idempotent. Failures are logged, never raised."""
     try:
         sid, host, port = _get_session()
         try:
@@ -386,41 +258,9 @@ def create_project_folders(project):
     except Exception as e:
         current_app.logger.warning(f'NAS folder creation failed for project {project.id}: {e}')
 
-def rename_project_folder(project, old_name):
-    """
-    Rename the project's top-level NAS folder when project.name changes.
-
-    Call AFTER db.session.commit() so project reflects the new name.
-    old_name is the name the folder currently has on the NAS (captured
-    before the DB mutation).
-
-    If the old folder doesn't exist (e.g. was never created), the rename
-    is a no-op and create_project_folders will build the correct tree
-    under the new name on the next call.
-
-    Failures are logged as warnings and never crash the calling route.
-    """
-    try:
-        sid, host, port = _get_session()
-        try:
-            root        = current_app.config['NAS_PROJECT_ROOT']
-            year        = project.created_at.year
-            client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
-            old_path    = f'{root}/{year}/{client_name}/{old_name}'
-            _rename_folder(host, port, sid, old_path, project.name)
-        finally:
-            _logout(host, port, sid)
-    except Exception as e:
-        current_app.logger.warning(
-            f'NAS folder rename failed for project {project.id} '
-            f'({old_name!r} → {project.name!r}): {e}'
-        )
-
 def build_file_path(project, subfolder, filename):
-    """
-    Build the full NAS path for a project file.
-    e.g. /Projects/2026/P&G/Summer 2026/Reference Files/brief.pdf
-    """
+    """Full NAS path for a project file, e.g.
+    /Projects/2026/P&G/Summer 2026/Reference Files/brief.pdf"""
     root        = current_app.config['NAS_PROJECT_ROOT']
     year        = project.created_at.year
     client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
@@ -429,7 +269,7 @@ def build_file_path(project, subfolder, filename):
 
 def build_chat_file_path(project, filename):
     """Chat attachment NAS path under NAS_CHATS_ROOT, e.g. /Chats/2026/P&G/Summer 2026/9f2a...c1.jpg.
-    No provisioning step needed — upload_app_file creates missing folders on upload."""
+    upload_app_file creates missing folders."""
     root        = current_app.config['NAS_CHATS_ROOT']
     year        = project.created_at.year
     client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
@@ -437,8 +277,8 @@ def build_chat_file_path(project, filename):
 
 def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
     """
-    Upload file bytes directly to a NAS folder. Retries up to _max_attempts
-    times with exponential back-off on any transient error before raising.
+    Upload bytes to a NAS folder. Retries with exponential back-off, then
+    raises RuntimeError.
 
     Args:
         file_bytes:      raw bytes of the file (call file.read() before passing)
@@ -469,7 +309,7 @@ def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
                 data = resp.json()
                 if not data.get('success'):
                     raise RuntimeError(f'NAS upload failed: {data}')
-                return  # success — exit early
+                return
             finally:
                 _logout(host, port, sid)
         except Exception as exc:
@@ -553,8 +393,7 @@ def download_app_file(nas_file_path):
 
 def delete_app_file(nas_file_path):
     """
-    Delete a single file from the NAS.
-    Failures are logged as warnings and never crash the caller.
+    Delete one file from the NAS. Failures are logged, never raised.
 
     Args:
         nas_file_path: full path including filename
@@ -582,49 +421,25 @@ def delete_app_file(nas_file_path):
 
 # --------- Synology Drive deep-links ------
 #
-# Every user-facing "open this folder" button points at Synology Drive
-# instead of File Station, since Drive is the app people browse day to day.
-# Upload/download/rename/create-folder (above) stay on the File Station API;
-# this section only builds the clickable "open folder in browser" links.
+# User-facing "open folder" links go to Synology Drive (the app people
+# browse); file operations above use the File Station API.
 #
-# Drive addresses content by its own opaque internal file_id
-# (https://{host}/drive/#file_id={id}) and has NO API that resolves a path
-# string straight to a file_id. Drive's own web client walks an ID tree:
-# SYNO.SynologyDrive.TeamFolders.list (method=list, version=1, no `path`
-# param — that response IS the root, each item already carries its own
-# file_id) gets you the top-level Team Folders (Docs and Templates,
-# Projects, etc). From there, SYNO.SynologyDrive.Files.list (method=list,
-# version=2) with path="id:{parent_file_id}" lists one folder's contents;
-# matching a child by `name` and taking ITS file_id lets you descend one
-# more level. Repeat per path segment.
+# Drive links need an opaque file_id (https://{host}/drive/#file_id={id})
+# and no API maps a path to one. So we walk the tree like Drive's web client:
+# TeamFolders.list (no `path`) returns the root items with their file_ids,
+# then Files.list with path="id:{parent_file_id}" lists one level; match
+# each path segment by name.
 
 def _path_to_segments(path):
-    """Splits a File Station-style path ('/Docs and Templates/Templates/
-    Simulation Files') into the ordered list of folder names Drive's
-    TeamFolders/Files.list walk needs (see resolve_drive_file_id()).
-    Filters out empty segments, so a leading and/or trailing slash is
-    harmless."""
+    """Split a path ('/Docs and Templates/Templates/Simulation Files') into
+    folder names for the Drive walk; leading/trailing slashes are ignored."""
     return [seg for seg in path.split('/') if seg]
 
 
 def resolve_drive_file_id(folder_path):
-    """
-    Resolves a filesystem-style path to its Synology Drive file_id by
-    walking Drive's own ID-based folder tree one segment at a time —
-    see the module comment above for why this can't be a single API call.
-
-    Logs in via _login_with_session('SynologyDrive') — the SAME LAN-IP/
-    NAS_TUNNEL_HOST fallback _get_session() uses, just a different
-    'session' scope (a FileStation sid isn't assumed to also authorize
-    Drive calls). Uses whichever (host, port) that login actually
-    succeeded on for every walk step too — not the raw config value.
-
-    Returns None on any failure (unreachable NAS, a path segment not
-    found, bad auth, unexpected response shape) — callers treat None as
-    "no Drive link available," same as the File Station builders do
-    when NAS_WEB_URL wasn't configured. Every failure is logged via
-    current_app.logger so a None return isn't a dead end when debugging.
-    """
+    """Resolve a path to its Synology Drive file_id by walking the tree one
+    segment at a time (see the section comment). Logs in with the
+    'SynologyDrive' session scope. Returns None on any failure, and logs why."""
     segments = _path_to_segments(folder_path)
     if not segments:
         current_app.logger.warning('Drive file_id lookup called with an empty path')
@@ -637,13 +452,8 @@ def resolve_drive_file_id(folder_path):
         return None
 
     def _list(params):
-        # cookies={'id': sid} is sent alongside the existing _sid
-        # query param — mirrors download_app_file()'s FileStation.Download
-        # call elsewhere in this file. Some Synology webapi endpoints (Drive
-        # included, it seems) check the session cookie, not just _sid, and
-        # silently hand back a limited/empty result instead of a real auth
-        # error when it's missing, which is indistinguishable from "this
-        # path segment genuinely doesn't exist" without this.
+        # Send the sid cookie too: without it some endpoints (Drive included)
+        # silently return an empty list instead of an auth error.
         resp = _NAS_SESSION.get(
             _nas_url(host, port, '/webapi/entry.cgi'),
             params={**params, '_sid': sid},
@@ -653,7 +463,7 @@ def resolve_drive_file_id(folder_path):
         return resp.json()
 
     try:
-        # Root level: Team Folders (no `path` param — this call IS the root).
+        # Root level: Team Folders (no `path` param).
         data = _list({
             'api': 'SYNO.SynologyDrive.TeamFolders', 'version': '1', 'method': 'list',
             'offset': '0', 'limit': '1000',
@@ -669,9 +479,7 @@ def resolve_drive_file_id(folder_path):
         for depth, segment in enumerate(segments):
             match = next((it for it in items if it['name'] == segment), None)
             if not match:
-                # Dumps the actual item names Drive returned at this level,
-                # so a mismatch (wrong session scope, wrong root, a renamed
-                # folder) shows itself in one log line.
+                # Log the names Drive returned, so a mismatch shows in one line.
                 current_app.logger.warning(
                     f'Drive path segment {segment!r} not found (resolving {folder_path!r}, '
                     f'matched so far: {segments[:depth]!r}) — items actually returned: '
@@ -680,7 +488,7 @@ def resolve_drive_file_id(folder_path):
                 return None
             file_id = match['file_id']
             if depth == len(segments) - 1:
-                break  # last segment — file_id above is the answer, no need to list its contents
+                break  # last segment: no need to list its contents
             data = _list({
                 'api': 'SYNO.SynologyDrive.Files', 'version': '2', 'method': 'list',
                 'offset': '0', 'limit': '1000',
@@ -697,17 +505,17 @@ def resolve_drive_file_id(folder_path):
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, ValueError, KeyError) as e:
         current_app.logger.warning(f'Drive file_id lookup errored for {folder_path!r}: {e}')
         return None
+    finally:
+        # A failed logout must not turn a resolved id into an exception.
+        try:
+            _logout(host, port, sid, 'SynologyDrive')
+        except requests.exceptions.RequestException as e:
+            current_app.logger.warning(f'Drive logout failed after resolving {folder_path!r}: {e}')
 
 
 def build_drive_folder_url(folder_path):
-    """Public entry point for every NAS-open-folder call site — resolves
-    folder_path (a plain File Station-style path, e.g. '/Docs and
-    Templates/Templates/Simulation Files' or '/Projects/2026/Client/Job')
-    to a Drive file_id via resolve_drive_file_id()'s ID-tree walk, and
-    returns the web-client deep-link, or None if anything along the way
-    failed. Signature unchanged from the earlier (wrong) version, so none
-    of file_templates.py / project_overlay.py / project_preproduction.py
-    need to change."""
+    """Drive web deep-link for a folder path (e.g. '/Projects/2026/Client/Job'),
+    or None if it can't be resolved. Used by every "open NAS folder" link."""
     file_id = resolve_drive_file_id(folder_path)
     if not file_id:
         return None

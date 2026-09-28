@@ -3,8 +3,7 @@
 {% block title %}HSE — My performance{% endblock %}
 
 {% macro delta(d, unit) %}
-    {# No arrow when there is nothing to compare against. A first period
-       gets an honest blank rather than an invented improvement. #}
+    {# No delta when there is no previous period to compare against. #}
     {% if d %}
     <div class="hse-pf-delta{{ ' is-up' if d.improved else (' is-down' if d.improved is sameas false else '') }}">
         {% if d.improved %}▲{% elif d.improved is sameas false %}▼{% else %}—{% endif %}
@@ -18,22 +17,38 @@
     <div class="module-shell">
         {% include 'hse/_rail.html' %}
         <div class="module-main hse-main">
-            <div class="hse-inner hse-inner--fill">
+            <div class="hse-inner hse-inner--fill hse-inner--page">
 
                 <div class="hse-header">
                     <h1 class="hse-title">My performance</h1>
                     <div class="hse-header-actions">
-                        <span class="hse-month-chip">{{ window.label }}</span>
+                        {# Month steps a month, Year steps twelve; the forward arrow
+                           stops at the current month. See navigation(). #}
+                        <span class="hse-pf-nav">
+                            <a class="hse-btn hse-pf-step" aria-label="Previous"
+                               href="{{ url_for('hse.performance', view=window.view, month=nav.prev) }}">&lsaquo;</a>
+                            <span class="hse-month-chip">{{ window.label }}</span>
+                            {% if nav.next %}
+                            <a class="hse-btn hse-pf-step" aria-label="Next"
+                               href="{{ url_for('hse.performance', view=window.view, month=nav.next) }}">&rsaquo;</a>
+                            {% else %}
+                            <span class="hse-btn hse-pf-step is-disabled" aria-hidden="true">&rsaquo;</span>
+                            {% endif %}
+                        </span>
+                        {% if not nav.is_current %}
+                        <a class="hse-btn" href="{{ url_for('hse.performance', view=window.view) }}">Back to now</a>
+                        {% endif %}
+                        {# Both options keep the shown month. #}
                         <span class="hse-pf-toggle">
                             <a class="hse-pf-toggle-opt{{ ' is-on' if window.view == 'month' else '' }}"
-                               href="{{ url_for('hse.performance', view='month', month=window.start.strftime('%Y-%m')) }}">Month</a>
+                               href="{{ url_for('hse.performance', view='month', month=nav.month) }}">Month</a>
                             <a class="hse-pf-toggle-opt{{ ' is-on' if window.view == 'year' else '' }}"
-                               href="{{ url_for('hse.performance', view='year', month=window.end.strftime('%Y-%m')) }}">Year</a>
+                               href="{{ url_for('hse.performance', view='year', month=nav.month) }}">Year</a>
                         </span>
                         <a class="hse-btn hse-tab"
                            href="{{ url_for('hse.performance_report', view=window.view, month=window.end.strftime('%Y-%m')) }}"
                            target="_blank" rel="noopener">Print</a>
-                        <a class="hse-btn hse-btn--primary hse-tab"
+                        <a class="hse-btn hse-btn--primary hse-tab mobile-primary"
                            href="{{ url_for('hse.performance_report', view=window.view, month=window.end.strftime('%Y-%m'), auto=1) }}"
                            target="_blank" rel="noopener">Export for review</a>
                     </div>
@@ -91,9 +106,7 @@
                             {% if reporting.unclassified %}
                             <div class="hse-pf-note">{{ reporting.unclassified }} not yet classified</div>
                             {% endif %}
-                            {# Kept on the page deliberately. Read cold, a rising
-                               number looks like a worse site, and that misreading
-                               punishes the behaviour he is trying to build. #}
+                            {# Keep this callout: without it a rising number reads as a worse site. #}
                             <p class="hse-pf-callout">
                                 <strong>Read this one carefully.</strong> More near misses reported is a
                                 <em>good</em> result — it means people are raising things before somebody
@@ -115,8 +128,7 @@
                                 <span>Lapsed on my watch</span>
                                 <span class="hse-pf-fig{{ ' is-bad' if compliance.lapsed_count else '' }}">{{ compliance.lapsed_count }}</span>
                             </div>
-                            {# Named, not hidden. A page that only flatters is
-                               worth nothing in the room. #}
+                            {# Lapsed items are listed by name, not hidden. #}
                             {% for row in compliance.lapsed %}
                             <p class="hse-pf-foot">{{ row.item }} — expired {{ row.due_at.strftime('%d %b %Y') }}</p>
                             {% endfor %}

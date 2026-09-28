@@ -1,10 +1,7 @@
-"""Coverage for the project-overlay and blog gates after the move to the map.
+"""Project-overlay, blog and Start Project permission gates, for every role.
 
-Two things are worth pinning. First, that each converted helper answers
-identically to the role sets it replaced, for every role. Second — the reason
-this chunk needed care — that the handful of role literals left in place stay
-literal: they select a designer-only branch, and admin holds those capabilities
-through the wildcard, so converting them would quietly let admin in.
+A few checks must stay role literals: admin holds their capabilities through
+the wildcard, so can() there would let admin into designer-only branches.
 """
 import pytest
 from flask import url_for
@@ -56,7 +53,7 @@ class _StubFlag:
         self.created_by_id = created_by_id
 
 
-# ── The role sets these helpers replaced ───────────────────────────────────
+# ── Role tables ────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize('role', ALL_ROLES)
 def test_can_manage_flags_matches_the_old_role_set(db_session, role):
@@ -109,17 +106,17 @@ def test_a_read_only_role_manages_nothing(db_session):
         assert _can_manage_deliverables(_StubProject(), user) is False
 
 
-# ── The literals that must not be converted ────────────────────────────────
+# ── Role literals that must stay literals ────────────────────────────────
 
 def test_admin_holds_claim_work_through_the_wildcard(db_session):
-    """The trap these next two tests guard against."""
+    """The wildcard trap that _is_assigned_designer must avoid."""
     admin = _user(db_session, 'wildcard', 'admin')
     assert can('claim_work', admin) is True
 
 
 def test_an_admin_is_not_an_assigned_designer(db_session):
-    """Feeds the notification sweeps. Converting this check to can('claim_work')
-    would make every admin count as assigned on every project."""
+    """Feeds the notification sweeps; can('claim_work') here would make every
+    admin count as assigned on every project."""
     admin = _user(db_session, 'assigned-admin', 'admin')
     cs = _user(db_session, 'assigned-cs', 'cs')
     assert _is_assigned_designer(None, admin) is False
@@ -150,7 +147,6 @@ def test_blog_editor_opens_for_an_admin(app, client, db_session):
 
 @pytest.mark.parametrize('role', ALL_ROLES)
 def test_only_design_management_and_admin_can_start_a_project(role):
-    """CS deliberately lost this: Start Project used to run on a relationship
-    check that included the CS lead. The people doing the work start it now."""
+    """Start Project is for designers, team leads, management and admin; not CS."""
     expected = role in ('designer', 'team_lead', 'management', 'admin')
     assert can('start_projects', _StubUser(role)) is expected

@@ -1,10 +1,8 @@
 """
-The register list query: the chip counts, the total above them, and paging —
-including the compliance branch that has to page in Python because its status
-is computed from a date rather than stored.
+Register list query (page_of): chip counts, the 'All' total and paging, including
+the expiry branch that pages in Python because its status is computed.
 
-DB-backed: page_of runs real queries, so these use db_session. Every row is
-rolled back at teardown.
+DB-backed via db_session; rows roll back at teardown.
 """
 from datetime import date, timedelta
 
@@ -25,8 +23,7 @@ def _com(db_session, ref, due_at, compliance_item_id=None):
 
 
 def _cert(db_session, label):
-    """A compliance-item reference row. The certificate name lives here now,
-    not in the entry's data blob, so search has to reach it through the join."""
+    """A compliance_item reference row; it holds the certificate name, not the entry's data."""
     ref = HseReference(kind='compliance_item', label=label, active=True)
     db_session.add(ref)
     db_session.flush()
@@ -42,9 +39,7 @@ def _inc(db_session, ref, status):
 
 
 def test_the_all_count_on_an_expiry_register_matches_its_chips(db_session):
-    """The fix: the computed-status branch counts 'All' from the chips, like
-    every other register, so a certificate with no expiry date can't inflate
-    the total above the chips beside it."""
+    """On an expiry register, 'All' is the sum of the chips (no-status rows excluded)."""
     _com(db_session, 'COM-0001', TODAY + timedelta(days=100))  # Valid
     _com(db_session, 'COM-0002', TODAY + timedelta(days=10))   # Expiring soon
     _com(db_session, 'COM-0003', TODAY - timedelta(days=10))   # Expired
@@ -57,7 +52,7 @@ def test_the_all_count_on_an_expiry_register_matches_its_chips(db_session):
 
 
 def test_the_all_count_on_a_stored_register_matches_its_chips(db_session):
-    """The other branch, for parity — the two must define 'All' the same way."""
+    """On a stored-status register, 'All' is also the sum of the chips."""
     for i in range(3):
         _inc(db_session, f'INC-100{i}', 'Open')
     for i in range(2):
@@ -108,9 +103,7 @@ def test_filtering_an_expiry_register_by_status_narrows_the_rows(db_session):
 
 
 def test_searching_compliance_by_certificate_name_finds_it(db_session):
-    """The name moved off the data blob onto the reference row. Search has to
-    reach it through the join, or searching a certificate by name comes back
-    empty — the bug the promotion introduced."""
+    """Search matches the compliance item's name through the reference join."""
     iso = _cert(db_session, 'ISO 45001 Certification')
     fire = _cert(db_session, 'Fire safety certificate')
     _com(db_session, 'COM-0001', TODAY + timedelta(days=100), compliance_item_id=iso.id)

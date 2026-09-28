@@ -1,4 +1,4 @@
-# The one blueprint every HSE route file attaches to.
+# Blueprint shared by every HSE route file.
 from flask import Blueprint
 
 hse_bp = Blueprint(

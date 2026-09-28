@@ -1,33 +1,29 @@
 """
-The numbers this module reports, each defined exactly once.
-
-Every metric here is read by more than one page. The Overview shows
-compliance health as a tile; My performance shows it as a section; the
-calendar header shows coverage. Two pages showing different numbers for
-the same word is the trust problem this module exists to fix, so the
-definition lives here and the pages read it.
-
-Nothing is stored. Every figure is computed from entries at read time.
+Shared HSE metric definitions, each defined once so the Overview, My
+performance and the register pages always show the same numbers. Computed
+from entries at read time; nothing is stored.
 """
 
+import re
+from calendar import monthrange
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 from app.modules.hse.lib.computed import (
     EXPIRING_SOON_DAYS, closed_on_time, days_open, days_owned,
     days_to_expiry, expiry_status, sla_days,
 )
-from app.modules.hse.lib.registers import BY_KEY
+from app.modules.hse.lib.registers import BY_KEY, money_fields, money_registers
 from app.modules.hse.lib.schedule import coverage
 
 
-# Delivery, not spend. Training expenses are money and are counted on the
-# cost line, never as a session the officer ran.
+# Registers that count as training delivered. Training expenses are excluded.
 TRAINING_REGISTERS = ('induction_training', 'toolbox_talk')
 
 
 def expiry_registers():
-    """Registers whose status is a function of a due date — the set
-    compliance health is measured over."""
+    """Registers whose status comes from a due date; compliance health is
+    measured over these."""
     return tuple(k for k, reg in BY_KEY.items() if reg.status_source == 'expiry')
 
 
@@ -40,18 +36,9 @@ def _filed_after(entry, other):
 
 
 def _expiring(entries):
-    """The items compliance health is measured over — one row per
-    certificate, not one per renewal.
-
-    Renewing files a new entry and leaves the old one in the register.
-    Counting both makes renewing *lower* the score: the superseded row
-    expires on its old date and reads as lapsed while its replacement reads
-    as valid. The certificate is the thing being tracked, so only its most
-    recent entry counts.
-
-    An entry with no certificate set is counted on its own — it has no
-    history to supersede.
-    """
+    """Expiry entries to measure: the latest entry per compliance item, plus
+    every entry with no item set. Superseded renewals must be skipped or
+    they read as lapsed and lower the score."""
     keys = set(expiry_registers())
     rows = [e for e in entries if e.register in keys and e.due_at is not None]
 
@@ -68,19 +55,12 @@ def _expiring(entries):
 
 
 def compliance_health(entries, today=None):
-    """Items valid today, divided by items tracked.
-
-    The one definition. The Overview's tile and My performance both read
-    this; neither recomputes it.
-
-    `lapsed` names what expired rather than hiding it. A page that only
-    flatters is worth nothing in the room, and the officer needs the list
-    more than the manager needs the percentage.
-    """
+    """Items valid today / items tracked, plus the `lapsed` and `expiring`
+    entries. Read by the Overview tile and My performance."""
     today = today or date.today()
     items = _expiring(entries)
     if not items:
-        # Nothing tracked is not the same as nothing valid.
+        # Nothing tracked: percent is None, not 0.
         return {'percent': None, 'valid': 0, 'total': 0, 'lapsed': [], 'expiring': []}
 
     valid, lapsed, expiring = 0, [], []
@@ -105,19 +85,16 @@ def compliance_health(entries, today=None):
 
 
 def expiring_soon_count(entries, today=None):
-    """Items still valid but inside the workbook's own 30-day window."""
+    """Items still valid but within EXPIRING_SOON_DAYS of expiry."""
     today = today or date.today()
     return sum(1 for e in _expiring(entries)
                if 0 <= (days_to_expiry(e, today) or -1) <= EXPIRING_SOON_DAYS)
 
 
 def sla_pressure(entry, today=None):
-    """Days past the SLA for this entry, or None when it has no clock.
-
-    Negative means time left. Time parked with someone else is already
-    excluded by days_owned, so an action waiting on the production manager
-    does not climb this list.
-    """
+    """Days past the SLA (negative = time left), or None when there is no
+    SLA or it is closed. Uses days_owned, so time waiting on others is
+    excluded."""
     allowed = sla_days(entry)
     if allowed is None or entry.closed_at is not None:
         return None
@@ -128,11 +105,8 @@ def sla_pressure(entry, today=None):
 
 
 def closed_on_time_rate(entries, start, end, today=None):
-    """Of entries closed in the period, the share closed inside their SLA.
-
-    None when nothing closed — a period with no closures has no rate, and
-    showing 0% would read as failure rather than quiet.
-    """
+    """Share of entries closed in the period that closed within their SLA.
+    percent is None when none could be judged (not 0%)."""
     closed = [e for e in entries
               if e.closed_at is not None and start <= e.closed_at <= end]
     judged = [e for e in closed if closed_on_time(e, today) is not None]
@@ -147,20 +121,14 @@ def closed_on_time_rate(entries, start, end, today=None):
 
 
 def done_vs_due(schedules, entries, start, end, today=None):
-    """Planned work done over planned work due — the calendar's coverage,
-    read rather than recomputed."""
+    """Planned work done / due; delegates to schedule.coverage()."""
     return coverage(schedules, entries, start, end, today)
 
 
 def average_days_to_close(entries, start, end):
-    """Mean days from entry date to closing date, over entries closed in
-    the period.
-
-    Calendar days, not owned days: this answers how long the person who
-    raised it actually waited, and they waited through the parked time
-    too. closed_on_time_rate is the one that excludes it, because that is
-    the one judging him.
-    """
+    """Mean days from entry date to close, over entries closed in the
+    period. Calendar days, including time waiting on others (the SLA rate
+    is the one that excludes it)."""
     closed = [e for e in entries
               if e.closed_at is not None and start <= e.closed_at <= end]
     spans = [d for d in (days_open(e) for e in closed) if d is not None]
@@ -170,15 +138,10 @@ def average_days_to_close(entries, start, end):
 
 
 def near_miss_ratio(entries, start, end):
-    """Near misses raised for every incident that happened.
-
-    Counted from the Incidents register alone: an injury logged there and
-    again under First Aid would otherwise be two incidents.
-
-    None when nothing was recorded — dividing by nothing is not a perfect
-    score. `unclassified` is entries filed before the field existed, and
-    the page shows it rather than folding them into either side.
-    """
+    """Near misses per incident, from the Incidents register only (so an
+    injury also logged under First Aid is not counted twice). ratio is None
+    when there are no incidents; `unclassified` counts entries with no
+    event_class."""
     rows = [e for e in entries
             if e.register == 'incidents'
             and e.entry_date is not None and start <= e.entry_date <= end]
@@ -194,11 +157,8 @@ def near_miss_ratio(entries, start, end):
 
 
 def training_delivered(entries, start, end):
-    """Sessions run and people in the room, over both training registers.
-
-    An induction and a toolbox talk are both delivery — he ran the room
-    either way — so they are one number, broken out by type underneath.
-    """
+    """Sessions and attendees across both training registers, with a
+    per-type breakdown."""
     rows = [e for e in entries
             if e.register in TRAINING_REGISTERS
             and e.entry_date is not None and start <= e.entry_date <= end]
@@ -208,7 +168,7 @@ def training_delivered(entries, start, end):
         data = entry.data or {}
         count = data.get('attendees') or 0
         attendees += count
-        # A toolbox talk has no type field — the register is the type.
+        # Toolbox talks have no type field; the register label is the type.
         label = data.get('training_type') or BY_KEY[entry.register].label
         bucket = by_type.setdefault(label, {'label': label, 'sessions': 0,
                                             'attendees': 0})
@@ -220,3 +180,98 @@ def training_delivered(entries, start, end):
         'by_type': sorted(by_type.values(),
                           key=lambda b: (-b['attendees'], b['label'])),
     }
+
+
+# Stripped before parsing a stored amount: thousands commas, spaces, the unit.
+_MONEY_NOISE = re.compile(r'[,\s]|aed', re.IGNORECASE)
+
+
+def parse_money(value):
+    """A stored amount as a Decimal, or None when blank, negative or not a
+    number. Accepts numbers and text such as '1,250.50' or 'AED 300'."""
+    if value is None or isinstance(value, bool):
+        return None
+    if not isinstance(value, (str, int, float, Decimal)):
+        return None
+    try:
+        amount = Decimal(_MONEY_NOISE.sub('', str(value)))
+    except InvalidOperation:
+        return None
+    if not amount.is_finite() or amount < 0:
+        return None
+    return amount
+
+
+def spend_of(entry):
+    """One entry's spend: the sum of every money field its register declares."""
+    reg = BY_KEY.get(entry.register)
+    if reg is None:
+        return Decimal(0)
+    data = entry.data or {}
+    amounts = (parse_money(data.get(fl.name)) for fl in money_fields(reg))
+    return sum((a for a in amounts if a is not None), Decimal(0))
+
+
+def _spent(entries, start=None, end=None):
+    """Spend dated by entry_date within [start, end]; no bounds is all time."""
+    if start is None:
+        return sum((spend_of(e) for e in entries), Decimal(0))
+    return sum((spend_of(e) for e in entries
+                if e.entry_date is not None and start <= e.entry_date <= end),
+               Decimal(0))
+
+
+def spend_summary(entries, today=None):
+    """Spend this calendar month, this calendar year and all time, by entry
+    date. Whole periods, so a later-dated entry this month still counts."""
+    today = today or date.today()
+    last_day = monthrange(today.year, today.month)[1]
+    return {
+        'month': _spent(entries, today.replace(day=1), today.replace(day=last_day)),
+        'year': _spent(entries, date(today.year, 1, 1), date(today.year, 12, 31)),
+        'all_time': _spent(entries),
+    }
+
+
+def spend_by_month(entries, year):
+    """Spend per calendar month of `year`, January first, plus the total."""
+    months = [Decimal(0)] * 12
+    for entry in entries:
+        if entry.entry_date is not None and entry.entry_date.year == year:
+            months[entry.entry_date.month - 1] += spend_of(entry)
+    return {'year': year, 'months': months, 'total': sum(months, Decimal(0))}
+
+
+def _share(amount, total):
+    return round(amount * 100 / total) if total else 0
+
+
+def spend_by_area(entries, start, end):
+    """Spend per rail group over the period, each split by register. Every
+    group and register with a money field is listed, even at zero; shares
+    are of the period total, so a register's share is part of its group's."""
+    areas = {}
+    for reg in money_registers():
+        area = areas.setdefault(reg.group, {'group': reg.group, 'amount': Decimal(0),
+                                            'registers': {}})
+        area['registers'][reg.key] = {'key': reg.key, 'label': reg.label,
+                                      'amount': Decimal(0)}
+
+    for entry in entries:
+        if entry.entry_date is None or not start <= entry.entry_date <= end:
+            continue
+        reg = BY_KEY.get(entry.register)
+        if reg is None or reg.group not in areas:
+            continue
+        amount = spend_of(entry)
+        areas[reg.group]['amount'] += amount
+        areas[reg.group]['registers'][reg.key]['amount'] += amount
+
+    total = sum((a['amount'] for a in areas.values()), Decimal(0))
+    out = []
+    for area in areas.values():
+        registers = list(area['registers'].values())
+        for row in registers:
+            row['share'] = _share(row['amount'], total)
+        out.append(dict(area, share=_share(area['amount'], total), registers=registers))
+    return {'total': total, 'areas': out}

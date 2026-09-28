@@ -1,7 +1,5 @@
-{# Toolbar. The two selects are server-side (GET), so the Export link can
-   reuse exactly the same filtering; the search box filters the loaded rows
-   as you type, the same way the Table tab's search does — so Export
-   deliberately doesn't reflect it. #}
+{# The two selects filter server-side (GET), so Export uses the same
+   filters. The search box only filters loaded rows, so Export ignores it. #}
 <form class="cs-inv-toolbar" method="get" action="{{ url_for('client_servicing.invoicing') }}">
     <input type="text" id="cs-inv-search" class="cs-inv-search-input"
            placeholder="Search project, client, LPO…" autocomplete="off">

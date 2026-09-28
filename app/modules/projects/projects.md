@@ -10,7 +10,6 @@ together.
 ```
 app/modules/projects/
   routes/
-    transfer.py                # `transfer` — move/duplicate a C&CM deliverable
     project_notes.py           # `project_notes` — notes + chat panels (JSON)
     project_preproduction.py   # `project_preproduction` — 2D/3D/Technical streams
     project_list.py            # `project_list` (/projects-new) — the list page
@@ -70,7 +69,6 @@ app/modules/projects/
   Handed to Production cascade.
 - **project_notes**: the notes and chat panels (JSON endpoints; renders two of
   the overlay's partials).
-- **transfer**: move or duplicate a C&CM deliverable to a different customer.
 
 ## Internal coupling
 `project_overlay` and `project_preproduction` import each other (the overlay's
@@ -92,7 +90,7 @@ together.
 ## Static
 The project-card JS set (15 JS + 3 CSS: project_list, project_overlay,
 project_overlay_create/edit, deliverables/details/flags/chat/notes/submissions
-cards, transfer, etc.) is still served from the global `/static` loader; it moves
+cards, etc.) is still served from the global `/static` loader; it moves
 in the shared-static pass.
 
 ## Known follow-up (deferred to the per-module overhaul)

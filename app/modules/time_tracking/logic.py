@@ -1,34 +1,23 @@
-# Business-hours computation for the time-tracking feature. Pure functions:
-# no Flask/DB writes, they derive hour totals from the *StatusLog history
-# (one row per status an entity was ever in: status, started_at, ended_at;
-# ended_at is None while it is the entity's current status).
+# Business-hours totals derived from *StatusLog history (one row per status
+# an entity was in: status, started_at, ended_at; ended_at is None for the
+# current status). No DB writes; recomputed on every read.
 #
-# The rules the numbers follow:
+# Rules:
 #   - Business hours only: Mon-Fri, 10AM-6PM Dubai time.
-#   - Weekend hours (Sat/Sun) are discarded unless a status change actually
-#     happened that weekend (a transition is taken as evidence of real work).
-#   - Broken down per status, not just one aggregate, feeding the
-#     project+deliverable drill-down page.
-#
-# Everything is recomputed from the status-log history on every read, so the
-# numbers are always derivable from history and there is no separate counter
-# to keep in sync. This file is the one place to change the business-hours
-# window, the weekend rule, or the excluded-status set.
+#   - Weekend hours count only if a status change happened that weekend.
+#   - Totals are kept per status as well as overall.
 
 from datetime import datetime, timedelta, timezone, time
 
 from app.modules.core.shared.models import Project
 
-# Fixed UTC+4 offset for Dubai. A fixed offset rather than ZoneInfo, whose
-# tzdata is not reliably present on the app's Windows host.
+# Fixed UTC+4: ZoneInfo's tzdata is not reliably present on the Windows host.
 DUBAI_TZ = timezone(timedelta(hours=4))
 
 BUSINESS_START_HOUR = 10
 BUSINESS_END_HOUR = 18
 
-# Statuses that do NOT count toward the "overall" active-time total.
-# Framed as an exclusion set: every other status (including 'approved')
-# counts as active time by default.
+# Statuses left out of the "overall" total; every other status counts.
 EXCLUDED_FROM_OVERALL = {'in_queue', 'submitted_to_client', 'internal_revision', 'on_hold'}
 
 
@@ -46,21 +35,9 @@ def _business_window(day_date):
 
 
 def _confirmed_weekend_saturdays(rows):
-    """
-    A 'confirmed' weekend is one where at least one status transition (a
-    log row's started_at — the moment the PREVIOUS status ended and this
-    one began) fell on a Saturday or Sunday, Dubai-local. Returns a set of
-    `date` objects, each the Saturday of a confirmed weekend.
-
-    Per Ezekiel: "silently track saturday and sunday but discard those
-    hours on the following Monday if the status didn't change. If the
-    status changes on the weekend, those hours get added ... because that
-    indicates it was worked on." A transition ANYWHERE in a weekend
-    confirms the WHOLE weekend (both days) — the segment ending at that
-    transition and the segment starting from it both get credited for
-    their weekend portions. That's what "discard on Monday if nothing
-    changed" implies: the check is per-weekend, not per-minute.
-    """
+    """Saturdays (as `date`) of weekends where any row's started_at falls
+    on Sat/Sun, Dubai-local. One transition confirms both days, for every
+    segment that overlaps that weekend."""
     confirmed = set()
     for r in rows:
         local = _to_dubai(r.started_at)
@@ -81,12 +58,8 @@ def _overlap_hours(seg_start, seg_end, window_start, window_end):
 
 
 def _segment_business_hours(started_at_utc, ended_at_utc, confirmed_weekends):
-    """
-    Business hours (10AM-6PM Dubai) between two naive-UTC datetimes, for
-    ONE status segment — Mon-Fri always counted, Sat/Sun only counted if
-    that weekend (identified by its Saturday's date) is in
-    `confirmed_weekends`.
-    """
+    """Business hours between two naive-UTC datetimes. Sat/Sun count only
+    when that weekend's Saturday is in `confirmed_weekends`."""
     start_local = _to_dubai(started_at_utc)
     end_local = _to_dubai(ended_at_utc)
     if end_local <= start_local:
@@ -109,20 +82,9 @@ def _segment_business_hours(started_at_utc, ended_at_utc, confirmed_weekends):
 
 
 def compute_status_hours(rows, now_utc=None):
-    """
-    Given a list of *StatusLog rows for ONE entity (project or
-    deliverable), sorted or not (this sorts them), returns:
-
-        {
-          'overall': <business hours across all non-excluded statuses>,
-          'by_status': {status: business_hours, ...},  # every status seen
-        }
-
-    An open row (ended_at is None — the entity's CURRENT status) is
-    treated as ending "now" (now_utc, defaulting to datetime.utcnow()) so
-    time in the current status counts up to the moment of viewing, not
-    just up to the last completed transition.
-    """
+    """Returns {'overall': hours, 'by_status': {status: hours}} for one
+    entity's status-log rows (any order). An open row counts up to now_utc
+    (default utcnow())."""
     if now_utc is None:
         now_utc = datetime.utcnow()
 
@@ -155,18 +117,10 @@ def compute_deliverable_hours(deliverable, now_utc=None):
 
 
 def build_time_tracking_rows():
-    """
-    One row per non-draft project, each with its own overall and per-status
-    business-hours breakdown, plus the same breakdown for each of its
-    (standard-brief) deliverables. Company-wide, not scoped to one CS lead.
-
-    C&CM per-customer status history (ProjectCustomerStatusLog) is not
-    included — the breakdown is per project and per standard-brief deliverable.
-
-    No access check here — that is the caller's job. This feeds both the
-    /time-tracking page and the dashboard's Average Time card, each of which
-    gates on admin/management before calling.
-    """
+    """One row per non-draft project with its hours breakdown and each
+    deliverable's. Per-customer status logs are not included.
+    No access check: the /time-tracking page and the dashboard's Average
+    Time card gate on view_time_reports before calling."""
     projects = Project.query.filter(Project.project_status != 'draft').order_by(Project.name).all()
 
     rows = []

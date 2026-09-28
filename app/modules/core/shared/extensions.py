@@ -1,13 +1,6 @@
-"""
+"""Shared Flask extension singletons: SQLAlchemy, Flask-Login and Flask-Mail.
 
-Shared flash extension instances.
-
-The SQLAlchemy database handle, Flask-Login manager and the Flask-Mail
-sender are created here as unbound singletone. The application factory
-binds them to the app at startup, and every module imports these same instances so
-the whole application shares one database registry, one login managee and one
-mail sender.
-
+create_app() binds them to the app; every module imports these same instances.
 """
 
 from flask_sqlalchemy import SQLAlchemy

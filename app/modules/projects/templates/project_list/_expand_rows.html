@@ -1,20 +1,12 @@
-{# app/templates/project_list/_expand_rows.html
-C&CM only — the customer-level sub-table. Each customer row is itself
-expandable: clicking its toggle fetches expand_customer()'s response
-(_deliverable_table.html) into the sibling container right below it —
-same lazy-fetch-once pattern the outer table and the deliverable table
-both already use.
+{# app/modules/projects/templates/project_list/_expand_rows.html
+C&CM only: the customer-level sub-table. Each customer row's toggle
+lazy-fetches expand_customer() (_deliverable_table.html) into the
+container below it, once.
 
-Built as its own single shared grid (expand-customer-*), the same "one
-grid, rows are display:contents" technique as expand-deliverable-* and
-the outer .project-table — keeps header/row borders pixel-aligned and
-lets every column but the pinned expand slot resize independently.
-
-Interleaves a .project-expand-container after every row, same as the
-outer table — so, also like the outer table, each row and its container
-gets an explicit --row-num / grid-row rather than relying on the grid's
-automatic placement, since a hidden container coming in and out of the
-layout could otherwise shift things around. #}
+One shared grid with display:contents rows, like the outer table, so
+header and row borders stay aligned. Each row and its expand container
+get an explicit --row-num / grid-row, so hidden containers don't shift
+the auto-placement. #}
 {% from '_shared_macros.html' import tag, status_pill %}
 <div class="expand-customer-table">
     <div class="expand-customer-row expand-customer-header" style="--row-num: 1;">

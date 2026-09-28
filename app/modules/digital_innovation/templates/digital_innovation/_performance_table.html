@@ -1,30 +1,17 @@
-{# Performance table — the 3 summary stat cards + the per-project rollup table,
-   sharing the view / period_key / rollup / currency context performance_screen()
-   computes. The Weekly/Monthly/Quarterly tabs and prev/next nav live in
-   performance.html (with the Export button); switching is a plain SPA-nav link.
-   This whole fragment is wrapped in #di-perf-table-body and re-fetched on every
-   DI-wide live SSE ping (performance_table_fragment).
+{# Performance stat cards + per-project rollup table. Rendered by
+   performance.html and by performance_table_fragment for live refresh;
+   #di-perf-table-body is the node that gets replaced.
 
-   Cost / Charge / Profit per project are LIFETIME totals — identical to that
-   project's Cost Breakdown, unchanged by which period you view. Only Dev Time
-   (this period's dev-time entries) and which projects appear change with the
-   period. The three cards are the period-scoped figures: Total cost = ledger
-   entries dated in this window; Closed profit = lifetime profit of every project
-   that closed in this period (a closed project overlaps only the one period it
-   closed in — see lib/periods.py); Projected profit = charge minus costs so far
-   across still-open projects touching this period.
+   Per-project Cost / Charge / Profit are lifetime totals (match Cost
+   Breakdown). Only Dev Time and which projects appear depend on the period.
+   Cards: Total cost = entries dated in the period; Closed profit = lifetime
+   profit of projects closed in the period (lib/periods.py); Projected profit
+   = charge minus costs so far across open projects.
 
-   Closed profit reads in --pine (green), Projected profit in
-   di-column-header--sky (blue) — a deliberate split so "banked" and "still
-   estimated" money don't look interchangeable.
+   Closed profit is green (--pine), projected is blue, so banked and
+   estimated money look different. Figures are whole numbers; profit is signed.
 
-   Currency figures are whole-number, thousands-separated ('{:,.0f}'); profit also
-   gets an explicit +/- sign ('{:+,.0f}'). Cost Breakdown keeps its 2-decimal
-   ledger style; these are rollups/estimates, so whole numbers read better.
-
-   Expanded features render as their own rows under the same six columns as the
-   parent (name indented under Project, a stage pill under Status, hours under
-   Dev Time, Cost/Charge/Profit blank). #}
+   Feature rows reuse the parent's six columns; Cost/Charge/Profit stay blank. #}
 <div id="di-perf-table-body">
 <div class="di-cost-stats di-perf-stats">
     <div class="di-cost-stat-card">

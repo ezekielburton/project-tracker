@@ -1,8 +1,8 @@
 /**
  * rich-editor.js
- * Adds drag-and-drop / paste image embedding to every [data-rich-editor] element.
- * Images upload immediately and embed inline (like Outlook). Click an embedded
- * image to reveal resize handles.
+ * Drag-and-drop / paste image embedding for every [data-rich-editor]
+ * element. Images upload at once and embed inline; click one for resize
+ * handles.
  *
  * Public API (set on window):
  *   getRichContent(id)   — returns innerHTML (empty string if visually blank)
@@ -158,19 +158,17 @@
         if (_selectedImg) placeOverlay(_selectedImg);
     });
 
-    // Re-position overlay when the page scrolls (image position shifts)
+    // Capture phase, so scrolling any container moves the overlay too.
     window.addEventListener('scroll', function () {
         if (_selectedImg) placeOverlay(_selectedImg);
     }, true);
 
-    // Dismiss overlay on click outside the overlay / outside an image
     document.addEventListener('click', function (e) {
         if (_overlay && _overlay.contains(e.target)) return;
         if (_selectedImg && e.target === _selectedImg) return;
         hideOverlay();
     });
 
-    // Dismiss overlay + deselect on Escape
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') hideOverlay();
     });
@@ -182,13 +180,10 @@
 
         var projectId = editor.dataset.projectId;
 
-        // Set initial empty state
         updateEmpty(editor);
 
-        // Track content changes (typing, paste, delete)
         editor.addEventListener('input', function () { updateEmpty(editor); });
 
-        // Click on image → show resize overlay; click elsewhere → hide
         editor.addEventListener('click', function (e) {
             if (e.target.tagName === 'IMG') {
                 showOverlay(e.target);
@@ -197,7 +192,6 @@
             }
         });
 
-        // Drag image files over the editor
         editor.addEventListener('dragover', function (e) {
             var types = e.dataTransfer && e.dataTransfer.types;
             var hasFiles = types && (
@@ -280,7 +274,6 @@
     window.getRichContent = function (id) {
         var el = document.getElementById(id);
         if (!el) return '';
-        // Visually empty → treat as no content
         if (el.textContent.trim() === '' && !el.querySelector('img')) return '';
         return el.innerHTML;
     };
@@ -293,25 +286,9 @@
         updateEmpty(el);
     };
 
-    // ── Wire flag-reply forms (regular form POST — sync hidden input on submit) ─
-    function wireReplyForms() {
-        document.querySelectorAll('.flag-reply-form').forEach(function (form) {
-            if (form._richEditorWired) return;
-            form._richEditorWired = true;
-            form.addEventListener('submit', function () {
-                var editor = form.querySelector('[data-rich-editor]');
-                var hidden = form.querySelector('.rich-editor-value');
-                if (editor && hidden) {
-                    hidden.value = window.getRichContent(editor.id) || editor.innerHTML;
-                }
-            });
-        });
-    }
-
     // ── Init all editors ───────────────────────────────────────────────────────
     window.initRichEditors = function () {
         document.querySelectorAll('[data-rich-editor]').forEach(initEditor);
-        wireReplyForms();
     };
 
     if (document.readyState === 'loading') {
@@ -320,11 +297,7 @@
         window.initRichEditors();
     }
 
-    // Re-init after any section-level DOM refresh (e.g. refreshSection() calls)
-    document.addEventListener('helix:section-refreshed', window.initRichEditors);
-    // Re-init on SPA navigation — sidebar.js swaps innerHTML without a full reload,
-    // so DOMContentLoaded never fires again. helix:navigated is the correct hook for
-    // base.html scripts that need to re-initialize after each nav swap.
+    // SPA swaps never refire DOMContentLoaded.
     document.addEventListener('helix:navigated', window.initRichEditors);
 
 })();

@@ -1,9 +1,6 @@
-{# One day, fetched when a cell is clicked. Rendered server-side on first
-   load too, so the page arrives with a day already open.
-
-   The list is `cards`, not `items`: Jinja resolves an attribute before a
-   subscript, so {{ drawer.items }} would hand this template the bound
-   dict.items method and fail with "no len()". #}
+{# One day's drawer, fetched on cell click and also rendered on first load.
+   The list is `cards`, not `items`: {{ drawer.items }} resolves to the
+   dict.items method and fails with "no len()". #}
 {% from 'hse/_calendar_macros.html' import drawer_card %}
 <div class="hse-cal-drawer-inner" data-drawer-date="{{ drawer.date.isoformat() }}">
     <div class="hse-cal-drawer-head">

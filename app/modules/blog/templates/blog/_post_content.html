@@ -30,12 +30,9 @@
         {% endif %}
         <p class="blog-post-meta">
             By {{ post.author.name }}
-            {% if post.published_at %}
-            · {{ post.published_at.strftime('%d %b %Y') }}
-            {% endif %}
-            {% if not post.is_published %}
-            · <span style="color: var(--rose);">Draft</span>
-            {% endif %}
+            {#- The publish button in blog.js updates these two spans in place. #}
+            <span class="blog-post-meta-date">{% if post.published_at %} · {{ post.published_at.strftime('%d %b %Y') }}{% endif %}</span>
+            <span class="blog-post-meta-draft" {% if post.is_published %}hidden{% endif %}>· <span style="color: var(--rose);">Draft</span></span>
         </p>
     </div>
 

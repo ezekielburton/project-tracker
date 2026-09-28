@@ -1,4 +1,4 @@
-/* Outer wrapper — placeholder for the future border-customization feature */
+/* Outer wrapper; carries the user's active achievement border class. */
 .profile-border-wrap {
     padding: 4px;
     border-radius: 16px;
@@ -42,21 +42,6 @@
     opacity: 1;
 }
 
-.profile-settings-gear {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    background: var(--white);
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    color: var(--black);
-}
-
 /* ── Avatar + header row ────────────────────────────────── */
 .profile-header-row {
     display: flex;
@@ -67,7 +52,7 @@
 
 .profile-avatar-wrap {
     position: relative;
-    /* Pull the avatar up so it overlaps the bottom of the banner, Facebook-style */
+    /* Overlap the bottom of the banner. */
     margin-top: -60px;
     flex-shrink: 0;
 }
@@ -130,8 +115,7 @@
     flex-shrink: 0;
 }
 
-/* Global h1-h6 are uppercase by default —
-   a person's name shouldn't render in the all-caps display font. */
+/* Undo the global uppercase headings for the name. */
 .profile-name {
     text-transform: none;
     letter-spacing: normal;
@@ -159,11 +143,8 @@
     margin-top: 0.5rem;
 }
 
-/* Outline-style pill tags for fun title / role / favourite food / birthday —
-   shared off-white fill (--sandstone), colored border + text per tag. Same
-   general shape as .status-badge elsewhere (border + fill + colored text),
-   but one consistent fill color instead of a different tint per status,
-   since these are meant to read as personality/flair, not system state. */
+/* Pill tags for fun title / role / food / birthday: one quiet fill, colored
+   border + text per tag. */
 .profile-tag {
     display: inline-flex;
     align-items: center;
@@ -173,9 +154,6 @@
     padding: 0.3rem 0.75rem;
     border-radius: 999px;
     white-space: nowrap;
-    /* Lighter than plain --sandstone — same treatment as the bio/achievements
-       cards below, so the tag fill stays quiet and lets the border+text carry
-       the color instead. */
     background-color: color-mix(in srgb, var(--sandstone) 50%, white);
     border: 1.5px solid;
 }
@@ -184,8 +162,6 @@
     background-color: color-mix(in srgb, var(--sandstone) 70%, transparent);
 }
 
-/* Border+text back to full-strength accent colors — the lighter background
-   above now provides the contrast, rather than diluting both together. */
 .profile-tag--title {
     color: var(--tangerine);
     border-color: var(--tangerine);
@@ -196,9 +172,7 @@
     border-color: var(--ashen);
 }
 
-/* --canary as text is hard to read against a light fill regardless of exact
-   shade — border stays canary, text uses --oak (same warm/earthy family,
-   actually legible) instead of literal canary. */
+/* Canary text is unreadable on a light fill, so the text uses --oak. */
 .profile-tag--food {
     color: var(--oak);
     border-color: var(--canary);
@@ -212,8 +186,6 @@
 /* ── Bio + Achievements ─────────────────────────────────── */
 .profile-body-grid {
     display: grid;
-    /* Single column — stacks Bio then Achievements top-to-bottom, in the
-       order they already appear in profile.html, rather than side by side. */
     grid-template-columns: 1fr;
     gap: 1.5rem;
     padding: 0 2rem 2rem;
@@ -221,8 +193,6 @@
 
 .profile-bio-card,
 .profile-achievements-card {
-    /* Lighter than plain --sandstone — blended most of the way to white so
-       these sub-cards feel airier against the white .profile-card behind them. */
     background: var(--page-background);
     border-radius: 12px;
     padding: 1.25rem 1.5rem;
@@ -230,8 +200,7 @@
 }
 
 #profile-bio-text {
-    /* Preserve line breaks typed in the textarea — without this, HTML
-       collapses all newlines to spaces when rendering the bio. */
+    /* Keep the bio's typed line breaks. */
     white-space: pre-wrap;
 }
 
@@ -241,7 +210,7 @@
     gap: 0.5rem;
 }
 
-/* ── Crop/zoom modal ────────────────────────────────────── */
+/* ── Crop/zoom modal (shared partial, used app-wide) ───────── */
 .crop-modal-box {
     width: 420px;
     max-width: 90vw;
@@ -260,10 +229,7 @@
     display: block;
 }
 
-/* Cropper.js renders its own internal elements (.cropper-view-box,
-   .cropper-face) — this is the standard trick to make its square crop box
-   preview as a circle for the avatar, without Cropper needing native
-   circle support. */
+/* Round Cropper.js's square crop box for the avatar preview. */
 .crop-container--circle .cropper-view-box,
 .crop-container--circle .cropper-face {
     border-radius: 50%;
@@ -282,5 +248,3 @@
 .crop-size-hint--warning {
     color: var(--rose);
 }
-
-/* ── Active badge inline next to name — see .profile-name-badge in rules above ── */

@@ -1,14 +1,6 @@
-// digital_innovation_archive.js — Digital Innovation module, the Archive
-// screen: closed and archived projects, each reopenable, closed ones
-// also archivable one step further. Reopen/Archive themselves still do a
-// full reload — these actions are rare, at most a handful of rows, and
-// the acting user already sees the result immediately either way, so
-// re-rendering the whole screen server-side stays simpler than
-// hand-patching the DOM for THAT case. What's new (3 Sep 2026) is a live
-// refresh for the OTHER case — someone ELSE closing/archiving/reopening
-// a project while this screen is just sitting open — via a DI-wide SSE
-// ping; see digital_innovation_live.js for the shared connection-
-// watching helper this calls into.
+// Digital Innovation Archive screen: closed projects (reopen or archive) and
+// archived projects (reopen). The user's own actions reload the page; other
+// users' changes arrive via a DI-wide SSE ping that re-fetches the lists.
 
 if (!window._diArchiveDispatcherWired) {
     window._diArchiveDispatcherWired = true;
@@ -41,10 +33,7 @@ function _diApplyArchiveAction(fetchPromise) {
     fetchPromise
         .then(function (res) {
             if (!res.ok) throw new Error('request failed');
-            // Full reload — the row that moved needs to leave this list (or,
-            // for reopen, leave the page entirely), and there are at most a
-            // handful of rows here, so re-rendering the whole screen
-            // server-side is simpler than hand-patching the DOM.
+            // Reload so the moved row leaves its list and the rail's project list updates.
             window.location.reload();
         })
         .catch(function () {
@@ -53,10 +42,8 @@ function _diApplyArchiveAction(fetchPromise) {
 }
 
 
-// Re-fetches _archive_lists.html fresh and swaps #di-archive-lists
-// wholesale — same "replace the whole wrapper node" reasoning
-// digital_innovation_board.js's diRefreshBoard and this module's own
-// diRefreshPerformanceTable use.
+// Re-fetches _archive_lists.html and replaces #di-archive-lists. The
+// fragment is its own wrapper, so the node is replaced, not its innerHTML.
 function diRefreshArchiveLists() {
     var container = document.getElementById('di-archive-lists');
     if (!container) return;
@@ -73,9 +60,7 @@ function diRefreshArchiveLists() {
             if (fresh) container.replaceWith(fresh);
         })
         .catch(function () {
-            // A failed live refresh isn't worth surfacing to the user —
-            // the page just stays showing what it last successfully
-            // loaded, same as if the ping had never arrived.
+            // Silent: the page keeps its last state.
         });
 }
 

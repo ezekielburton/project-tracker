@@ -1,9 +1,5 @@
-"""Coverage for the projects, dashboard and DI gates after the map swap.
-
-Two things matter here beyond the usual role table. One, that the six
-duplicate emulation helpers really do resolve to the same user now. Two, that
-the layout and branch selectors left as role literals still exclude admin —
-the same trap as the project overlay.
+"""Capability gates for Pre-Production, project files, site visits, DI and
+time tracking, plus emulation-aware actor resolution.
 """
 import pytest
 from flask import session, url_for
@@ -30,7 +26,7 @@ def _user(db_session, tag, role, team=None):
     return user
 
 
-# ── The two new capabilities ───────────────────────────────────────────────
+# ── Role tables ───────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize('role', ALL_ROLES)
 def test_complete_preproduction_matches_the_old_role_set(db_session, role):
@@ -52,7 +48,7 @@ def test_site_visits_open_to_the_capability_holders(db_session, role):
 
 
 def test_site_visits_are_team_scoped_for_designers(db_session):
-    """The designer half is a team rule, not a capability — Technical only."""
+    """Designers can log site visits only on the Technical team."""
     technical = _user(db_session, 'visit-tech', 'designer', team='Technical')
     other = _user(db_session, 'visit-2d', 'designer', team='2D')
     assert _can_log_site_visit(technical) is True
@@ -64,11 +60,10 @@ def test_read_only_roles_cannot_log_site_visits(db_session):
         assert _can_log_site_visit(_user(db_session, f'visit-{role}', role)) is False
 
 
-# ── One effective_user, reached by every old name ──────────────────────────
+# ── Actor resolution ──────────────────────────────────────────────────────
 
 def test_get_actor_resolves_to_the_emulated_user(app, db_session):
-    """utils.get_actor, the overlay's _get_actor and CS's helper were four
-    separate implementations of this. They are one now."""
+    """get_actor() and effective_user() both return the emulated user."""
     admin = _user(db_session, 'actor-admin', 'admin')
     designer = _user(db_session, 'actor-designer', 'designer')
 

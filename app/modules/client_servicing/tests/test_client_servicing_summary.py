@@ -1,4 +1,4 @@
-"""Coverage for the Monthly Summary rollup (lib/summary.py)."""
+"""The Monthly Summary rollup (lib/summary.py)."""
 from datetime import date
 from decimal import Decimal
 
@@ -16,8 +16,7 @@ def _lead(db_session):
 
 
 def _project(db_session, lead, name, status='briefed', due=None, **cs):
-    # project_value= in a seed now means the project's own value — the CS
-    # column it used to set was retired when the two were merged.
+    # project_value= seeds Project.value; the other kwargs go to the CS row.
     p = Project(name=name, cs_lead_id=lead.id, created_by_id=lead.id,
                 project_status=status, first_output_deadline=due,
                 value=cs.pop('project_value', None))
@@ -41,8 +40,7 @@ def _seed_march_year(db_session):
     # March 2026 — no LPO, bucketed by its planned invoice month, stuck
     _project(db_session, lead, 'C stuck', invoice_month_date=date(2026, 3, 1),
              project_value=Decimal('30'))
-    # A design deadline is NOT a billing date — this one is excluded, which
-    # is the whole point of dropping first_output_deadline from the chain.
+    # A design deadline is not a billing date → excluded
     _project(db_session, lead, 'D due date only', due=date(2026, 3, 25),
              project_value=Decimal('999'))
     # No dates anywhere → excluded
@@ -92,9 +90,7 @@ def test_due_this_month_only_uninvoiced(db_session):
 
 
 def test_a_design_deadline_never_puts_a_project_in_a_month(db_session):
-    """first_output_deadline is the Projects page's output deadline. It used
-    to be the last fallback here, which parked uninvoiced work in whatever
-    month design happened to be due."""
+    """first_output_deadline (the design deadline) never buckets a project into a month."""
     lead = _lead(db_session)
     _project(db_session, lead, 'Design deadline only', due=date(2026, 7, 14),
              project_value=Decimal('400'))

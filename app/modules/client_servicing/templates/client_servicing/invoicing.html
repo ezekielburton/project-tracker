@@ -5,14 +5,11 @@
 {% block content %}
 <div class="module-page cs-page">
     <div class="module-shell">
-        {% with active_nav = 'invoicing' %}
+        {% with active_nav = 'invoicing', active_sub = 'by_project' %}
         {% include "client_servicing/_sidebar.html" %}
         {% endwith %}
         <div class="module-main">
             <div class="client-servicing-page">
-                {% with active_tab = 'by_project' %}
-                {% include "client_servicing/_invoicing_tabs.html" %}
-                {% endwith %}
                 {% include "client_servicing/_invoicing_toolbar.html" %}
                 {% include "client_servicing/_invoicing_table.html" %}
             </div>
@@ -25,7 +22,7 @@
 {% endblock %}
 
 {% block extra_js %}
-{# Loaded for everyone now — the search box is in here too, and each
-   feature no-ops when its own DOM isn't present. #}
+{# Loaded for every viewer (it runs the search too); each feature no-ops
+   when its DOM is absent. #}
 <script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_invoicing.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

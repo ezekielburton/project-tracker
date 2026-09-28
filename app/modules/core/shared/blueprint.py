@@ -1,9 +1,6 @@
-"""The core/shared blueprint.
-
-It registers no routes. Its purpose is to place core/shared's templates on
-Jinja's search path so every module can extend the shared base layout and
-import the shared macros. (When shared static is centralised here later, this
-same blueprint gains a static_folder to serve those assets.)
+"""The core/shared blueprint. No routes: it puts core/shared's templates on
+Jinja's search path (shared base layout and macros) and serves shared static
+files at /core/static.
 """
 from flask import Blueprint
 

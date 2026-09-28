@@ -1,9 +1,5 @@
-"""Route-level coverage for the Archive screen (routes/archive.py) and
-the sidebar's project-lifecycle surfaces: the per-project Close button
-(board.html/_sidebar.html) and the Archive screen's Reopen/Archive
-buttons. The lifecycle state changes themselves (close/archive/reopen)
-have their own coverage in test_project_routes.py — these tests are
-about what gets rendered, and to whom."""
+"""Tests for what the Archive screen and the board's Close control render,
+and to whom. The lifecycle actions are tested in test_project_routes.py."""
 from flask import url_for
 
 from app.modules.core.shared.testing import login_as
@@ -22,10 +18,7 @@ def test_archive_screen_requires_auth(app, client, db_session):
 def test_archive_screen_lists_closed_and_archived_projects(app, client, db_session):
     _project(db_session, 'aa', lifecycle='closed')
     _project(db_session, 'ab', lifecycle='archived')
-    _project(db_session, 'ac')  # active — appears in the sidebar's project
-    # switcher (every DI screen includes it), just not in either archive
-    # list — so the assertion below checks the archive-row markup
-    # specifically, not the page as a whole.
+    _project(db_session, 'ac')  # active: in the sidebar, so assert on archive-row markup only
     user = _user(db_session, 'aa', role='admin')
     login_as(client, app, user, 'password123')
 
@@ -41,9 +34,7 @@ def test_archive_screen_lists_closed_and_archived_projects(app, client, db_sessi
 
 
 def test_archive_screen_shows_actions_to_an_admin(app, client, db_session):
-    _project(db_session, 'ad0')  # an active project — needed so the
-    # sidebar's default_project() lookup (used when a screen isn't
-    # scoped to one project) has something to find.
+    _project(db_session, 'ad0')  # active, so default_project() finds one
     _project(db_session, 'ad', lifecycle='closed')
     _project(db_session, 'ae', lifecycle='archived')
     user = _user(db_session, 'ad', role='admin')
@@ -60,12 +51,8 @@ def test_archive_screen_shows_actions_to_an_admin(app, client, db_session):
 
 
 def test_archive_screen_hides_non_ovp_projects_and_actions_from_a_designer(app, client, db_session):
-    # The visibility gate
-    # (can_view_di_project, lib/access.py) means a designer no longer
-    # sees a button-less row for a non-OVP project — the row itself is
-    # gone, since closed_projects()/archived_projects() are filtered
-    # through visible_di_projects same as everything else.
-    _project(db_session, 'af0')  # active — see the comment above
+    # A designer can't see non-permanent projects, so the row is absent.
+    _project(db_session, 'af0')  # active, so default_project() finds one
     _project(db_session, 'af', lifecycle='closed')
     _project(db_session, 'ag', lifecycle='archived')
     user = _user(db_session, 'af', role='designer')
@@ -84,7 +71,7 @@ def test_archive_screen_hides_non_ovp_projects_and_actions_from_a_designer(app, 
 
 
 def test_archive_screen_hides_actions_from_an_admin_emulating_a_designer(app, client, db_session):
-    _project(db_session, 'ah0')  # active — see the comment above
+    _project(db_session, 'ah0')  # active, so default_project() finds one
     _project(db_session, 'ah', lifecycle='closed')
     admin = _user(db_session, 'ah', role='admin')
     designer = _user(db_session, 'ah2', role='designer')
@@ -119,11 +106,7 @@ def test_board_shows_close_button_for_editable_projects_to_an_admin(app, client,
 
 
 def test_project_board_403s_for_a_designer_instead_of_showing_close_button(app, client, db_session):
-    # A non-permanent
-    # board isn't reachable by a designer at all (can_view_di_
-    # project, lib/access.py), the close-button-hidden case is now
-    # unreachable for this project — the meaningful assertion left is
-    # that the route 403s outright.
+    # A designer can't view a non-permanent board at all, so it 403s.
     project = _project(db_session, 'aj')
     user = _user(db_session, 'aj', role='designer')
     login_as(client, app, user, 'password123')
@@ -152,11 +135,8 @@ def test_board_never_shows_close_button_for_the_permanent_project(app, client, d
 
 
 def test_board_sidebar_excludes_closed_and_archived_projects(app, client, db_session):
-    # is_permanent=True: this test is about lifecycle
-    # filtering (sidebar_projects() only ever returns lifecycle='active'
-    # rows, so the closed/archived ones here were never reachable via
-    # the sidebar regardless), not the separate visibility gate — stand
-    # in for OVP so a designer can view the board at all.
+    # is_permanent=True so a designer passes the visibility gate; this
+    # tests lifecycle filtering only.
     active_project = _project(db_session, 'al', is_permanent=True)
     _project(db_session, 'am', lifecycle='closed')
     _project(db_session, 'an', lifecycle='archived')
@@ -174,7 +154,7 @@ def test_board_sidebar_excludes_closed_and_archived_projects(app, client, db_ses
     assert 'Test DI Project an' not in body
 
 
-# ── archive_lists_fragment (DI-wide live SSE refresh) ────────
+# ── archive_lists_fragment (live refresh) ────────
 
 def test_archive_lists_fragment_requires_auth(app, client, db_session):
     with app.test_request_context():
@@ -184,11 +164,7 @@ def test_archive_lists_fragment_requires_auth(app, client, db_session):
 
 
 def test_archive_lists_fragment_shows_closed_and_archived_projects(app, client, db_session):
-    # role='admin': a non-OVP project's closed/archived row
-    # is visibility-gated (can_view_di_project, lib/access.py), same
-    # as everywhere else — a designer would see neither of these at all,
-    # so this needs a role the gate actually allows to test the fragment
-    # itself rather than the gate.
+    # Admin, so the visibility gate lets these non-permanent rows through.
     _project(db_session, 'ao', lifecycle='closed')
     _project(db_session, 'ap', lifecycle='archived')
     user = _user(db_session, 'ao', role='admin')

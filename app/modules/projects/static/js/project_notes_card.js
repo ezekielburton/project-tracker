@@ -1,10 +1,5 @@
-// app/static/js/project_notes_card.js
-//
-// Site Visits tab controller (task #52/M9, notes half moved out M10 chat
-// redesign — see project_chat_panel.js). Kept its original filename/
-// module name (ProjectNotesCard) since renaming needs a real git mv this
-// session's remote file tools can't do — a safe, non-blocking cleanup for
-// later, along with the matching template rename noted in _overlay_notes.html.
+// Site Visits tab controller (data-main-tab="notes", _overlay_notes.html).
+// Despite the "notes" name, it only handles Site Visits.
 
 window.ProjectNotesCard = (function () {
 
@@ -12,23 +7,17 @@ window.ProjectNotesCard = (function () {
         let designerPickerHandle = null;   // shared between wireSiteVisits() and destroy()        
 
         function toLocalIso(date) {
-            // Air Datepicker hands back a real JS Date in the browser's local
-            // timezone. date.toISOString() would convert to UTC and silently
-            // shift the hour/day — every other date field in this app stores a
-            // naive local datetime, so build the string from local components
-            // instead.
+            // The server stores naive local datetimes; toISOString() would
+            // shift to UTC and move the hour or day.
             const pad = (n) => String(n).padStart(2, '0');
             return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
                 `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
         }
 
-        function formatRangeLabel(start, end) {
-            const dateOpts = { day: '2-digit', month: 'short', year: 'numeric' };
-            const timeOpts = { hour: '2-digit', minute: '2-digit' };
-            const date = start.toLocaleString(undefined, dateOpts);
-            const startTime = start.toLocaleString(undefined, timeOpts);
-            const endTime = end.toLocaleString(undefined, timeOpts);
-            return `${date} · ${startTime} – ${endTime}`;
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
         }
 
         function postJson(url, body) {
@@ -40,11 +29,8 @@ window.ProjectNotesCard = (function () {
         }
 
         function reload() {
-            // Simplest safe way to reflect a successful add/delete — the
-            // create route only hands back an id, not the full rendered
-            // row, and re-fetching the whole section avoids duplicating
-            // that formatting logic in JS. Same tradeoff Deliverables'
-            // own edit-save flow makes.
+            // Re-render the whole tab after add/delete; the create route
+            // returns only an id, not the rendered row.
             return fetch(`/projects/${projectId}/overlay/notes`)
                 .then((res) => res.text())
                 .then((html) => {
@@ -54,6 +40,7 @@ window.ProjectNotesCard = (function () {
         }
 
         // ---- Site Visits ----
+        // Project name and location are user-entered, so escape before innerHTML.
         function showOverlapModal(conflict) {
             const wrapper = document.createElement('div');
             wrapper.innerHTML = `
@@ -61,8 +48,8 @@ window.ProjectNotesCard = (function () {
                     <div class="modal-box">
                         <h3 class="modal-title">This site visit conflicts with another site visit</h3>
                         <p class="overlay-submit-summary-note">
-                            ${conflict.project_name} — ${conflict.start_at} to ${conflict.end_at}
-                            ${conflict.location ? ' · ' + conflict.location : ''}
+                            ${escapeHtml(conflict.project_name)} — ${escapeHtml(conflict.start_at)} to ${escapeHtml(conflict.end_at)}
+                            ${conflict.location ? ' · ' + escapeHtml(conflict.location) : ''}
                         </p>
                         <div class="modal-actions">
                             <button type="button" class="overlay-file-action-btn overlay-file-action-btn--action"
@@ -87,10 +74,10 @@ window.ProjectNotesCard = (function () {
             const designerPickerEl = contentEl.querySelector('#overlay-visit-designer-picker');
 
             let selectedDesignerId = null;
-            let selectedStart = null;   // full Date (date + time), set on Apply — same shape the submit handler always expected
+            let selectedStart = null;   // full Date (date + time), set on Apply
             let selectedEnd = null;
 
-            // ---- Designer picker (unchanged) ----
+            // ---- Designer picker ----
             if (designerPickerHandle) {
                 designerPickerHandle.destroy();
                 designerPickerHandle = null;
@@ -105,12 +92,8 @@ window.ProjectNotesCard = (function () {
             }
 
             // ---- Date & Time picker ----
-            // Custom widget, styled after the projects table's own
-            // Initial/Next Deadline filter picker (project_list.js /
-            // project_list.css's .date-range-picker) rather than Air
-            // Datepicker — this needed future-only dates, a range OR a
-            // single day, and typed H:MM time entry, which didn't map
-            // cleanly onto Air Datepicker's own range+timepicker combo.
+            // Custom one-month widget reusing the .date-range-picker styles
+            // from project_list.css. Future days only; typed HH:MM times.
             const datetimePicker = contentEl.querySelector('#visit-datetime-picker');
             const datetimePrev = contentEl.querySelector('#visit-date-prev');
             const datetimeNext = contentEl.querySelector('#visit-date-next');
@@ -126,7 +109,7 @@ window.ProjectNotesCard = (function () {
 
             let viewYear = null;
             let viewMonth = null;
-            let rangeStart = null;      // the selected day — Apply combines this with the time inputs into selectedStart/selectedEnd above
+            let rangeStart = null;      // selected day; Apply adds the times to make selectedStart/selectedEnd
 
 
             if (datetimePicker && monthLabelEls.length === 1 && dayGridEls.length === 1) {
@@ -174,9 +157,7 @@ window.ProjectNotesCard = (function () {
                         if (date.getMonth() !== month) cell.classList.add('is-other-month');
                         if (sameDay(date, today)) cell.classList.add('is-today');
                         if (sameDay(date, rangeStart)) cell.classList.add ('is-range-start');
-                        // Site visits are future-only — past days stay
-                        // visible (so the grid still reads as a normal
-                        // month) but greyed out and inert.
+                        // Past days show but are disabled.
                         if (date < todayMidnight) cell.classList.add('is-disabled');
 
                         gridEl.appendChild(cell);
@@ -222,10 +203,7 @@ window.ProjectNotesCard = (function () {
                 }
 
                 function openDatetimePicker() {
-                    // Re-derive the calendar/time state from whatever was
-                    // last applied, so reopening shows your last selection
-                    // instead of starting blank — same behavior the table's
-                    // own date filter has.
+                    // Reopening shows the last applied selection.
                     if (selectedStart) {
                         rangeStart = new Date(selectedStart.getFullYear(), selectedStart.getMonth(), selectedStart.getDate());
                         fillTimeInputs(startHourInput, startMinuteInput, selectedStart);
@@ -271,8 +249,7 @@ window.ProjectNotesCard = (function () {
                     renderVisitCalendar();
                 });
 
-                // One delegated listener for every day cell across both
-                // months, same pattern as the table's own picker.
+                // One delegated listener for every day cell.
                 datetimePicker.addEventListener('click', (e) => {
                     const cell = e.target.closest('.date-range-picker-day');
                     if (!cell || cell.classList.contains('is-disabled')) return;
@@ -291,10 +268,8 @@ window.ProjectNotesCard = (function () {
                     closeDatetimePicker();
                 });
 
-                // Add Site Visit validates everything at once (designer,
-                // date, times, location) and submits — this is now the
-                // one submit button for the whole modal, not just the
-                // date/time part.
+                // #visit-date-apply ("Add Site Visit") is the modal's only
+                // submit: it validates every field, then posts.
                 function showError(msg) {
                     if (errorEl) { errorEl.textContent = msg; errorEl.classList.remove('hidden'); }
                 }
@@ -339,7 +314,6 @@ window.ProjectNotesCard = (function () {
 
             contentEl.querySelectorAll('.overlay-visit-delete').forEach((btn) => {
                 btn.addEventListener('click', () => {
-                    // M10: was bare window.confirm() — unified on showConfirm()
                     window.showConfirm('Delete this site visit?', () => {
                         const visitId = btn.getAttribute('data-visit-id');
                         postJson(`/projects/${projectId}/overlay/site-visits/${visitId}/delete`, {}).then(({ ok, data }) => {

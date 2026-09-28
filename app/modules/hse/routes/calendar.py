@@ -1,14 +1,9 @@
 """
-HSE — the calendar. Month grid, agenda, and the day drawer the officer
-files from.
+HSE calendar: Month and Agenda views, plus the day drawer.
 
-The calendar is a view and a way in, never a second store: every route here
-reads, and "Log it" hands off to the ordinary entry form. If anything in
-this module ever writes a row, something has gone wrong.
-
-No SSE. Client Servicing streams its calendar because several people edit
-one table; HSE has one user, and polling.js holds the pattern if a second
-ever appears.
+Read-only: "Log it" hands off to the normal entry form, and no route here
+writes a row. No SSE, since HSE has a single user; polling.js is the
+pattern to follow if that changes.
 """
 from datetime import date, timedelta
 
@@ -24,8 +19,8 @@ from app.modules.hse.lib.calendar import (
     shift_month, state_chips,
 )
 from app.modules.hse.lib.registers import HSE_REGISTERS
-from app.modules.hse.lib.query import open_counts_by_group
-from app.modules.hse.lib.rail import rail_items
+from app.modules.hse.lib.query import open_counts_by_register
+from app.modules.hse.lib.rail import GROUP_LABELS, rail_items
 from app.modules.hse.models import HseEntry, HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
 
@@ -37,13 +32,8 @@ def _schedules():
 
 
 def _entries(start, end):
-    """Every entry that could draw inside the window, in one query.
-
-    Three different dates can put an entry on the grid — the day it was
-    filed, the day it expires, and the occurrence it satisfies — so all
-    three are in the filter. Loading them separately would be three round
-    trips for one page.
-    """
+    """Every entry that could appear in the window, in one query: by filed
+    date, due/expiry date, or occurrence date."""
     return (HseEntry.query
             .options(selectinload(HseEntry.asset),
                      selectinload(HseEntry.reported_by),
@@ -60,10 +50,14 @@ def _entries(start, end):
 
 
 def _log_registers():
-    """What "+ Log entry" offers. Every register, because unplanned work is
-    exactly the thing that has no schedule to start from."""
-    return [{'key': reg.key, 'label': reg.label, 'group': reg.group}
-            for reg in HSE_REGISTERS]
+    """Registers offered by "+ Log entry": all of them, for unplanned work."""
+    # A one-register group shares the register's name, so it shows no group.
+    out = []
+    for reg in HSE_REGISTERS:
+        group = GROUP_LABELS.get(reg.group, reg.group.title())
+        out.append({'key': reg.key, 'label': reg.label,
+                    'group': group if group != reg.label else ''})
+    return out
 
 
 def _drawer(grouped, day, today):
@@ -75,9 +69,8 @@ def _drawer(grouped, day, today):
 
 
 def _view_model(start, end, today, state):
-    """Everything both calendar views need. `grouped_all` is unfiltered, so
-    the chip counts describe the whole window rather than the slice the
-    chips are currently showing."""
+    """Month view data. `grouped_all` is unfiltered so chip counts cover the
+    whole window, not just the active chip's slice."""
     schedules = _schedules()
     entries = _entries(start, end)
     grouped_all = items_by_day(schedules, entries, start, end, today)
@@ -124,16 +117,16 @@ def calendar_month():
         drawer=_drawer(grouped, selected, today),
         log_registers=_log_registers(),
         month_chip=month_start.strftime('%b %Y'),
-        rail=rail_items(open_counts_by_group(today), active_group='calendar'),
+        rail=rail_items(open_counts_by_register(today), active_group='calendar'),
         active_group='calendar',
+        active_sub='calendar',
     )
 
 
 def _agenda(today, state):
     start = today
     end = today + timedelta(days=AGENDA_DAYS)
-    # The header counts describe this month, the same as the month view, so
-    # switching tabs never changes the numbers at the top.
+    # Header KPIs cover this month, matching the Month view.
     month_start = date(today.year, today.month, 1)
     month_end = date(*shift_month(today.year, today.month, 1), 1) - timedelta(days=1)
 
@@ -153,8 +146,9 @@ def _agenda(today, state):
         active_state=state,
         today=today,
         days_ahead=AGENDA_DAYS,
-        rail=rail_items(open_counts_by_group(today), active_group='calendar'),
+        rail=rail_items(open_counts_by_register(today), active_group='calendar'),
         active_group='calendar',
+        active_sub='calendar',
     )
 
 
@@ -184,8 +178,7 @@ def calendar_day(datestr):
 @login_required
 @require('view_hse')
 def calendar_today():
-    """A stable link back to the current month with today open — what the
-    Today button points at, so it survives being bookmarked."""
+    """Bookmarkable Today link: redirects to the current month with today open."""
     today = date.today()
     return redirect(url_for('hse.calendar_month',
                             month='%04d-%02d' % (today.year, today.month),

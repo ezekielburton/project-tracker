@@ -1,20 +1,20 @@
 """
-Shared save/delete for profile images (avatars and banners). Lives here so the
-profile module and the admin panel both set images through the same validated
-path. The browser sends a cropped, compressed JPEG, but we always re-validate
-server-side — never trust what the client claims to have sent.
+Save/delete for profile images (avatars and banners), shared by the profile
+module and the admin panel. Only the file extension is checked server-side.
 """
 import os
 import uuid
 
 ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
-AVATAR_FOLDER = os.path.join('app', 'static', 'avatars')
-BANNER_FOLDER = os.path.join('app', 'static', 'banners')
+# Absolute (app/static/...) so saves don't depend on the process's working directory.
+_STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'static'))
+AVATAR_FOLDER = os.path.join(_STATIC_DIR, 'avatars')
+BANNER_FOLDER = os.path.join(_STATIC_DIR, 'banners')
 
 
 def save_profile_pic(file, folder):
-    """Save an uploaded image to `folder` under a uuid name.
-    Returns the stored filename, or None if missing / not an allowed type."""
+    """Save an uploaded image to `folder` under a random name. Returns the
+    stored filename, or None if missing or not an allowed extension."""
     if not file or file.filename == '':
         return None
 

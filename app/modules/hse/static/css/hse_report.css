@@ -1,13 +1,8 @@
 /* ══ HSE performance report — the print sheet ═════════════════════════════
-   A4 pages built as fixed blocks, each carrying its own footer. That is how
-   the reference report gets "Page 1 of 4" without the browser's own header
-   and footer, which CSS cannot reach.
-
-   Light only, on purpose: this is a document that gets printed and handed
-   across a desk, not a screen that follows the app theme.
-
-   Fonts are shipped with the module rather than pulled from a CDN, so the
-   report renders the same on the server as on a laptop with no internet. */
+   Fixed A4 blocks, each with its own footer, so "Page 1 of 4" prints without
+   the browser's header/footer (which CSS cannot reach).
+   Light only: it is a printed document, not themed.
+   Fonts are bundled with the module so it renders the same offline. */
 
 @font-face { font-family: 'Barlow Condensed'; font-weight: 700; font-style: normal;
     font-display: block; src: url('../fonts/barlow-condensed-700.woff2') format('woff2'); }

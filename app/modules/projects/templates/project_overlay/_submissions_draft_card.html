@@ -1,11 +1,8 @@
 {% from '_shared_macros.html' import card, status_pill, deliverable_picker, person_chip, tag, included_summary %}
-{# Two cards inside the working area: Sent to Client (client-facing record +
-CS decision) and Next Draft/Draft (the working area). Current/History
-(client-facing revision history) stays above both, unconditional on
-sent_submission — history can exist with nothing currently sent, so it can't
-live inside the Sent to Client card. Draft/History (internal edit-reason
-trail) lives in the Next Draft card's own header instead — different
-position reads as a different control without relying on the label alone. #}
+{# Two cards: Client Submission (the sent deck + CS decision) and Next
+Draft/Draft (the working area). The Current/History toggle (client-facing
+revisions) sits above both, since history can exist with nothing sent. The
+internal edit-reason history lives in the draft card's header. #}
 
 {% if history_submissions %}
 <div class="overlay-submissions-view-toggle">
@@ -18,11 +15,10 @@ position reads as a different control without relying on the label alone. #}
 
 <div id="overlay-submissions-current">
 {% if sent_submission %}
-{# Sent-to-Client state. Once the deck is submitted, _get_active_draft no
-longer matches it (workflow_status='sent_to_client'), so _build_draft_card_
-context surfaces it as sent_submission/sent_files instead — read-only:
-the deck is now the permanent client record. Files read from the NAS zip
-via the same Preview/Download routes (see _load_submission_file_bytes). #}
+{# A sent deck (workflow_status='sent_to_client') is not the active
+draft; _build_draft_card_context passes it as sent_submission/sent_files.
+Read-only client record. Files are served from the NAS zip
+(_load_submission_file_bytes). #}
 {% call card('Client Submission') %}
 <div class="overlay-status-row">
     {% if sent_revision_event %}{{ status_pill('Revision Requested', 'lavender') }}
@@ -75,8 +71,7 @@ via the same Preview/Download routes (see _load_submission_file_bytes). #}
     </div>
 </div>
 {% if can_mark_approved or can_request_client_revision %}
-{# Mutually-exclusive actions — both gated by the same can_mark_approved/
-can_request_client_revision (a sent deck with no revision already pending). #}
+{# Mutually exclusive actions; both need a sent deck with no revision pending. #}
 <div class="overlay-submission-section">
     <div class="overlay-sent-actions">
         {% if can_request_client_revision %}

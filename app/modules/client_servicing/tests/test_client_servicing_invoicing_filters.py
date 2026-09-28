@@ -20,8 +20,7 @@ def _user(db_session, tag, role='cs'):
 
 
 def _project(db_session, user, name, **cs_kwargs):
-    # project_value= in a seed now means the project's own value — the CS
-    # column it used to set was retired when the two were merged.
+    # project_value= seeds Project.value; the other kwargs go to the CS row.
     project = Project(name=name, cs_lead_id=user.id, created_by_id=user.id,
                       project_status='briefed',
                       value=cs_kwargs.pop('project_value', None))
@@ -97,7 +96,7 @@ def test_the_two_filters_combine(app, client, db_session):
 
 
 def test_an_unknown_validation_code_shows_everything(app, client, db_session):
-    """A stale or hand-edited URL should not silently empty the table."""
+    """An unknown validation code is ignored, so a bad URL doesn't empty the table."""
     user = _user(db_session, 'e')
     _seed(db_session, user)
     login_as(client, app, user, 'password123')

@@ -1,13 +1,8 @@
 {% from '_shared_macros.html' import card %}
-{# app/templates/project_overlay/_details_create.html
-   Create-mode Details step (task #61) — every field here is always a live
-   input, not the view/edit-toggle pattern _details_standard.html uses
-   post-creation (there's nothing to "view" yet on a blank draft). Wired by
-   project_overlay_create.js, which debounce-autosaves each field via
-   POST /projects/overlay/new as it changes. Restyled to the overlay's own
-   visual system (overlay-property-row/-label, card(), .overlay-notes) per
-   Ezekiel's 18 Aug 2026 instruction — not a copy of the old create.html's
-   layout. #}
+{# app/modules/projects/templates/project_overlay/_details_create.html
+   Create-mode Details step. Every field is a live input (no view/edit
+   toggle). project_overlay_create.js autosaves each change (debounced) via
+   POST /projects/overlay/new. #}
 
 <div class="overlay-create-brieftype-row">
     <span class="overlay-property-label">Brief Type</span>
@@ -55,10 +50,9 @@
             <div class="overlay-property-row">
                 <span class="overlay-property-label">Contact</span>
                 <span class="overlay-property-value">
-                    {# Known gap, closed by #65 (resumable drafts): a draft
-                    resumed after already having a contact_id set won't show
-                    it pre-selected here yet — client_directory.js's cascade
-                    only populates options once a Client is (re)selected. #}
+                    {# Known gap: a resumed draft's saved contact isn't
+                    pre-selected; client_directory.js only fills this list
+                    once a Client is (re)selected. #}
                     <select class="overlay-create-input" id="contact_id" data-create-field="contact_id">
                         <option value="">— Select Contact —</option>
                         <option value="__add_new__">+ Add new contact…</option>
@@ -102,14 +96,11 @@
             <div class="overlay-property-row">
                 <span class="overlay-property-label">Initial Deadline</span>
                 <span class="overlay-property-value">
-                    {# Auto-computed (18 Aug 2026, per Ezekiel), not directly
-                    editable — see _recompute_initial_deadline() in
-                    project_overlay.py. C&CM: matches the Concept & KV
-                    deadline when that's needed, else the earliest deliverable
-                    deadline; Standard: always the earliest deliverable
-                    deadline. Kept in sync live by bindDetailsStep's autosave
-                    handler (project_overlay_create.js) whenever a field that
-                    could move it changes. #}
+                    {# Read-only, computed by _recompute_initial_deadline()
+                    (routes/project_overlay/_common.py): the Concept & KV
+                    deadline for C&CM when needed, else the earliest
+                    deliverable deadline. project_overlay_create.js refreshes
+                    it after autosave. #}
                     <span id="overlay-create-initial-deadline-value">{{ project.first_output_deadline.strftime('%d %b %Y') if project.first_output_deadline else 'Auto - Based on earliest deadline added' }}</span>
                 </span>
             </div>
@@ -125,12 +116,8 @@
 
     <div class="overlay-details-right">
         {% if can_manage_reference_files %}
-        {# Reuses the exact same partial + JS (project_details_card.js) the
-        live overlay's Details tab uses — task #63, per Ezekiel's "remember
-        our current conventions" instruction from the Deliverables step.
-        _details_reference_files.html wraps itself in its own card() call
-        already, so no extra wrapping needed here. Not brief-type-scoped,
-        so it lives outside both scope divs below. #}
+        {# Same partial and JS (project_details_card.js) as the live Details
+        tab; it brings its own card(). Shared by both brief types. #}
         {% include "project_overlay/_details_reference_files.html" %}
         {% endif %}
 
@@ -188,15 +175,9 @@
         <div class="overlay-create-scope{% if project.brief_type != 'ccm' %} is-hidden{% endif %}"
             data-create-scope="ccm">
             {% call card('Concept & KV') %}
-            {# Urgency removed from create mode (18 Aug 2026, per Ezekiel —
-            "ripping this out, will rework later after we deploy this
-            update"). Left as a real, harmless-if-unsent field on the model
-            and in overlay_create_draft()'s per-field handling — nothing
-            currently posts 'urgency', so it just never gets set. #}
-            {# Concept & KV merged into one tickbox/deadline/requirements/
-            options set (18 Aug 2026, per Ezekiel — "they are always
-            together"). See overlay_create_draft()'s comment for how this
-            maps onto the model's still-separate concept_*/kv_* columns. #}
+            {# One set of fields covers both Concept and KV;
+            overlay_create_draft() maps it onto the separate concept_*/kv_*
+            columns. #}
             <div class="overlay-property-row">
                 <span class="overlay-property-label">Concept &amp; KV Needed</span>
                 <span class="overlay-property-value">

@@ -1,7 +1,6 @@
 """
-Client Servicing — Dashboard section. The module's landing page and first rail
-entry: the daily-standup overview. Aggregation lives in lib/dashboard.py; this
-route only gates access and renders.
+Client Servicing — Dashboard, the module's landing page. Aggregation lives
+in lib/dashboard.py; these routes only gate access and render.
 """
 from flask import render_template
 from flask_login import login_required
@@ -24,7 +23,7 @@ def index():
 @login_required
 @require_cs
 def dashboard_panels():
-    """Panels fragment for the SSE live refresh — same context as the page,
-    rendered on its own so client_servicing_dashboard.js can swap it in."""
+    """Panels fragment for the SSE live refresh; client_servicing_dashboard.js
+    fetches it and swaps it in."""
     actor = effective_user()
     return render_template('client_servicing/_dashboard_panels.html', **dashboard_context(actor))

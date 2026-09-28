@@ -1,9 +1,6 @@
-"""My performance — the period arithmetic, the tiles, the panels and the
-charts.
+"""Performance page: period arithmetic, tiles, panels, report sections and charts.
 
-Plain stubs again: lib/performance.py and lib/charts.py read attributes and
-never query, so none of this needs the app fixture. The stub guard below
-keeps the fields honest against the real columns.
+Plain stubs: lib/performance.py and lib/charts.py never query, so no app fixture.
 """
 from datetime import date
 
@@ -11,7 +8,7 @@ from app.modules.hse.lib import charts
 from app.modules.hse.lib.computed import SLA_DAYS
 from app.modules.hse.lib.performance import (
     age_series, closed_by_severity, compliance_panel, coverage_series,
-    expiring_next, open_by_age, period, read_outs, reporting,
+    expiring_next, navigation, open_by_age, period, read_outs, reporting,
     schedule_coverage, sla_table, tiles, trend_months,
 )
 from app.modules.hse.models import HseEntry, HseSchedule
@@ -32,7 +29,7 @@ class _Person:
 
 
 class _Ref:
-    """A compliance certificate: a stable id, and a name that can be edited."""
+    """A compliance item: stable id, editable label."""
     def __init__(self, id, label):
         self.id = id
         self.label = label
@@ -74,8 +71,7 @@ def sched(**kw):
 
 
 def test_the_stubs_only_use_real_columns():
-    """A column rename must break the stubs rather than leave these tests
-    passing against fields that no longer exist."""
+    """Every stub field is a real model column, so a rename fails here."""
     for fields, model in ((ENTRY_FIELDS, HseEntry), (SCHEDULE_FIELDS, HseSchedule)):
         columns = {c.key for c in model.__table__.columns}
         missing = [n for n in fields if n not in columns]
@@ -93,8 +89,7 @@ def test_a_month_compares_against_the_month_before():
 
 
 def test_a_year_is_the_trailing_twelve_months_not_january_to_december():
-    """A review in September should read the twelve months he actually
-    worked, not eight months and a gap."""
+    """The year view is the trailing twelve months ending this month."""
     w = period('year', TODAY)
     assert (w['start'], w['end']) == (date(2025, 10, 1), date(2026, 9, 30))
     assert (w['prev_start'], w['prev_end']) == (date(2024, 10, 1), date(2025, 9, 30))
@@ -126,8 +121,7 @@ def _closed(day, severity='Medium', opened=None, **kw):
 
 
 def test_a_falling_time_to_close_reads_as_an_improvement():
-    """Lower is better here. An arrow that does not know that is worse than
-    no arrow at all."""
+    """For time-to-close, a lower value counts as improved."""
     entries = [
         _closed(date(2026, 8, 21), opened=date(2026, 8, 1)),   # 20 days, prev
         _closed(date(2026, 9, 6), opened=date(2026, 9, 1)),    # 5 days, now
@@ -163,8 +157,7 @@ def test_the_average_names_how_much_of_it_was_someone_elses_delay():
 
 
 def test_an_empty_period_gives_dashes_not_zeroes():
-    """Nothing closed is not a 0% on-time rate, and the tile must not imply
-    one."""
+    """With no data, rate tiles show None, not 0."""
     for tile in tiles([], [], period('month', TODAY), TODAY):
         if tile['key'] in ('on_time', 'speed', 'coverage'):
             assert tile['value'] is None
@@ -194,8 +187,7 @@ def test_the_bars_and_the_tile_come_from_the_same_coverage():
 
 
 def test_a_month_with_nothing_closed_breaks_the_line_rather_than_dropping_to_zero():
-    """Nothing closed is not an instant turnaround, and a line through zero
-    would say it was."""
+    """A month with nothing closed is None and breaks the line, not a zero."""
     months = trend_months(date(2026, 9, 30))
     entries = [_closed(date(2026, 9, 6), opened=date(2026, 9, 1))]
     series = age_series(entries, months)
@@ -234,8 +226,7 @@ def test_an_empty_chart_still_draws_its_gridlines():
 # --- the panels -----------------------------------------------------------
 
 def test_small_counts_do_not_repeat_gridline_labels():
-    # A month topping out at 1 or 2 must not round three even gridlines into
-    # duplicates like 0, 1, 1 — the officer's metrics are mostly low counts.
+    # Low maxima must not round the three gridlines into duplicates like 0, 1, 1.
     for top in (1, 2, 3):
         drawn = charts.grouped_bars(
             [{'label': 'Jan', 'planned': top, 'done': 0}])
@@ -279,10 +270,7 @@ def test_a_renewal_filed_after_expiry_is_counted_but_not_as_on_time():
 
 
 def test_renaming_a_certificate_keeps_its_renewal_history():
-    """The whole point of the reference: the two entries carry different
-    display names — as if the item were renamed between filings — but the
-    same id, so they still count as one certificate's renewal, not two new
-    items."""
+    """Renewals group by compliance_item_id, so a renamed item still counts as one."""
     cert = _Ref(3, 'ISO 45001:2018')
     old = entry(id=1, register='compliance_renewal', ref='COM-0001',
                 entry_date=date(2025, 9, 1), due_at=date(2026, 9, 1),
@@ -295,8 +283,7 @@ def test_renaming_a_certificate_keeps_its_renewal_history():
 
 
 def test_a_certificate_with_none_set_is_skipped_not_grouped():
-    """Two entries with no certificate must not collapse into one group and
-    invent a renewal between unrelated rows."""
+    """Entries with no compliance_item_id are not grouped into a fake renewal."""
     a = entry(id=1, register='compliance_renewal', ref='COM-0001',
               entry_date=date(2025, 9, 1), due_at=date(2026, 9, 1),
               compliance_item_id=None)
@@ -330,8 +317,7 @@ def test_open_actions_land_in_the_right_age_bucket():
 
 
 def test_a_log_has_no_open_actions_to_age():
-    """A toolbox talk either happened or was never logged. It must not sit in
-    the ageing panel forever."""
+    """Log-type registers (e.g. toolbox talk) never appear in the ageing panel."""
     talk = entry(id=1, register='toolbox_talk', entry_date=date(2026, 1, 1))
     assert open_by_age([talk], TODAY)['total'] == 0
 
@@ -358,8 +344,7 @@ def test_the_report_prints_the_sla_it_judges_against_worst_first():
 
 
 def test_schedule_coverage_puts_the_worst_round_first():
-    """One failing schedule must not be averaged away by the ones that went
-    fine, so the weakest sorts to the top."""
+    """Schedule coverage rows sort lowest percentage first."""
     good = sched(id=1, label='Weekly walk', frequency='weekly', weekday=0,
                  starts_on=date(2026, 9, 1))
     bad = sched(id=2, label='Forklift check', frequency='weekly', weekday=1,
@@ -388,8 +373,7 @@ def test_expiring_next_lists_soonest_first_and_ignores_what_already_went():
 
 
 def test_a_read_out_is_never_written_about_a_number_that_does_not_exist():
-    """The closing notes come off the figures. With nothing recorded there is
-    nothing to say, and the report says nothing rather than guessing."""
+    """With no data, read_outs returns no notes."""
     window = period('month', TODAY)
     notes = read_outs(tiles([], [], window, TODAY),
                       reporting([], window),
@@ -399,8 +383,7 @@ def test_a_read_out_is_never_written_about_a_number_that_does_not_exist():
 
 
 def test_a_completed_induction_is_not_an_open_action():
-    """Its register has no closing date, so the panel has to read the status.
-    Left alone, a finished training course would age forever."""
+    """A register with no closed_at is judged open/closed by status."""
     done = entry(id=1, register='induction_training', ref='TRN-0001',
                  entry_date=date(2025, 10, 1), status='Completed')
     assert open_by_age([done], TODAY)['total'] == 0
@@ -424,28 +407,49 @@ def test_severity_rows_run_worst_first():
 # --- chart sizing ---------------------------------------------------------
 
 def test_the_chart_is_sized_to_the_width_it_will_render_at():
-    """The SVG scales everything inside it, type included. A chart drawn at
-    556 and stretched across a 1160px card renders its 9px labels at 19px,
-    which is why the screen and the report ask for different widths."""
+    """Screen and print charts use their own widths, since SVG scaling also scales text."""
     assert charts.PRINT_WIDTH < charts.SCREEN_WIDTH
     screen = charts.grouped_bars([{'label': 'Jan', 'planned': 4, 'done': 2}])
     report = charts.grouped_bars([{'label': 'Jan', 'planned': 4, 'done': 2}],
                                  width=charts.PRINT_WIDTH, height=230)
     assert screen['width'] == charts.SCREEN_WIDTH
     assert report['width'] == charts.PRINT_WIDTH
-    # The bars scale with the chart rather than staying a fixed pixel size,
-    # so neither surface ends up with hairlines or slabs.
+    # Bar width scales with chart width.
     assert report['bars'][0]['w'] < screen['bars'][0]['w']
 
 
 def test_bars_share_the_width_out_however_many_months_there_are():
-    """Six months and twelve months both have to look deliberate."""
+    """Bar width adapts to the number of months and never overflows."""
     six = charts.grouped_bars([{'label': str(i), 'planned': 2, 'done': 1}
                                for i in range(6)])
     twelve = charts.grouped_bars([{'label': str(i), 'planned': 2, 'done': 1}
                                   for i in range(12)])
     assert six['bars'][0]['w'] > twelve['bars'][0]['w']
-    # Nothing runs off the right edge either way.
     for drawn in (six, twelve):
         last = drawn['bars'][-1]
         assert last['x'] + last['w'] <= drawn['width'] + 0.5
+
+
+# --- moving between periods --------------------------------------------------
+
+def test_flipping_month_and_year_never_walks_back_in_time():
+    """Flipping Month/Year keeps the same anchor month instead of drifting backwards."""
+    anchor = TODAY
+    for _ in range(5):
+        month = navigation(period('month', anchor), TODAY)['month']
+        anchor = date.fromisoformat(month + '-01')
+        year = navigation(period('year', anchor), TODAY)['month']
+        anchor = date.fromisoformat(year + '-01')
+    assert anchor == TODAY.replace(day=1)
+
+
+def test_the_arrows_step_a_month_or_a_year_and_stop_at_now():
+    now = navigation(period('month', TODAY), TODAY)
+    assert now['prev'] == '2026-08' and now['next'] is None and now['is_current']
+
+    back = navigation(period('month', date(2026, 5, 1)), TODAY)
+    assert back['next'] == '2026-06' and not back['is_current']
+
+    year = navigation(period('year', date(2026, 1, 1)), TODAY)
+    assert year['prev'] == '2025-01'
+    assert year['next'] == '2026-09'     # would overshoot, so lands on now

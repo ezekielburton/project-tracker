@@ -1,15 +1,7 @@
-// digital_innovation_templates.js — Digital Innovation module, the
-// admin-only Edit Templates screen. Same "fetch an HTML fragment and
-// swap it in" pattern as digital_innovation_board.js's feature detail
-// modal: every add/edit/delete/move POSTs or DELETEs, then swaps the
-// returned fragment into #di-templates-body. As of 3 Sep 2026 that
-// swap also happens on a DI-wide live SSE ping (another admin's own
-// add/edit/delete/move) — safe to always auto-apply (Ezekiel's explicit
-// choice) because the add/edit modal (#di-template-step-modal) lives
-// OUTSIDE #di-templates-body entirely, so refreshing the list behind it
-// never touches whatever's currently typed into an open modal. See
-// digital_innovation_live.js for the shared connection-watching helper
-// this calls into.
+// Digital Innovation Edit Templates screen (admin only). Every add/edit/
+// delete/move request returns the _templates_body.html fragment, swapped into
+// #di-templates-body. A DI-wide SSE ping re-fetches it too; that is safe
+// while editing because the step modal sits outside #di-templates-body.
 
 if (!window._diTemplatesDispatcherWired) {
     window._diTemplatesDispatcherWired = true;
@@ -62,9 +54,8 @@ if (!window._diTemplatesDispatcherWired) {
     });
 }
 
-// Set by openDiTemplateStepModal(): null stepId means "adding a new step
-// to _diTemplateModalStage"; a stepId means "editing that existing step"
-// (its stage never changes, so the stage isn't needed once editing).
+// Set by openDiTemplateStepModal(): no stepId means "add a step to
+// _diTemplateModalStage"; a stepId means "edit that step" (stage unused).
 var _diTemplateModalStepId = null;
 var _diTemplateModalStage = null;
 
@@ -155,20 +146,14 @@ function _diApplyTemplatesBodyAction(fetchPromise) {
         })
         .then(function (html) { if (body) body.innerHTML = html; })
         .catch(function () {
-            // Delete/move failures are rare (a 404 on an already-removed
-            // row, two admins editing at once) — reload rather than leave
-            // the screen showing stale state silently.
+            // Reload so a failed delete/move (e.g. a row already removed) does not leave stale state.
             window.location.reload();
         });
 }
 
 
-// Re-fetches _templates_body.html fresh and swaps it into
-// #di-templates-body — same innerHTML-swap _diApplyTemplatesBodyAction
-// already uses for every mutating action above, not a whole-node
-// replaceWith, since (unlike _board_columns.html/_archive_lists.html)
-// this fragment was never self-wrapping to begin with — #di-templates-
-// body is templates.html's own wrapper, not part of the fragment.
+// Re-fetches _templates_body.html into #di-templates-body. Uses innerHTML
+// because the wrapper lives in templates.html, not in the fragment.
 function diRefreshTemplatesBody() {
     var body = document.getElementById('di-templates-body');
     if (!body) return;
@@ -180,9 +165,7 @@ function diRefreshTemplatesBody() {
         })
         .then(function (html) { body.innerHTML = html; })
         .catch(function () {
-            // A failed live refresh isn't worth surfacing to the user —
-            // the page just stays showing what it last successfully
-            // loaded, same as if the ping had never arrived.
+            // Silent: the page keeps its last state.
         });
 }
 

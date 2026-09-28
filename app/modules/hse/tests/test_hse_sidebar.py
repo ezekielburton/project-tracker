@@ -1,10 +1,8 @@
 """
-What a single-module role sees.
+Sidebar and module rail for the single-module HSE role.
 
-The HSE officer is the first role meant to see *less* of the app, and the
-sidebar is hand-written markup with no per-item gate — so the decision lives
-in one capability, `view_workspace`, and these assertions are what stop it
-drifting.
+The sidebar has no per-item gate, so what the officer sees hangs on one
+capability, `view_workspace`.
 """
 from flask import url_for
 
@@ -31,8 +29,7 @@ def _user(db_session, tag, role):
 
 
 def test_only_the_single_module_role_lacks_the_workspace():
-    """A new role added without view_workspace would silently get a nearly
-    empty sidebar. If this fails, decide deliberately — then update it."""
+    """Only the hse role lacks view_workspace; a new role without it gets a near-empty sidebar."""
     without = sorted(r for r, caps in ROLE_CAPABILITIES.items()
                      if '*' not in caps and 'view_workspace' not in caps)
     assert without == ['hse'], (
@@ -67,8 +64,7 @@ def test_everyone_else_keeps_the_full_sidebar(app, client, db_session):
 
 
 def test_hiding_is_not_the_gate(app, client, db_session):
-    """The sidebar is cosmetic. Projects and the dashboard were
-    login-only, so the officer could have reached them by typing the URL."""
+    """Hidden links are cosmetic; the officer still gets 403 on projects and dashboard by URL."""
     officer = _user(db_session, 'gate', 'hse')
     login_as(client, app, officer, 'password123')
     with app.test_request_context():
@@ -80,11 +76,38 @@ def test_hiding_is_not_the_gate(app, client, db_session):
 
 
 def test_raise_an_issue_is_gone(app, client, db_session):
-    """Retired — the Signal tray already covers it. This catches it coming
-    back rather than leaving two ways to report the same thing."""
+    """The sidebar has no "raise an issue" link; the Signal tray covers reporting."""
     designer = _user(db_session, 'signal', 'designer')
     login_as(client, app, designer, 'password123')
     with app.test_request_context():
         url = url_for('wiki.index')
 
     assert 'data-link="raise-issue"' not in client.get(url).get_data(as_text=True)
+
+
+# --- the module rail ---------------------------------------------------------
+
+def test_a_section_lists_its_registers_and_badges_their_total(app):
+    """A rail section's badge sums its registers' counts; a one-register section has no sub-list."""
+    from app.modules.hse.lib.rail import rail_items
+    with app.test_request_context():
+        items = {i['key']: i for i in rail_items({'incidents': 2, 'first_aid': 3})}
+    incidents = items['incidents']
+    assert incidents['count'] == 5
+    counts = {c['key']: c['count'] for c in incidents['children']}
+    assert counts['incidents'] == 2 and counts['first_aid'] == 3
+    assert counts['lost_time_injury'] is None
+    assert 'children' not in items['compliance']
+    assert [c['key'] for c in items['calendar']['children']] == ['calendar', 'schedule']
+
+
+def test_daily_log_is_a_plain_link_right_under_overview(app):
+    """Daily log sits between Overview and Calendar, with no sub-list."""
+    from app.modules.hse.lib.rail import rail_items
+    with app.test_request_context():
+        items = rail_items({'daily_log': 4})
+    assert [i['key'] for i in items[:3]] == ['overview', 'daily_log', 'calendar']
+    daily = items[1]
+    assert daily['label'] == 'Daily log' and daily['count'] == 4
+    assert daily['url'].endswith('/hse/daily_log/daily_log')
+    assert 'children' not in daily

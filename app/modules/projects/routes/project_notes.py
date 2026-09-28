@@ -8,16 +8,16 @@ from app.modules.core.shared.lib.capabilities import can, effective_user
 
 project_notes_bp = Blueprint('project_notes', __name__, template_folder='../templates')
 
-# Narrower video list than Reference Files' — must play inline in <video>.
+# Videos are limited to formats that play inline in <video>.
 _CHAT_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 _CHAT_VIDEO_EXTENSIONS = {'mp4', 'mov', 'webm', 'm4v'}
-# Image cap is a backstop (client already compresses); video cap is the real limit.
+# Image cap is a backstop (the client compresses); the video cap is the real limit.
 _CHAT_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 _CHAT_VIDEO_MAX_BYTES = 16 * 1024 * 1024
 
 
 def _save_chat_attachment(project, upload):
-    """Validates and uploads one chat attachment to the NAS. Returns
+    """Validate and upload one chat attachment to the NAS. Returns
     (True, (stored_filename, original_filename, type)) or (False, error_message)."""
     import uuid
     from app.modules.core.shared.services.nas import upload_app_file, build_chat_file_path
@@ -39,8 +39,7 @@ def _save_chat_attachment(project, upload):
         label = 'Video' if attachment_type == 'video' else 'Image'
         return False, f'{label} is too large (max {max_bytes // (1024 * 1024)}MB).'
 
-    # UUID-based filename — a busy chat can pull in "IMG_1234.jpg" from many
-    # phones into the same folder, so plain filenames risk collisions.
+    # UUID name: phone uploads often share names like "IMG_1234.jpg".
     stored_filename = f'{uuid.uuid4().hex}.{ext}'
     nas_file_path = build_chat_file_path(project, stored_filename)
     nas_folder = nas_file_path.rsplit('/', 1)[0]
@@ -54,12 +53,12 @@ def _save_chat_attachment(project, upload):
 
 
 def _get_actor():
-    """Emulation-aware actor. Local name for core/shared's effective_user()."""
+    """Emulation-aware actor (alias for effective_user())."""
     return effective_user()
 
 
 def _can_manage_notes(project, actor):
-    # Who's actually working on this project: CS lead, secondary CS, owner, designers, admin.
+    # Chat post gate: manage_projects, CS lead, secondary CS, owner, assigned designers.
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
     return (
         can('manage_projects', actor)
@@ -69,9 +68,15 @@ def _can_manage_notes(project, actor):
         or any(pd.user_id == actor.id for pd in project.assigned_designers)
     )
 
+def _can_read_chat(project, actor):
+    """Chat read gate: anyone who can open the Projects workspace (and so the
+    overlay) can read a project's chat. Roles outside it, like the HSE
+    officer, cannot."""
+    return can('view_workspace', actor)
+
 def _get_mentionable_users(project):
-    """Concrete @-mentionable roster: CS lead, secondary CS, project owner,
-    assigned designers. Excludes admin/management — too broad a set to mention."""
+    """@-mentionable users: CS lead, secondary CS, owner, assigned designers.
+    Admin/management are left out as too broad."""
     seen_ids = set()
     users = []
 
@@ -90,8 +95,7 @@ def _get_mentionable_users(project):
 
 
 def _is_designer(user):
-    # Role literal on purpose: this answers "is this person a designer",
-    # which admin is not. can('claim_work') includes admin via the wildcard.
+    # Role literal: can('claim_work') would also match admin via the wildcard.
     return user.role in ('designer', 'team_lead')
 
 def _overlapping_site_visit(visit_user, start_at, end_at, exclude_id=None):
@@ -109,8 +113,8 @@ def _overlapping_site_visit(visit_user, start_at, end_at, exclude_id=None):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/notes')
 @login_required
 def overlay_notes(project_id):
-    """Site Visits tab — notes now live in the chat drawer (see overlay_chat()
-    below); URL kept as /overlay/notes so the existing JS call site still works."""
+    """Site Visits tab. The URL says "notes" to match the tab's key
+    (data-main-tab="notes") and the JS that fetches it."""
     from app.modules.core.shared.models import User
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
@@ -129,8 +133,8 @@ def overlay_notes(project_id):
 
 
 def _highlight_mentions(text, mentioned_users):
-    """Wraps each mentioned user's "@Name" in a highlight span, escaping the rest.
-    Matches on their current name; longest names checked first to avoid partial shadowing."""
+    """Wrap each mentioned user's "@Name" in a highlight span, escaping the rest.
+    Matches current names, longest first so a short name can't shadow a longer one."""
     from markupsafe import Markup, escape
     if not text:
         return Markup('')
@@ -151,9 +155,9 @@ def _highlight_mentions(text, mentioned_users):
 
 
 def _build_chat_rows(notes, actor, is_admin):
-    """Turns notes into template-ready rows: Dubai-local time, day_label (day
-    dividers), is_own/can_delete (5-min self-delete window), reaction_groups
-    (emoji -> count/reacted_by_me), and body_html (mentions highlighted)."""
+    """Turn notes into template rows: Dubai-local time, day divider labels,
+    is_own/can_delete (5-min self-delete window), grouped reactions, and
+    body_html with mentions highlighted."""
     from datetime import datetime, timezone, timedelta
     from collections import OrderedDict
     dubai_tz = timezone(timedelta(hours=4))
@@ -214,13 +218,9 @@ def _build_chat_rows(notes, actor, is_admin):
 
 
 def render_project_chat(project, actor):
-    """The chat drawer's rendered content. Shared by the overlay drawer and the
-    global Chat tray, so there is one chat view rather than two.
-
-    Advances this user's "new chat" watermark — deliberately its own, separate
-    from the overlay's "new updates" one, so opening some other tab never
-    silently marks unread chat messages as read.
-    """
+    """Render the chat drawer, shared by the overlay and the Chat tray.
+    Advances the user's chat watermark, which is separate from the overlay's
+    "new updates" one so other tabs never mark chat as read."""
     notes = ProjectNote.query.filter_by(project_id=project.id).order_by(ProjectNote.created_at.asc()).all()
     # At most one pinned note per project (enforced in toggle_pin_note).
     pinned_note = next((n for n in notes if n.is_pinned), None)
@@ -239,14 +239,18 @@ def render_project_chat(project, actor):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/chat')
 @login_required
 def overlay_chat(project_id):
-    """Persistent chat drawer — every ProjectNote for this project, oldest first."""
-    return render_project_chat(Project.query.get_or_404(project_id), _get_actor())
+    """The overlay's chat drawer: every note for this project, oldest first."""
+    project = Project.query.get_or_404(project_id)
+    actor = _get_actor()
+    if not _can_read_chat(project, actor):
+        return jsonify({'error': 'You do not have access to project chat.'}), 403
+    return render_project_chat(project, actor)
 
 
 @project_notes_bp.route('/projects/<int:project_id>/overlay/chat/mentionable')
 @login_required
 def chat_mentionable_users(project_id):
-    """Backs the composer's @-mention picker. Excludes the actor themself."""
+    """Users for the composer's @-mention picker, excluding the actor."""
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     if not _can_manage_notes(project, actor):
@@ -263,8 +267,7 @@ def create_note(project_id):
     if not _can_manage_notes(project, actor):
         abort(403)
 
-    # Attachments post multipart/form-data; plain text posts JSON. request.files
-    # only populates on multipart, so that's what tells the two paths apart.
+    # Attachments post multipart; plain text posts JSON. request.files tells them apart.
     upload = request.files.get('file')
     if upload and upload.filename:
         data = request.form
@@ -289,8 +292,8 @@ def create_note(project_id):
             return jsonify({'success': False, 'error': result}), 400
         attachment_filename, attachment_original_filename, attachment_type = result
 
-    # Re-validated against the real mentionable set — never trust client ids outright.
-    # Multipart form can't carry a real array, so it arrives JSON-encoded there.
+    # Never trust client ids: re-check against the mentionable set.
+    # Multipart can't carry an array, so there it arrives JSON-encoded.
     raw_mentioned_ids = data.get('mentioned_ids')
     if isinstance(raw_mentioned_ids, str):
         import json
@@ -335,8 +338,7 @@ def create_note(project_id):
 @project_notes_bp.route('/projects/notes/<int:note_id>/attachment')
 @login_required
 def chat_attachment(note_id):
-    """Serves a chat image/video inline so a bubble's <img>/<video> tag can
-    point straight at this URL, instead of forcing a Save As dialog."""
+    """Serve a chat image/video inline so <img>/<video> tags can point at it."""
     import io
     import mimetypes
     from flask import send_file
@@ -345,6 +347,8 @@ def chat_attachment(note_id):
     note = ProjectNote.query.get_or_404(note_id)
     if not note.attachment_filename:
         abort(404)
+    if not _can_read_chat(note.project, _get_actor()):
+        abort(403)
 
     nas_path = build_chat_file_path(note.project, note.attachment_filename)
     try:
@@ -479,8 +483,7 @@ def delete_note(project_id, note_id):
 @project_notes_bp.route('/projects/<int:project_id>/overlay/notes/<int:note_id>/pin', methods=['POST'])
 @login_required
 def toggle_pin_note(project_id, note_id):
-    """Pin/unpin a message. One pin per project — pinning a new message
-    replaces whichever one was pinned before."""
+    """Pin/unpin a message. One pin per project: pinning replaces the current one."""
     note = ProjectNote.query.get_or_404(note_id)
     if note.project_id != project_id:
         abort(404)
@@ -504,8 +507,7 @@ def toggle_pin_note(project_id, note_id):
 @project_notes_bp.route('/projects/notes/<int:note_id>/react', methods=['POST'])
 @login_required
 def toggle_reaction(note_id):
-    """Add/replace/remove the caller's own reaction. Same emoji again removes it,
-    a different emoji replaces it."""
+    """Toggle the caller's reaction: same emoji removes it, a different one replaces it."""
     from app.modules.core.shared.models import ProjectNoteReaction
     note = ProjectNote.query.get_or_404(note_id)
     actor = _get_actor()

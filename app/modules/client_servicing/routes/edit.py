@@ -1,11 +1,11 @@
 """
-Client Servicing field edits — one PATCH endpoint, cell by cell.
+Client Servicing field edits — one PATCH endpoint, one cell at a time.
 
-CS-only fields write straight to the project's ClientServicing row. Writeback
-fields (job number, CS lead, owner, SPOC, install date, value, due date) go
-through projects/services/mutations.py, so they raise the same notifications
-and activity-log entries as a Projects-overlay edit — on a broader permission
-(any CS/management/admin user).
+CS-only fields write to the ClientServicing row. Write-back fields (job
+number, CS lead, owner, SPOC, install date, value, due date) go through
+projects/services/mutations.py, so they notify and log like a Projects edit,
+but are open to any user who passes require_cs. Finance fields also need
+edit_finance.
 """
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -31,8 +31,7 @@ from app.modules.client_servicing.routes.table import _serialize_person
 
 
 class _FieldError(ValueError):
-    """Raised by a field parser for a value that fails validation — the
-    message is shown back to the user as-is."""
+    """A field value failed validation; the message is shown to the user as-is."""
 
 
 def _text_parser(max_len):
@@ -100,8 +99,7 @@ def _parse_validation(value):
 
 
 def _parse_invoice_month(value):
-    """The month picker sends YYYY-MM; anything a person pasted goes through
-    the same reader the migration used."""
+    """Month picker value (YYYY-MM) or free text, parsed by lib/months.parse_month."""
     if value in (None, ''):
         return None
     parsed = parse_month(value)
@@ -122,8 +120,7 @@ def _parse_scope_id(value):
     return scope_id
 
 
-# field name -> parser(raw_json_value) -> stored value (or raises _FieldError).
-# CS-only fields only — see module docstring.
+# CS-only field name -> parser(raw value) -> stored value (raises _FieldError).
 _EDITABLE_FIELDS = {
     'lpo': _text_parser(120),
     'store_location': _text_parser(255),
@@ -145,8 +142,7 @@ _EDITABLE_FIELDS = {
     'validation_status': _parse_validation,
 }
 
-# Finance/master-control fields — gated on edit_finance, a NARROWER
-# capability than page access, same gate as the Invoicing tab.
+# Finance fields: need edit_finance, narrower than page access.
 _FINANCE_FIELDS = {
     'lpo_date', 'invoice_number', 'invoice_date',
     'invoice_amount', 'gr_received', 'invoice_uploaded', 'validation_status',
@@ -187,11 +183,8 @@ def _display_detail_value(field, value):
 
 
 def _resolve_person(value, role):
-    """value is a raw user id (or '' / None to clear — neither CS lead nor
-    project owner can actually be cleared, so an empty value is always a
-    validation error here). Only an active user with the right role is
-    ever a valid target — same rule the existing reassign/set-owner routes
-    enforce."""
+    """Raw user id -> active User with the given role. Empty is an error:
+    CS lead and project owner cannot be cleared."""
     if value in (None, ''):
         raise project_mutations.FieldError('is required')
     try:
@@ -229,10 +222,9 @@ def _save_cs_only_field(project, field, raw_value):
 _CS_STATUS_SET = set(CS_STATUS_OPTIONS)
 
 def _save_cs_status(project, raw_value):
-    """Manual operational-status overlay. Stores on the CS row only —
-    never Project.project_status. An empty value clears it back to the
-    derived status. Returns the recomputed effective status so the cell
-    can re-render pill + indicator chips + the auto hint."""
+    """Manual CS status override, stored on the CS row only (never
+    Project.project_status). Empty clears it back to the derived status.
+    Returns the effective status so the cell can re-render."""
     value = (raw_value or '').strip()
     if value and value not in _CS_STATUS_SET:
         return None, 'must be a valid status'
@@ -255,9 +247,8 @@ def _save_cs_status(project, raw_value):
 _RISK_SET = set(RISK_OPTIONS)
 
 def _save_cs_risk(project, raw_value):
-    """Manual installation-risk override. Stores on the CS row only; empty
-    clears it back to the derived risk. Returns the recomputed effective
-    risk so the calendar cell can re-render."""
+    """Manual installation-risk override, stored on the CS row. Empty clears
+    it back to the derived risk. Returns the effective risk for re-render."""
     value = (raw_value or '').strip()
     if value and value not in _RISK_SET:
         return None, 'must be a valid risk'
@@ -279,10 +270,8 @@ def _save_cs_risk(project, raw_value):
 @login_required
 @require_cs
 def update_field(project_id):
-    # Resolved once and reused for the finance check and every mutation call
-    # below — an admin previewing the page while emulating someone else has
-    # the resulting notification/activity-log entry attributed to that
-    # person, not to the real admin.
+    # Emulation-aware: the finance check, notifications and activity log all
+    # use the emulated user, not the real admin.
     actor = effective_user()
 
     project = Project.query.get_or_404(project_id)
@@ -315,8 +304,7 @@ def update_field(project_id):
         if field == 'cs_lead_id':
             new_lead = _resolve_person(raw_value, 'cs')
             project_mutations.reassign_cs_lead(project, new_lead, actor)
-            # 'person' lets the table show the avatar chip immediately
-            # instead of plain text, same as a live-refresh would.
+            # 'person' lets the cell render the avatar chip straight away.
             return jsonify({'field': field, 'value': new_lead.name, 'person': _serialize_person(new_lead)})
 
         if field == 'project_owner_id':

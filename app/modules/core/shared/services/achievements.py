@@ -1,90 +1,80 @@
-"""
-Achievement checker service. Single entry point: check_achievements().
+"""Achievement checker; entry point check_achievements().
 
-Call this AFTER committing whatever action just happened (a project
-submission, a login, a comment, ...) — it runs its own commit(s)
-internally, so your own state changes must already be committed when you
-call it.
+Call it AFTER committing the triggering action: it commits internally. A
+failure rolls back only its own SAVEPOINT, never the caller's pending work.
 """
 from datetime import datetime
 
+from flask import current_app
 
-def check_achievements(user, event_type, metadata=None):
-    """
-    Advances progress on every Achievement whose trigger_event matches
-    event_type, for the given user. If progress reaches an achievement's
-    threshold, marks it earned, notifies the user, and logs an activity
-    entry.
 
-    metadata is accepted but not used by any achievement logic yet — a
-    placeholder for future achievements needing more than a simple "+1
-    per event" rule (e.g. "submit with zero revisions"). Kept now so call
-    sites already pass it and won't need to change when that day comes.
-
-    Never raises — any error is caught, rolled back, and logged rather
-    than propagated. This runs at the tail end of many unrelated,
-    already-critical routes (submission, approval, login...), so a bug in
-    achievement logic must never break any of those.
-    """
+def check_achievements(user, event_type):
+    """+1 progress on each achievement whose trigger_event is event_type; at
+    the threshold, mark it earned, notify the user and log it. Never raises:
+    it runs at the end of critical routes, so errors are logged."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import Achievement, UserAchievement
     from app.modules.core.shared.services.notifications import create_notification
     from app.modules.core.shared.lib.utils import log_activity
 
+    progressed = False
+    newly_earned = []
     try:
-        # Only achievements actually wired to this event. Most calls will
-        # match zero or one achievement, but nothing stops an admin from
-        # defining several achievements on the same trigger_event (e.g. a
-        # "10 submissions" and a "50 submissions" achievement both
-        # listening for 'project_submitted').
-        matching_achievements = Achievement.query.filter_by(trigger_event=event_type).all()
+        # SAVEPOINT: an error rolls back only this work, never the caller's.
+        with db.session.begin_nested():
+            # Several achievements can share a trigger_event (e.g. 10 and 50 submissions).
+            matching_achievements = Achievement.query.filter_by(trigger_event=event_type).all()
 
-        for achievement in matching_achievements:
-            # Upsert: find this user's progress row for this achievement,
-            # or create one starting at 0 the first time they trigger it.
-            user_achievement = UserAchievement.query.filter_by(
-                user_id=user.id, achievement_id=achievement.id
-            ).first()
+            for achievement in matching_achievements:
+                # Progress row is created on first trigger.
+                user_achievement = UserAchievement.query.filter_by(
+                    user_id=user.id, achievement_id=achievement.id
+                ).first()
 
-            if user_achievement is None:
-                user_achievement = UserAchievement(
-                    user_id=user.id, achievement_id=achievement.id, progress=0
-                )
-                db.session.add(user_achievement)
+                if user_achievement is None:
+                    user_achievement = UserAchievement(
+                        user_id=user.id, achievement_id=achievement.id, progress=0
+                    )
+                    db.session.add(user_achievement)
 
-            # Already earned — don't keep incrementing progress past the
-            # threshold or re-fire the notification a second time. Also
-            # protects against an achievement whose threshold got lowered
-            # by an admin after some users already earned it.
-            if user_achievement.earned_at is not None:
-                continue
+                # Already earned: stop counting and never re-notify (also covers
+                # a threshold lowered after users earned it).
+                if user_achievement.earned_at is not None:
+                    continue
 
-            user_achievement.progress += 1
+                user_achievement.progress += 1
+                progressed = True
 
-            newly_earned = user_achievement.progress >= achievement.threshold
-            if newly_earned:
-                user_achievement.earned_at = datetime.utcnow()
-
-            # Commit the progress/earned state before notifying, since the
-            # notification service expects state committed first.
-            db.session.commit()
-
-            if newly_earned:
-                log_activity(
-                    'achievement_earned',
-                    f'{user.name} earned the achievement "{achievement.name}"',
-                    user=user, entity_type='achievement',
-                    entity_name=achievement.name, entity_id=achievement.id
-                )
-                from flask import url_for
-                create_notification(
-                    recipient=user,
-                    message=f'You earned: {achievement.name}',
-                    notification_type='achievement_earned',
-                    triggered_by=None,  # system-earned, not caused by another user's action
-                    link=url_for('profile.view', user_id=user.id)
-                )
+                if user_achievement.progress >= achievement.threshold:
+                    user_achievement.earned_at = datetime.utcnow()
+                    newly_earned.append(achievement)
     except Exception:
+        current_app.logger.exception(f'Achievement check failed for user {user.id} ({event_type})')
+        return
+
+    if not progressed:
+        return
+
+    try:
+        # Commit progress before notifying.
+        db.session.commit()
+        for achievement in newly_earned:
+            log_activity(
+                'achievement_earned',
+                f'{user.name} earned the achievement "{achievement.name}"',
+                user=user, entity_type='achievement',
+                entity_name=achievement.name, entity_id=achievement.id
+            )
+            from flask import url_for
+            create_notification(
+                recipient=user,
+                message=f'You earned: {achievement.name}',
+                notification_type='achievement_earned',
+                triggered_by=None,  # system-earned, not caused by another user's action
+                link=url_for('profile.view', user_id=user.id)
+            )
+    except Exception:
+        # Past the SAVEPOINT the caller's work is committed with ours (or its
+        # commit already failed), so a full rollback loses nothing more.
         db.session.rollback()
-        import traceback
-        traceback.print_exc()
+        current_app.logger.exception(f'Achievement notification failed for user {user.id} ({event_type})')

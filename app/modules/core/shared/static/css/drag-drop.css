@@ -12,13 +12,7 @@
     word-break: break-word;
     white-space: pre-wrap;
     cursor: text;
-    resize: none; /* divs can't resize but suppress the CSS rule inherited from textarea */
-}
-
-/* Strip resize from flag-specific classes when applied to a div */
-div.flag-reply-input,
-div.flag-create-textarea {
-    resize: none;
+    resize: none; /* cancels resize set by textarea-style classes it may share */
 }
 
 /* Placeholder — shown via data-empty attribute, set/removed by rich-editor.js */

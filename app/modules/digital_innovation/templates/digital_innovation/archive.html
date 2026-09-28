@@ -9,12 +9,9 @@
         {% include "digital_innovation/_sidebar.html" %}
         {% endwith %}
 
-        {# di-board is deliberately a <div>, not a <main> — base.html's
-           #main-content is already the page's one <main> landmark, and
-           spa_strip_response's regex (app/__init__.py) extracts its
-           content by matching up to the FIRST literal "</main>" it finds.
-           A nested <main>...</main> here would close that match early on an SPA
-           nav, dropping everything below it (the DI modals) until a full refresh. #}
+        {# Must stay a <div>, not <main>: spa_strip_response (app/__init__.py)
+           cuts #main-content at the first "</main>", so a nested one drops
+           everything after it on SPA nav. #}
         <div class="di-board">
             <div class="di-board-header">
                 <div>

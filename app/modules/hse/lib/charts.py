@@ -1,33 +1,22 @@
 """
-The two charts on My performance, drawn as SVG on the server.
+View models for the two My performance charts, drawn as server-side SVG so
+they print in the PDF report (canvas prints blank). Colours come from CSS
+classes in the templates.
 
-No chart library, for two reasons: OVP has no charting dependency and this
-module is not the place to add one, and a canvas chart prints blank. The PDF
-export is the whole point of this page, so the chart has to be real markup.
-
-Colours come in as CSS variables, so both themes and the light-only report
-each get the right pair without this file knowing which is which.
-
-**Size the viewBox to roughly the width it will render at.** The SVG scales
-to fill its container, and everything inside scales with it — including the
-type. A 556-wide chart stretched across a 1160px card renders its 9px labels
-at 19px. That is why the screen and the report ask for different widths
-rather than sharing one and hoping.
+Size the viewBox close to the rendered width: the SVG scales to its
+container, text included, so an oversized scale factor inflates the labels.
+That is why screen and print pass different widths.
 """
 import math
 
-# Roughly the width each surface renders a chart at, so the scale factor
-# stays near 1 and the labels come out the size they were written. The
-# default heights are chosen so the two charts together fill the column
-# rather than floating in it — the aspect is the only height control an
-# SVG scaled to its container has.
+# Approximate rendered width per surface, keeping the scale factor near 1.
+# Heights set the aspect ratio, the only height control a scaled SVG has.
 SCREEN_WIDTH = 1100
 PRINT_WIDTH = 690
 
 GRID_LINES = 3
 
-# Share of a month's slot the two bars take between them; the rest is the
-# gap to the next month.
+# Share of a month's slot taken by its two bars; the rest is gap.
 GROUP_SHARE = 0.62
 BAR_GAP = 4
 
@@ -35,17 +24,14 @@ AXIS_FONT = 12
 TICK_FONT = 12.5
 
 
-# Gridline steps, per decade. Denser than a plain 1-2-5 ladder on purpose:
-# with three gridlines, a max of 16 on a 1-2-5 ladder reaches for a top of
-# 30 and leaves half the chart empty above the bars. 6/12/18 is just as
-# sayable and fits.
+# Gridline steps per decade. Denser than 1-2-5 so the top sits close to the
+# data (a max of 16 gives 6/12/18, not 10/20/30).
 _STEPS = (1, 2, 3, 4, 5, 6, 8, 10)
 
 
 def _nice_top(value):
-    """A round number at or above the tallest bar, so the gridlines land on
-    values a person would actually say out loud — and no higher than it has
-    to be, because headroom is chart the reader cannot use."""
+    """The smallest round axis top at or above `value`, so gridlines land
+    on round numbers."""
     if value <= 0:
         return 4
     raw = value / GRID_LINES
@@ -57,10 +43,9 @@ def _nice_top(value):
 
 
 def _gridlines(top, floor, span):
-    """Evenly-spaced lines with whole-number labels. At a small top (a chart
-    maxing at 1 or 2) three evenly-spaced labels round into duplicates like
-    0, 1, 1 — so step by whole numbers there and draw one line per unit. Any
-    remaining rounding collision is dropped rather than drawn twice."""
+    """Evenly spaced gridlines with whole-number labels. A small top gets one
+    line per unit, since rounding would duplicate labels; any remaining
+    duplicates are dropped."""
     if top <= GRID_LINES:
         values = list(range(1, int(top) + 1))
     else:
@@ -77,12 +62,8 @@ def _gridlines(top, floor, span):
 
 def grouped_bars(series, width=SCREEN_WIDTH, height=270,
                  pad_bottom=34, pad_top=16, pad_left=34):
-    """Planned against completed, two bars per month.
-
-    Returns a view model rather than a string: the template draws it, so the
-    markup stays readable and the numbers stay testable. Bar widths come off
-    the chart width, so six months and twelve months both look deliberate.
-    """
+    """Planned vs completed, two bars per month. Returns a view model the
+    template draws; bar widths scale with the number of months."""
     top = _nice_top(max([max(row['planned'], row['done']) for row in series] or [0]))
     floor = height - pad_bottom
     span = floor - pad_top
@@ -117,11 +98,8 @@ def grouped_bars(series, width=SCREEN_WIDTH, height=270,
 
 def line(series, width=SCREEN_WIDTH, height=340,
          pad_bottom=34, pad_top=34, pad_left=34):
-    """Average days to close, month by month.
-
-    A month with nothing closed is a break in the line, not a zero — nothing
-    closed is not instant. That is why the points carry `gap`.
-    """
+    """Average days to close, month by month. A month with nothing closed
+    has y=None and breaks the line; it is not drawn as zero."""
     values = [row['days'] for row in series if row['days'] is not None]
     top = _nice_top(max(values) if values else 0)
     floor = height - pad_bottom
@@ -138,12 +116,11 @@ def line(series, width=SCREEN_WIDTH, height=340,
             'x': round(pad_left + index * step, 1),
             'y': None if days is None else round(floor - span * days / top, 1),
             'days': days,
-            # Every other month, so the axis does not turn into a smear.
+            # Label every other month to keep the axis legible.
             'show_label': index % 2 == 0,
         })
 
-    # One <path> per unbroken run, so a gap is a gap rather than a straight
-    # line drawn through months where nothing happened.
+    # One <path> per unbroken run, so empty months leave a gap.
     paths, run = [], []
     for point in points:
         if point['y'] is None:

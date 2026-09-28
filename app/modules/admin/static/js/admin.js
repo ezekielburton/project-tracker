@@ -1,9 +1,14 @@
-// admin.js — Vitamin-E
-// Admin panel trigger/emulation badge (global, header) + all admin panel section
-// functions: accounts, clients, customers, projects, deliverable/design types,
-// activity log, reference file uploads.
-// Depends on: showToast() — defined in main.js.
-// Loaded after main.js.
+// admin.js — the admin panel and emulation badge in the shell header: emulation,
+// accounts, OVP champions, sounds, project tools, activity log, achievements.
+// Loaded once by base.html (admins only), after main.js; uses showToast,
+// showConfirm and btnLoading/btnDone from there.
+
+// HTML-escapes server text for innerHTML and attribute values ('' for null).
+function adminEsc(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
     // Admin panel open / close
     var adminTrigger = document.getElementById('admin-panel-trigger');
@@ -23,7 +28,6 @@
     }
 
     // Admin section switching
-    // Admin section switching
     document.querySelectorAll('.admin-nav-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             document.querySelectorAll('.admin-nav-btn').forEach(function (b) {
@@ -40,7 +44,7 @@
             if (sectionName === 'projects') loadProjectToolsSection();
             if (sectionName === 'activity') loadActivitySection();
             if (sectionName === 'sounds') loadSoundsSection();
-            if (sectionName === 'achievements') loadAchievementsSection(); // Phase 7 — see bottom of this file
+            if (sectionName === 'achievements') loadAchievementsSection(); // see bottom of this file
 
         });
     });
@@ -77,8 +81,8 @@
             row.className = 'emulate-user-row';
             row.innerHTML =
                 '<div class="emulate-user-info">' +
-                '<span class="emulate-user-name">' + user.name + '</span>' +
-                '<span class="emulate-user-role">' + user.role + '</span>' +
+                '<span class="emulate-user-name">' + adminEsc(user.name) + '</span>' +
+                '<span class="emulate-user-role">' + adminEsc(user.role) + '</span>' +
                 '</div>' +
                 '<button type="button" class="emulate-user-btn" data-id="' + user.id + '">Emulate</button>';
             emulateUserList.appendChild(row);
@@ -144,8 +148,8 @@
             row.className = 'badge-user-row';
             row.innerHTML =
                 '<div class="badge-user-info">' +
-                '<span class="badge-user-name">' + user.name + '</span>' +
-                '<span class="badge-user-role">' + user.role + '</span>' +
+                '<span class="badge-user-name">' + adminEsc(user.name) + '</span>' +
+                '<span class="badge-user-role">' + adminEsc(user.role) + '</span>' +
                 '</div>';
             row.addEventListener('click', function () {
                 fetch('/admin/emulate/' + user.id, {
@@ -228,8 +232,7 @@
         var wrap = document.createElement('div');
         wrap.className = 'ovp-champion-row';
 
-        // "carried over" marks a department nobody has rotated this week — the
-        // helper falls back to the last person set, so it is never empty.
+        // "carried over": nobody was set this week, so the last champion still holds it.
         var held = dept.current ? dept.current.name : 'not set';
         var carried = dept.current && !dept.set_this_week ? ' (carried over)' : '';
         var label = document.createElement('p');
@@ -304,9 +307,8 @@
                 var activeUsers = users.filter(function (u) { return u.is_active; });
                 var deactivatedUsers = users.filter(function (u) { return !u.is_active; });
 
-                // Bespoke groups first, then designers split by team, then one
-                // group per remaining role taken from the capabilities map — a
-                // role added there appears here without touching this file.
+                // Fixed groups first (designers split by team), then one group per
+                // other role in ROLE_LABELS, so a new role shows up here automatically.
                 var TEAM_GROUPED_ROLES = ['cs', 'admin', 'management', 'project_owner', 'designer', 'team_lead'];
                 var roleLabels = window.ROLE_LABELS || {};
 
@@ -350,14 +352,12 @@
                     renderGroup(group.label, members, 'account-user-row');
                 });
 
-                // Anyone no group matched — e.g. a designer with no team set.
-                // Without this they render nowhere and the account looks deleted.
+                // Catch-all (e.g. a designer with no team), so no account goes missing.
                 renderGroup('Other', activeUsers.filter(function (u) {
                     return !rendered[u.id];
                 }), 'account-user-row');
 
-                // Deactivated accounts, pulled out of their normal group into one
-                // muted list at the bottom so they can be found and reactivated.
+                // Deactivated accounts go in one muted list at the bottom.
                 renderGroup('Deactivated', deactivatedUsers, 'account-user-row account-user-row--deactivated');
 
                 if (accountsUserList.children.length === 0) {
@@ -366,23 +366,29 @@
             });
     }
 
-    // Admin avatar picker — one hidden file input + the shared crop modal,
-    // targeting whichever user's "Replace photo" was clicked.
+    // Admin avatar picker: one hidden file input + the shared crop modal,
+    // aimed at whichever user's "Replace photo" was clicked.
     var adminAvatarInput = null;
     var adminAvatarTargetId = null;
+    var adminAvatarCropper = null; // the HelixAvatarCropper the input is wired to
 
     function ensureAdminAvatarCropper() {
-        if (adminAvatarInput || !window.HelixAvatarCropper) return;
+        // avatar-cropper.js re-runs with a new crop modal on every SPA swap;
+        // re-wire when the instance changes so the input never opens a removed modal.
+        var cropperApi = window.HelixAvatarCropper;
+        if (!cropperApi || (adminAvatarInput && adminAvatarCropper === cropperApi)) return;
+        if (adminAvatarInput) adminAvatarInput.remove();
+        adminAvatarCropper = cropperApi;
         adminAvatarInput = document.createElement('input');
         adminAvatarInput.type = 'file';
         adminAvatarInput.accept = 'image/jpeg,image/png,image/webp';
         adminAvatarInput.style.display = 'none';
         document.body.appendChild(adminAvatarInput);
-        HelixAvatarCropper.wireFileInput(adminAvatarInput, 'avatar', function (data) {
+        cropperApi.wireFileInput(adminAvatarInput, 'avatar', function (data) {
             var wrap = document.querySelector('.account-user-avatar[data-id="' + adminAvatarTargetId + '"]');
             if (wrap) {
                 var btn = wrap.querySelector('.account-avatar-btn');
-                wrap.innerHTML = '<img class="user-avatar-img" src="' + data.url + '" alt="">';
+                wrap.innerHTML = '<img class="user-avatar-img" src="' + adminEsc(data.url) + '" alt="">';
                 if (btn) wrap.appendChild(btn);
             }
             if (typeof showToast === 'function') showToast('Photo updated.', 'success');
@@ -391,7 +397,7 @@
 
     function openAdminAvatarPicker(userId) {
         ensureAdminAvatarCropper();
-        if (!adminAvatarInput) return;
+        if (!adminAvatarInput || adminAvatarCropper !== window.HelixAvatarCropper) return;
         adminAvatarTargetId = userId;
         adminAvatarInput.value = '';
         adminAvatarInput.click();
@@ -399,8 +405,8 @@
 
     function renderAvatarCell(user) {
         var inner = user.avatar_filename
-            ? '<img class="user-avatar-img" src="/static/avatars/' + user.avatar_filename + '" alt="">'
-            : '<span class="user-avatar-initials">' + user.name.charAt(0).toUpperCase() + '</span>';
+            ? '<img class="user-avatar-img" src="/static/avatars/' + adminEsc(user.avatar_filename) + '" alt="">'
+            : '<span class="user-avatar-initials">' + adminEsc(user.name.charAt(0).toUpperCase()) + '</span>';
         return '<span class="user-avatar-link user-avatar--profile account-user-avatar" data-id="' + user.id + '">' +
             inner +
             '<button type="button" class="account-avatar-btn" title="Replace photo">\uD83D\uDCF7</button>' +
@@ -408,29 +414,28 @@
     }
 
     function renderAccountDisplay(user) {
-        var teamTag = user.team ? '<span class="account-user-team">' + user.team + '</span>' : '';
+        var teamTag = user.team ? '<span class="account-user-team">' + adminEsc(user.team) + '</span>' : '';
         var activeToggle = user.is_active
             ? '<button type="button" class="account-deactivate-btn">Deactivate</button>'
             : '<button type="button" class="account-reactivate-btn">Reactivate</button>';
         return '<div class="account-user-display">' +
             renderAvatarCell(user) +
             '<div class="account-user-info">' +
-            '<span class="account-user-name">' + user.name + '</span>' +
-            '<span class="account-user-role">' + user.role + '</span>' +
+            '<span class="account-user-name">' + adminEsc(user.name) + '</span>' +
+            '<span class="account-user-role">' + adminEsc(user.role) + '</span>' +
             teamTag +
             '</div>' +
             '<div class="account-user-actions">' +
             activeToggle +
-            '<button type="button" class="account-edit-btn" data-name="' + user.name + '" data-role="' + user.role + '" data-team="' + (user.team || '') + '">Edit</button>' +
-            '<button type="button" class="account-reset-btn" data-name="' + user.name + '">&#8635;</button>' +
-            '<button type="button" class="account-delete-btn" data-name="' + user.name + '">&times;</button>' +
+            '<button type="button" class="account-edit-btn" data-name="' + adminEsc(user.name) + '" data-role="' + adminEsc(user.role) + '" data-team="' + adminEsc(user.team) + '">Edit</button>' +
+            '<button type="button" class="account-reset-btn" data-name="' + adminEsc(user.name) + '">&#8635;</button>' +
+            '<button type="button" class="account-delete-btn" data-name="' + adminEsc(user.name) + '">&times;</button>' +
             '</div>' +
             '</div>';
     }
 
     function renderAccountEdit(user) {
-        // Roles come from ROLE_CAPABILITIES, handed over by base.html. The
-        // literal is a fallback for the case where that global is missing.
+        // ROLE_LABELS is set by base.html from capabilities.py; the literal is a fallback.
         var roles = window.ROLE_LABELS || {
             cs: 'Client Servicing', designer: 'Designer', team_lead: 'Team Lead',
             management: 'Management', project_owner: 'Project Owner',
@@ -444,8 +449,8 @@
         }).join('');
         var teamHidden = (user.role === 'designer' || user.role === 'team_lead') ? '' : ' hidden';
         return '<div class="account-user-edit-form">' +
-            '<input type="text" class="form-input edit-name" value="' + user.name + '" placeholder="Full name">' +
-            '<input type="email" class="form-input edit-email" value="' + (user.email || '') + '" placeholder="Email">' +
+            '<input type="text" class="form-input edit-name" value="' + adminEsc(user.name) + '" placeholder="Full name">' +
+            '<input type="email" class="form-input edit-email" value="' + adminEsc(user.email) + '" placeholder="Email">' +
             '<select class="form-input edit-role">' + roleOptions + '</select>' +
             '<select class="form-input edit-team' + teamHidden + '"><option value="">Select team...</option>' + teamOptions + '</select>' +
             '<input type="password" class="form-input edit-password" placeholder="New password (leave blank to keep)">' +
@@ -523,7 +528,7 @@
 
         if (resetBtn) {
             resetBtn.addEventListener('click', function () {
-                showConfirm('Reset password for ' + user.name + ' to Vitamin2026!?', function () {
+                showConfirm('Reset the password for ' + user.name + ' to a new temporary one?', function () {
                     fetch('/admin/api/users/' + user.id + '/reset-password', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' }
@@ -533,8 +538,15 @@
                             if (data.success) {
                                 resetBtn.textContent = '✓';
                                 setTimeout(function () { resetBtn.innerHTML = '&#8635;'; }, 2000);
+                                // Shown once only; the server keeps just the hash.
+                                showConfirm('New password for ' + user.name + ': ' + data.temp_password +
+                                    '\nShare it with them now; it will not be shown again.',
+                                    null, 'Password reset');
+                            } else {
+                                showToast(data.error || 'Could not reset the password.', 'error');
                             }
-                        });
+                        })
+                        .catch(function () { showToast('Server error resetting the password.', 'error'); });
                 });
             });
         }
@@ -680,11 +692,11 @@ function renderSoundsList(sounds) {
         row.id = 'sound-' + sound.id;
         row.innerHTML =
             '<div class="account-user-info">' +
-            '<span class="account-user-name">' + sound.name + '</span>' +
-            '<audio controls src="' + sound.url + '" style="height:28px;"></audio>' +
+            '<span class="account-user-name">' + adminEsc(sound.name) + '</span>' +
+            '<audio controls src="' + adminEsc(sound.url) + '" style="height:28px;"></audio>' +
             '</div>' +
             '<div class="account-user-actions">' +
-            '<button type="button" class="account-delete-btn" data-id="' + sound.id + '" data-name="' + sound.name + '">&times;</button>' +
+            '<button type="button" class="account-delete-btn" data-id="' + sound.id + '" data-name="' + adminEsc(sound.name) + '">&times;</button>' +
             '</div>';
         soundsList.appendChild(row);
 
@@ -714,8 +726,7 @@ if (addSoundForm) {
             return;
         }
 
-        // multipart/form-data — FormData handles the file automatically,
-        // unlike the JSON.stringify() pattern used for other admin forms.
+        // Multipart upload, so no JSON Content-Type header.
         var formData = new FormData();
         formData.append('name', nameInput.value.trim());
         formData.append('file', fileInput.files[0]);
@@ -730,7 +741,7 @@ if (addSoundForm) {
                 if (!data.success) { showToast(data.error || 'Upload failed.', 'error'); return; }
                 addSoundForm.reset();
                 addSoundForm.classList.add('hidden');
-                loadSoundsSection(); // simplest way to show the new row in the same sorted order as a fresh page load
+                loadSoundsSection(); // reload keeps the server's sort order
             })
             .catch(function () { btnDone(submitBtn); });
     });
@@ -762,7 +773,7 @@ if (addSoundForm) {
         else if (name === 'deliverables') loadPTDeliverables();
         else if (name === 'design-types') loadPTDesignTypes();
         else if (name === 'design-directions') loadPTDesignDirections();
-        else if (name === 'job-numbers') loadPTJobNumbers(); // Job Numbers tab
+        else if (name === 'job-numbers') loadPTJobNumbers();
         else if (name === 'cs-scopes') loadPTCsScopes();
     }
 
@@ -779,14 +790,14 @@ if (addSoundForm) {
                 }
                 list.innerHTML = clients.map(function (c) {
                     return '<div class="account-user-row" id="pt-client-' + c.id + '">' +
-                        '<span class="account-user-name">' + c.name + '</span>' +
+                        '<span class="account-user-name">' + adminEsc(c.name) + '</span>' +
                         '<div class="account-user-actions">' +
-                        '<button type="button" class="account-delete-btn" data-id="' + c.id + '" data-name="' + c.name + '">&times;</button>' +
+                        '<button type="button" class="account-delete-btn" data-id="' + c.id + '" data-name="' + adminEsc(c.name) + '">&times;</button>' +
                         '</div></div>';
                 }).join('');
                 list.querySelectorAll('.account-delete-btn').forEach(function (btn) {
                     btn.addEventListener('click', function () {
-                        /* Capture dataset values before the async modal opens — 'this' won't survive the callback. */
+                        /* Read dataset now; 'this' is gone inside the confirm callback. */
                         var name = this.dataset.name;
                         var id   = this.dataset.id;
                         showConfirm('Delete client "' + name + '"? This cannot be undone.', function () {
@@ -859,12 +870,12 @@ if (addSoundForm) {
                 });
                 var html = '';
                 Object.keys(grouped).sort().forEach(function (region) {
-                    html += '<div class="accounts-group-label">' + region.charAt(0).toUpperCase() + region.slice(1) + '</div>';
+                    html += '<div class="accounts-group-label">' + adminEsc(region.charAt(0).toUpperCase() + region.slice(1)) + '</div>';
                     grouped[region].forEach(function (c) {
                         html += '<div class="account-user-row" id="pt-customer-' + c.id + '">' +
-                            '<span class="account-user-name">' + c.name + '</span>' +
+                            '<span class="account-user-name">' + adminEsc(c.name) + '</span>' +
                             '<div class="account-user-actions">' +
-                            '<button type="button" class="account-delete-btn" data-id="' + c.id + '" data-name="' + c.name + '">&times;</button>' +
+                            '<button type="button" class="account-delete-btn" data-id="' + c.id + '" data-name="' + adminEsc(c.name) + '">&times;</button>' +
                             '</div></div>';
                     });
                 });
@@ -942,13 +953,13 @@ if (addSoundForm) {
                     return '<div class="account-user-row" id="pt-project-' + p.id + '">' +
                         '<div class="pt-project-row-content">' +
                         '<div class="pt-project-row-info">' +
-                        '<span class="pt-project-job-num">' + (p.job_number || 'No job #') + '</span>' +
-                        '<span class="pt-project-name">' + p.name + '</span>' +
-                        '<span class="pt-project-cs">' + p.cs_lead + '</span>' +
-                        '<span class="pt-project-status">' + statusText + '</span>' +
+                        '<span class="pt-project-job-num">' + adminEsc(p.job_number || 'No job #') + '</span>' +
+                        '<span class="pt-project-name">' + adminEsc(p.name) + '</span>' +
+                        '<span class="pt-project-cs">' + adminEsc(p.cs_lead) + '</span>' +
+                        '<span class="pt-project-status">' + adminEsc(statusText) + '</span>' +
                         '</div>' +
                         '<div class="account-user-actions">' +
-                        '<button type="button" class="account-delete-btn" data-id="' + p.id + '" data-name="' + p.name + '">&times;</button>' +
+                        '<button type="button" class="account-delete-btn" data-id="' + p.id + '" data-name="' + adminEsc(p.name) + '">&times;</button>' +
                         '</div>' +
                         '</div></div>';
                 }).join('');
@@ -970,9 +981,7 @@ if (addSoundForm) {
     }
 
     // ── Drafts ────────────────────────────────────────────────────
-    // Shows all draft-status projects.  Deleting a draft here removes the whole
-    // project row, which also frees the job_number (it lives on the same row and
-    // has a UNIQUE constraint — once the row is gone the number is available again).
+    // Deleting a draft deletes the project row, which frees its unique job_number.
 
     function loadPTDrafts() {
         fetch('/admin/api/drafts')
@@ -984,16 +993,15 @@ if (addSoundForm) {
                     return;
                 }
                 list.innerHTML = drafts.map(function (d) {
-                    // Show job number in the subtitle so admin can see which number
-                    // will be freed when a draft is deleted.
+                    // Job number shown so the admin sees which number a delete frees.
                     var subtitle = d.cs_lead + (d.job_number ? ' · ' + d.job_number : '');
                     return '<div class="account-user-row" id="pt-draft-' + d.id + '">' +
                         '<div class="account-user-info">' +
-                        '<span class="account-user-name">' + d.name + '</span>' +
-                        '<span class="account-user-role">' + subtitle + '</span>' +
+                        '<span class="account-user-name">' + adminEsc(d.name) + '</span>' +
+                        '<span class="account-user-role">' + adminEsc(subtitle) + '</span>' +
                         '</div>' +
                         '<div class="account-user-actions">' +
-                        '<button type="button" class="account-delete-btn" data-id="' + d.id + '" data-name="' + d.name + '">&times;</button>' +
+                        '<button type="button" class="account-delete-btn" data-id="' + d.id + '" data-name="' + adminEsc(d.name) + '">&times;</button>' +
                         '</div></div>';
                 }).join('');
                 list.querySelectorAll('.account-delete-btn').forEach(function (btn) {
@@ -1014,9 +1022,8 @@ if (addSoundForm) {
     }
 
     // ── Job Numbers ───────────────────────────────────────────────
-    // Lists every project that has a job_number set.  The "Clear" button sets
-    // the number to NULL (freeing the UNIQUE slot) WITHOUT deleting the project.
-    // Useful when a draft was left half-created and needs its number recycled.
+    // Every project with a job_number. "Clear" sets the number to NULL, freeing
+    // it for reuse, and keeps the project.
 
     function loadPTJobNumbers() {
         fetch('/admin/api/job-numbers')
@@ -1028,7 +1035,6 @@ if (addSoundForm) {
                     return;
                 }
 
-                // Human-readable labels for every possible project status.
                 var statusLabel = {
                     draft:                  'Draft',
                     briefed:                'Briefed',
@@ -1051,17 +1057,16 @@ if (addSoundForm) {
                     return '<div class="account-user-row" id="pt-jobn-' + item.id + '">' +
                         '<div class="pt-project-row-content">' +
                         '<div class="pt-project-row-info">' +
-                        '<span class="pt-project-job-num">' + item.job_number + '</span>' +
-                        '<span class="pt-project-name">' + item.name + '</span>' +
-                        '<span class="pt-project-cs">' + item.cs_lead + '</span>' +
-                        '<span class="pt-project-status">' + statusText + '</span>' +
+                        '<span class="pt-project-job-num">' + adminEsc(item.job_number) + '</span>' +
+                        '<span class="pt-project-name">' + adminEsc(item.name) + '</span>' +
+                        '<span class="pt-project-cs">' + adminEsc(item.cs_lead) + '</span>' +
+                        '<span class="pt-project-status">' + adminEsc(statusText) + '</span>' +
                         '</div>' +
                         '<div class="account-user-actions">' +
-                        // "Clear" removes just the number, not the project — text reflects this.
                         '<button type="button" class="account-delete-btn"' +
                         ' data-id="' + item.id + '"' +
-                        ' data-name="' + item.job_number + '"' +
-                        ' data-project="' + item.name.replace(/"/g, '&quot;') + '">' +
+                        ' data-name="' + adminEsc(item.job_number) + '"' +
+                        ' data-project="' + adminEsc(item.name) + '">' +
                         'Clear</button>' +
                         '</div>' +
                         '</div></div>';
@@ -1069,8 +1074,7 @@ if (addSoundForm) {
 
                 list.querySelectorAll('.account-delete-btn').forEach(function (btn) {
                     btn.addEventListener('click', function () {
-                        /* Capture all values before the async confirm opens — 'this' won't
-                           be available inside the callback after the modal is shown. */
+                        /* Read dataset now; 'this' is gone inside the confirm callback. */
                         var id      = this.dataset.id;
                         var jobn    = this.dataset.name;
                         var project = this.dataset.project;
@@ -1083,10 +1087,8 @@ if (addSoundForm) {
                                     .then(function (res) { return res.json(); })
                                     .then(function (data) {
                                         if (data.success) {
-                                            // Remove this row from the list.
                                             var row = document.getElementById('pt-jobn-' + id);
                                             if (row) row.remove();
-                                            // If the list is now empty show the empty state.
                                             if (!document.querySelector('[id^="pt-jobn-"]')) {
                                                 document.getElementById('pt-job-numbers-list').innerHTML =
                                                     '<p class="empty-state">No job numbers assigned.</p>';
@@ -1126,7 +1128,7 @@ if (addSoundForm) {
         var sel = document.getElementById('pt-new-del-client');
         sel.innerHTML = '<option value="">Select client...</option>' +
             ptFormClients.map(function (c) {
-                return '<option value="' + c.id + '">' + c.name + '</option>';
+                return '<option value="' + c.id + '">' + adminEsc(c.name) + '</option>';
             }).join('');
     }
 
@@ -1137,7 +1139,7 @@ if (addSoundForm) {
         var sel = document.getElementById('pt-new-del-customer');
         sel.innerHTML = '<option value="">Select customer...</option>' +
             filtered.map(function (c) {
-                return '<option value="' + c.id + '">' + c.name + '</option>';
+                return '<option value="' + c.id + '">' + adminEsc(c.name) + '</option>';
             }).join('');
     }
 
@@ -1164,11 +1166,7 @@ if (addSoundForm) {
         populatePTDelFormCustomers(this.value);
     });
 
-// Actually creates the deliverable type via the admin API, given
-// whatever reference image filename we ended up with (or null). Split
-// out so the submit handler can call it either immediately or after
-// the upload finishes — same idea as the inline quick-add flow in
-// main.js.
+// Creates the deliverable type once any uploads have returned their filenames (or null).
 function createPTDeliverableType(name, clientId, customerId, disciplines, isCustom, referenceImage, templateFilename, submitBtn) {
     fetch('/admin/api/deliverable-types', {
         method: 'POST',
@@ -1201,9 +1199,7 @@ function createPTDeliverableType(name, clientId, customerId, disciplines, isCust
         .catch(function () { btnDone(submitBtn); });
 }
 
-// Returns a Promise resolving to the uploaded filename, or null if no file
-// was chosen at all. Shared by both the reference-image and template-file
-// uploads below — same endpoint-agnostic shape, just a different URL.
+// Uploads a file to `endpoint`; resolves to the saved filename, or null if no file.
 function uploadDeliverableFile(file, endpoint) {
     if (!file) return Promise.resolve(null);
     var formData = new FormData();
@@ -1216,12 +1212,9 @@ function uploadDeliverableFile(file, endpoint) {
         });
 }
 
-// Three possible outcomes for one of the file fields on an edit save:
-//  - a new file was chosen -> upload it, resolve to the new filename
-//  - "remove current" was checked -> resolve to null (explicit clear)
-//  - neither -> resolve to undefined, meaning "leave alone" — the caller
-//    uses that to decide whether to include the key in the PATCH body at
-//    all, matching the backend's "only touch the field if present" rule.
+// One file field on an edit save resolves to: the new filename (file chosen),
+// null (remove checked), or undefined (leave alone). The caller omits the key
+// from the PATCH on undefined; the backend only touches keys that are present.
 function resolveFileField(chosenFile, removeChecked, endpoint) {
     if (chosenFile) return uploadDeliverableFile(chosenFile, endpoint);
     if (removeChecked) return Promise.resolve(null);
@@ -1247,8 +1240,6 @@ ptAddDelForm.addEventListener('submit', function (e) {
     var imageFile = document.getElementById('pt-new-del-image').files[0];
     var templateFile = document.getElementById('pt-new-del-template').files[0];
 
-    // Both uploads (if chosen) run in parallel, then the deliverable type
-    // is created once both filenames (or nulls) are known.
     Promise.all([
         uploadDeliverableFile(imageFile, '/projects/deliverable-types/upload-image'),
         uploadDeliverableFile(templateFile, '/admin/api/deliverable-types/upload-template')
@@ -1283,12 +1274,12 @@ ptAddDelForm.addEventListener('submit', function (e) {
                     types.map(function (t) {
                         return '<div class="account-user-row" id="pt-dt-' + t.id + '">' +
                             '<div class="account-user-info">' +
-                            '<span class="account-user-name">' + t.name + '</span>' +
-                            '<span class="account-user-role">' + (t.team ? t.team.split(',').join(' + ') : 'No team set') + '</span>' +
+                            '<span class="account-user-name">' + adminEsc(t.name) + '</span>' +
+                            '<span class="account-user-role">' + adminEsc(t.team ? t.team.split(',').join(' + ') : 'No team set') + '</span>' +
                             '</div>' +
                             '<div class="account-user-actions">' +
-                            '<button class="account-edit-btn pt-dt-edit" data-id="' + t.id + '" data-name="' + t.name + '" data-team="' + (t.team || '') + '">Edit</button>' +
-                            '<button class="account-delete-btn pt-dt-delete" data-id="' + t.id + '" data-name="' + t.name + '">&times;</button>' +
+                            '<button class="account-edit-btn pt-dt-edit" data-id="' + t.id + '" data-name="' + adminEsc(t.name) + '" data-team="' + adminEsc(t.team) + '">Edit</button>' +
+                            '<button class="account-delete-btn pt-dt-delete" data-id="' + t.id + '" data-name="' + adminEsc(t.name) + '">&times;</button>' +
                             '</div></div>';
                     }).join('');
                 list.querySelectorAll('.pt-dt-delete').forEach(function (btn) {
@@ -1311,7 +1302,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
                         var currentTeams = currentTeam ? currentTeam.split(',') : [];
                         row.innerHTML =
                             '<div class="pt-inline-edit">' +
-                            '<input type="text" class="form-input pt-edit-name" value="' + currentName + '" style="max-width:180px;">' +
+                            '<input type="text" class="form-input pt-edit-name" value="' + adminEsc(currentName) + '" style="max-width:180px;">' +
                             '<div class="pt-discipline-checks pt-edit-teams">' +
                             ['2D', '3D', 'Technical'].map(function (t) {
                                 return '<label><input type="checkbox" value="' + t + '"' + (currentTeams.indexOf(t) !== -1 ? ' checked' : '') + '> ' + t + '</label>';
@@ -1393,7 +1384,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
             });
         }
 
-        // ── CS Scopes (Chunk 6) ──────────────────────────────────────
+        // ── CS Scopes ──────────────────────────────────────
         var addCsScopeToggle = document.getElementById('pt-add-cs-scope-toggle');
         var addCsScopeForm = document.getElementById('pt-add-cs-scope-form');
         var addCsScopeCancel = document.getElementById('pt-add-cs-scope-cancel');
@@ -1427,10 +1418,10 @@ ptAddDelForm.addEventListener('submit', function (e) {
                 list.innerHTML = dirs.length === 0 ? '<p class="empty-state">No design directions yet.</p>' :
                     dirs.map(function (d) {
                         return '<div class="account-user-row" id="pt-dd-' + d.id + '">' +
-                            '<div class="account-user-info"><span class="account-user-name">' + d.name + '</span></div>' +
+                            '<div class="account-user-info"><span class="account-user-name">' + adminEsc(d.name) + '</span></div>' +
                             '<div class="account-user-actions">' +
-                            '<button class="account-edit-btn pt-dd-edit" data-id="' + d.id + '" data-name="' + d.name + '">Edit</button>' +
-                            '<button class="account-delete-btn pt-dd-delete" data-id="' + d.id + '" data-name="' + d.name + '">&times;</button>' +
+                            '<button class="account-edit-btn pt-dd-edit" data-id="' + d.id + '" data-name="' + adminEsc(d.name) + '">Edit</button>' +
+                            '<button class="account-delete-btn pt-dd-delete" data-id="' + d.id + '" data-name="' + adminEsc(d.name) + '">&times;</button>' +
                             '</div></div>';
                     }).join('');
                 list.querySelectorAll('.pt-dd-delete').forEach(function (btn) {
@@ -1451,7 +1442,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
                         var currentName = this.dataset.name;
                         row.innerHTML =
                             '<div class="pt-inline-edit">' +
-                            '<input type="text" class="form-input pt-edit-name" value="' + currentName + '" style="max-width:240px;">' +
+                            '<input type="text" class="form-input pt-edit-name" value="' + adminEsc(currentName) + '" style="max-width:240px;">' +
                             '<button class="btn-primary pt-dd-save" data-id="' + id + '">Save</button>' +
                             '<button class="account-delete-btn pt-dd-cancel">Cancel</button>' +
                             '</div>';
@@ -1474,12 +1465,10 @@ ptAddDelForm.addEventListener('submit', function (e) {
             });
     }
 
-    // ── CS Scopes (Chunk 6) — the Client Servicing table's own Scope
-    // dropdown. Deactivate, not delete: a deactivated scope drops out of
-    // future selection (backend already filters on it) but any row still
-    // pointing at it keeps showing its name fine. Uses the
-    // client_servicing module's own routes, not /admin/api/* — that
-    // module owns this data, admin.js is just driving its shared UI. ──
+    // ── CS Scopes ──
+    // Options for the Client Servicing table's Scope dropdown. Deactivating hides
+    // a scope from new picks; rows that use it keep its name. Data is owned by
+    // the client_servicing module, so these calls use its routes.
     function loadPTCsScopes() {
         fetch('/client-servicing/scopes')
             .then(function (r) { return r.json(); })
@@ -1495,9 +1484,9 @@ ptAddDelForm.addEventListener('submit', function (e) {
                         ? '<button type="button" class="account-deactivate-btn pt-cs-scope-toggle" data-id="' + scope.id + '" data-active="true">Deactivate</button>'
                         : '<button type="button" class="account-reactivate-btn pt-cs-scope-toggle" data-id="' + scope.id + '" data-active="false">Reactivate</button>';
                     return '<div class="account-user-row' + (scope.active ? '' : ' account-user-row--deactivated') + '" id="pt-cs-scope-' + scope.id + '">' +
-                        '<div class="account-user-info"><span class="account-user-name">' + scope.name + '</span></div>' +
+                        '<div class="account-user-info"><span class="account-user-name">' + adminEsc(scope.name) + '</span></div>' +
                         '<div class="account-user-actions">' +
-                        '<button class="account-edit-btn pt-cs-scope-edit" data-id="' + scope.id + '" data-name="' + scope.name + '">Edit</button>' +
+                        '<button class="account-edit-btn pt-cs-scope-edit" data-id="' + scope.id + '" data-name="' + adminEsc(scope.name) + '">Edit</button>' +
                         toggleBtn +
                         '</div></div>';
                 }
@@ -1530,7 +1519,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
                         var currentName = this.dataset.name;
                         row.innerHTML =
                             '<div class="pt-inline-edit">' +
-                            '<input type="text" class="form-input pt-edit-name" value="' + currentName + '" style="max-width:240px;">' +
+                            '<input type="text" class="form-input pt-edit-name" value="' + adminEsc(currentName) + '" style="max-width:240px;">' +
                             '<button class="btn-primary pt-cs-scope-save" data-id="' + id + '">Save</button>' +
                             '<button class="account-delete-btn pt-cs-scope-cancel">Cancel</button>' +
                             '</div>';
@@ -1567,10 +1556,10 @@ ptAddDelForm.addEventListener('submit', function (e) {
         });
         clients.sort();
         var sel = document.getElementById('pt-filter-client');
-        var prev = sel.value; // Save current selection befoe rebuilding
+        var prev = sel.value;
         sel.innerHTML = '<option value="">All Clients</option>' +
-            clients.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
-        if (clients.indexOf(prev) !== -1) sel.value = prev; // restore if still valid
+            clients.map(function (c) { return '<option value="' + adminEsc(c) + '">' + adminEsc(c) + '</option>'; }).join('');
+        if (clients.indexOf(prev) !== -1) sel.value = prev; // keep the selection if still valid
     }
 
     function populatePTDelCustomerFilter(region) {
@@ -1589,7 +1578,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
         var sel = document.getElementById('pt-filter-customer');
         var prev = sel.value;
         sel.innerHTML = '<option value="">All Customers</option>' +
-            customers.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+            customers.map(function (c) { return '<option value="' + adminEsc(c) + '">' + adminEsc(c) + '</option>'; }).join('');
         if (customers.indexOf(prev) !== -1) sel.value = prev;
     }
 
@@ -1622,12 +1611,12 @@ ptAddDelForm.addEventListener('submit', function (e) {
         list.innerHTML = types.map(function (t) {
             return '<div class="account-user-row" id="pt-del-' + t.id + '">' +
                 '<div class="account-user-info">' +
-                '<span class="account-user-name">' + t.name + '</span>' +
-                '<span class="account-user-role">' + t.client + ' · ' + t.customer + (t.is_custom ? ' · Custom' : '') + '</span>' +
+                '<span class="account-user-name">' + adminEsc(t.name) + '</span>' +
+                '<span class="account-user-role">' + adminEsc(t.client + ' · ' + t.customer + (t.is_custom ? ' · Custom' : '')) + '</span>' +
                 '</div>' +
                 '<div class="account-user-actions">' +
                 '<button type="button" class="account-edit-btn" data-id="' + t.id + '">Edit</button>' +
-                '<button type="button" class="account-delete-btn" data-id="' + t.id + '" data-name="' + t.name + '">&times;</button>' +
+                '<button type="button" class="account-delete-btn" data-id="' + t.id + '" data-name="' + adminEsc(t.name) + '">&times;</button>' +
                 '</div></div>';
         }).join('');
 
@@ -1656,20 +1645,12 @@ ptAddDelForm.addEventListener('submit', function (e) {
                 var row = document.getElementById('pt-del-' + id);
                 row.innerHTML =
                     '<div class="account-user-edit-form">' +
-                    '<input type="text" class="form-input pt-del-name-input" value="' + type.name + '">' +
+                    '<input type="text" class="form-input pt-del-name-input" value="' + adminEsc(type.name) + '">' +
                     '<div class="pt-discipline-checks">' +
-                    // Canonical casing ('2D'/'3D'/'Technical') — must match
-                    // the create form (base.html) and User.team exactly,
-                    // since the Deliverables roster's team-tag assignment
-                    // feature looks designers up by an exact team-string
-                    // match. This used to be a lowercase array, silently
-                    // rewriting a type's disciplines to '2d'/'technical'
-                    // on every save through this edit form (the create
-                    // form was never affected — only this one). Fixed 22
-                    // Aug 2026; the case-insensitive .some() below still
-                    // shows a type's existing lowercase-saved disciplines
-                    // as checked so editing one doesn't silently drop them
-                    // — the next save just re-normalizes them correctly.
+                    // Values must match User.team casing exactly: the Deliverables
+                    // roster finds designers by exact team string. The
+                    // case-insensitive match still ticks lowercase values
+                    // already stored, and saving rewrites them in this casing.
                     ['2D', '3D', 'Technical'].map(function (d) {
                         var checked = type.disciplines.some(function (existing) {
                             return existing.toLowerCase() === d.toLowerCase();
@@ -1677,17 +1658,14 @@ ptAddDelForm.addEventListener('submit', function (e) {
                         return '<label><input type="checkbox" value="' + d + '" ' + checked + '> ' + d.toUpperCase() + '</label>';
                     }).join('') +
                     '</div>' +
-                    // Shows the current image (if one's set) plus a checkbox
-                    // to explicitly remove it, and a file input to replace
-                    // it with something new. Three independent choices:
-                    // leave it alone, remove it, or swap it.
+                    // Per file: leave it, tick "remove", or choose a replacement.
                     (type.reference_image ?
-                        '<img src="/static/deliverable-images/' + type.reference_image + '" class="pt-del-image-preview" style="max-width:80px;max-height:80px;display:block;margin:6px 0;">' +
+                        '<img src="/static/deliverable-images/' + adminEsc(type.reference_image) + '" class="pt-del-image-preview" style="max-width:80px;max-height:80px;display:block;margin:6px 0;">' +
                         '<label style="font-size:0.85rem;"><input type="checkbox" class="pt-del-remove-image"> Remove current image</label>'
                         : '') +
                     '<label style="font-size:0.85rem;display:block;margin-top:4px;">Replace image: <input type="file" class="pt-del-image-input" accept="image/*"></label>' +
                     (type.template_filename ?
-                        '<p style="font-size:0.85rem;margin:6px 0;">Current template: <code>' + type.template_filename + '</code></p>' +
+                        '<p style="font-size:0.85rem;margin:6px 0;">Current template: <code>' + adminEsc(type.template_filename) + '</code></p>' +
                         '<label style="font-size:0.85rem;"><input type="checkbox" class="pt-del-remove-template"> Remove current template</label>'
                         : '') +
                     '<label style="font-size:0.85rem;display:block;margin-top:4px;">Replace template (.ai): <input type="file" class="pt-del-template-input" accept=".ai"></label>' +
@@ -1764,14 +1742,13 @@ ptAddDelForm.addEventListener('submit', function (e) {
         var search = document.getElementById('activity-search').value.trim();
         var from = document.getElementById('activity-from').value;
         var to = document.getElementById('activity-to').value;
-        var category = document.getElementById('activity-category').value; // 'all' or a named category
+        var category = document.getElementById('activity-category').value;
 
         var params = new URLSearchParams();
         if (search) params.append('search', search);
         if (from) params.append('from', from);
         if (to) params.append('to', to);
-        // Only send category param when the user has selected a specific filter —
-        // 'all' means no filter and the backend returns everything.
+        // 'all' means no filter, so the param is left off.
         if (category && category !== 'all') params.append('category', category);
 
         var url = '/admin/api/activity' + (params.toString() ? '?' + params.toString() : '');
@@ -1787,8 +1764,8 @@ ptAddDelForm.addEventListener('submit', function (e) {
                 list.innerHTML = entries.map(function (e) {
                     return '<div class="activity-entry" id="activity-' + e.id + '">' +
                         '<div class="activity-entry-body">' +
-                        '<span class="activity-description">' + e.description + '</span>' +
-                        '<span class="activity-meta">' + e.user + ' · ' + e.created_at + '</span>' +
+                        '<span class="activity-description">' + adminEsc(e.description) + '</span>' +
+                        '<span class="activity-meta">' + adminEsc(e.user + ' · ' + e.created_at) + '</span>' +
                         '</div>' +
                         '<button type="button" class="account-delete-btn" data-id="' + e.id + '">&times;</button>' +
                         '</div>';
@@ -1823,7 +1800,7 @@ ptAddDelForm.addEventListener('submit', function (e) {
             loadActivitySection();
         });
 
-        // Category dropdown — filter immediately on change, no need to click Search
+        // Category filters on change, without Search.
         document.getElementById('activity-category').addEventListener('change', function () {
             loadActivitySection();
         });
@@ -1876,144 +1853,16 @@ ptAddDelForm.addEventListener('submit', function (e) {
 
     }
 
-    // ── Reference File Uploads ────────────────────────────────────
-
-    // Only run on pages that have the upload button
-    var refFileBtn = document.getElementById('refFileBtn');
-    var refFileInput = document.getElementById('refFileInput');
-
-    if (refFileBtn && refFileInput) {
-
-        // Clicking the button triggers the hidden file input
-        refFileBtn.addEventListener('click', function () {
-            refFileInput.click();
-        });
-
-        // When a file is selected, upload it immediately via fetch
-        refFileInput.addEventListener('change', function () {
-            var file = refFileInput.files[0];
-            if (!file) return;
-
-            // Get the project ID from a data attribute we'll add to the button
-            var projectId = refFileBtn.dataset.projectId;
-            var status = document.getElementById('refFileStatus');
-
-            status.textContent = 'Uploading...';
-
-            // Build a FormData object — this is how we send files via fetch
-            var formData = new FormData();
-            formData.append('file', file);
-
-            fetch('/projects/' + projectId + '/upload-file', {
-                method: 'POST',
-                body: formData
-                // Note: do NOT set Content-Type header — the browser sets it
-                // automatically with the correct multipart boundary when using FormData
-            })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (!data.success) {
-                        status.textContent = 'Error: ' + data.error;
-                        return;
-                    }
-
-                    status.textContent = 'Uploaded.';
-                    setTimeout(function () { status.textContent = ''; }, 3000);
-
-                    // Reset input so the same file can be re-uploaded if needed
-                    refFileInput.value = '';
-
-                    // Build and inject the new file row into the list
-                    var list = document.getElementById('reference-files-list');
-
-                    // Remove the "no files" message if present
-                    var noFilesMsg = list.querySelector('.no-files-msg');
-                    if (noFilesMsg) noFilesMsg.remove();
-
-                    var icons = { jpg: '🖼', jpeg: '🖼', png: '🖼', pdf: '📄', docx: '📝', xlsx: '📊',
-                                  mp4: '🎬', mov: '🎬', avi: '🎬', webm: '🎬', mkv: '🎬', wmv: '🎬', m4v: '🎬' };
-                    var icon = icons[data.file.file_type] || '📎';
-
-                    var item = document.createElement('div');
-                    item.className = 'reference-file-item';
-                    item.dataset.fileId = data.file.id;
-                    item.innerHTML = `
-                <span class="reference-file-icon">${icon}</span>
-                <span class="reference-file-name">${data.file.original_filename}</span>
-                <span class="reference-file-meta">${data.file.uploaded_by}</span>
-                <div class="reference-file-actions">
-                    <a href="/projects/files/${data.file.id}/download"
-                       class="btn-secondary btn-sm">Download</a>
-                    <button class="btn-danger btn-sm reference-file-delete-btn"
-                            data-file-id="${data.file.id}">Remove</button>
-                </div>
-            `;
-
-                    // Attach delete handler to the new button
-                    item.querySelector('.reference-file-delete-btn').addEventListener('click', handleFileDelete);
-
-                    list.appendChild(item);
-                })
-                .catch(function (err) {
-                    status.textContent = 'Upload failed.';
-                    console.error('File upload error:', err);
-                });
-        });
-
-        // Delete handler — attached to existing buttons on page load and new ones dynamically
-        function handleFileDelete(e) {
-            /* Capture before the async modal so 'this' is guaranteed in the callback. */
-            var fileId = this.dataset.fileId;
-            var item = this.closest('.reference-file-item');
-
-            showConfirm('Remove this file?', function () {
-                fetch('/projects/files/' + fileId + '/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (!data.success) return;
-                        item.remove();
-
-                        // Show empty message if no files remain
-                        var list = document.getElementById('reference-files-list');
-                        if (list.querySelectorAll('.reference-file-item').length === 0) {
-                            var msg = document.createElement('p');
-                            msg.className = 'no-files-msg';
-                            msg.textContent = 'No reference files uploaded yet.';
-                            list.appendChild(msg);
-                        }
-                    });
-            });
-        }
-
-        // Attach delete handler to all existing delete buttons on page load
-        document.querySelectorAll('.reference-file-delete-btn').forEach(function (btn) {
-            btn.addEventListener('click', handleFileDelete);
-        });
-    }
-
 // ═══════════════════════════════════════════════════════════════════════
-// ── Achievements admin panel (Phase 7 of the achievement system) ────────
+// ── Achievements admin panel ────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════
-// Two sub-tabs: Achievements (category accordion, drag-reorderable, with
-// an Add/Edit modal per achievement) and Borders (simple list + preview).
-// Depends on: btnLoading/btnDone, showConfirm, showToast (all defined
-// elsewhere in this file / main.js), and the global `Sortable` constructor
-// loaded via CDN in base.html (added for the Pinned Achievements UI on the
-// Account page, Phase 5 — reused here rather than loading a second copy).
+// Two sub-tabs: Achievements (drag-reorderable category accordion + Add/Edit
+// modal) and Borders (list + preview). Needs the global `Sortable`, loaded
+// from a CDN in base.html.
 
-// achCategoriesData / achBordersData cache the last fetch so the Add/Edit
-// modal can populate its category + border <select> options without a
-// separate round trip every time it opens.
+// Last fetch, cached so the Add/Edit modal can fill its selects without a round trip.
 var achCategoriesData = [];
 var achBordersData = [];
-
-// Tracks whether a drag has actually happened since the last save, so the
-// "Save Order" button only appears once there's something to save — same
-// UX as the Pinned Achievements drag UI reusing the same idea.
-var achOrderDirty = false;
 
 function loadAchievementsSection() {
     var activeAchTab = document.querySelector('.ach-tab-btn.active');
@@ -2044,7 +1893,6 @@ function loadAchievementCategories() {
         .then(function (r) { return r.json(); })
         .then(function (categories) {
             achCategoriesData = categories;
-            achOrderDirty = false;
             document.getElementById('save-ach-order-btn').classList.add('hidden');
             renderAchievementCategories(categories);
         });
@@ -2076,15 +1924,15 @@ function renderAchievementCategories(categories) {
             return '<div class="ach-achievement-row" data-id="' + a.id + '">' +
                 '<span class="ach-drag-handle" title="Drag to reorder">⠿</span>' +
                 (a.badge_url
-                    ? '<img src="' + a.badge_url + '" class="ach-achievement-badge-thumb" alt="">'
+                    ? '<img src="' + adminEsc(a.badge_url) + '" class="ach-achievement-badge-thumb" alt="">'
                     : '<span class="ach-achievement-badge-thumb ach-achievement-badge-thumb--empty">🏆</span>') +
                 '<div class="ach-achievement-info">' +
-                '<span class="ach-achievement-name">' + a.name + '</span>' +
-                '<span class="ach-achievement-meta">' + metaBits.join(' · ') + '</span>' +
+                '<span class="ach-achievement-name">' + adminEsc(a.name) + '</span>' +
+                '<span class="ach-achievement-meta">' + adminEsc(metaBits.join(' · ')) + '</span>' +
                 '</div>' +
                 '<div class="account-user-actions">' +
                 '<button type="button" class="account-edit-btn ach-edit-btn" data-id="' + a.id + '">Edit</button>' +
-                '<button type="button" class="account-delete-btn ach-delete-btn" data-id="' + a.id + '" data-name="' + a.name + '">&times;</button>' +
+                '<button type="button" class="account-delete-btn ach-delete-btn" data-id="' + a.id + '" data-name="' + adminEsc(a.name) + '">&times;</button>' +
                 '</div></div>';
         }).join('');
 
@@ -2092,19 +1940,19 @@ function renderAchievementCategories(categories) {
             '<div class="ach-category-header">' +
             '<span class="ach-category-drag-handle" title="Drag to reorder">⠿</span>' +
             '<span class="ach-category-display">' +
-            (cat.icon ? '<span class="ach-category-icon">' + cat.icon + '</span>' : '') +
-            '<span class="ach-category-name">' + cat.name + '</span>' +
+            (cat.icon ? '<span class="ach-category-icon">' + adminEsc(cat.icon) + '</span>' : '') +
+            '<span class="ach-category-name">' + adminEsc(cat.name) + '</span>' +
             '</span>' +
             '<span class="ach-category-edit-form hidden">' +
-            '<input type="text" class="ach-cat-edit-icon admin-input" placeholder="icon emoji" value="' + (cat.icon || '') + '" maxlength="4" style="width:3.5rem">' +
-            '<input type="text" class="ach-cat-edit-name admin-input" placeholder="Category name" value="' + cat.name + '" style="flex:1;min-width:8rem">' +
+            '<input type="text" class="ach-cat-edit-icon admin-input" placeholder="icon emoji" value="' + adminEsc(cat.icon) + '" maxlength="4" style="width:3.5rem">' +
+            '<input type="text" class="ach-cat-edit-name admin-input" placeholder="Category name" value="' + adminEsc(cat.name) + '" style="flex:1;min-width:8rem">' +
             '<button type="button" class="accounts-add-btn ach-cat-save-btn" data-id="' + cat.id + '">Save</button>' +
             '<button type="button" class="account-cancel-btn ach-cat-cancel-btn">Cancel</button>' +
             '</span>' +
             '<div class="ach-category-actions">' +
             '<button type="button" class="account-edit-btn ach-category-edit-btn" data-id="' + cat.id + '">Edit</button>' +
             '<button type="button" class="ach-category-toggle-btn" data-cat-id="' + cat.id + '">▾</button>' +
-            '<button type="button" class="account-delete-btn ach-category-delete" data-id="' + cat.id + '" data-name="' + cat.name + '">&times;</button>' +
+            '<button type="button" class="account-delete-btn ach-category-delete" data-id="' + cat.id + '" data-name="' + adminEsc(cat.name) + '">&times;</button>' +
             '</div>' +
             '</div>' +
             '<div class="ach-category-body" id="ach-category-body-' + cat.id + '">' +
@@ -2118,7 +1966,7 @@ function renderAchievementCategories(categories) {
 }
 
 function attachAchievementCategoryHandlers() {
-    // Collapse/expand — purely visual, no server round trip.
+    // Collapse/expand is client-only.
     document.querySelectorAll('.ach-category-toggle-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var body = document.getElementById('ach-category-body-' + this.dataset.catId);
@@ -2127,10 +1975,8 @@ function attachAchievementCategoryHandlers() {
         });
     });
 
-    // Delete category — blocked server-side if it still has achievements
-    // in it (see delete_achievement_category in admin_achievements.py),
-    // so the error message from that response is what actually explains
-    // why a delete didn't go through.
+    // The server refuses to delete a category that still has achievements
+    // (admin_achievements.py); its error message is shown as the reason.
     document.querySelectorAll('.ach-category-delete').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var name = this.dataset.name;
@@ -2146,7 +1992,7 @@ function attachAchievementCategoryHandlers() {
         });
     });
 
-    // Edit category — toggle inline edit form
+    // Edit category (inline form)
     document.querySelectorAll('.ach-category-edit-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var card = this.closest('.ach-category-card');
@@ -2162,7 +2008,6 @@ function attachAchievementCategoryHandlers() {
         btn.addEventListener('click', function () {
             var card = this.closest('.ach-category-card');
             var catId = card.dataset.catId;
-            // Reset inputs to original data
             var cat = achCategoriesData.find(function (c) { return String(c.id) === String(catId); });
             if (cat) {
                 card.querySelector('.ach-cat-edit-name').value = cat.name;
@@ -2191,13 +2036,12 @@ function attachAchievementCategoryHandlers() {
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     if (!data.success) { showToast(data.error || 'Could not save.', 'error'); btnDone(btn); return; }
-                    // Update in-memory data and display
                     var cat = achCategoriesData.find(function (c) { return String(c.id) === String(catId); });
                     if (cat) { cat.name = data.category.name; cat.icon = data.category.icon; }
                     var displayEl = card.querySelector('.ach-category-display');
-                    displayEl.innerHTML = (data.category.icon ? '<span class="ach-category-icon">' + data.category.icon + '</span>' : '') +
-                        '<span class="ach-category-name">' + data.category.name + '</span>';
-                    // Also update the delete button's data-name so confirm dialog shows the right name
+                    displayEl.innerHTML = (data.category.icon ? '<span class="ach-category-icon">' + adminEsc(data.category.icon) + '</span>' : '') +
+                        '<span class="ach-category-name">' + adminEsc(data.category.name) + '</span>';
+                    // Keep the delete confirm's name in step with the rename.
                     var deleteBtn = card.querySelector('.ach-category-delete');
                     if (deleteBtn) deleteBtn.dataset.name = data.category.name;
                     card.querySelector('.ach-category-edit-form').classList.add('hidden');
@@ -2210,7 +2054,7 @@ function attachAchievementCategoryHandlers() {
         });
     });
 
-    // "+ Add Achievement" — opens the shared modal in create mode, pre-scoped to this category.
+    // "+ Add Achievement" opens the modal in create mode, preset to this category.
     document.querySelectorAll('.ach-add-achievement-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
             openAchievementModal('create', null, this.dataset.catId);
@@ -2244,12 +2088,9 @@ function attachAchievementCategoryHandlers() {
     });
 }
 
-// SortableJS wiring — one Sortable instance for the category list itself
-// (reorders categories), plus one PER category for its achievement list
-// (reorders achievements within that category only — achievements do NOT
-// drag between categories, since that's not something the spec asked for
-// and it would need a category_id reassignment on drop, not just a
-// display_order change).
+// One Sortable for the category list, plus one per category's achievement
+// list. Achievements cannot move between categories: that would need a
+// category_id change, and the reorder routes only set display_order.
 function initAchievementSortables() {
     var categoriesList = document.getElementById('ach-categories-list');
     new Sortable(categoriesList, {
@@ -2268,15 +2109,11 @@ function initAchievementSortables() {
 }
 
 function markAchOrderDirty() {
-    achOrderDirty = true;
     document.getElementById('save-ach-order-btn').classList.remove('hidden');
 }
 
-// Save Order — reads the CURRENT DOM order (post-drag) for categories and
-// for every category's achievement list, and fires one reorder request per
-// list. Deliberately reads live DOM order rather than tracking it via drag
-// event payloads — simpler, and always correct even if several drags
-// happened before Save was clicked.
+// Save Order: reads the live DOM order and sends one reorder request for the
+// categories plus one per achievement list.
 document.getElementById('save-ach-order-btn').addEventListener('click', function () {
     var saveBtn = this;
     btnLoading(saveBtn);
@@ -2303,10 +2140,11 @@ document.getElementById('save-ach-order-btn').addEventListener('click', function
     }));
 
     Promise.all(requests)
-        .then(function () {
+        .then(function (responses) {
+            // fetch only rejects on network errors; an HTTP error must fail the save too.
+            if (!responses.every(function (r) { return r.ok; })) throw new Error('reorder failed');
             btnDone(saveBtn);
             saveBtn.classList.add('hidden');
-            achOrderDirty = false;
         })
         .catch(function () {
             btnDone(saveBtn);
@@ -2360,14 +2198,14 @@ var achFormBadgePreview = document.getElementById('ach-form-badge-preview');
 function populateAchievementCategoryDropdown(selectedCategoryId) {
     var sel = document.getElementById('ach-form-category');
     sel.innerHTML = achCategoriesData.map(function (cat) {
-        return '<option value="' + cat.id + '"' + (String(cat.id) === String(selectedCategoryId) ? ' selected' : '') + '>' + cat.name + '</option>';
+        return '<option value="' + cat.id + '"' + (String(cat.id) === String(selectedCategoryId) ? ' selected' : '') + '>' + adminEsc(cat.name) + '</option>';
     }).join('');
 }
 
 function populateAchievementBorderDropdown(selectedBorderId) {
     var sel = document.getElementById('ach-form-border');
     sel.innerHTML = '<option value="">— None —</option>' + achBordersData.map(function (b) {
-        return '<option value="' + b.id + '"' + (String(b.id) === String(selectedBorderId) ? ' selected' : '') + '>' + b.name + '</option>';
+        return '<option value="' + b.id + '"' + (String(b.id) === String(selectedBorderId) ? ' selected' : '') + '>' + adminEsc(b.name) + '</option>';
     }).join('');
 }
 
@@ -2376,9 +2214,7 @@ function openAchievementModal(mode, achievement, categoryId) {
     achievementModal.dataset.editingId = achievement ? achievement.id : '';
     achievementModalTitle.textContent = mode === 'edit' ? 'Edit Achievement' : 'Add Achievement';
 
-    // Borders are needed for the dropdown here even if the admin never
-    // visited the Borders tab this session — fetch on demand if we don't
-    // have them cached yet, same lazy-load idea as loadPTDelFormData().
+    // Borders load lazily; the Borders tab may not have been opened yet.
     var ensureBorders = achBordersData.length > 0
         ? Promise.resolve()
         : fetch('/admin/api/achievement-borders').then(function (r) { return r.json(); }).then(function (b) { achBordersData = b; });
@@ -2405,7 +2241,7 @@ function openAchievementModal(mode, achievement, categoryId) {
         }
 
         achievementModal.classList.remove('hidden');
-        if (window.helixPolling) window.helixPolling.pause(); // modal requires input before any server action — the polling-pause pattern
+        if (window.helixPolling) window.helixPolling.pause(); // no polling refresh while the modal is open
     });
 }
 
@@ -2430,10 +2266,8 @@ document.getElementById('achievement-modal-save-btn').addEventListener('click', 
         return;
     }
 
-    // Multipart form, not JSON — a badge image file may be attached.
-    // Booleans are appended as literal 'true'/'false' strings rather than
-    // relying on checkbox-only-present-when-checked FormData behaviour,
-    // matching what admin_achievements.py's create/update routes expect.
+    // Multipart, since a badge file may be attached. Booleans go as
+    // 'true'/'false' strings; admin_achievements.py compares against 'true'.
     var formData = new FormData();
     formData.append('name', name);
     formData.append('description', document.getElementById('ach-form-description').value.trim());
@@ -2483,17 +2317,14 @@ function renderAchievementBorders(borders) {
     }
     list.innerHTML = borders.map(function (b) {
         return '<div class="account-user-row" id="ach-border-' + b.id + '">' +
-            // Live preview — applies the actual saved css_class to a small div,
-            // so the admin can see immediately whether the class name they typed
-            // actually matches something real in achievements.css, rather than
-            // discovering a typo only once a user tries to select it as active.
-            '<div class="ach-border-preview ' + b.css_class + '"></div>' +
+            // Preview applies the saved css_class, so a mistyped class is visible at once.
+            '<div class="ach-border-preview ' + adminEsc(b.css_class) + '"></div>' +
             '<div class="account-user-info">' +
-            '<span class="account-user-name">' + b.name + '</span>' +
-            '<span class="account-user-role">' + b.css_class + '</span>' +
+            '<span class="account-user-name">' + adminEsc(b.name) + '</span>' +
+            '<span class="account-user-role">' + adminEsc(b.css_class) + '</span>' +
             '</div>' +
             '<div class="account-user-actions">' +
-            '<button type="button" class="account-delete-btn" data-id="' + b.id + '" data-name="' + b.name + '">&times;</button>' +
+            '<button type="button" class="account-delete-btn" data-id="' + b.id + '" data-name="' + adminEsc(b.name) + '">&times;</button>' +
             '</div></div>';
     }).join('');
 

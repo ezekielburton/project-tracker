@@ -1,7 +1,5 @@
-"""Coverage for column-width and column-order persistence:
-POST /client-servicing/layout (routes/layout.py)
-and table.py's _column_widths()/_ordered_columns() reading it back into
-the rendered <colgroup>/<thead>."""
+"""Column width and order persistence: POST /client-servicing/layout, and the
+table rendering it back into <colgroup>/<thead>."""
 import json
 import re
 
@@ -113,9 +111,8 @@ def test_one_users_layout_does_not_affect_another(app, client, db_session):
 
 
 def _rendered_column_order(client, app):
-    """The data-col-key order of the <th> elements on the live page —
-    i.e. what the user actually sees, after table.py's _ordered_columns()
-    has applied their saved layout."""
+    """The data-col-key order of the rendered <th> elements, after the saved
+    layout is applied."""
     with app.test_request_context():
         url = url_for('client_servicing.table')
     resp = client.get(url)
@@ -128,11 +125,8 @@ def test_saved_order_is_reflected_in_rendered_column_order(app, client, db_sessi
     user = _user(db_session, 'h')
     login_as(client, app, user, 'password123')
 
-    # Put the last three default columns right after priority/margin/
-    # inward_cost; everything else keeps its relative order behind them,
-    # unaffected keys included. Project isn't part of this saved layout
-    # at all, but it's pinned (see test_project_column_is_pinned_first_
-    # even_if_saved_layout_says_otherwise below) so it still comes first.
+    # Move the last three default columns to the front, reversed. Project is
+    # not in the saved layout but is pinned, so it still comes first.
     reordered = [{'key': 'priority', 'width': 100}, {'key': 'margin_percent', 'width': 100},
                  {'key': 'inward_cost', 'width': 100}]
     resp = _post_layout(client, app, reordered)
@@ -171,18 +165,14 @@ def test_stale_unknown_key_in_saved_layout_is_ignored(app, client, db_session):
 
     order = _rendered_column_order(client, app)
     assert 'not_a_real_column' not in order
-    # project is pinned first regardless of what's saved (see the pinning
-    # test below); client is next since it's the only real key saved
+    # project is pinned first; client is the only real key saved
     assert order[0] == 'project'
     assert order[1] == 'client'
     assert set(order) == {c['key'] for c in COLUMNS}
 
 
 def test_project_column_is_pinned_first_even_if_saved_layout_says_otherwise(app, client, db_session):
-    """Project is a sticky, non-draggable column on the page (it always
-    sits right after "Open in Projects") — so even a saved layout from
-    before that was true, or one tampered with by hand, must not be able
-    to move it."""
+    """Project is a sticky, non-draggable column; no saved layout can move it."""
     user = _user(db_session, 'k')
     login_as(client, app, user, 'password123')
 

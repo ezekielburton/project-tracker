@@ -1,5 +1,4 @@
-"""Ref generation: sequential per register, never shared between them,
-and safe when two saves land at once."""
+"""Ref generation: a separate sequential counter per register, and formatting."""
 import pytest
 
 from app.modules.hse.lib.refs import format_ref, next_ref
@@ -26,8 +25,7 @@ def test_an_unknown_register_fails_loudly(db_session):
 
 
 def test_concurrent_allocations_never_collide(db_session):
-    """The counter is bumped by one atomic statement, so a batch of
-    allocations produces a batch of distinct refs."""
+    """Repeated allocations give distinct refs (sequential calls, not truly concurrent)."""
     refs = [next_ref('incidents') for _ in range(50)]
     assert len(set(refs)) == 50
 

@@ -1,9 +1,7 @@
-// app/static/js/project_overlay_edit.js
+// app/modules/projects/static/js/project_overlay_edit.js
 //
-// Design > Details edit mode (M4). Task #34 slice: Save now persists via
-// a real POST, with the concurrent-edit check from _build_details_
-// context's edit_snapshot_at. Field-level activity logging (task #36)
-// and the SSE push to other viewers (task #35) aren't wired yet.
+// Details edit mode: the header's Edit/Save/Cancel. Save POSTs every
+// [data-field] with edit_snapshot_at so the server can reject a concurrent edit.
 
 window.ProjectOverlayEdit = (function () {
     function init(headerEl, contentEl, projectId, onSaved) {
@@ -17,19 +15,13 @@ window.ProjectOverlayEdit = (function () {
         var isEditingNow = false;
         var isDirty = false;
 
-        // Delegated once (not per-field) so any current or future editable
-        // field marks the form dirty just by existing under contentEl — no
-        // per-row wiring to keep in sync as fields get added later. Ignored
-        // outside edit mode so page-load's initial input values (there
-        // aren't any today, but future-proof) can't false-positive this.
+        // Delegated on contentEl, which persists across page switches, so any
+        // edit field marks the form dirty. Ignored outside edit mode.
         contentEl.addEventListener('input', markDirtyIfEditing);
         contentEl.addEventListener('change', markDirtyIfEditing);
 
         function markDirtyIfEditing(e) {
-            // closest() (not classList.contains) so a control INSIDE an
-            // .overlay-edit-input container — e.g. a checkbox in a
-            // checkbox-group field — also marks the form dirty, not just a
-            // bare input that is itself the .overlay-edit-input.
+            // closest() so controls inside an .overlay-edit-input (checkbox groups) count too.
             if (isEditingNow && e.target.closest && e.target.closest('.overlay-edit-input')) isDirty = true;
         }
 
@@ -80,9 +72,7 @@ window.ProjectOverlayEdit = (function () {
                 var input = row.querySelector('.overlay-edit-input');
                 if (!input) return;
                 if (input.dataset.editType === 'checkbox-group') {
-                    // Comma-joined checked values — the shape the server
-                    // stores for design_teams_requested (and any future
-                    // multi-select field that opts in the same way).
+                    // Comma-joined checked values, as the server stores them.
                     var picked = [];
                     input.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
                         if (cb.checked) picked.push(cb.value);
@@ -109,11 +99,8 @@ window.ProjectOverlayEdit = (function () {
                         alert(data.error || 'Could not save changes.');
                         return;
                     }
-                    // Refresh brings back fresh view-mode content (new
-                    // values baked in) and a fresh edit_snapshot_at, and
-                    // loadSubTabContent already calls exitEditMode() on
-                    // every switch — see project_list.js — so the header
-                    // resets for free.
+                    // onSaved reloads Details (fresh values and snapshot);
+                    // project_list.js's loadSubTabContent resets the header.
                     if (onSaved) onSaved();
                 })
                 .catch(function () {
@@ -123,12 +110,9 @@ window.ProjectOverlayEdit = (function () {
         }
 
         saveBtn.addEventListener('click', function () {
-            // Any checkbox-group option that was checked on load and is now
-            // unchecked, and declares data-confirm-uncheck, gates Save behind
-            // a confirm — e.g. dropping a design team that still has a Design
-            // Lead. Generic (data-driven), not teams-specific. defaultChecked
-            // reflects the server's freshly-rendered original state; checked
-            // reflects the current toggle.
+            // Unticking a box that has data-confirm-uncheck (e.g. a team with
+            // a Design Lead) asks for confirmation. defaultChecked is the
+            // server-rendered state.
             var warnings = [];
             contentEl.querySelectorAll('.overlay-edit-input input[type="checkbox"][data-confirm-uncheck]').forEach(function (cb) {
                 if (cb.defaultChecked && !cb.checked) warnings.push(cb.dataset.confirmUncheck);
@@ -143,8 +127,7 @@ window.ProjectOverlayEdit = (function () {
 
         return {
             destroy: function () {
-                // Listeners live on the header buttons, torn down with the
-                // rest of the overlay shell on close.
+                // Listeners are on overlay nodes and go with them on close.
             },
             exitEditMode: exitEditMode,
             isEditing: function () { return isEditingNow; },

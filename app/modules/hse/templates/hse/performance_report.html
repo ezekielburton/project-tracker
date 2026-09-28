@@ -1,11 +1,6 @@
-{# The HSE performance report — four A4 pages, printed from the browser.
-
-   Deliberately NOT extending base.html: this is a document, not a screen.
-   It carries no app chrome, no theme switch and no navigation, because all
-   three would end up in the PDF.
-
-   Every figure comes from the same view model the page uses, so the report
-   and the screen can never disagree. #}
+{# The HSE performance report: four A4 pages, printed from the browser.
+   Does not extend base.html, so no app chrome ends up in the PDF. Uses the
+   same view model as the performance page. #}
 <!doctype html>
 <html lang="en">
 <head>
@@ -129,8 +124,7 @@
             <tr><td colspan="4" class="rp-empty" style="text-align:left;">Nothing closed in this period.</td></tr>
             {% endfor %}
         </table>
-        {# A severity with nothing closed is left out rather than printed as
-           0%, which would read as a failure that never happened. #}
+        {# Severities with nothing closed are left out, not shown as 0%. #}
     </div>
 
     <div class="rp-card">
@@ -209,8 +203,7 @@
                 to {{ reporting.incidents }} incidents
             </span>
         </div>
-        {# The note is the reason this metric can go in front of a manager at
-           all. Removing it turns good reporting into a bad-looking number. #}
+        {# Keep this note: without it a high ratio reads as a bad result. #}
         <p class="rp-cardnote">
             <strong>Read this one carefully.</strong> A higher ratio is the good result — it
             means people are raising things before somebody gets hurt. A falling number

@@ -1,8 +1,6 @@
-// settings-overlay.js — Vitamin-E
-// Opens auth.account's content inside a modal instead of navigating there.
-// Reuses the exact fragment sidebar.js's SPA nav already gets from the
-// server (X-Nav-Request), so every form and endpoint on that page keeps
-// working unchanged — this only changes how it's displayed.
+// settings-overlay.js — shows the /account page inside a modal.
+// Fetches it with X-Nav-Request, the same stripped fragment SPA nav gets,
+// and re-runs its scripts with sidebar.js's helixExecScripts.
 
 (function () {
     var trigger = document.getElementById('settings-dropdown-btn');
@@ -25,6 +23,10 @@
             })
             .then(function (html) {
                 body.innerHTML = html;
+                // The fragment repeats the shell's crop modal, file pickers and
+                // cropper script; the page already has them, so drop the copies.
+                body.querySelectorAll('#crop-modal, #avatar-file-input, #banner-file-input, script[src*="avatar-cropper.js"]')
+                    .forEach(function (el) { el.remove(); });
                 if (window.helixExecScripts) window.helixExecScripts(body);
             })
             .catch(function () {
@@ -34,7 +36,7 @@
 
     function closeSettings() {
         modal.classList.add('hidden');
-        body.innerHTML = ''; // so the next open re-fetches fresh instead of flashing stale content
+        body.innerHTML = ''; // next open starts blank, with no stale flash
         if (window.helixPolling) window.helixPolling.resume();
     }
 

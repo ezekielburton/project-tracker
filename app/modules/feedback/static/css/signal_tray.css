@@ -1,5 +1,5 @@
-/* Signal tray — the two compact boards and the Friction Log inside the tray
-   shell. The item detail reuses feedback.css, which already loads globally. */
+/* Signal tray: the two compact boards and the Friction Log. Item detail
+   styles come from feedback.css, which loads globally. */
 
 .signal-tray {
     display: flex;
@@ -136,7 +136,7 @@
     outline-offset: -2px;
 }
 
-/* Severity reads as a rank, so weight carries it rather than colour alone. */
+/* Severity shows as a text label plus colour, so it never relies on colour alone. */
 .signal-tray__sev {
     width: 46px;
     flex-shrink: 0;
@@ -327,8 +327,8 @@
 }
 
 /* ── Status pills ────────────────────────────────────────────
-   One colour per stage, shared by both boards. Same pill language as the
-   Projects status pills: solid pastel in light, tint + tone ink in dark. */
+   One colour per stage, shared by both boards: solid pastel in light,
+   tint + tone ink in dark. */
 .signal-tray__pill.is-in_queue,
 .signal-tray__pill.is-requested {
     background: var(--sky);
@@ -376,9 +376,8 @@
 }
 
 /* ── Primary action ──────────────────────────────────────────
-   "Report a bug" / "New request" are the one action in the header, so they
-   take the app-wide tangerine treatment — solid in light, tinted in dark,
-   matching .btn-primary. .signal-tray__back stays neutral. */
+   Tangerine like .btn-primary: solid in light, tinted in dark.
+   .signal-tray__back stays neutral. */
 .signal-tray__new {
     background: var(--tangerine);
     border-color: var(--tangerine);

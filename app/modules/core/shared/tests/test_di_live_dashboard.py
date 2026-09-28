@@ -1,31 +1,20 @@
-"""Coverage for the DI-wide SSE broadcast infrastructure added 3 Sep 2026
-(digital innovation module Performance/Templates/Archive live refresh —
-see digital_innovation_module.md's "SPA/SSE readiness" entry). No route
-or DB layer here — this exercises live_events.py's DiStepTemplate
-sentinel getter and sse_relay.py's dashboard-broadcast dispatch directly,
-the same way test_step_engine.py exercises lib/step_engine.py directly
-against the database rather than through HTTP. Neither
-live_events.py nor sse_relay.py had any test coverage at all before this
-(true for the main Projects module's own _dashboard_subscribers/
-_dispatch_project_change too) — this file is scoped to just what this
-round of work added or changed, not a retroactive sweep of the whole
-choke point."""
+"""Digital Innovation live refresh: live_events.py's DiStepTemplate sentinel
+getter and sse_relay.py's DI dashboard broadcast, called directly (no HTTP)."""
 from app.modules.core.shared.services.live_events import _DI_PROJECT_ID_GETTERS, _collect_ids
 from app.modules.core.shared.services import sse_relay
 from app.modules.digital_innovation.models import DiStepTemplate
 
 
-def test_di_step_template_getter_returns_the_sentinel():
+# `app` imports every model, so DiStepTemplate's mapper can configure when
+# this file runs alone.
+def test_di_step_template_getter_returns_the_sentinel(app):
     template = DiStepTemplate(stage='researching', title='Untracked', sort_order=0)
     getter = _DI_PROJECT_ID_GETTERS['DiStepTemplate']
     assert getter(template) == -1
 
 
-def test_collect_ids_picks_up_the_di_step_template_sentinel():
-    # The regression this guards against: _collect_ids does
-    # `if value: seen.add(value)` — a sentinel of 0 is falsy in Python
-    # and would silently never be collected at all. -1 is truthy, so it
-    # must actually land in the set.
+def test_collect_ids_picks_up_the_di_step_template_sentinel(app):
+    # _collect_ids skips falsy ids, so the sentinel must be -1, not 0.
     template = DiStepTemplate(stage='researching', title='Untracked', sort_order=0)
     seen = set()
     _collect_ids([template], seen, _DI_PROJECT_ID_GETTERS)
@@ -39,10 +28,8 @@ def test_collect_ids_ignores_objects_with_no_registered_getter():
 
 
 def test_dashboard_broadcast_receives_every_di_change(monkeypatch):
-    # A dashboard-style subscriber (Performance/Templates/Archive) must
-    # hear about a change to ANY di_project_id — including the -1
-    # sentinel a DiStepTemplate edit uses, which never matches a real
-    # per-project subscriber.
+    # Dashboard subscribers hear every di_project_id, including the -1
+    # template sentinel, which no per-project subscriber receives.
     sse_relay._di_project_subscribers.clear()
     sse_relay._di_dashboard_subscribers.clear()
 

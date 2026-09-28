@@ -1,9 +1,6 @@
 """
-HSE labels to the shared status-pill colours.
-
-The pill CSS owns shape and colour only — which colour a label gets is
-decided here, the same split core/shared/lib/status_vocabulary.py uses for
-project statuses.
+Maps HSE status and severity labels to shared status-pill colour modifiers
+(same split as core/shared/lib/status_vocabulary.py).
 """
 
 # Status -> status-pill modifier. Covers both the stored workflow statuses
@@ -41,18 +38,15 @@ STATUS_MODIFIERS = {
     'Decommissioned': 'oak',
 }
 
-# Statuses that mean "still needs someone". The rail badges, the Overview and
-# My performance all count openness with this one set, so they cannot
-# disagree about what open means. Lives here rather than in query.py because
-# that module imports the models, and the metric code must stay importable
-# without them.
+# Statuses that count as open. The rail badges, Overview and My performance
+# all use this set. Kept out of query.py so metric code can import it
+# without the models.
 OPEN_STATUSES = ('Open', 'In Progress', 'Escalated')
 
 # Computed expiry statuses that count as needing attention.
 OPEN_EXPIRY_STATUSES = ('Expiring soon', 'Expired')
 
-# Severity -> modifier. Deliberately not the UI accent: coral means
-# interactive everywhere else in the app.
+# Severity -> modifier. Avoids coral, which means "interactive" in the app.
 SEVERITY_MODIFIERS = {
     'Low': 'sage',
     'Medium': 'oak',

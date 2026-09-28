@@ -1,19 +1,12 @@
-/*  app/static/css/project_list.css
-     Projects page. Page specific layout on top of shares.css's card/tag/person-chip componenets
-    Loaded only on this page via base.html's extra_css block, not globally */
+/*  Projects list page layout, on top of shared.css's card/tag/person-chip components.
+    Loaded globally from base.html: SPA navigation never loads a page's extra_css. */
 
 .project-list-page {
     padding: var(--space-6);
 }
 
-.project-list-heading {
-    font-size: var(--text-xl);
-    margin-bottom: var(--space-5);
-}
-
-/* A saved view's tab is the same .project-list-tab styling as the 3 fixed
-   presets, just wrapped in a positioning parent so its "⋯" menu button and
-   popovers (rename input swap-in, delete confirm) can anchor to it. */
+/* Saved-view tab: a positioning parent so its "⋯" menu and rename/delete
+   popovers can anchor to it. */
 .project-list-tab-wrap {
     position: relative;
     display: flex;
@@ -119,9 +112,7 @@
     border-color: var(--red, var(--tint-c0392b));
 }
 
-/* Popover for naming a brand-new saved view — anchored under the
-   filter panel's "Save as new view" button, same recipe as the sort
-   panel's own absolutely-positioned popover. */
+/* Popover for naming a new saved view, anchored under "Save as new view". */
 .save-view-popover {
     position: absolute;
     margin-top: var(--space-2);
@@ -173,56 +164,10 @@
 .project-table,
 .project-group-table {
     display: grid;
-    /* Every flexible column is wrapped in minmax(min-content, <max>) so a
-       column can never shrink narrower than its own content (see the
-       long comment on .project-table-rounded-clip below for the fuller
-       history/reasoning on min-content specifically).
-
-       width: max-content + min-width: 100% is what makes manual
-       column resizing actually work again (Pass 3's fix — see below for
-       why scrolling moved off this element). But Pass 3 alone wasn't
-       enough: it swapped in the OTHER half of this bug (Pass 4).
-
-       PASS 4 — why "Designers" rendered way wider than its own content,
-       and why dragging couldn't shrink it:
-
-       The <fr> unit (2fr, 1.6fr, etc.) is a SHARED-space unit — the
-       spec's algorithm for expanding flexible (fr) tracks computes ONE
-       "hypothetical fr size" for the whole row of tracks: it looks at
-       every fr track, divides that track's own base (min-content) size
-       by its flex factor, and takes the LARGEST of those ratios as the
-       unit everyone else gets multiplied by. So a single column with a
-       big min-content relative to its own small flex factor — here,
-       next-deliverable at 1.4fr, holding a long unbroken deliverable
-       name — sets an inflated "per-1fr" unit that every OTHER fr column
-       (Designers at 1.6fr, in particular) then gets multiplied out to,
-       regardless of what's actually inside THAT column. This step runs
-       BOTH when the browser distributes real free space AND — this is
-       the part Pass 3 didn't account for — when it works out how wide
-       max-content itself should be for a grid sized by width:max-content,
-       which is exactly this element. That's why the column looked
-       inflated even though nothing about its own content asked for it,
-       and why dragging couldn't shrink it: the true floor JS was
-       measuring (cell.scrollWidth) was itself reading the ALREADY-
-       inflated rendered width, not the column's real minimum, so every
-       drag just re-clamped back to the same bloated number (see the
-       comment on contentMinWidth in project_list_layout.js for that
-       half of the fix).
-
-       The fix: drop <fr> as the track maximum entirely and use
-       max-content instead. Because every cell in a track already has
-       white-space: nowrap (added in Pass 2), a track's min-content and
-       max-content are IDENTICAL for plain text, and for the Designers
-       chip row they're only as different as actual chip-wrapping allows
-       — so minmax(min-content, max-content) makes each column exactly
-       as wide as its own content needs, no more, with zero cross-column
-       sharing, because max-content/min-content maximums are NOT subject
-       to the "find the size of an fr" step at all — that step only
-       exists for literal <flex> (fr) maximums. project_list_layout.js's
-       DEFAULT_LAYOUT was changed to match (widths are now the literal
-       string 'max-content' instead of fr strings), with an auto-healing
-       step that upgrades any already-saved fr-suffixed layout so
-       existing accounts get this fix without a manual reset. */
+    /* minmax(min-content, max-content) sizes each column to its own
+       content. Do not use fr maximums: one wide fr column inflates every
+       other fr column, including when sizing a width: max-content grid.
+       --track-N are set by project_list_layout.js (DEFAULT_LAYOUT). */
     grid-template-columns:
         var(--track-1, 2.5rem)
         minmax(min-content, var(--track-2, max-content))
@@ -243,11 +188,9 @@
 }
 
 .project-table-rounded-clip {
-    /* This is now the actual horizontal-scroll viewport — see the long
-       comment on .project-table above for why the scrolling moved here
-       instead of staying on .project-table itself. project_list_layout.js
-       reads/writes scrollLeft/scrollWidth/clientWidth on THIS element
-       (via #project-table-scroll, set in index.html), not on #project-table. */
+    /* The horizontal-scroll viewport. Scroll must live here, not on the
+       grid. project_list_layout.js scrolls #project-table-scroll (this
+       element), not #project-table. */
     position: relative;
     border-radius: var(--radius);
     overflow-x: auto;
@@ -270,10 +213,7 @@
     z-index: 6;
 }
 
-/* Grouped mode gets its own per-card stripe (see .project-group::before
-   below) instead of one running the full height of the page - a single
-   continuous bar behind separate cards would visually re-connect them,
-   defeating the point of them being separate. */
+/* Grouped mode uses a per-card stripe (.project-group::before) instead. */
 .project-table-scroll-region--grouped .project-table-rounded-clip::before {
     display: none;
 }
@@ -306,18 +246,10 @@
     height: 1px;
 }
 
-/* Expand and Name are pinned to the left of the table and stay on screen
-   as the table scrolls right. They need a solid background so scrolled
-   columns don't show through underneath them, and a z-index so they sit
-   above those columns. left: 2.5rem on Name matches Expand's fixed width
-   exactly, so the two sit flush against each other with no gap.
-
-   overflow: hidden matters here specifically because these two are
-   sticky: a name too long for its column used to just spill into the
-   next column's space and sit harmlessly behind it. Now that this column
-   is pinned above the others, that same overflow would paint on top of
-   whatever column is scrolled underneath it instead - clipping it stops
-   that. */
+/* Expand and Name stick to the left while the table scrolls. Solid
+   background + z-index hide the columns scrolling underneath. Name's
+   left: 2.5rem must match Expand's track width. overflow: hidden stops a
+   long name painting over the scrolled columns. */
 .project-col-expand {
     grid-column: var(--pos-expand, 1);
     position: sticky;
@@ -337,35 +269,16 @@
     overflow: hidden;
 }
 
-/* .project-table-header>span (further down) sets position: relative on
-   every header cell, for the resize handle to anchor to. Its selector
-   (a class plus a type) is more specific than .project-col-expand/
-   .project-col-name's own class-only selector, so on header cells it was
-   silently winning and turning sticky back into relative.
-
-   That's not just a scroll-time bug: "left" means something different
-   for the two. Sticky only uses left as a threshold - at rest, before
-   there's anything to stick to, the element sits at its normal grid
-   position with no offset at all. Relative always applies left as a
-   permanent shift from that same normal position. So with relative
-   winning, the header's Expand and Name cells were pushed right by
-   their own left values (0 and 2.5rem) even with the table unscrolled,
-   landing on top of the columns after them - while the body cells below,
-   still genuinely sticky, sat correctly at rest. Restated here with two
-   classes so header cells win back their sticky positioning. */
+/* .project-table-header>span (below) sets position: relative with higher
+   specificity. Restate sticky here, or the header Expand/Name cells get
+   shifted right by their left values and overlap the next columns. */
 .project-table-header .project-col-expand,
 .project-table-header .project-col-name {
     position: sticky;
 }
 
-/* Unread dots (26/27 Aug 2026, per Ezekiel) — small, distinct colors so
-"new update" and "new chat message" read as two different things at a
-glance, not one generic "something happened" indicator. --tangerine
-matches the notification bell's own existing accent color (main.css's
-.bell-badge/.notification-item), so "update" reads consistently with the
-rest of the app; --lavender is unused elsewhere in this palette, so
-"chat" can't be mistaken for a status/urgency color already in play
-(coral/oak/clover are status stages, salmon is danger, sky is action). */
+/* Unread dots: tangerine = new update (matches the notification bell),
+lavender = new chat message (not used by any status/urgency colour). */
 .project-unread-dot {
     flex-shrink: 0;
     width: 8px;
@@ -418,17 +331,9 @@ rest of the app; --lavender is unused elsewhere in this palette, so
     grid-column: var(--pos-status, 11);
 }
 
-/* Handed to Production pill — the one status pill that's independently
-clickable (jumps to the Design Completed tab, see project_list.js's click
-handler on .project-col-status), so it gets its own hover affordance to
-read as clickable within a row that otherwise opens the overlay from
-anywhere you click. Retargeted from the old 'Design Completed' data value
-(22 Aug 2026 simplification, per Ezekiel) — that separate label is gone.
-Selector keys off the data attribute, not the pill's colour modifier —
-"clover" is exclusive to this pill at the project level now that "Client
-Approved" (which used to share it) was removed the same day, but keying
-off the label text rather than the colour still means this survives any
-future colour change without needing a second look. */
+/* Handed to Production pill is clickable on its own: project_list.js jumps
+to the Design Completed tab instead of opening the overlay. Keyed off the
+data attribute, which that JS also checks. */
 .project-col-status[data-status-value="Handed to Production"] .status-pill {
     cursor: pointer;
 }
@@ -503,14 +408,6 @@ body.is-resizing-column * {
     opacity:0.85;
 }
 
-.project-next-deadline-name,
-.project-expand-deliverable-name {
-    display: block;
-    font-size: var(--text-xs);
-    color: var(--grey-mid);
-    font-weight: 200;
-}
-
 .project-col-next-deadline {
     display: flex;
     justify-content: center;
@@ -542,37 +439,14 @@ body.is-resizing-column * {
     background: var(--background);
     border-bottom: 1px solid var(--border-subtle);
     grid-column: 1 / -1;
-    /* 22 Aug 2026 — the sub-table injected here (.expand-deliverable-table
-    or .expand-customer-table) is its own independent grid, sized
-    width: max-content off its OWN columns, which have nothing to do
-    with the outer #project-table's own tracks. Without its own scroll
-    boundary, wide sub-table content (many columns, long names) simply
-    overflowed this cell — and by extension the page — instead of
-    scrolling, forcing a browser resize/zoom to see it. This is the same
-    "overflow-x: auto lives on the WRAPPING element, not the grid"
-    pattern #project-table-scroll already uses for the outer table (see
-    project_list.css's long Pass 3 comment on .project-table) — applied
-    here as this sub-table's own dedicated scroll boundary, independent
-    of whatever the outer table's scroll region is doing. */
+    /* Scroll boundary for the injected sub-table, which sizes to its own
+    columns; without it a wide sub-table overflows the page. */
     overflow-x: auto;
 }
 
-/* Group by renders as separate Monday-style cards, each floating on the
-   page's own background (see .project-table-scroll-region--grouped
-   below) rather than sitting edge-to-edge inside one shared table.
-
-   .project-table--grouped drops .project-table's own `display: grid`
-   (that big grid-template-columns rule right below still applies to it
-   harmlessly — it's just ignored once display isn't grid) in favor of a
-   plain vertical flex stack of .project-group cards, each sized to its
-   own content (width: max-content, same trick .project-table already
-   used) so they all still line up to the SAME width — every card's
-   .project-group-table is its own independent CSS Grid, but they all
-   read the exact same --track-N/--pos-<key> custom properties that
-   project_list_layout.js sets on the outer #project-table, which cascade
-   into every card's grid the same way regardless of nesting. That's what
-   keeps columns perfectly aligned across cards while still looking like
-   separate tables. */
+/* Group by: a flex stack of separate cards on the page background. Each
+   card's .project-group-table is its own grid, but all read the
+   --track-N/--pos-<key> vars set on #project-table, so columns line up. */
 .project-table--grouped {
     display: flex;
     flex-direction: column;
@@ -594,13 +468,7 @@ body.is-resizing-column * {
     box-shadow: var(--shadow);
 }
 
-/* Each card gets its OWN tangerine accent stripe (rather than one
-   continuous bar behind every card, which would visually re-connect
-   them). Same absolutely-positioned full-height bar .project-table-
-   rounded-clip::before already used for the ungrouped table, just
-   scoped to this one card - and since .project-group clips to its own
-   border-radius (overflow: hidden, above), the stripe's top/bottom ends
-   come out rounded for free, matching the card's own corners. */
+/* Per-card tangerine stripe; the card's overflow: hidden rounds its ends. */
 .project-group::before {
     content: '';
     position: absolute;
@@ -612,13 +480,8 @@ body.is-resizing-column * {
     z-index: 1;
 }
 
-/* The card's title bar - not part of any grid, just a plain clickable
-   header sitting on top of .project-group-table. It's styled to match
-   the page background rather than stand out (same idea as Monday's own
-   group headers - the label reads as plain text, not a colored button),
-   but the whole bar stays a real <button> spanning the full card width,
-   so clicking anywhere on it (not just the caret) still collapses/
-   expands it even though there's no visible button chrome. */
+/* Card title bar: a full-width <button> with no button chrome, so a click
+   anywhere on it collapses/expands the group. */
 .project-group-header {
     position: relative;
     display: flex;
@@ -662,9 +525,8 @@ body.is-resizing-column * {
     color: var(--grey-mid);
 }
 
-/* Each card's own independent grid — same column formula as .project-table
-   (see the shared selector on that big rule below), so a group's repeated
-   header + rows line up exactly like the ungrouped table always has. */
+/* .project-group-table shares .project-table's grid rule (above); its
+   display: grid beats the UA [hidden] rule, so restate it. */
 .project-group-table[hidden] {
     display: none;
 }
@@ -691,20 +553,9 @@ body.is-resizing-column * {
 .expand-deliverable-table {
     position: relative;
     display: grid;
-    /* Every track wrapped in minmax(min-content, ...) — the same Pass
-    4/6 fix .project-table's own tracks got (see its long comment
-    above), extended to this sub-table 22 Aug 2026 (it only had the
-    status column's half of the fix until then). Was: every other
-    column had a bare fr maximum, a shared-space unit that let one
-    column's content (a long deliverable name) inflate every OTHER fr
-    column's rendered width regardless of that column's own content —
-    same bug, same cause, as the outer table's Pass 4. The JS default
-    (project_list_layout.js, DELIVERABLE_DEFAULT_LAYOUT) now matches:
-    'max-content' widths, not fr strings, so on first load (before any
-    manual resize) every column already sizes purely from its own
-    content, with the status column's original 18 Aug fix folded into
-    the same treatment rather than being the one column handled
-    differently. */
+    /* Same minmax(min-content, max-content) tracks as .project-table, for
+    the same reason (no fr). --dtrack-* come from project_list_layout.js
+    (DELIVERABLE_DEFAULT_LAYOUT). */
     grid-template-columns:
         minmax(min-content, var(--dtrack-name, max-content))
         minmax(min-content, var(--dtrack-deadline, max-content))
@@ -748,10 +599,7 @@ body.is-resizing-column * {
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--border-subtle);
-    /* Same reasoning as .project-table-header > span's white-space:
-    nowrap — text that's allowed to wrap under-reports its own
-    min-content, and the header row shares tracks with every data row,
-    so its label width has to count toward the column's real floor. */
+    /* nowrap so min-content is the full label width (see .project-row>span). */
     white-space: nowrap;
 }
 
@@ -831,14 +679,9 @@ body.is-resizing-column * {
 .expand-customer-table {
     position: relative;
     display: grid;
-    /* Every track wrapped in minmax(min-content, ...) — same Pass 4/6
-    fix as .expand-deliverable-table above (22 Aug 2026), extended past
-    just the status column. No resize JS ever wired up for this table
-    (the resize-handle markup exists but is inert — see
-    project_list_layout.js), so these are pure CSS fallbacks with no
-    custom property ever actually set; max-content as the fallback
-    means every column still sizes to its own content by default,
-    rather than a bare fr letting one column's content inflate another's. */
+    /* Same track sizing as .expand-deliverable-table. No JS sets the
+    --ctrack-* vars (its resize handles are inert), so the max-content
+    fallbacks always apply. */
     grid-template-columns:
         2.5rem
         minmax(min-content, var(--ctrack-name, max-content))
@@ -869,8 +712,7 @@ body.is-resizing-column * {
     align-items: center;
     border-bottom: 1px solid var(--border-subtle);
     grid-row: var(--row-num);
-    /* Same reasoning as .expand-deliverable-row > span's white-space:
-    nowrap — wrapped text under-reports its own min-content. */
+    /* nowrap so min-content is the full text width. */
     white-space: nowrap;
 }
 
@@ -982,11 +824,8 @@ body.is-resizing-column * {
 .project-table-header>span {
     background: var(--white);
     position: relative;
-    /* Same reasoning as .project-row > span's white-space: nowrap — a
-       two-word header label ("LEAD DESIGNERS", "NEXT DELIVERABLE")
-       should never be allowed to wrap and under-report its own
-       min-content, since the header row shares the same tracks as every
-       data row and its label width counts toward that column's floor. */
+    /* nowrap so a two-word label counts at full width toward the
+       column's floor (see .project-row>span). */
     white-space: nowrap;
 }
 
@@ -1025,10 +864,8 @@ body.is-resizing-column * {
     border-bottom: 1px solid var(--border-subtle);
     grid-row: var(--row-num);
     min-height: var(--row-height);
-    /* Forces every cell's min-content measurement to be its full
-       single-line width — without this, the browser is free to assume
-       text CAN wrap and report a much narrower minimum, which would
-       undersize the column relative to what's actually being displayed. */
+    /* nowrap makes min-content the full single-line width; wrappable
+       text reports a narrower minimum and the column undersizes. */
     white-space: nowrap;
 }
 
@@ -1090,13 +927,8 @@ body.is-resizing-column * {
     position: absolute;
     top: calc(100% + var(--space-2));
     left: 0;
-    /* Widened from 780px (22 Aug 2026, per Ezekiel — "the options are
-    actually [not] readable") alongside the .filter-columns/.filter-chip-text
-    changes below: 780px across 7 (now 8) columns left labels like "Handed
-    to Production" or a full client name truncated to "Han..."/"Ac...".
-    1180px is sized so 8 columns at their new 130px floor (see
-    .filter-columns) fit without horizontal scroll on a normal desktop
-    viewport; overflow-x below is the fallback for anything narrower. */
+    /* Sized for the 8 grid tracks at their 130px floor (.filter-columns);
+    overflow-x covers narrower viewports. */
     width: min(95vw, 1180px);
     max-height: 70vh;
     overflow-y: auto;
@@ -1117,10 +949,7 @@ body.is-resizing-column * {
     color: var(--tangerine);
 }
 
-/* ---- Sort Panel ----
-   Same white/border/shadow popover recipe as .project-filter-panel just
-   above, sized for a short list of fields rather than the filter panel's
-   wide multi-column layout. */
+/* ---- Sort Panel ---- */
 
 .project-sort-wrap {
     position: relative;
@@ -1142,10 +971,7 @@ body.is-resizing-column * {
     z-index: 20;
 }
 
-/* Two side-by-side sections sharing one panel/one Clear button — Group by
-   on the left, the existing per-field Order by arrows on the right. Kept
-   as two independent columns rather than stacked, since Group by is a
-   short flat list of buttons while Order by is a taller list of rows. */
+/* Group by (left) and Order by (right), sharing one Clear button. */
 .project-sort-panel-columns {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1301,14 +1127,8 @@ body.is-resizing-column * {
 
 .filter-columns {
     display: grid;
-    /* 8 columns now (Design Type added 22 Aug 2026, per Ezekiel), each with
-    a real minimum instead of minmax(0, ...) — the old bare-0 minimum let
-    the grid squeeze every column down arbitrarily far on top of an
-    already-narrow 780px panel, which is what made every label truncate.
-    130px is enough for "Handed to Production" to sit on two lines (see
-    .filter-chip-text's wrap change below) without looking cramped; if the
-    panel is ever narrower than 8*130px it scrolls horizontally
-    (.project-filter-panel's overflow-x) rather than re-shrinking below this. */
+    /* 130px floor keeps labels readable; the panel scrolls below that.
+    The template renders 9 columns, so the 9th wraps to a second row. */
     grid-template-columns: repeat(8, minmax(130px, 1fr));
     gap: 0;
     margin-top: var(--space-3);
@@ -1379,14 +1199,8 @@ body.is-resizing-column * {
 }
 
 .filter-chip-text {
-    /* Was overflow:hidden + ellipsis + nowrap — on a narrow column that
-    cut "Handed to Production"/a full client name/designer name down to a
-    few unreadable characters ("Han...", "Ac...") no matter how the count
-    badge next to it was sized (22 Aug 2026 fix, per Ezekiel). Wrapping
-    instead means every label is always fully readable; align-items:
-    flex-start above (was center) keeps a wrapped 2-line label's count
-    badge pinned to its top line rather than vertically re-centering
-    against the taller row. */
+    /* Labels wrap so they stay readable; the row's align-items: flex-start
+    keeps the count on the first line. */
     overflow-wrap: break-word;
     white-space: normal;
     line-height: 1.25;
@@ -1442,13 +1256,6 @@ body.is-resizing-column * {
     border-bottom: 1px solid var(--border-subtle);
 }
 
-.filter-panel-title {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
 .filter-panel-count {
     font-size: var(--text-xs);
     color: var(--grey-dark);
@@ -1459,48 +1266,6 @@ body.is-resizing-column * {
     font-weight: 600;
     color: var(--tint-b45309);
     margin-bottom: var(--space-3);
-}
-
-.filter-group-count {
-    color: var(--grey-mid);
-    font-weight: 400;
-    text-transform: none;
-}
-
-.filter-checkbox-text {
-    flex: 1;
-}
-
-.filter-checkbox-count {
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--grey-mid);   
-}
-
-.filter-text-input,
-.filter-date-input {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    padding: var(--space-2);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    width: 100%;
-}
-
-.filter-date-range {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-}
-
-.filter-date-input {
-    width: auto;
-    flex: 1;
-}
-
-.filter-date-sep {
-    font-size: var(--text-xs);
-    color: var(--grey-mid);
 }
 
 .project-list-header {

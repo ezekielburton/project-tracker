@@ -1,14 +1,12 @@
 """
-Recurring obligations turned into occurrences, computed at read time.
+Recurring schedules expanded into occurrences, computed at read time.
 
-An occurrence is not a row and never becomes one. The only thing a
-completed inspection writes is an ordinary HseEntry carrying schedule_id
-and occurrence_date, which is what makes it count here. If anything in
-this module ever writes, something has gone wrong.
+Occurrences are never stored. Completed work is an ordinary HseEntry with
+schedule_id and occurrence_date set; that pair is what counts it here.
+Nothing in this module writes.
 
-Dates are anchored to the schedule's own starts_on, never to the window
-being asked for, so a schedule yields the same dates whether the page is
-rendering one week or a whole year.
+Dates anchor to the schedule's starts_on, not the requested window, so a
+schedule yields the same dates for any window size.
 """
 
 from calendar import monthrange
@@ -17,18 +15,16 @@ from datetime import date, timedelta
 
 FREQUENCIES = ('daily', 'weekly', 'monthly', 'quarterly', 'annual')
 
-# Months between occurrences, before the schedule's own interval. A
-# six-monthly vehicle service is frequency='monthly', interval=6 — or
-# 'quarterly' with interval=2; both land on the same dates.
+# Months per step, multiplied by the schedule's interval (six-monthly =
+# 'monthly' x 6 or 'quarterly' x 2).
 _MONTH_STEP = {'monthly': 1, 'quarterly': 3, 'annual': 12}
 
-# A guard, not a limit anyone should reach: it stops a malformed interval
-# spinning rather than capping any real schedule.
+# Runaway guard for malformed data; no real schedule gets near it.
 _MAX_OCCURRENCES = 2000
 
 
 def _interval(schedule):
-    """Intervals below 1 would never advance. Treated as 1."""
+    """The schedule's interval; missing, invalid or below 1 becomes 1."""
     try:
         n = int(schedule.interval or 1)
     except (TypeError, ValueError):
@@ -37,7 +33,7 @@ def _interval(schedule):
 
 
 def _clamp(year, month, day):
-    """The 31st of a 30-day month is that month's last day, not a skip."""
+    """A date with the day clamped to the month's length (31st -> 30th)."""
     return date(year, month, min(day, monthrange(year, month)[1]))
 
 
@@ -50,7 +46,7 @@ def _from_index(index, day):
 
 
 def _day_dates(schedule, lo, hi, step_days):
-    """Dates for the fixed-length frequencies — daily and weekly."""
+    """Dates for the fixed-length frequencies (daily, weekly)."""
     anchor = schedule.starts_on
     if schedule.frequency == 'weekly':
         target = schedule.weekday
@@ -60,7 +56,7 @@ def _day_dates(schedule, lo, hi, step_days):
 
     cur = anchor
     if lo > anchor:
-        # Jump straight to the window instead of walking years of history.
+        # Jump to the window without walking the history.
         cur = anchor + timedelta(days=((lo - anchor).days // step_days) * step_days)
 
     out = []
@@ -72,14 +68,14 @@ def _day_dates(schedule, lo, hi, step_days):
 
 
 def _month_dates(schedule, lo, hi, step_months):
-    """Dates for the month-based frequencies. The day of the month is the
-    schedule's own, clamped to months that are too short for it."""
+    """Dates for the month-based frequencies, on the schedule's day of month
+    (clamped in short months)."""
     anchor = schedule.starts_on
     day = schedule.day_of_month or anchor.day
 
     index = _month_index(anchor)
     if _from_index(index, day) < anchor:
-        # The chosen day has already gone in the starting month.
+        # The day has already passed in the starting month.
         index += step_months
 
     if lo > _from_index(index, day):
@@ -118,18 +114,14 @@ def occurrence_dates(schedule, window_start, window_end):
 
     step = _MONTH_STEP.get(schedule.frequency)
     if step is None:
-        return []  # an unknown frequency is due never, not every day
+        return []  # unknown frequency: never due
     return _month_dates(schedule, lo, hi, step * n)
 
 
 def schedule_targets(schedule):
-    """What one occurrence covers. A schedule with assets is due once per
-    asset — six vehicles is six inspections. One without assets, like a
-    tool box talk, is due once.
-
-    A schedule whose assets have all been retired is due for nothing: it
-    must not quietly turn into a general obligation.
-    """
+    """What one occurrence covers: each active asset, or [None] for a
+    schedule with no assets. If every asset is retired, returns [] (due
+    for nothing, not a general obligation)."""
     declared = list(schedule.assets or [])
     if not declared:
         return [None]
@@ -137,9 +129,8 @@ def schedule_targets(schedule):
 
 
 def _entry_index(entries):
-    """Entries filed against a planned occurrence, keyed by schedule and
-    occurrence date. An entry without both is unplanned work and belongs
-    to no occurrence."""
+    """Entries keyed by (schedule_id, occurrence_date). Entries missing
+    either are unplanned and left out."""
     index = {}
     for e in entries:
         if e.schedule_id is None or e.occurrence_date is None:
@@ -149,13 +140,9 @@ def _entry_index(entries):
 
 
 def occurrences(schedules, entries, window_start, window_end, today=None):
-    """Occurrences in the window, one per schedule per date, each carrying
-    its per-asset items. Nothing here is stored.
-
-    An entry's own entry_date is not consulted: logging Monday's overdue
-    inspection on Wednesday ticks off Monday, and the lateness stays
-    visible rather than being back-dated away.
-    """
+    """Occurrences in the window, one per schedule per date, each with its
+    per-asset items. Matching uses occurrence_date, not entry_date, so late
+    work ticks off the original day."""
     today = today or date.today()
     index = _entry_index(entries)
 
@@ -176,8 +163,7 @@ def occurrences(schedules, entries, window_start, window_end, today=None):
                 items.append({'asset': target, 'entry': match,
                               'done': match is not None})
 
-            # Work filed against an asset since retired still happened. It
-            # stays visible rather than vanishing from the day it was done.
+            # Keep work filed against assets that have since been retired.
             for e in filed:
                 if e.asset_id not in target_ids:
                     items.append({'asset': e.asset, 'entry': e, 'done': True})
@@ -208,16 +194,9 @@ def occurrences(schedules, entries, window_start, window_end, today=None):
 
 
 def coverage(schedules, entries, window_start, window_end, today=None):
-    """Done divided by due over the window — the number the inspection
-    tile and the performance page have both been missing a denominator
-    for. Defined here once so the two pages can never disagree.
-
-    Due counts only occurrences on or before today: a job scheduled for
-    Friday is not missed on Wednesday, and counting it would make every
-    month read badly until its last day.
-
-    Counted per asset, so six vehicles missed reads six, not one.
-    """
+    """Done / due over the window, counted per asset. The single source for
+    the calendar header and the performance page. Due counts only
+    occurrences on or before today."""
     today = today or date.today()
     due = done = 0
     for o in occurrences(schedules, entries, window_start, window_end, today):
@@ -229,24 +208,21 @@ def coverage(schedules, entries, window_start, window_end, today=None):
         'due': due,
         'done': done,
         'outstanding': due - done,
-        # None, not 0 — nothing was due, which is not the same as failing.
+        # None when nothing was due; that is not a 0% score.
         'percent': round(done * 100 / due) if due else None,
     }
 
 
 def falls_due_on(schedule, day):
-    """True when this schedule genuinely falls due on that date.
-
-    The write path checks this before stamping an entry with an occurrence.
-    Without it a hand-made request could tick off work that was never
-    planned, and coverage stops being a number anyone can trust.
-    """
+    """True when this schedule falls due on that date. The write path checks
+    this before linking an entry to an occurrence, so a forged request
+    cannot tick off unplanned work."""
     return day in occurrence_dates(schedule, day, day)
 
 
 def next_due(schedule, today=None, horizon_days=400):
-    """The next date this schedule falls due, for the Schedule tab. None
-    when it has ended, or when nothing falls inside the horizon."""
+    """The next date this schedule falls due, for the Schedule page. None
+    when it has ended or nothing falls inside the horizon."""
     today = today or date.today()
     dates = occurrence_dates(schedule, today, today + timedelta(days=horizon_days))
     return dates[0] if dates else None

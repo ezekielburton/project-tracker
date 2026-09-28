@@ -49,8 +49,7 @@ def test_editor_template_carries_every_declared_id():
 
 
 def test_editor_template_pins_every_library():
-    """A pinned version is only half the promise — without a hash, a changed
-    file on the CDN still runs."""
+    """Every CDN library is pinned by version and by integrity hash."""
     template = open(EDITOR_TEMPLATE, encoding='utf-8').read()
     tags = {match.group(1): match.group(0) for match in SCRIPT_TAG.finditer(template)}
     for library in PINNED_LIBRARIES:
@@ -67,7 +66,16 @@ def test_editor_template_resolves(app):
 # ------ Cleaning on save ------
 
 def _save(client, section_id, document):
+    """Save into a fresh article, as the editor does after the dashboard creates one."""
+    from app.modules.core.shared.extensions import db
+    from app.modules.core.shared.models import WikiArticle
+
+    article = WikiArticle(section_id=section_id, title='A title', slug=f'a-title-{section_id}',
+                          sections_json='{}')
+    db.session.add(article)
+    db.session.commit()
     return client.post('/wiki/editor/article/save', data={
+        'article_id': str(article.id),
         'section_id': str(section_id),
         'title': 'A title',
         'sections_json': json.dumps(document),
@@ -114,14 +122,19 @@ def test_save_drops_unknown_block_types(app, client, db_session):
 
 
 def test_save_rejects_content_that_is_not_a_document(app, client, db_session):
-    from app.modules.core.shared.models import WikiSection
+    from app.modules.core.shared.models import WikiArticle, WikiSection
 
     _admin(db_session, client, app, 'editor-bad@example.com')
     section = WikiSection(title='S', slug='s-bad')
     db_session.add(section)
     db_session.commit()
 
+    article = WikiArticle(section_id=section.id, title='A title', slug='a-title-bad', sections_json='{}')
+    db_session.add(article)
+    db_session.commit()
+
     resp = client.post('/wiki/editor/article/save', data={
+        'article_id': str(article.id),
         'section_id': str(section.id),
         'title': 'A title',
         'sections_json': '[{"type": "body"}]',
@@ -150,7 +163,7 @@ def test_save_rejects_unsafe_media_urls(app, client, db_session):
 
 
 def test_svg_upload_is_rejected(app, client, db_session):
-    """Same-origin svg can carry script."""
+    """SVG uploads are refused: same-origin SVG can carry script."""
     import io as _io
     _admin(db_session, client, app, 'editor-svg@example.com')
 

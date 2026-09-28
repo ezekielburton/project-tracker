@@ -1,12 +1,9 @@
-{# Shared template macros. Currently just one: user_avatar(). Import with
-{% from '_macros.html' import user_avatar %} at the top of any template
-that needs a clickable, badge-aware avatar. #}
+{# Avatar macros. user_avatar() is the clickable,
+badge-aware avatar most templates want. #}
 
 {% macro user_avatar_visual(user, size='sm') %}
-{# Just the circle + badge, no <a> wrapper — for spots where the avatar
-    sits inside an already-interactive element (e.g. a <button>) and
-        nesting a link inside it would be invalid HTML / a dead click target.
-        user_avatar() below wraps this for every normal case. #}
+{# Circle + badge with no link, for use inside an interactive element
+    (e.g. a <button>), where a nested link is invalid. #}
         <span class="user-avatar-link user-avatar--{{ size }}" title="{{ user.name }}">
             {% if user.avatar_filename %}
             <img src="{{ url_for('static', filename='avatars/' + user.avatar_filename) }}" class="user-avatar-img"
@@ -25,30 +22,9 @@ that needs a clickable, badge-aware avatar. #}
         {% endmacro %}
 
         {% macro user_avatar(user, size='sm') %}
-        {# The normal case: same visual, wrapped in a link to that user's profile. #}
+        {# The avatar, linked to the user's profile. #}
         <a href="{{ url_for('profile.view', user_id=user.id) }}" class="user-avatar-link-wrap"
             style="text-decoration:none; display:inline-flex;">
             {{ user_avatar_visual(user, size) }}
         </a>
-        {% endmacro %}
-
-        {% macro deliverable_tag(deliverable, checkbox_class, state, status_label=None) %}
-        {# Renders one deliverable as a clickable tag instead of a plain checkbox row.
-           state is one of:
-             'locked'     — already approved: checked+disabled, pine fill, checkmark
-             'selectable' — checked, clickable, tangerine when checked (the normal case)
-             'disabled'   — some other status: unchecked+disabled, muted, shows status_label
-           Every existing script that reads `.checked` / `data-deliverable-id` off
-           these checkboxes keeps working unchanged — only the wrapper markup differs. #}
-        <label
-            class="deliverable-tag{% if state == 'locked' %} deliverable-tag--locked{% elif state == 'disabled' %} deliverable-tag--disabled{% endif %}">
-            <input type="checkbox" class="{{ checkbox_class }}" data-deliverable-id="{{ deliverable.id }}"
-                {% if state=='locked' %}checked disabled{% elif state=='selectable' %}checked{% else %}disabled{% endif %}>
-            <span>{{ deliverable.name }}</span>
-            {% if state == 'locked' %}
-            <span class="deliverable-tag-status">✓</span>
-            {% elif state == 'disabled' and status_label %}
-            <span class="deliverable-tag-status">{{ status_label }}</span>
-            {% endif %}
-        </label>
         {% endmacro %}

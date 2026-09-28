@@ -1,8 +1,6 @@
 def assignable_teams_for(team):
-    """Teams whose members may be assigned to a deliverable/stream/lead on `team`.
-    3D designers routinely do the 2D companion work AND the technical drawings
-    for their own 3D jobs, so the 2D and Technical pools also include 3D people.
-    Every other team stays its own."""
+    """Teams whose members may be assigned to work on `team`. 2D and Technical
+    also include 3D, since 3D designers do the 2D and drawings for their own jobs."""
     t = (team or '').strip().lower()
     if t == '2d':
         return ['2D', '3D']

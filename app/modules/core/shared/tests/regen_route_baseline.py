@@ -1,23 +1,16 @@
-"""Regenerate the route-contract baseline from the live app.
+"""Regenerate refactor/route_baseline.txt from the live app, then commit it.
 
-Run once from the repo root when routes intentionally change (or to restore a
-lost baseline):  python -m app.modules.core.shared.tests.regen_route_baseline
+Run from the repo root:  python -m app.modules.core.shared.tests.regen_route_baseline
 
-Writes refactor/route_baseline.txt at the repo root — the exact path
-test_routes_contract.py's _baseline_path() reads from. Commit it.
-
-The route set written here comes from current_routes() below, which
-test_routes_contract.py imports too — one definition, so a baseline written
-by this script can never disagree with the contract that reads it.
+test_routes_contract.py imports current_routes() and baseline_path() from here,
+so the writer and the reader always agree.
 """
 import os
 
 
 def current_routes(app):
-    """The routes that make up the contract.
-
-    Static routes (the app's own plus one per blueprint as assets move into
-    modules) are infrastructure, not contract, so they are left out.
+    """The contract's routes as tab-separated rule, methods, endpoint strings.
+    Static routes (the app's and each blueprint's) are left out.
     """
     routes = set()
     for r in app.url_map.iter_rules():

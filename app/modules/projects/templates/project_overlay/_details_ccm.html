@@ -1,25 +1,10 @@
 {% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
 
-{# Flags + Customers toggle share one row (23 Aug 2026, per Ezekiel —
-"a cancel customer button next to flag history - blue. becomes cancel
-when pressed to go back"). _flag_project_panel.html itself is untouched —
-it's a shared partial also used per-customer on the Deliverables tab, so
-the button is a sibling here rather than something added into that
-partial's own controls row, keeping it from leaking into those other
-copies. Clicking it swaps the Properties/Design Leads/Reference Files
-body (#overlay-details-main-view) out for the Customers card
-(#overlay-details-cancel-view) in place, same "Edit -> Save/Cancel" swap
-vocabulary the overlay header's own Edit button already uses — the button
-reads "Manage Customers" while showing the normal view, and "Back" while
-the Customers card is showing.
-
-Relabelled from "Cancel Customer" 25 Aug 2026 (per Ezekiel) when Add
-Customer landed in the same card below — the toggle now opens a panel
-that can do more than cancel, so the button needed to say so. Gate
-widened to match: it used to require customer_rows (nothing to cancel
-without at least one row), but can_manage_customers alone is enough now,
-since a project can reach here with zero customers and still need to add
-the first one. See project_details_card.js. #}
+{# Flags and the Manage Customers toggle share one row. The button sits
+beside _flag_project_panel.html, not inside it, because that partial is
+also used on the Deliverables tab. It swaps #overlay-details-main-view for
+the Customers card (#overlay-details-cancel-view) and relabels to "Back".
+See project_details_card.js. #}
 <div class="overlay-details-grid">
     <div class="overlay-card-full overlay-ccm-top-row">
         <div class="overlay-ccm-top-row-flags">
@@ -149,23 +134,11 @@ the first one. See project_details_card.js. #}
 </div>
 </div>
 
-{# Customers (23 Aug 2026, per Ezekiel — "we need a way to cancel a
-customer. Cancelling a customer freezes its state for invoicing -> it can
-be undone"). Swapped in over #overlay-details-main-view by the Manage
-Customers toggle button above, not shown alongside it — every customer on
-the project, cancelled or not, unlike the Deliverables/Submissions/Pre-
-Production scope-selects which all drop a cancelled customer from their
-list (that's what makes cancelling a "freeze" everywhere else). This is
-the one place a cancelled customer can still be seen and reactivated.
-
-Add Customer (25 Aug 2026, per Ezekiel — see can_manage_customers/
-addable_customers_by_region in _build_details_context() for the
-permission/data behind this): a customer picked from every Customer NOT
-already linked to this project, cancelled or not — re-adding a cancelled
-one goes through Reactivate below, not this form. Gate widened from
-customer_rows alone to (customer_rows or can_manage_customers), since a
-project can land here with zero customers and still need to add its
-first one. #}
+{# Customers card, swapped in by Manage Customers. Lists every customer,
+cancelled or not. Other tabs' scope selects hide cancelled customers
+(cancelling freezes them for invoicing), so this is the only place to
+reactivate one. Add Customer offers only customers not yet linked (see
+_build_details_context()); a cancelled one comes back via Reactivate. #}
 {% if customer_rows or can_manage_customers %}
 <div id="overlay-details-cancel-view" class="is-hidden">
     <div class="overlay-details-grid">
@@ -230,9 +203,7 @@ first one. #}
                         </span>
                     </div>
                     {% if pc.cancelled and pc.cancel_reason %}
-                    {# Read-only — the reason captured when this customer was
-                    cancelled, plus who/when, kept visible even to someone who
-                    can't act (can_cancel_project gates the buttons, not this). #}
+                    {# Shown to everyone; can_cancel_project gates only the buttons. #}
                     <p class="overlay-customer-cancel-note">Cancelled{% if pc.cancelled_by %} by {{
                         pc.cancelled_by.name }}{% endif %}{% if pc.cancelled_at %} on {{
                         pc.cancelled_at.strftime('%d %b %Y') }}{% endif %}: {{ pc.cancel_reason }}</p>

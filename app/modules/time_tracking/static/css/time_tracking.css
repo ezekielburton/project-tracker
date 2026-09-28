@@ -1,14 +1,5 @@
-/* app/static/css/time_tracking.css
-   ───────────────────────────────────
-   Project + deliverable business-hours breakdown page (added 13 Jul
-   2026). Own dedicated CSS file per this project's "every new feature
-   gets its own route/JS/CSS" convention.
-
-   Deliberately doesn't reuse dashboard.css's .dash-row/.dash-tile
-   components: this page's rows carry a variable-length list of per-status
-   chips rather than a fixed set of mini-stats, so it gets its own
-   simpler, purpose-built card/chip shapes instead of stretching the
-   dashboard's tile system to fit a shape it wasn't designed for. */
+/* Time-tracking page. Loaded globally from base.html; the dashboard's
+   Average Time card reuses these .tt-* classes. */
 
 .tt-header {
     margin-bottom: 1.5rem;
@@ -87,9 +78,7 @@
     text-decoration: underline;
 }
 
-/* Overall hours — same "big number + small label" language as
-   dashboard.css's .dash-mini-stat, but its own class since this page
-   doesn't import that component. */
+/* Overall hours: big number + small label. */
 .tt-overall {
     display: flex;
     flex-direction: column;
@@ -157,8 +146,7 @@
     margin: 0.75rem 0 0;
 }
 
-/* Deliverables — native <details>/<summary>, styled to look like a
-   subtle expandable link rather than the browser default triangle. */
+/* Deliverables: native <details>/<summary> with a custom marker. */
 .tt-deliverables {
     margin-top: 0.9rem;
     border-top: 1px solid var(--border-subtle);

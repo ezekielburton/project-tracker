@@ -84,10 +84,9 @@
         });
     }
 
-    function startAutosave(editor, form, articleField, status) {
+    function startAutosave(editor, articleField, status) {
         window.helixEditorAutosave = window.HelixEditorAutosave.start({
             editor: editor,
-            form: form,
             status: status,
             articleField: articleField,
             url: window.WIKI_AUTOSAVE_URL,
@@ -116,7 +115,7 @@
             minHeight: 200,
             onReady: function () {
                 window.helixBlockDrag = window.HelixBlockDrag.attach(editor, holder);
-                startAutosave(editor, form, articleField, status);
+                startAutosave(editor, articleField, status);
             }
         });
 

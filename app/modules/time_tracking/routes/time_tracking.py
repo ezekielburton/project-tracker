@@ -1,7 +1,5 @@
-# The management/admin time-tracking page: a full-page table of business
-# hours per project and per deliverable, broken down by status. The hour
-# math and row-building live in the module's logic.py; this file is just
-# the route.
+# Time-tracking page: business hours per project and deliverable, by status.
+# The math lives in logic.py.
 
 from flask import Blueprint, render_template, abort
 from flask_login import login_required
@@ -15,16 +13,8 @@ time_tracking_bp = Blueprint('time_tracking', __name__, template_folder='../temp
 @time_tracking_bp.route('/time-tracking')
 @login_required
 def index():
-    """
-    Full-page time-tracking breakdown for admin/management.
-
-    Uses a manual get_actor() role check rather than the shared
-    a real-user gate: this is a read-only reporting view, so it must
-    be emulation-aware (an admin emulating a CS/Designer/Team Lead should see
-    it as unreachable as that role would). A real-user gate checks the real
-    current_user, which is right for admin-only WRITE routes but wrong for a
-    read-only view like this one.
-    """
+    """Time-tracking page. Checks get_actor() so it is emulation-aware: an
+    admin emulating a role without view_time_reports gets a 403."""
     actor = get_actor()
     if not can('view_time_reports', actor):
         abort(403)

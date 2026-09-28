@@ -1,20 +1,9 @@
-# app/submission_cache.py
+# Local-disk cache for Draft-stage submission files. Files sit here until
+# Submit to Client, when the caller names each file in the zip and calls
+# build_zip_bytes() to get one archive for nas.upload_app_file().
 #
-# Local-disk cache for Submissions Draft-stage files (M3 Step 4 overlay
-# content build). While a submission is in Draft, uploaded files sit here
-# instead of going straight to the NAS — see ProjectSubmissionFile.storage_
-# location in app/models/__init__.py for the full reasoning. At Submit to
-# Client, the caller (the submit-to-client route) reads every cached file
-# for a submission, decides the in-zip name for each (this module doesn't
-# know about canonical naming/revision labels — that's project/submission
-# context the caller already has), and calls build_zip_bytes() to get back
-# one archive ready to hand to app.nas.upload_app_file().
-#
-# Deliberately NOT built on top of app/zip_utils.py's build_zip() — that
-# utility writes to a 1-hour-swept temp folder and hands back a one-time
-# download link, which fits "Download All" but not this: we need the zip
-# BYTES in hand immediately, to upload to the NAS ourselves, never to serve
-# a download link for it.
+# Not built on zip_utils.build_zip(): that writes to a swept temp folder and
+# returns a download link; here we need the zip bytes to upload ourselves.
 
 import os
 import io
@@ -22,19 +11,13 @@ import re
 import zipfile
 from flask import current_app
 
-# Where draft-stage files live while a submission is being worked on.
-# NOT swept on any schedule — a draft can sit for days. Cleared explicitly
-# by the caller (via clear_submission_cache) once a submission's files are
-# safely zipped and uploaded to the NAS, or if a draft is discarded.
+# Never swept on a schedule (a draft can sit for days); callers clear it via
+# clear_submission_cache once files are on the NAS or the draft is discarded.
 CACHE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'submission_drafts')
 
 
 def _sanitize(filename):
-    """Strip characters that aren't safe in a filesystem path. Same
-    character set projects_submission.py's own _sanitize() strips from
-    canonical submission names — kept local rather than shared, matching
-    this codebase's existing convention of small per-file _sanitize()
-    helpers rather than one shared util."""
+    """Strip characters that aren't safe in a filesystem path."""
     return re.sub(r'[\\/:*?"<>|]', '', filename).strip()
 
 
@@ -44,13 +27,9 @@ def _draft_folder(project_id, submission_id):
 
 
 def _resolve_cache_path(stored):
-    """Re-root a stored cache path onto THIS machine's CACHE_ROOT.
-
-    local_cache_path is saved absolute, from whichever host wrote it — so a row
-    created on the server ('/home/.../submission_drafts/..') won't exist on a
-    laptop, or vice versa. Everything after 'submission_drafts' is the portable
-    part (project/submission/filename); rejoin it to the local CACHE_ROOT.
-    Unchanged if the marker isn't present, so a plain filename still works."""
+    """Re-root a stored cache path onto this machine's CACHE_ROOT.
+    Stored paths are absolute from whichever host wrote them; the part after
+    'submission_drafts/' is portable. Returned unchanged if the marker is absent."""
     if not stored:
         return stored
     marker = 'submission_drafts/'
@@ -62,14 +41,8 @@ def _resolve_cache_path(stored):
 
 
 def cache_submission_file(project_id, submission_id, file_bytes, original_filename):
-    """
-    Write an uploaded file's bytes into the draft's local cache folder.
-
-    Returns the local disk path — callers store this on
-    ProjectSubmissionFile.local_cache_path so it can be read back later
-    (for preview/download while still in Draft) or picked up by
-    build_zip_bytes() at Submit to Client.
-    """
+    """Write an uploaded file into the draft's cache folder and return its
+    path, which callers store on ProjectSubmissionFile.local_cache_path."""
     folder = _draft_folder(project_id, submission_id)
     os.makedirs(folder, exist_ok=True)
 
@@ -83,8 +56,7 @@ def cache_submission_file(project_id, submission_id, file_bytes, original_filena
 
 
 def delete_cached_file(local_cache_path):
-    """Delete one cached file. Safe to call if it's already gone (e.g. the
-    whole draft was cleared out from under it) — never raises."""
+    """Delete one cached file. Safe if it's already gone; never raises."""
     path = _resolve_cache_path(local_cache_path)
     if path and os.path.isfile(path):
         try:
@@ -96,10 +68,7 @@ def delete_cached_file(local_cache_path):
 
 
 def clear_submission_cache(project_id, submission_id):
-    """Remove a submission's entire draft folder — called once its files
-    are safely zipped and uploaded to the NAS (Submit to Client), or when
-    a draft is explicitly discarded. Safe to call on an already-empty or
-    never-created folder."""
+    """Remove a submission's whole draft folder. Safe if it's empty or missing."""
     folder = _draft_folder(project_id, submission_id)
     if not os.path.isdir(folder):
         return
@@ -110,25 +79,14 @@ def clear_submission_cache(project_id, submission_id):
     try:
         os.rmdir(folder)
     except OSError:
-        # Not empty for some reason (e.g. a concurrent write landed after
-        # the listdir above) — leave it; next clear will catch it.
+        # A concurrent write may have landed after listdir; the next clear gets it.
         pass
 
 
 def build_zip_bytes(entries):
-    """
-    Build a zip archive in memory from a list of cached files.
-
-    Args:
-        entries: list of dicts, each {'local_cache_path': str, 'arcname': str}.
-            arcname is the filename this file should have INSIDE the zip —
-            the caller decides this (the canonical auto-name for whichever
-            file is flagged is_main_deck, the file's own original_filename
-            for everything else). This module has no opinion on naming.
-
-    Returns:
-        In-memory zip bytes, ready to hand to app.nas.upload_app_file().
-    """
+    """Build an in-memory zip from cached files and return its bytes.
+    `entries` is a list of {'local_cache_path', 'arcname'}; the caller picks
+    each arcname (the name inside the zip)."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
         for entry in entries:

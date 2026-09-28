@@ -1,6 +1,6 @@
-// Global trays — the dock launchers, the shared panel shell, and the
-// unread-bubble hook B2/B3 feed. Lives outside #main-content, so this binds
-// once per session and SPA page swaps never touch it.
+// Global trays: the dock launchers, the shared panel shell, and the unread
+// bubbles. Lives outside #main-content, so it binds once per full page load
+// and SPA swaps never touch it. Each tray registers via window.HelixTrays.
 (function () {
     var STORAGE_KEY = 'helix.openTray';
 
@@ -140,7 +140,7 @@
         if (entry && entry.onOpen) entry.onOpen(bodyEl, actionsEl);
     }
 
-    // The public hook B2/B3 use. 0 or less hides the bubble entirely.
+    // Called by each tray with its unread count. 0 or less hides the bubble.
     function setUnread(name, count) {
         var btn = launchers[name];
         if (!btn) return;
@@ -172,8 +172,8 @@
         if (e.key === 'Escape' && openTray) close();
     });
 
-    // The per-user live stream notifications.js already holds. Each tray
-    // refetches its own count from here; B1 ships no counts of its own.
+    // notifications.js fires this on each per-user stream update; each tray
+    // refetches its own count.
     document.addEventListener('helix:user-stream', function () {
         Object.keys(registry).forEach(function (name) {
             var entry = registry[name];

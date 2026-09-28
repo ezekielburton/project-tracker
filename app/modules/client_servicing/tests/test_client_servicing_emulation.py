@@ -1,14 +1,6 @@
-"""Coverage for CS emulation-awareness.
-
-Every route in this module used to read current_user directly for its
-access check, saved layout, and edit-attribution — so an admin emulating
-a lower-role user (session['emulating_user_id'], the same mechanism
-Projects/Dashboard already use) could still open and use the page,
-since current_user is always the real, logged-in admin regardless of
-who's being emulated. The shared effective_user() fixes that; these
-tests lock the fix in and pin down the one deliberate exception (the
-Scope-management CRUD, which is genuinely admin-only and stays on
-current_user on purpose)."""
+"""CS routes use effective_user() for access, saved layout and attribution,
+so an emulating admin gets the emulated user's rights. Exception: scope
+CRUD checks current_user (the real admin)."""
 import json
 
 from flask import url_for
@@ -47,9 +39,7 @@ def test_index_403s_for_an_admin_emulating_a_designer(app, client, db_session):
 
 
 def test_table_rows_403s_for_an_admin_emulating_a_designer(app, client, db_session):
-    """The SSE live-refresh fragment endpoint has its own _require_access()
-    call, independent of index() — worth its own test since a fix to one
-    doesn't guarantee the other got fixed too."""
+    """The SSE rows fragment has its own access check, separate from index()."""
     admin = _user(db_session, 'b', role='admin')
     designer = _user(db_session, 'b2', role='designer')
     login_as(client, app, admin, 'password123')
@@ -60,9 +50,7 @@ def test_table_rows_403s_for_an_admin_emulating_a_designer(app, client, db_sessi
 
 
 def test_index_200s_for_an_admin_emulating_an_allowed_role(app, client, db_session):
-    """Sanity check for the other direction: emulating a role that DOES
-    have CS access should still work, same as that role logging in for
-    real would."""
+    """Emulating a role with CS access opens the page."""
     admin = _user(db_session, 'c', role='admin')
     cs_user = _user(db_session, 'c2', role='cs')
     login_as(client, app, admin, 'password123')
@@ -75,9 +63,7 @@ def test_index_200s_for_an_admin_emulating_an_allowed_role(app, client, db_sessi
 def test_edit_403s_for_an_admin_emulating_a_designer(app, client, db_session):
     admin = _user(db_session, 'd', role='admin')
     designer = _user(db_session, 'd2', role='designer')
-    # job_number is a plain Project field update_field() writes directly
-    # (unlike lpo, which lives on the ClientServicing extension row and
-    # isn't a Project constructor kwarg at all).
+    # job_number is a Project column, so it can be seeded in the constructor.
     project = Project(name='Emulation Edit Test', cs_lead_id=admin.id, created_by_id=admin.id, job_number='OLD')
     db_session.add(project)
     db_session.flush()
@@ -107,10 +93,8 @@ def test_quick_add_scope_403s_for_an_admin_emulating_a_designer(app, client, db_
 
 
 def test_admin_only_scope_crud_still_works_while_emulating_a_designer(app, client, db_session):
-    """Deliberate exception, not an oversight: list/create/rename/deactivate
-    check can('manage_scopes', current_user) — the real logged-in user, not
-    the emulated one — so an admin previewing the app as someone else doesn't
-    lose access to real admin tools mid-preview."""
+    """Scope CRUD checks can('manage_scopes', current_user), so it keeps
+    working for the real admin while emulating."""
     admin = _user(db_session, 'f', role='admin')
     designer = _user(db_session, 'f2', role='designer')
     login_as(client, app, admin, 'password123')
@@ -142,11 +126,8 @@ def test_saved_layout_is_scoped_to_the_emulated_user_not_the_real_admin(app, cli
 
 
 def test_reassign_cs_lead_while_emulating_attributes_the_notification_to_the_emulated_user(app, client, db_session):
-    # Deliberately non-overlapping names (not _user()'s default
-    # "Emulation Test {tag}" shape) — "Test h" is a literal substring of
-    # "Test h2", which made the admin.name-not-in-message assertion
-    # below pass or fail on accident rather than on the actual behaviour
-    # being tested.
+    # Non-overlapping names: with the default names, "Test h" is a substring of
+    # "Test h2" and the admin.name-not-in-message assertion would be meaningless.
     admin = _user(db_session, 'h', role='admin', name='Real Admin Underneath')
     management_user = _user(db_session, 'h2', role='management', name='Emulated Manager')  # has CS access, can trigger a reassign
     new_lead = _user(db_session, 'h3', role='cs')

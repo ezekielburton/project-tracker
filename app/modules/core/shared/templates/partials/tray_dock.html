@@ -1,6 +1,6 @@
-{# The tray dock: a tab pinned to the right edge, with the launchers in a strip
-   that slides out of it. Sits outside #main-content so an SPA page swap never
-   removes or rebinds it. B2 (Chat) and B3 (Signal) mount into #tray-panel-body. #}
+{# The tray dock: a tab on the right edge whose launcher strip slides out.
+   Outside #main-content, so SPA page swaps never remove or rebind it. Each
+   tray (Chat, Signal, Help) mounts into #tray-panel-body (trays.js). #}
 <div id="tray-dock" class="tray-dock">
     <div class="tray-dock__launchers" id="tray-dock-launchers">
         <button type="button" class="tray-launcher" data-tray="chat" data-title="Chat" aria-expanded="false">
@@ -31,8 +31,8 @@
         </button>
     </div>
 
-    {# The tab itself. Carries one combined count so a shut dock still tells you
-       something is waiting; the per-tray counts stay on the launchers. #}
+    {# The tab carries one combined unread count so a shut dock still shows
+       something is waiting; per-tray counts stay on the launchers. #}
     <button type="button" class="tray-dock__tab" id="tray-dock-tab"
             aria-expanded="false" aria-controls="tray-dock-launchers" aria-label="Show trays">
         <svg class="tray-dock__chev" width="14" height="14" viewBox="0 0 24 24" fill="none"

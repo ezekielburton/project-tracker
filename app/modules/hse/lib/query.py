@@ -1,35 +1,29 @@
 """
-The register list query, and the counts the rail and the filter chips read.
+The register list query, and the counts the rail and filter chips read.
 
-Every list here is eager-loaded in one round trip: a register row shows
-five related records, and lazy loading them is the N+1 the dashboard
-module is being rebuilt to undo.
-
-Filtering and paging both happen here rather than in the route, so the
-chip counts and the rows they filter can never be built from two different
-sets.
+Rows eager-load their related records to avoid N+1 queries. Filtering and
+paging both live here so chip counts and rows come from the same set.
 """
 
+from collections import namedtuple
 from datetime import date, timedelta
 
 from sqlalchemy import Text, cast, extract, func, or_
 from sqlalchemy.orm import aliased, selectinload
 
 from app.modules.hse.lib.computed import expiry_status
-# Re-exported: these are vocabulary, and lib/vocab.py stays importable without
-# the models so the metric code can read the same set.
+# Re-exported; defined in lib/vocab.py so metric code can import them
+# without the models.
 from app.modules.hse.lib.vocab import (  # noqa: F401
     OPEN_EXPIRY_STATUSES, OPEN_STATUSES,
 )
 from app.modules.hse.models import HseAsset, HseEntry, HsePerson, HseReference
 
 
-# Rows per page. Small enough that the table never needs its own scrollbar
-# on a laptop, which is what the wireframe shows.
+# Rows per page.
 PAGE_SIZE = 25
 
-# How far back the Overview looks. An incident ages out of usefulness; a
-# certificate does not.
+# How far back the Overview looks (entries with a due_at are always loaded).
 DASHBOARD_LOOKBACK_DAYS = 400
 
 
@@ -51,13 +45,9 @@ def empty_filters():
 
 
 def _searched(query, term):
-    """Free text across the ref, everything in the JSONB blob, and the names
-    behind the foreign keys.
-
-    The joins only go on when someone is actually searching — they are seven
-    outer joins, and every unfiltered page load would otherwise pay for
-    them.
-    """
+    """Free-text filter across ref, status, the JSONB blob, and the names
+    behind the foreign keys. Adds seven outer joins, so only call it when
+    there is a search term."""
     like = f'%{term}%'
     location, department = aliased(HseReference), aliased(HseReference)
     compliance = aliased(HseReference)
@@ -76,8 +66,7 @@ def _searched(query, term):
     return query.filter(or_(
         HseEntry.ref.ilike(like),
         HseEntry.status.ilike(like),
-        # The JSONB blob holds every unpromoted field. Promoted choices (the
-        # compliance item) live on their reference row, joined below.
+        # Unpromoted fields. Promoted ones are matched via the joins above.
         cast(HseEntry.data, Text).ilike(like),
         location.label.ilike(like),
         department.label.ilike(like),
@@ -91,8 +80,8 @@ def _searched(query, term):
 
 
 def _matching(register_key, filters):
-    """Everything except the status filter — the set the chips count over,
-    so a chip shows how many rows it would land on, not how many exist."""
+    """All filters except status: the set the chips count over, so each
+    chip shows how many rows it would land on."""
     query = HseEntry.query.filter(HseEntry.register == register_key)
     if filters.get('severity'):
         query = query.filter(HseEntry.severity == filters['severity'])
@@ -108,8 +97,7 @@ def _ordered(query):
 
 
 def years_for(register_key):
-    """The years this register actually holds rows in, newest first. A year
-    with nothing in it is not offered — an empty filter is a dead end."""
+    """Years this register has rows in, newest first."""
     rows = (HseEntry.query
             .with_entities(extract('year', HseEntry.entry_date))
             .filter(HseEntry.register == register_key)
@@ -118,14 +106,10 @@ def years_for(register_key):
 
 
 def page_of(register_key, filters, page=1, today=None):
-    """One page of a register, with the chip counts that go above it.
-
-    A stored status is a column, so both the counts and the page are SQL. A
-    computed expiry status is neither — it is a function of due_at and the
-    date — so that branch loads the matching rows and does the work in
-    Python. Compliance is the only expiry register and it holds certificates,
-    not events, so the set stays small by nature.
-    """
+    """One page of a register, with its chip counts. Stored statuses count
+    and page in SQL. Expiry statuses are computed, so that branch loads all
+    matching rows and works in Python; expiry registers hold documents and
+    issued PPE, so the sets stay small."""
     from app.modules.hse.lib.registers import register
 
     reg = register(register_key)
@@ -139,10 +123,8 @@ def page_of(register_key, filters, page=1, today=None):
             label = expiry_status(row, today)
             if label:
                 counts[label] = counts.get(label, 0) + 1
-        # Count the chips first, then total from them — same definition as
-        # the stored branch, so "All" can never disagree with the chips it
-        # sits above (a row with no expiry status has no chip and no place in
-        # the total).
+        # "All" is the sum of the chips, as in the stored branch; rows with
+        # no expiry status are left out of both.
         total_all = sum(counts.values())
         if status:
             rows = [r for r in rows if expiry_status(r, today) == status]
@@ -172,9 +154,9 @@ def page_of(register_key, filters, page=1, today=None):
     }
 
 
-def open_counts_by_group(today=None):
-    """Open-item count per rail group, for the rail badges. One pass over
-    the open rows rather than a query per group."""
+def open_counts_by_register(today=None):
+    """Open-item count per register key, for the rail badges. One pass over
+    rows with no closed_at."""
     from app.modules.hse.lib.registers import BY_KEY
 
     expiry_registers = [k for k, r in BY_KEY.items() if r.status_source == 'expiry']
@@ -190,7 +172,7 @@ def open_counts_by_group(today=None):
         reg = BY_KEY.get(register_key)
         if reg is None:
             continue
-        # A log has no open items — it must not inflate a rail badge.
+        # Logs have no open items.
         if reg.status_source == 'none':
             continue
         if register_key in expiry_registers:
@@ -199,13 +181,13 @@ def open_counts_by_group(today=None):
         else:
             hit = status in OPEN_STATUSES
         if hit:
-            counts[reg.group] = counts.get(reg.group, 0) + 1
+            counts[register_key] = counts.get(register_key, 0) + 1
     return counts
 
 
 class _DueOnly:
-    """The two fields expiry_status reads, so the group-count query can stay
-    a lightweight column select instead of loading whole entries."""
+    """Stand-in carrying the fields expiry_status reads, so the count query
+    can select columns only."""
 
     def __init__(self, due_at, closed_at):
         self.due_at = due_at
@@ -213,19 +195,57 @@ class _DueOnly:
 
 
 
+SpendRow = namedtuple('SpendRow', 'register entry_date data')
+
+
+def spend_entries(register_keys=None, filters=None, today=None):
+    """All-time rows from registers with a money field, money values only:
+    the one loader for the Overview panel and the register strip. `filters`
+    (one register) applies the table's status, severity and search, not year."""
+    from app.modules.hse.lib.registers import BY_KEY, money_fields, money_registers
+
+    regs = ([BY_KEY[k] for k in register_keys if k in BY_KEY]
+            if register_keys is not None else list(money_registers()))
+    regs = [r for r in regs if money_fields(r)]
+    if not regs:
+        return []
+    names = sorted({fl.name for r in regs for fl in money_fields(r)})
+
+    if filters:
+        if len(regs) != 1:
+            raise ValueError('Filters apply to one register')
+        reg = regs[0]
+        query = _matching(reg.key, dict(filters, year=None))
+        status = filters.get('status')
+    else:
+        reg, status = None, None
+        query = HseEntry.query.filter(HseEntry.register.in_([r.key for r in regs]))
+
+    # Expiry statuses are computed, so that filter runs in Python below.
+    by_expiry = bool(status) and reg.status_source == 'expiry'
+    if status and not by_expiry:
+        query = query.filter(HseEntry.status == status)
+
+    columns = [HseEntry.register, HseEntry.entry_date]
+    columns += [HseEntry.data[name].astext for name in names]
+    if by_expiry:
+        columns += [HseEntry.due_at, HseEntry.closed_at]
+
+    out = []
+    for row in query.with_entities(*columns).all():
+        if by_expiry and expiry_status(_DueOnly(row[-2], row[-1]), today) != status:
+            continue
+        values = row[2:2 + len(names)]
+        data = {n: v for n, v in zip(names, values) if v is not None}
+        out.append(SpendRow(row[0], row[1], data))
+    return out
+
+
 def dashboard_entries(today=None, lookback=DASHBOARD_LOOKBACK_DAYS):
-    """The entry set the Overview and My performance both read.
-
-    One function on purpose. The metric definitions are already shared, but
-    two routes with two different windows still give two different answers
-    to "compliance health" — which is the drift sharing them was meant to
-    stop.
-
-    **Anything carrying a due date is loaded whatever its issue date.** An
-    event more than a year old is history; a five-year licence issued in
-    2024 is the most current thing the site owns, and filtering it out by
-    issue date makes it silently vanish from the number that counts it.
-    """
+    """The entry set both the Overview and My performance read, so their
+    metrics use the same window. Entries dated within the lookback, plus any
+    entry with a due_at regardless of age (a long-lived licence must still
+    count)."""
     today = today or date.today()
     cutoff = today - timedelta(days=lookback)
     return (_eager(HseEntry.query)

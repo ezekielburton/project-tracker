@@ -33,9 +33,7 @@
             data-has-gulf-regions="{{ 'true' if has_gulf_regions else 'false' }}"
             data-show-ckv="{{ 'true' if show_ckv else 'false' }}"></div>
         {% else %}
-        {# No customers added yet and no Concept/KV — nothing for the scope
-        dropdown to offer, so there's nothing Submissions can show. Was
-        rendering as a dead empty dropdown; show guidance instead. #}
+        {# No customers and no Concept/KV: the scope dropdown would be empty. #}
         <p class="overlay-field-empty">Add deliverables to the project to open submissions...</p>
         {% endif %}
         {% endcall %}

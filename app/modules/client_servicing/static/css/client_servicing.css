@@ -1,13 +1,10 @@
-/* Client Servicing page. All colours are role tokens, per theming.md —
-   no hard-coded hex. */
+/* Client Servicing pages. Role tokens only (theming.md), no hard-coded hex. */
 
-/* The page frame and rail are shared (.module-page / .module-shell /
-   .module-main in shared.css). .cs-page stays on the frame as the hook the
-   close-project script scopes itself to. */
+/* Page frame and rail come from shared.css (.module-page / .module-shell /
+   .module-main). .cs-page stays on the frame: the close-project script scopes to it. */
 
-/* No padding-bottom: syncTableScrollHeight() (client_servicing.js) sizes
-   the table box to meet the footer, so any bottom padding here is dead
-   space between the box and the footer. */
+/* No padding-bottom: syncTableScrollHeight() (client_servicing.js) sizes the
+   table box to meet the footer, so bottom padding would be dead space. */
 .client-servicing-page {
     padding: var(--space-6);
     padding-bottom: 0;
@@ -25,16 +22,12 @@
     color: var(--text);
 }
 
-/* Capped-height scroll box: it scrolls internally on both axes so the
-   sticky thead th (below) pins against THIS box, not the page. A page-level
-   sticky header isn't possible here — overflow-x: auto forces overflow-y off
-   "visible" too (CSS axis coercion), so the element is its own scroll
-   container either way; the same technique main.css's .table-wrapper uses.
-   Height comes from --cs-table-scroll-height, set live by
-   syncTableScrollHeight() (client_servicing.js) from the box's top offset and
-   the real footer height; the calc() is only the pre-JS fallback. Flexbox
-   fill doesn't work in this shell — no ancestor has a definite height, so a
-   flex child just grows to its content. */
+/* Scrolls on both axes so the sticky thead pins to this box. A page-level
+   sticky header can't work: overflow-x: auto forces overflow-y off "visible",
+   making this its own scroll container anyway.
+   --cs-table-scroll-height is set by syncTableScrollHeight() (client_servicing.js);
+   the calc() is the pre-JS fallback. Flex fill won't work: no ancestor has a
+   definite height. */
 .cs-table-scroll {
     overflow-x: auto;
     overflow-y: auto;
@@ -44,9 +37,8 @@
     background: var(--surface);
 }
 
-/* Hide only the vertical scrollbar (WebKit/Blink per-axis pseudo-class);
-   Firefox has no per-axis equivalent so it keeps both — accepted. The box
-   still scrolls via wheel/trackpad/keyboard. */
+/* Hide the vertical scrollbar only (WebKit/Blink); Firefox keeps both. The
+   box still scrolls by wheel, trackpad and keyboard. */
 .cs-table-scroll::-webkit-scrollbar:vertical {
     display: none;
 }
@@ -80,9 +72,8 @@
     white-space: nowrap;
 }
 
-/* Project name: capped default width with wrapping, instead of nowrap
-   forcing the column as wide as the longest name. A drag-resize's inline
-   <col> width still wins over this default, so the column stays resizable. */
+/* Project name: capped default width that wraps. A drag-resize's inline <col>
+   width overrides it. */
 .cs-table col[data-col-key="project"] {
     width: 220px;
 }
@@ -111,11 +102,9 @@
     width: 1%;
 }
 
-/* Sticky Project-name column, mirroring the Projects page's pinned
-   Expand+Name pair: "Open in Projects" and Project stay on screen as the
-   table scrolls right. Project is always first (table.py _ordered_columns)
-   and excluded from reorder. Scoped to th/td so it skips the resize-handle
-   span carrying the same data-col-key. */
+/* "Open in Projects" and Project stay pinned as the table scrolls right.
+   Project is always first and never reordered (table.py _ordered_columns).
+   Scoped to th/td to skip the resize-handle span with the same data-col-key. */
 .cs-table th.cs-col-open,
 .cs-table td.cs-col-open,
 .cs-table th[data-col-key="project"],
@@ -125,11 +114,8 @@
     background: var(--surface);
 }
 
-/* The header row is already sticky to the top (thead th, below) — these
-   two columns are ALSO sticky to the left, making their header cells a
-   pinned corner that needs to outrank both the plain sticky header row
-   and the plain sticky body columns to stay on top while scrolling in
-   either direction. */
+/* Pinned corner: sticky top and left, so it must outrank both the sticky
+   header row and the sticky body columns. */
 .cs-table thead th.cs-col-open,
 .cs-table thead th[data-col-key="project"] {
     z-index: 3;
@@ -143,10 +129,8 @@
 
 .cs-table th[data-col-key="project"],
 .cs-table td[data-col-key="project"] {
-    /* Set by client_servicing.js's syncStickyProjectOffset() to the Open
-       column's actual rendered width — unlike the Projects page's
-       fixed-size icon-only Expand column, "Open in Projects" is a text
-       button with no fixed, known width to hard-code here. */
+    /* Set by syncStickyProjectOffset() (client_servicing.js) to the Open
+       column's rendered width, which varies with its text button. */
     left: var(--cs-sticky-project-left, 0px);
 }
 
@@ -188,9 +172,8 @@
     outline-offset: -2px;
 }
 
-/* Inline "+ Add new..." mini-form (Scope / Client SPOC cells): a name input
-   + Add/Cancel replacing the select, in the same td. Colours come from the
-   shared .btn-primary/.btn-secondary; this only shrinks them to fit a cell. */
+/* Inline "+ Add new..." form in Scope / Client SPOC cells. Button colours come
+   from .btn-primary/.btn-secondary; this only shrinks them to fit. */
 .cs-quick-add {
     display: flex;
     flex-direction: column;
@@ -237,8 +220,7 @@
     background: var(--border-strong);
 }
 
-/* Column reorder. Draggable headers get a grab cursor; the resize handle
-   inside the same <th> keeps its own col-resize cursor (child cursor wins). */
+/* Column reorder. The resize handle inside the <th> keeps its own cursor. */
 .cs-table th[data-col-key] {
     cursor: grab;
 }
@@ -247,9 +229,7 @@
     opacity: 0.4;
 }
 
-/* Click-to-sort. An arrow after the label shows the sorted column and
-   direction; client_servicing.js toggles these classes on the sorted <th>.
-   Not persisted — same-page visual state only. */
+/* Click-to-sort arrow; client_servicing.js toggles these classes. Not saved. */
 .cs-th-sorted-asc::after,
 .cs-th-sorted-desc::after {
     margin-left: var(--space-1);
@@ -264,12 +244,11 @@
     content: '\25BC'; /* ▼ */
 }
 
-/* ── Invoicing section — By Project tab (read-only). Role tokens only;
-   the coral finance tint is a color-mix toward transparent so it holds in
-   both light and dark without a separate override. Badges reuse the themed
+/* ── Invoicing — By Project page. The coral finance tint mixes toward
+   transparent, so it works in both themes without an override. Badges reuse
    .status-pill--* colours, resized. ── */
 
-/* Tab strip */
+/* Tab strip — used by the calendar's Month/Agenda switch. */
 .cs-inv-tabs {
     display: flex;
     align-items: center;
@@ -387,8 +366,7 @@
     white-space: nowrap;
 }
 
-/* Two sticky header rows — the group row on top, the column row directly
-   under it. The 34px offset matches the group row's fixed height. */
+/* Two sticky header rows. The column row's 34px top must match the group row's height. */
 .cs-inv-table .cs-inv-grouprow th {
     top: 0;
     z-index: 2;
@@ -481,9 +459,8 @@
     color: var(--tone-clover);
 }
 
-/* Project column — narrow, wrapping, and sticky to the left as the finance
-   columns scroll horizontally. Sticky cells need an opaque background so
-   scrolled content doesn't show through. */
+/* Project column: fixed width, wraps, sticky left. Sticky cells need an
+   opaque background or scrolled content shows through. */
 .cs-inv-name {
     position: sticky;
     left: 0;
@@ -555,7 +532,7 @@
     margin: 0 2px;
 }
 
-/* ── Monthly Summary tab ── */
+/* ── Monthly Summary page ── */
 .cs-inv-selectors {
     display: flex;
     gap: var(--space-2);
@@ -606,7 +583,7 @@
     color: var(--salmon);
 }
 
-/* Single-row header tables (summary) don't need the two-row sticky offset */
+/* Single-row header tables (summary, closed) opt out of the two-row sticky header. */
 .cs-inv-sumtable thead th {
     position: static;
 }
@@ -646,10 +623,8 @@
 }
 
 /* ── Installation Calendar (Month + Agenda) ─────────────────────────────
-   Role tokens only; risk colours reuse the shared palette tokens
-   (--clover/--canary/--poppy, grey via --text-faint) so they flip in dark
-   for free. Tints mix toward transparent (theme-safe). Status pills reuse
-   the shared .status-pill--* set. See theming.md. */
+   Risk colours are palette tokens and tints mix toward transparent, so both
+   themes work without overrides. */
 .cs-cal-page { display: flex; flex-direction: column; min-height: 0; }
 
 /* KPI row */
@@ -717,9 +692,7 @@
 .cs-cal-dr-body { flex: 1; overflow: auto; padding: 10px; }
 .cs-cal-dr-empty { padding: 24px 16px; }
 
-/* Job card (drawer + agenda) — risk is the card's left-border frame;
-   status is one inline pill; the risk chip is a light bordered chip with
-   the RAG colour on its dot/border and "auto" folded in. */
+/* Job card (drawer + agenda). Risk colour sits on the left border and the risk chip. */
 .cs-cal-job { border: 1px solid var(--border); border-left-width: 3px; border-left-color: var(--border); border-radius: 9px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
 .cs-cal-job--ontrack { border-left-color: var(--clover); }
 .cs-cal-job--attention { border-left-color: var(--canary); }
@@ -731,7 +704,7 @@
 .cs-cal-goto { flex-shrink: 0; margin-top: 2px; color: var(--coral); text-decoration: none; display: inline-flex; }
 .cs-cal-job-sc { font-size: var(--text-xs); color: var(--text-muted); margin-top: 3px; }
 .cs-cal-qty { cursor: pointer; }
-/* Empty install qty — a dashed slot that reads as 'needs filling'. */
+/* Empty install qty: dashed slot that reads as "needs filling". */
 .cs-cal-qty--empty { color: var(--text-muted); border: 1px dashed color-mix(in srgb, var(--canary) 55%, var(--border)); border-radius: 6px; padding: 0 6px; }
 .cs-cal-job-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 11px; }
 .cs-cal-status { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -765,18 +738,14 @@
 
 
 /* ── Dashboard (landing) ─────────────────────────────────────────────────
-   Panels for the CS Dashboard. All colour is role/palette tokens per
-   theming.md — no hard-coded hex; tints use color-mix toward transparent so
-   they flip with the theme. The page fits one screen: the two list panels
-   (Urgent Actions, Upcoming Installs) scroll internally, nothing else does. */
+   Tints mix toward transparent so they work in both themes. Urgent Actions
+   and Upcoming Installs scroll internally. */
 
 .cs-dash {
     padding: var(--space-5) var(--space-5) var(--space-4);
 }
 
-/* The panels live in a swap target (#cs-dash-panels) so the SSE refresh can
-   replace just them. The flex column + gap that spaces the panels sits here,
-   not on .cs-dash — whose only child is now this wrapper. */
+/* SSE refresh swaps this wrapper, so the panel spacing lives here, not on .cs-dash. */
 #cs-dash-panels {
     display: flex;
     flex-direction: column;
@@ -879,12 +848,9 @@
 
 /* ── main grid ── */
 .cs-dash-grid {
-    /* Definite, generous height so Urgent Actions and Upcoming Installs are
-       tall and end on the same line (both fill it, then scroll inside).
-       flex-shrink:0 stops the column-flex parent from compressing it on short
-       viewports; clamp floors it at ~6-7 upcoming rows and lets it grow on
-       taller screens. The page scrolls to reach the bottom row. Tune the
-       floor via --cs-dash-grid-h. */
+    /* Definite height so both list panels end on the same line and scroll
+       inside. flex-shrink: 0 stops the flex parent squashing it; the page
+       scrolls to reach the bottom row. */
     flex-shrink: 0;
     height: var(--cs-dash-grid-h, 450px);
     display: grid;
@@ -1259,10 +1225,7 @@
 }
 
 
-/* ── Table toolbar: search + filter (client-side, module-local) ──────────
-   Self-contained cs- classes so the toolbar can be restyled without touching
-   any other module. Colours are role/palette tokens (both themes); the
-   selected/active accent tints toward transparent so it flips cleanly. */
+/* ── Table toolbar: search + filter (client-side, module-local) ────────── */
 
 .cs-toolbar {
     display: flex;
@@ -1458,9 +1421,7 @@
 
 /* ── Close-out strip ───────────────────────────────────────────────────
    Cancelled projects waiting on the invoicing question, above the table.
-   Deliberately compact — it sits above the table every day, so it reads as
-   a queue line, not a panel. Canary tint mixed toward transparent so it
-   flips with the theme; the buttons are the shared .btn-* classes. */
+   Canary tint mixes toward transparent so it works in both themes. */
 .cs-closeout {
     margin-bottom: var(--space-3);
     padding: var(--space-2) var(--space-3);
@@ -1488,8 +1449,6 @@
     flex-direction: column;
 }
 
-/* One line per project, separated by a hairline rather than boxed — the
-   strip's own border already frames the group. */
 .cs-closeout-row {
     display: flex;
     align-items: center;
@@ -1523,15 +1482,13 @@
     white-space: nowrap;
 }
 
-/* The row's Close button shares the pinned Open-in-Projects cell, so it
-   sits under the link — same size, set alongside .cs-open-btn above. */
+/* Close button stacks under Open in the pinned cell; sized with .cs-open-btn above. */
 .cs-close-btn {
     margin-top: var(--space-1);
     display: block;
     width: 100%;
 }
 
-/* Project name the prompt is about — reads as a subject line, not prose. */
 .cs-close-subject {
     font-weight: 600;
     color: var(--text);
@@ -1539,9 +1496,7 @@
 }
 
 /* ── Closed jobs on the Calendar ───────────────────────────────────────
-   Closed projects stay as history: dimmed, and with no editable cells
-   rendered (see _calendar_macros.html), so nothing here has to disable
-   anything. */
+   Dimmed only; _calendar_macros.html renders them without editable cells. */
 .cs-cal-job--closed {
     opacity: 0.55;
 }
@@ -1560,9 +1515,7 @@
 }
 
 /* ── Closed Projects page ──────────────────────────────────────────────
-   Reuses the Invoicing KPI cards, selectors and table shells; only the
-   page header, the AED line under each KPI, the month group rows and the
-   mark-invoiced button are new. */
+   Reuses the Invoicing KPI cards, selectors and table shell. */
 .cs-closed-head {
     display: flex;
     align-items: baseline;
@@ -1581,7 +1534,7 @@
     color: var(--text-muted);
 }
 
-/* The money line under a KPI's count — secondary to the number above it. */
+/* AED line under a KPI's count. */
 .cs-closed-kpi-value {
     margin-top: var(--space-1);
     font-family: var(--font-mono);
@@ -1596,8 +1549,7 @@
     margin-bottom: var(--space-3);
 }
 
-/* The selectors already carry their own bottom margin on the Summary page;
-   inside this toolbar the row owns the spacing. */
+/* The toolbar row owns the spacing here. */
 .cs-closed-toolbar .cs-inv-selectors {
     margin-bottom: 0;
 }
@@ -1655,9 +1607,7 @@
     text-decoration: underline;
 }
 
-/* Close prompts: the shared .modal-actions sits tight against the copy
-   above it, which reads as if the buttons belong to the sentence. Scoped
-   to these boxes so the app's other modals are untouched. */
+/* Close prompts: more space above the buttons. Scoped so other modals are untouched. */
 .cs-close-box .modal-actions {
     margin-top: var(--space-5);
 }
@@ -1667,10 +1617,8 @@
 }
 
 /* ── Jump-to-project flash ─────────────────────────────────────────────
-   The Dashboard links here with ?project=<id>; client_servicing_focus.js
-   scrolls to the row and adds this class for a couple of seconds. Applied
-   to the cells, not the row: the pinned columns paint their own background,
-   so a row-level rule wouldn't show through them. */
+   ?project=<id> links: client_servicing_focus.js adds this class to the row.
+   Animates the cells, since pinned columns paint over a row background. */
 @keyframes cs-focus-pulse {
     0%, 100% { background-color: transparent; }
     50% { background-color: color-mix(in srgb, var(--coral) 24%, transparent); }
@@ -1680,7 +1628,7 @@
     animation: cs-focus-pulse 0.8s ease-in-out 3;
 }
 
-/* Motion-sensitive viewers get the highlight without the throb. */
+/* Reduced motion: static highlight. */
 @media (prefers-reduced-motion: reduce) {
     .cs-focus-flash td {
         animation: none;
@@ -1688,9 +1636,7 @@
     }
 }
 
-/* ── Invoicing Health: which projects are stuck ────────────────────────
-   The count above says how many; this says which, so the number isn't a
-   dead end. */
+/* ── Invoicing Health: which projects are stuck ──────────────────────── */
 .cs-dash-stucklist {
     display: flex;
     flex-direction: column;

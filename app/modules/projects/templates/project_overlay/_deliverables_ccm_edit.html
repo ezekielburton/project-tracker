@@ -3,18 +3,10 @@
 <div class="overlay-details-grid">
     <div class="overlay-card-full">
         {% call card('Deliverables') %}
-        {# Same controls-row pattern as _deliverables_ccm.html's view mode:
-        Add Deliverable on the left, commit actions + customer picker
-        grouped on the right. One customer panel is visible at a time, but
-        Save always posts every panel's rows in one request (see
-        collectAllRows in project_deliverables_card.js) — switching the
-        picker never risks losing unsaved edits in another panel.
-
-        Deliverable catalog picker + Apply to Multiple (26/27 Aug 2026, per
-        Ezekiel) — Apply to Multiple only makes sense with a second
-        customer to apply to, so it's only rendered when this project has
-        more than one; the button/modal simply don't exist otherwise
-        rather than rendering disabled and unexplained. #}
+        {# One customer panel shows at a time, but Save posts every panel's
+        rows in one request (collectAllRows in project_deliverables_card.js),
+        so switching customers never loses edits. Apply to Multiple renders
+        only when the project has more than one customer. #}
         <div class="overlay-card-controls-row">
             <button type="button" class="overlay-file-action-btn" id="overlay-add-deliverable-btn"
                 {% if not all_customers %}disabled{% endif %}>Add Deliverable</button>
@@ -50,10 +42,7 @@
         </div>
 
         {% if not all_customers %}
-        {# Only reachable from the create-mode flow today (task #62) — a
-        live project always has at least one customer by the time it
-        exists at all. Points back at the step that's actually missing
-        rather than just showing an empty, inert table. #}
+        {# Reached in create mode before any customer is picked. #}
         <p class="overlay-field-empty">No customers selected yet — go back to Details and pick at least one first.</p>
         {% else %}
         <div class="overlay-deliverables-edit-header">
@@ -71,11 +60,8 @@
             data-customer-panel="{{ c.project_customer.id }}">
             <div class="overlay-deliverables-edit-list" data-customer-id="{{ c.project_customer.id }}">
                 {% for d in c.deliverables %}
-                {# Same source priority as the view mode's team tags (see
-                _deliverables_ccm.html): a catalog deliverable type's fixed
-                disciplines win over the freeform .teams column, so a typed
-                deliverable's toggles open already showing what's actually
-                displayed rather than always blank. #}
+                {# A catalog type's disciplines win over the freeform .teams
+                column, matching what the view mode shows. #}
                 {% if d.deliverable_type and d.deliverable_type.disciplines %}
                 {% set current_teams = d.deliverable_type.disciplines | map(attribute='team') | list %}
                 {% else %}
@@ -84,14 +70,11 @@
                 <div class="overlay-deliverables-edit-row" data-deliverable-id="{{ d.id }}">
                     <div class="overlay-deliverables-edit-name-wrap">
                         <select class="overlay-deliverables-edit-name overlay-deliverables-edit-type-select">
-                            {# Never selected here — a saved row always has either a real catalog
-                            pick or the __legacy__ fallback below carrying `selected` instead. #}
+                            {# Never selected: a saved row always has a catalog pick or the
+                            __legacy__ option below. #}
                             <option value="" disabled>Choose a deliverable…</option>
-                            {# A row that hasn't been re-picked from the catalog yet (created before
-                            this feature, or still pointing at a name the customer's catalog doesn't
-                            have) keeps working exactly as it always has — this option carries its
-                            current name so Save leaves it untouched unless the picker is actually
-                            changed. #}
+                            {# Row with no catalog type: this option keeps its current name, so
+                            Save leaves it untouched unless the picker changes. #}
                             {% if not d.deliverable_type_id %}
                             <option value="__legacy__" data-name="{{ d.name }}" selected>{{ d.name }}</option>
                             {% endif %}
@@ -131,10 +114,8 @@
             </div>
         </div>
 
-        {# One row template per customer, keyed by that customer's own id
-        — Add Deliverable clones whichever one matches the active panel, so
-        the cloned row's picker always offers THAT customer's catalog, not
-        whichever customer happened to be first on the page. #}
+        {# One row template per customer: Add Deliverable clones the active
+        panel's, so the picker offers that customer's catalog. #}
         <template id="overlay-deliverable-row-template-{{ c.project_customer.id }}">
             <div class="overlay-deliverables-edit-row">
                 <div class="overlay-deliverables-edit-name-wrap">
@@ -164,28 +145,16 @@
         {% endfor %}
 
         {% if all_customers|length > 1 %}
-        {# Apply to Multiple (26/27 Aug 2026, per Ezekiel) — takes whichever
-        customer panel is active as the source, offers every OTHER customer
-        on this project as a target. Two-step modal, both steps in one
-        overlay so there's no extra page navigation: pick target customers
-        -> server computes matches/misses against each target's own catalog
-        -> review (one deadline per target customer, applied to everything
-        duplicated onto it — same "one date field, applied to the set"
-        pattern as Apply Deadline to All above, just per target customer
-        instead of per row) -> Apply. Requires Save Deliverables first (see
-        project_deliverables_card.js) so it always reads real, committed
-        deliverables. #}
+        {# Apply to Multiple: copies the active customer's deliverables to
+        other customers. Two steps: pick targets -> review server-matched
+        results against each target's catalog, one deadline per target ->
+        Apply. Needs saved deliverables (see project_deliverables_card.js). #}
         <div class="modal-overlay hidden" id="overlay-apply-multiple-modal">
             <div class="modal-box overlay-apply-multiple-box">
                 <h3 class="modal-title">Apply to Multiple</h3>
 
                 <div id="overlay-apply-multiple-step-select">
                     <p class="overlay-field-label" id="overlay-apply-multiple-source-label"></p>
-                    {# Clean toggle tags (27 Aug 2026, per Ezekiel) — same
-                    shape/font as the app's base .tag class, same
-                    click-to-select/sky-fill convention as the 2D/3D/
-                    Technical toggles above and the deliverable picker
-                    popover, instead of a checkbox list. #}
                     <div class="overlay-apply-multiple-customer-tags" id="overlay-apply-multiple-target-list">
                         {% for c in all_customers %}
                         <button type="button" class="overlay-apply-multiple-customer-tag"
@@ -212,12 +181,8 @@
                 </div>
             </div>
         </div>
-        {# Not rendered visibly — just a source of the standard Time…
-        <option> list for the per-target-customer deadline row the JS above
-        builds dynamically once a preview response comes back (each target
-        customer's deadline row doesn't exist in the DOM until then, so it
-        can't carry its own server-rendered options the way the main table
-        rows do). #}
+        {# Hidden source of Time options, cloned by project_deliverables_card.js
+        into the per-target deadline rows it builds after the preview. #}
         <select id="overlay-apply-multiple-time-options-template" class="hidden">
             <option value="">Time…</option>
             {% for value, label in time_options %}

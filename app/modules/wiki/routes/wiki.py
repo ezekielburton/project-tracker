@@ -7,7 +7,7 @@ from app.modules.core.shared.models import WikiSection, WikiArticle
 from app.modules.core.shared.lib.capabilities import can, require
 from app.modules.core.shared.lib.utils import slugify
 from sqlalchemy import update
-from app.modules.wiki.lib.blocks import load_blocks, sanitize_document, empty_document
+from app.modules.wiki.lib.blocks import load_blocks, sanitize_document
 from app.modules.wiki.lib.article_templates import picker_options, template_document
 from app.modules.wiki.lib.help_keys import HELP_KEY_GROUPS, coverage, is_registered, label_for
 
@@ -38,7 +38,7 @@ def get_article(article_id):
 @wiki_bp.route('/wiki/help')
 @login_required
 def help_browse():
-    """Everything there is to read — the Help pill opened with no key."""
+    """The tray's browse list: the Help pill opened with no key."""
     if can('manage_wiki'):
         sections = WikiSection.query.order_by(WikiSection.sort_order).all()
     else:
@@ -50,7 +50,7 @@ def help_browse():
 @wiki_bp.route('/wiki/help/<key>')
 @login_required
 def help_article(key):
-    """The article claiming this key, or the gap plus a way to fill it."""
+    """The article that claims this key, or an empty state with a write link for admins."""
     if not is_registered(key):
         abort(404)
 
@@ -66,7 +66,7 @@ def help_article(key):
 @wiki_bp.route('/wiki/help/article/<int:article_id>')
 @login_required
 def help_article_by_id(article_id):
-    """An article picked from the tray's browse list — same wrapper as the key path."""
+    """An article picked from the tray's browse list, in the same wrapper as the key route."""
     article = WikiArticle.query.get_or_404(article_id)
     if not article.is_published and not can('manage_wiki'):
         abort(403)
@@ -74,7 +74,7 @@ def help_article_by_id(article_id):
                            blocks=load_blocks(article.sections_json))
 
 
-#------ Image upload & serve ------
+# ------ Image upload ------
 
 @wiki_bp.route('/wiki/upload-image', methods=['POST'])
 @login_required
@@ -101,15 +101,23 @@ def upload_image():
     })
 
 
-#------ Video upload & serve ------
+# ------ Video upload ------
 
 _VIDEO_EXTENSIONS = {'mp4', 'webm'}
 _VIDEO_MAX_BYTES = 200 * 1024 * 1024
+_VIDEO_FORM_SLACK = 64 * 1024
 
 @wiki_bp.route('/wiki/upload-video', methods=['POST'])
 @login_required
 @require('manage_wiki', real_user=True)
 def upload_video():
+    too_large = jsonify({'success': False,
+                         'error': f'Video is too large (max {_VIDEO_MAX_BYTES // (1024 * 1024)}MB).'}), 400
+
+    # Refused before the body is parsed. The slack covers the multipart framing around the file.
+    if (request.content_length or 0) > _VIDEO_MAX_BYTES + _VIDEO_FORM_SLACK:
+        return too_large
+
     file = request.files.get('file')
     if not file:
         return jsonify({'success': False, 'error': 'No file provided'}), 400
@@ -118,24 +126,32 @@ def upload_video():
     if ext not in _VIDEO_EXTENSIONS:
         return jsonify({'success': False, 'error': 'File type not allowed'}), 400
 
-    file_bytes = file.read()
-    if len(file_bytes) > _VIDEO_MAX_BYTES:
-        return jsonify({'success': False, 'error': f'Video is too large (max {_VIDEO_MAX_BYTES // (1024 * 1024)}MB).'}), 400
-
     filename = f"{uuid.uuid4().hex}.{ext}"
     upload_dir = os.path.join(current_app.root_path, 'static', 'wiki-uploads', 'videos')
     os.makedirs(upload_dir, exist_ok=True)
-    with open(os.path.join(upload_dir, filename), 'wb') as out:
-        out.write(file_bytes)
+    path = os.path.join(upload_dir, filename)
 
-    # Local file is already saved and servable — a NAS failure here must
-    # never fail the upload, so back it up on a background thread.
+    # Streamed with a running count, since Content-Length can be absent or wrong.
+    written = 0
+    with open(path, 'wb') as out:
+        for chunk in iter(lambda: file.stream.read(1024 * 1024), b''):
+            written += len(chunk)
+            if written > _VIDEO_MAX_BYTES:
+                break
+            out.write(chunk)
+    if written > _VIDEO_MAX_BYTES:
+        os.remove(path)
+        return too_large
+
+    # The local copy is already servable; the NAS backup runs in the background
+    # so a NAS failure never fails the upload.
     from app.modules.core.shared.services.nas import upload_app_file, _run_in_background
     _app_obj = current_app._get_current_object()
 
     def _backup_to_nas():
         try:
-            upload_app_file(file_bytes, '/Admin/OVP/Wiki', filename)
+            with open(path, 'rb') as saved:
+                upload_app_file(saved.read(), '/Admin/OVP/Wiki', filename)
         except RuntimeError as e:
             _app_obj.logger.error(f'Wiki video NAS backup failed for {filename}: {e}')
 
@@ -177,7 +193,8 @@ def _unique_section_slug(title):
 
 
 def _claim_help_key(article, key):
-    """One article per key, so a "?" can never be ambiguous. Returns the titles it cleared."""
+    """Give the article this key and clear it from any other (one article per key).
+    An unregistered key clears it. Returns the titles that lost the key."""
     key = (key or '').strip()
     if key and not is_registered(key):
         key = ''
@@ -217,13 +234,12 @@ def _apply_order(model, ids, extra=None):
 
 
 def _editor_context(article, section):
-    """Everything the article editor page needs, for both new and existing articles."""
-    content = (article.draft_sections_json or article.sections_json or '') if article else ''
+    """Template context for the article editor. Loads the unsaved draft if there is one."""
     return {
         'article': article,
         'section': section,
-        'content_json': content,
-        'draft_restored': bool(article and article.draft_sections_json),
+        'content_json': article.draft_sections_json or article.sections_json or '',
+        'draft_restored': bool(article.draft_sections_json),
         'help_key_groups': HELP_KEY_GROUPS,
     }
 
@@ -252,7 +268,8 @@ def reorder_sections():
 @login_required
 @require('manage_wiki', real_user=True)
 def reorder_articles():
-    """The list a row is dropped into owns it, so the move and the order are one write."""
+    """Save one list's order. Rows in it also move to its section, so a
+    cross-section drop is one write."""
     payload = request.get_json(silent=True) or {}
     section_id = _int_or_none(str(payload.get('section_id') or ''))
     extra = {'section_id': WikiSection.query.get_or_404(section_id).id} if section_id else None
@@ -264,7 +281,7 @@ def reorder_articles():
 @login_required
 @require('manage_wiki', real_user=True)
 def create_article():
-    """From the new-article overlay: seed the chosen skeleton, then open the editor."""
+    """New-article overlay: seed the chosen skeleton, then open the editor."""
     section_id = _int_or_none(request.form.get('section_id'))
     title      = request.form.get('title', '').strip()
     template   = request.form.get('template', 'blank').strip()
@@ -309,8 +326,9 @@ def save_article():
     is_published  = request.form.get('is_published') == 'on'
     help_key      = request.form.get('help_key', '').strip()
 
-    if not title or not section_id:
-        return jsonify({'success': False, 'error': 'Title and section are required'}), 400
+    # Articles are created from the dashboard, so the editor always sends an id.
+    if not article_id or not title or not section_id:
+        return jsonify({'success': False, 'error': 'Article, title and section are required'}), 400
 
     try:
         payload = json.loads(sections_json)
@@ -321,24 +339,15 @@ def save_article():
     if document is None:
         return jsonify({'success': False, 'error': 'Invalid content data'}), 400
 
-    sections_json = json.dumps(document)
+    article               = WikiArticle.query.get_or_404(article_id)
+    article.section_id    = section_id
+    article.title         = title
+    article.slug          = article.slug or slugify(title)
+    article.sections_json = json.dumps(document)
+    article.is_published  = is_published
+    article.updated_at    = datetime.utcnow()
 
-    if article_id:
-        article               = WikiArticle.query.get_or_404(article_id)
-        article.section_id    = section_id
-        article.title         = title
-        article.slug          = article.slug or slugify(title)
-        article.sections_json = sections_json
-        article.is_published  = is_published
-        article.updated_at    = datetime.utcnow()
-    else:
-        article = WikiArticle(section_id=section_id, title=title,
-                              slug=slugify(title), sections_json=sections_json,
-                              sort_order=_next_sort_order(WikiArticle, section_id=section_id),
-                              is_published=is_published)
-        db.session.add(article)
-
-    # Saving is what makes the draft live, so the stored draft is spent.
+    # The draft is now live, so clear it.
     article.draft_sections_json = None
     article.draft_saved_at      = None
 
@@ -355,11 +364,12 @@ def save_article():
 @login_required
 @require('manage_wiki', real_user=True)
 def autosave_article():
-    """Park the working copy in draft_sections_json. Save is what makes it live."""
+    """Store the working copy in draft_sections_json. Only Save makes it live."""
     article_id    = _int_or_none(request.form.get('article_id'))
-    section_id    = _int_or_none(request.form.get('section_id'))
-    title         = request.form.get('title', '').strip()
     sections_json = request.form.get('sections_json', '')
+
+    if not article_id:
+        return jsonify({'success': False, 'error': 'Nothing to save yet'})
 
     try:
         payload = json.loads(sections_json)
@@ -370,25 +380,13 @@ def autosave_article():
     if document is None:
         return jsonify({'success': False, 'error': 'Invalid content data'}), 400
 
-    if article_id:
-        article = WikiArticle.query.get_or_404(article_id)
-    elif title and section_id and document['blocks']:
-        article = WikiArticle(section_id=section_id, title=title,
-                              slug=slugify(title),
-                              sections_json=json.dumps(empty_document()),
-                              sort_order=_next_sort_order(WikiArticle, section_id=section_id),
-                              is_published=False)
-        db.session.add(article)
-        db.session.commit()
-    else:
-        # A new article with no title or no content yet — nothing worth keeping.
-        return jsonify({'success': False, 'error': 'Nothing to save yet'})
+    article = WikiArticle.query.get_or_404(article_id)
 
     saved_at = datetime.utcnow()
     db.session.execute(
         update(WikiArticle)
         .where(WikiArticle.id == article.id)
-        # Assigning updated_at to itself is what stops onupdate firing — readers see that date.
+        # Assigning updated_at to itself stops onupdate firing; readers see that date.
         .values(draft_sections_json=json.dumps(document), draft_saved_at=saved_at,
                 updated_at=WikiArticle.updated_at)
     )

@@ -10,7 +10,6 @@
 
     function Autosave(options) {
         this.editor = options.editor;
-        this.form = options.form;
         this.status = options.status;
         this.articleField = options.articleField;
         this.url = options.url;
@@ -28,11 +27,6 @@
         window.clearInterval(this.clock);
     };
 
-    Autosave.prototype.field = function (name) {
-        var input = this.form.querySelector('[name="' + name + '"]');
-        return input ? input.value.trim() : '';
-    };
-
     Autosave.prototype.tick = function () {
         var self = this;
         if (this.busy || !this.editor) { return; }
@@ -48,8 +42,6 @@
         var self = this;
         var body = new FormData();
         body.append('article_id', this.articleField.value);
-        body.append('section_id', this.field('section_id'));
-        body.append('title', this.field('title'));
         body.append('sections_json', content);
 
         this.busy = true;
@@ -59,7 +51,6 @@
             .then(function (response) { return response.json(); })
             .then(function (result) {
                 if (!result.success) { self.show(''); return; }
-                if (!self.articleField.value) { self.articleField.value = result.article_id; }
                 self.lastSaved = content;
                 self.savedAt = Date.now();
                 self.showAge();

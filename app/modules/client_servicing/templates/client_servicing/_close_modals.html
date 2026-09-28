@@ -1,7 +1,6 @@
-{# The two close prompts. Standard app modal (.modal-overlay/.modal-box),
-   toggled by the .hidden class from client_servicing_close.js. The confirm
-   modal is for a live project; the two-step one is for a cancelled project,
-   whose invoicing answer decides its closed invoice state. #}
+{# The two close prompts, toggled via .hidden by client_servicing_close.js.
+   Confirm is for a live project; the two-step one is for a cancelled
+   project, whose invoicing answer sets its closed invoice state. #}
 {% if can_close %}
 <div class="modal-overlay hidden" id="cs-close-modal">
     <div class="modal-box cs-close-box">
@@ -33,9 +32,8 @@
 
         <div id="cs-closeout-step2" hidden>
             <p class="cs-muted">If it has been invoiced, give the invoice date.</p>
-            {# Shown by client_servicing_close.js only when the project has no
-               value yet — it needs one to appear on the Closed page and in
-               that month's total. #}
+            {# Shown only when the project has no value; it needs one to show
+               on the Closed page and in its month's total. #}
             <label class="cs-inv-field" id="cs-closeout-value-field" hidden>Project value (AED)
                 <input type="number" min="0" step="0.01" id="cs-closeout-value">
             </label>

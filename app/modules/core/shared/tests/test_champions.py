@@ -1,16 +1,11 @@
-"""The weekly OVP champion helpers and the Friction Log write gate.
-
-Each department rotates its own champion. The gate is the interesting part: it
-is a capability OR a per-person weekly grant, so both halves need coverage, and
-holding any one department is enough.
+"""Weekly OVP champion helpers and the Friction Log write gate (a capability
+OR a current champion badge in any department).
 """
 from datetime import timedelta
 
 from app.modules.core.shared.lib.champions import (
     CHAMPION_DEPARTMENTS,
-    DEPARTMENT_KEYS,
     can_write_friction,
-    champion_for,
     champion_for_week,
     current_champions,
     is_champion,
@@ -46,7 +41,6 @@ def test_the_department_list_has_unique_keys_and_labels():
     labels = [label for _, label in CHAMPION_DEPARTMENTS]
     assert len(keys) == len(set(keys))
     assert len(labels) == len(set(labels))
-    assert DEPARTMENT_KEYS == keys
 
 
 def test_no_assignment_means_no_champions(app, db_session):
@@ -66,8 +60,7 @@ def test_each_department_holds_its_own_champion(app, db_session):
 
 
 def test_a_department_falls_back_to_its_own_most_recent(app, db_session):
-    """A missed rotation must not leave that department empty — and must not
-    borrow another department's holder."""
+    """A missed rotation falls back to that department's own latest holder."""
     older = _user(db_session, 'older')
     recent = _user(db_session, 'recent')
     other = _user(db_session, 'other-dept')
@@ -75,7 +68,6 @@ def test_a_department_falls_back_to_its_own_most_recent(app, db_session):
     _assign(db_session, recent, 'production', week_start_for() - timedelta(weeks=1))
     _assign(db_session, other, 'finance', week_start_for())
 
-    assert champion_for('production').id == recent.id
     assert current_champions()['production'].id == recent.id
     assert current_champions()['finance'].id == other.id
 

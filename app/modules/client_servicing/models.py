@@ -1,15 +1,14 @@
 """
-Client Servicing module — data model. The CS-only fields live here, not on
-the shared Project, per the module boundary: this is a 1:1 companion row
-that extends a project, never a change to the shared model.
+Client Servicing data model. CS-only fields live on a 1:1 companion row to
+Project; the shared Project model is never changed.
 """
 
 from app.modules.core.shared.extensions import db
 
 
 class ClientServicingScope(db.Model):
-    """CS's own scope option list — separate from the projects module's
-    Scope. CS adds to it inline; also admin-editable."""
+    """CS's own scope options, separate from the projects module's Scope.
+    CS adds to it inline; admins can edit it."""
     __tablename__ = 'client_servicing_scopes'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -22,9 +21,8 @@ class ClientServicingScope(db.Model):
 
 
 class ClientServicing(db.Model):
-    """1:1 companion row to a Project, holding the CS master-sheet fields
-    that don't belong on the shared model. Margin is derived, never
-    stored — see margin_percent."""
+    """1:1 companion row to a Project holding the CS master-sheet fields.
+    Margin is derived, never stored (see margin_percent)."""
     __tablename__ = 'client_servicing'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -36,8 +34,7 @@ class ClientServicing(db.Model):
     lpo = db.Column(db.String(120), nullable=True)
     store_location = db.Column(db.String(255), nullable=True)
     removal_date = db.Column(db.Date, nullable=True)
-    # The month this gets invoiced in, stored as the 1st of that month. The
-    # Monthly Summary buckets by it.
+    # Invoice month, stored as the 1st of the month. Monthly Summary buckets by it.
     invoice_month_date = db.Column(db.Date, nullable=True)
     cost_to_client = db.Column(db.Numeric(12, 2), nullable=True)
     inward_cost = db.Column(db.Numeric(12, 2), nullable=True)
@@ -47,18 +44,16 @@ class ClientServicing(db.Model):
     )
     priority = db.Column(db.String(120), nullable=True)
 
-    # Manual operational-status overlay — the CS master-sheet lifecycle,
-    # which is wider than the platform's derived status. None = fall back
-    # to the derived status. See lib/status.py (never touches Project).
+    # Manual CS status overlay (a wider lifecycle than the platform's derived
+    # status). None = use the derived status. See lib/status.py.
     cs_status = db.Column(db.String(40), nullable=True)
 
-    # Installation-calendar overlay (CS annotations). risk is a manual
-    # override of the derived risk (status-vs-install-date); None = auto.
-    # next_action / action_owner are free-text notes shown on the calendar.
+    # Installation-calendar annotations. risk overrides the derived risk;
+    # None = auto. next_action / action_owner are free-text notes.
     risk = db.Column(db.String(20), nullable=True)
     next_action = db.Column(db.String(255), nullable=True)
     action_owner = db.Column(db.String(120), nullable=True)
-    install_qty = db.Column(db.Integer, nullable=True)  # manual install quantity; None = not filled
+    install_qty = db.Column(db.Integer, nullable=True)  # None = not filled in
 
     # Invoicing (finance-owned) fields.
     lpo_date = db.Column(db.Date, nullable=True)
@@ -70,9 +65,8 @@ class ClientServicing(db.Model):
     invoice_uploaded = db.Column(db.Boolean, nullable=False, default=False)
     validation_status = db.Column(db.String(20), nullable=True)
 
-    # Closed lifecycle (CS-owned). closed_at marks the project closed and
-    # buckets it into a closing month. invoice_needed carries the cancelled
-    # flow's answer; None means it was never asked.
+    # Closed lifecycle (CS-owned). closed_at marks the project closed and sets
+    # its closing month. invoice_needed is the cancelled flow's answer; None = never asked.
     closed_at = db.Column(db.DateTime, nullable=True)
     closed_by_id = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'),
@@ -89,8 +83,7 @@ class ClientServicing(db.Model):
     @property
     def margin_percent(self):
         """(cost_to_client - inward_cost) / cost_to_client as a percentage.
-        None whenever either figure is missing or cost_to_client is zero,
-        so callers never hit a divide-by-zero."""
+        None if either figure is missing or cost_to_client is zero."""
         if self.cost_to_client is None or self.inward_cost is None:
             return None
         if self.cost_to_client == 0:
@@ -109,8 +102,7 @@ class ClientServicing(db.Model):
 
     @property
     def is_closed(self):
-        """True once the project has been closed out. Closing is final —
-        nothing clears closed_at."""
+        """True once the project is closed. Closing is final; nothing clears closed_at."""
         return self.closed_at is not None
 
     @property
@@ -128,9 +120,8 @@ class ClientServicing(db.Model):
 
 
 class ClientServicingSetting(db.Model):
-    """Single-row module settings — currently the Days Pending colour
-    thresholds. Read via current(); admin/management edit it on the
-    Invoicing page."""
+    """Single-row module settings: the Days Pending colour thresholds. Read
+    via current(); admin/management edit it on Invoicing > By Project."""
     __tablename__ = 'client_servicing_settings'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -139,8 +130,7 @@ class ClientServicingSetting(db.Model):
 
     @classmethod
     def current(cls):
-        """The saved row, or a transient default instance if none exists —
-        read-only callers never trigger a write."""
+        """The saved row, or an unsaved default if none exists (reads never write)."""
         return cls.query.first() or cls(days_green_max=30, days_red_max=60)
 
     def __repr__(self):

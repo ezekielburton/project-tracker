@@ -1,9 +1,6 @@
-"""The schedule engine: recurring obligations turned into occurrences,
-computed at read time and never stored.
+"""Schedule engine: recurring schedules turned into occurrences at read time (never stored).
 
-Plain stubs again rather than mapped models — instantiating a mapped class
-configures every mapper in the app, which would make date arithmetic
-depend on a database. The two stub guards below keep them honest.
+Plain stubs: instantiating a mapped model configures every mapper in the app.
 """
 from datetime import date
 
@@ -28,8 +25,7 @@ class _Asset:
 
 
 class _Schedule:
-    """Stands in for an HseSchedule. `assets` is a relationship rather than
-    a column, so it sits outside the guarded field list."""
+    """Stands in for an HseSchedule. `assets` is a relationship, so it is outside the column guard."""
 
     def __init__(self, assets=None, **kw):
         for name in SCHEDULE_FIELDS:
@@ -61,8 +57,7 @@ def entry(**kw):
 
 
 def test_the_stubs_only_use_real_columns():
-    """A column rename must break the stubs here rather than leave these
-    tests passing against fields that no longer exist."""
+    """Every stub field is a real model column, so a rename fails here."""
     for stub_fields, model in ((SCHEDULE_FIELDS, HseSchedule),
                                (ENTRY_FIELDS, HseEntry)):
         columns = {c.key for c in model.__table__.columns}
@@ -82,9 +77,7 @@ def test_weekly_lands_on_the_chosen_weekday():
 
 
 def test_dates_are_anchored_to_the_schedule_not_the_window():
-    """The same schedule must give the same dates whether the page renders
-    one month or a whole year — otherwise a tile could be planned in one
-    view and absent in another."""
+    """Occurrence dates are the same whatever window is requested."""
     s = sched(frequency='weekly', weekday=0, starts_on=date(2026, 9, 1))
     month = occurrence_dates(s, date(2026, 9, 1), date(2026, 9, 30))
     year = occurrence_dates(s, date(2026, 1, 1), date(2026, 12, 31))
@@ -104,7 +97,7 @@ def test_daily_with_an_interval():
 
 
 def test_a_monthly_day_clamps_to_short_months():
-    """The 31st of February is the 28th, not a month with no inspection."""
+    """day_of_month past a month's end clamps to its last day."""
     s = sched(frequency='monthly', day_of_month=31, starts_on=date(2026, 1, 1))
     assert occurrence_dates(s, date(2026, 1, 1), date(2026, 4, 30)) == [
         date(2026, 1, 31), date(2026, 2, 28), date(2026, 3, 31), date(2026, 4, 30)]
@@ -152,7 +145,7 @@ def test_a_zero_interval_cannot_stall_the_generator():
 # --- what one occurrence covers -------------------------------------------
 
 def test_a_schedule_without_assets_is_due_once():
-    """A tool box talk is one obligation, not one per vehicle."""
+    """A schedule with no assets has a single target (None)."""
     assert schedule_targets(sched(frequency='weekly', starts_on=TODAY)) == [None]
 
 
@@ -169,8 +162,7 @@ def test_a_retired_asset_stops_being_due():
 
 
 def test_a_schedule_whose_assets_all_retired_is_due_for_nothing():
-    """It must not quietly become a general obligation the officer never
-    set up."""
+    """All assets retired means no targets, not a fallback to one general target."""
     s = sched(frequency='weekly', starts_on=TODAY, assets=[_Asset(13, active=False)])
     assert schedule_targets(s) == []
     assert occurrences([s], [], TODAY, TODAY, TODAY) == []
@@ -193,8 +185,7 @@ def test_planned_overdue_and_today():
 
 
 def test_a_late_entry_still_ticks_off_its_occurrence():
-    """Monday's inspection done on Wednesday: the occurrence reads done,
-    and nothing is back-dated — the entry keeps its real date."""
+    """An entry dated after its occurrence still marks that occurrence done."""
     filed = [entry(id=1, schedule_id=5, occurrence_date=date(2026, 9, 7),
                    asset_id=11, entry_date=date(2026, 9, 9)),
              entry(id=2, schedule_id=5, occurrence_date=date(2026, 9, 7),
@@ -211,16 +202,14 @@ def test_a_half_finished_occurrence_is_still_outstanding():
 
 
 def test_work_filed_against_a_since_retired_asset_still_shows():
-    """He did the inspection. Retiring the vehicle later must not erase it
-    from the day he did it."""
+    """Entries for an asset not on the schedule still appear in its items."""
     filed = [entry(id=3, schedule_id=5, occurrence_date=date(2026, 9, 7), asset_id=99)]
     occ = occurrences([_vehicles()], filed, date(2026, 9, 7), date(2026, 9, 7), TODAY)
     assert len(occ[0]['items']) == 3
 
 
 def test_unplanned_work_ticks_nothing_off():
-    """An entry filed straight into the register is real work, but it is
-    not evidence that a planned inspection happened."""
+    """An entry with no schedule_id does not mark any occurrence done."""
     filed = [entry(id=4, schedule_id=None, occurrence_date=None, asset_id=11)]
     occ = occurrences([_vehicles()], filed, date(2026, 9, 7), date(2026, 9, 7), TODAY)
     assert occ[0]['done'] == 0
@@ -229,8 +218,7 @@ def test_unplanned_work_ticks_nothing_off():
 # --- coverage -------------------------------------------------------------
 
 def test_coverage_ignores_what_is_not_due_yet():
-    """Due on the 7th and the 14th, two vehicles each. The 21st is still
-    ahead and must not count against him."""
+    """Coverage counts only occurrences up to today, not future ones in the window."""
     filed = [entry(id=1, schedule_id=5, occurrence_date=date(2026, 9, 7), asset_id=11),
              entry(id=2, schedule_id=5, occurrence_date=date(2026, 9, 7), asset_id=12)]
     cov = coverage([_vehicles()], filed, date(2026, 9, 1), date(2026, 9, 30), TODAY)
@@ -252,9 +240,7 @@ def test_next_due_is_the_next_date_from_today():
 # --- the write-path guard -------------------------------------------------
 
 def test_falls_due_on_accepts_only_real_occurrence_dates():
-    """The entry route checks this before stamping an occurrence onto an
-    entry. Without it a hand-made request could tick off work that was
-    never planned, and coverage stops meaning anything."""
+    """falls_due_on accepts only real occurrence dates; the entry route relies on it."""
     s = _vehicles()
     assert falls_due_on(s, date(2026, 9, 14)) is True    # a Monday in range
     assert falls_due_on(s, date(2026, 9, 15)) is False   # the Tuesday after

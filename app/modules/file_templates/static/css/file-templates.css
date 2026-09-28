@@ -1,13 +1,6 @@
-/* file-templates.css — Vitamin-E
-   C&CM File Templates library page. Region/customer rows reuse the exact
-   .brief-customer-* classes from the C&CM detail page (already defined in
-   main.css) — only the region-level pieces and the deliverable-row list
-   below are new here. */
-
-.page-title {
-    font-size: 2.4rem;
-    margin: 0 0 0.25rem;
-}
+/* File Templates page. Customer rows reuse the .brief-customer-* classes
+   from main.css. Loaded globally from base.html, so unscoped rules here
+   (.page-subtitle) apply app-wide. */
 
 .page-subtitle {
     font-size: 0.9rem;
@@ -23,9 +16,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-/* Scoped to .ft-region-body so this only applies on this page —
-   .brief-customer-block is shared with the C&CM detail page, which
-   doesn't want a bordered white-box treatment applied to it too. */
+/* Scoped to .ft-region-body: .brief-customer-block is shared with other pages. */
 .ft-region-body .brief-customer-block {
     background: var(--white);
     border: 1px solid var(--grey-light);
@@ -72,10 +63,7 @@
     transform: rotate(-90deg);
 }
 
-/* Only the toggle-only inner span (not the whole summary bar) drives
-   collapse now, per Chunk 5's structure — this reuses the existing
-   .brief-customer-summary-chevron element/rotation-on-collapse pattern
-   from the C&CM detail page, just scoped to this page's own wrapper. */
+/* Only this inner span toggles collapse, so the Download All button beside it does not. */
 .ft-customer-toggle-area {
     display: flex;
     align-items: center;

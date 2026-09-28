@@ -1,10 +1,7 @@
 """
-The Overview's view model — what the officer sees when he opens the module.
-
-The page answers one question in its first screen: what needs him today.
-Everything else is context for that. Nothing here is stored and nothing
-here defines a metric — the shared definitions live in lib/metrics.py so
-this page and My performance can never disagree.
+The Overview's view model: the module's landing page, led by what needs
+action today. Shared metrics come from lib/metrics.py so this page and My
+performance agree; nothing is stored.
 """
 
 from datetime import date
@@ -18,8 +15,7 @@ from app.modules.hse.lib.metrics import (
 from app.modules.hse.lib.vocab import OPEN_STATUSES
 from app.modules.hse.lib.registers import BY_KEY
 
-# How many rows each panel shows before it starts saying "and N more". The
-# Overview is a place to start work, not a second register.
+# Rows per panel before it shows "and N more".
 PANEL_LIMIT = 6
 
 # The rail group whose open items are "incidents" for the tile.
@@ -31,10 +27,55 @@ def _label(entry):
     return reg.label if reg else entry.register
 
 
+# Longest a free-text title runs before it is cut.
+TITLE_MAX = 60
+
+# JSONB fields naming what kind of thing happened, tried in order.
+_KIND_FIELDS = ('document_type', 'service_type', 'maintenance_type',
+                'inspection_type', 'injury_type', 'ppe_type', 'body_part',
+                'incident_type', 'issue_type')
+
+
+def _short(text):
+    text = ' '.join(str(text).split())
+    return text if len(text) <= TITLE_MAX else text[:TITLE_MAX - 1].rstrip() + '…'
+
+
+def entry_title(entry):
+    """A short human title for an entry: the certificate, asset + kind,
+    item, person + kind, kind + location, or description, whichever comes
+    first. Falls back to the register's name."""
+    data = entry.data or {}
+    kind = next((data[k] for k in _KIND_FIELDS if data.get(k)), None)
+
+    def with_kind(name):
+        return f'{name} — {kind}' if kind else name
+
+    item = getattr(entry, 'compliance_item', None)
+    if item is not None:
+        return item.label
+    asset = getattr(entry, 'asset', None)
+    if asset is not None:
+        return with_kind(asset.label)
+    if data.get('item'):
+        return _short(data['item'])
+    subject = getattr(entry, 'subject', None)
+    if subject is not None:
+        return with_kind(subject.name)
+    location = getattr(entry, 'location', None)
+    if kind:
+        return f'{kind} — {location.label}' if location is not None else kind
+    for key in ('description', 'issues_found', 'topic'):
+        if data.get(key):
+            return _short(data[key])
+    if location is not None:
+        return location.label
+    return _label(entry)
+
+
 def _open(entries):
-    """Entries still needing someone. A log has no status and is never
-    open; an expiry register's status is computed, and its overdue items
-    are counted by compliance health instead."""
+    """Open entries in stored-status registers. Logs are never open; expiry
+    registers are covered by compliance health."""
     out = []
     for entry in entries:
         reg = BY_KEY.get(entry.register)
@@ -46,20 +87,16 @@ def _open(entries):
 
 
 def open_incident_count(entries):
-    """Open work in the Incidents group — incidents, first aid, PPE
-    non-conformity and lost time injuries, not just the one register."""
+    """Open entries across the whole Incidents rail group, not only the
+    Incidents register."""
     # _open has already dropped anything whose register is unknown.
     return sum(1 for e in _open(entries)
                if BY_KEY[e.register].group == INCIDENT_GROUP)
 
 
 def needs_you_now(entries, today=None, limit=PANEL_LIMIT):
-    """Open work ordered by how far past its SLA it is.
-
-    Time parked with someone else is already out of the clock, so an action
-    he has chased and is waiting on does not crowd out the work he can
-    actually do. Those appear in waiting_on_others instead.
-    """
+    """Open work, most overdue against its SLA first. Entries waiting on
+    someone else are left out (see waiting_on_others)."""
     today = today or date.today()
     scored = []
     for entry in _open(entries):
@@ -73,9 +110,7 @@ def needs_you_now(entries, today=None, limit=PANEL_LIMIT):
         'entry': entry,
         'register_label': _label(entry),
         'ref': entry.ref,
-        'title': ((entry.data or {}).get('description')
-                  or (getattr(entry, 'compliance_item', None) and entry.compliance_item.label)
-                  or _label(entry)),
+        'title': entry_title(entry),
         'severity': entry.severity,
         'days_open': days_open(entry, today),
         'over_sla': pressure if pressure > 0 else 0,
@@ -85,12 +120,7 @@ def needs_you_now(entries, today=None, limit=PANEL_LIMIT):
 
 
 def waiting_on_others(entries, today=None, limit=PANEL_LIMIT):
-    """Work parked with someone else.
-
-    It sits in its own panel on purpose. The performance page refuses to
-    measure what the officer does not control, and the Overview should not
-    make him feel he is behind on something he has already chased.
-    """
+    """Open work waiting on someone else, longest-waiting first."""
     today = today or date.today()
     parked = [e for e in _open(entries) if e.waiting_on_id is not None]
     parked.sort(key=lambda e: e.waiting_since or e.entry_date or today)
@@ -98,7 +128,7 @@ def waiting_on_others(entries, today=None, limit=PANEL_LIMIT):
         'entry': entry,
         'ref': entry.ref,
         'register_label': _label(entry),
-        'title': (entry.data or {}).get('description') or _label(entry),
+        'title': entry_title(entry),
         'person': entry.waiting_on.name if entry.waiting_on else 'Someone',
         'days': days_waiting(entry, today),
     } for entry in parked[:limit]]
@@ -106,8 +136,7 @@ def waiting_on_others(entries, today=None, limit=PANEL_LIMIT):
 
 
 def expiring_panel(health, today=None, limit=PANEL_LIMIT):
-    """What has lapsed, then what is about to. Lapsed first because it is
-    already a problem, and naming it is the point."""
+    """Lapsed compliance items first, then those expiring soon."""
     today = today or date.today()
     rows = []
     for entry in health['lapsed'] + health['expiring']:
@@ -116,7 +145,7 @@ def expiring_panel(health, today=None, limit=PANEL_LIMIT):
             'entry': entry,
             'ref': entry.ref,
             'register_label': _label(entry),
-            'title': (getattr(entry, 'compliance_item', None) and entry.compliance_item.label) or _label(entry),
+            'title': entry_title(entry),
             'due_at': entry.due_at,
             'days': remaining,
             'lapsed': remaining is not None and remaining < 0,
@@ -126,11 +155,8 @@ def expiring_panel(health, today=None, limit=PANEL_LIMIT):
 
 
 def tiles(schedules, entries, month_start, month_end, today=None):
-    """The five counts across the top.
-
-    Compliance health is read from lib/metrics, not computed here, so the
-    tile and the performance page cannot drift apart.
-    """
+    """The tile counts across the top, plus the compliance health dict
+    (from lib/metrics) for the expiring panel."""
     today = today or date.today()
     health = compliance_health(entries, today)
     cov = done_vs_due(schedules, entries, month_start, month_end, today)
@@ -148,23 +174,15 @@ def tiles(schedules, entries, month_start, month_end, today=None):
     }, health
 
 
-# Severity order, worst last, so the bars read as a ramp rather than a
-# jumble. The tone names are the ones hse.css paints.
+# Severity order, worst last. Tone names must match the classes in hse.css.
 SEVERITY_BARS = (('Low', 'good'), ('Medium', 'warn'),
                  ('High', 'late'), ('Critical', 'bad'))
 
 
 def severity_breakdown(entries, start, end):
-    """Incidents by severity over the period, as bars.
-
-    Counted across the whole Incidents group — an injury is an incident
-    whether it was filed under Incidents, First aid or Lost time injury —
-    and each entry is counted once, in the register it was actually filed
-    in, so nothing is double counted.
-
-    The bars are scaled against the largest bar, not the total: with four
-    severities a share-of-total bar is always short and tells you nothing.
-    """
+    """Incidents-group entries by severity over the period, as bars. Each
+    entry counts once; bar length is relative to the largest bar, not the
+    total."""
     rows = [e for e in entries
             if BY_KEY.get(e.register) is not None
             and BY_KEY[e.register].group == INCIDENT_GROUP
@@ -186,12 +204,8 @@ def severity_breakdown(entries, start, end):
 
 
 def this_week(schedules, entries, start, end, today=None):
-    """The six numbers the weekly HSC report is built from.
-
-    They are counted here rather than typed by him: every column of that
-    report is derivable from the registers, which is why it is a generated
-    view and not a register of its own.
-    """
+    """The weekly HSC report figures, derived from the registers for the
+    given period."""
     today = today or date.today()
 
     def filed(*groups):

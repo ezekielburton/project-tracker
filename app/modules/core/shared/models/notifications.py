@@ -16,7 +16,6 @@ class Notification(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     link = db.Column(db.String(500), nullable=True)
 
-    # Relationships
     recipient = db.relationship('User', foreign_keys=[recipient_id], backref='notifications')
     project = db.relationship('Project', backref='notifications')
     triggered_by = db.relationship('User', foreign_keys=[triggered_by_id])
@@ -27,16 +26,15 @@ class Notification(db.Model):
 
 class NotificationSound (db.Model):
     """
-    An admin-uploaded audio file users can choose to play when a new notification arrives.
-    Files themselves alive on the disk at app/static/sounds/
-    This table only tracks metadata + which file backs each entry.
+    An admin-uploaded notification sound. The file lives in app/static/sounds/;
+    this row holds its label and filename.
     """
 
     __tablename__ = 'notification_sounds'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False) # Display label
-    filename = db.Column(db.String(255), nullable=False) # Actual file on disk
+    name = db.Column(db.String(100), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
     uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 

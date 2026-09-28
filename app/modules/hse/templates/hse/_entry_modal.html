@@ -1,19 +1,13 @@
-{# The entry overlay. Fetched as a fragment by hse_registers.js, so its
-   dropdowns always reflect the reference lists as they are now.
-
-   Uses the app's standard .modal-overlay/.modal-box, not the project
-   overlay — that one is for a fetched multi-tab body, and its
-   backdrop-filter is what broke every picker inside it. Anything
-   floating added here must go through PopoverPosition for the same
-   reason: .modal-overlay carries backdrop-filter too. #}
+{# The entry overlay, fetched as a fragment by hse_registers.js so its
+   dropdowns reflect the current reference lists. .modal-overlay has a
+   backdrop-filter, so anything floating added here must use PopoverPosition. #}
 <div class="modal-overlay hse-modal" id="hse-entry-modal"
      data-entry-id="{{ entry.id if entry else '' }}"
      data-register="{{ reg.key }}"
      data-save-url="{{ url_for('hse.update_entry', entry_id=entry.id) if entry
                        else url_for('hse.create_entry', register_key=reg.key) }}"
      data-method="{{ 'PATCH' if entry else 'POST' }}"
-     {# Set only when the form was opened from a planned occurrence. The
-        server re-checks that the occurrence is real before stamping it. #}
+     {# Set only when opened from a planned occurrence; the server re-checks it. #}
      data-schedule-id="{{ occurrence.schedule_id if occurrence else '' }}"
      data-occurrence-date="{{ occurrence.date if occurrence else '' }}">
     <div class="modal-box hse-modal-box">
@@ -27,24 +21,18 @@
         </div>
 
         {% if blocked_by %}
-        {# Filing an entry with a hole where a location should be is worse
-           than refusing it. #}
+        {# Refuse filing until required reference lists exist. #}
         <p class="hse-modal-blocked">
             Set up <strong>{{ blocked_by | join(', ') }}</strong> before filing an entry here.
         </p>
         {% endif %}
 
         <div class="hse-modal-body">
-            {% for lock in locked %}
-            <div class="form-group hse-locked">
-                <label>{{ lock.label }}</label>
-                <div class="hse-locked-box mono">{{ entry.ref if entry else '—' }}</div>
-                <span class="hse-hint">{{ lock.note }}</span>
-            </div>
-            {% endfor %}
-
+            {# Two columns; long text spans both. The ref is allocated on save, not a field. #}
+            <div class="hse-form-grid">
             {% for f in fields %}
-            <div class="form-group hse-field" data-field="{{ f.name }}" data-type="{{ f.type }}">
+            <div class="form-group hse-field{{ ' hse-field--wide' if f.type == 'textarea' else '' }}"
+                 data-field="{{ f.name }}" data-type="{{ f.type }}">
                 <label for="hse-f-{{ f.name }}">
                     {{ f.label }}{% if f.required %}<span class="hse-required">*</span>{% endif %}
                 </label>
@@ -59,7 +47,8 @@
                 <input type="hidden" id="hse-f-{{ f.name }}" value="{{ f.value or '' }}">
 
                 {% elif f.type == 'status' %}
-                <select class="form-input" id="hse-f-{{ f.name }}">
+                <select class="form-input" id="hse-f-{{ f.name }}"
+                        {%- if f.closed_status and f.closed_field %} data-closed-status="{{ f.closed_status }}" data-closed-field="{{ f.closed_field }}" data-today="{{ today }}"{% endif %}>
                     <option value="">—</option>
                     {% for s in f.statuses %}
                     <option value="{{ s }}"{{ ' selected' if s == f.value else '' }}>{{ s }}</option>
@@ -67,23 +56,37 @@
                 </select>
 
                 {% elif f.type in ('choice', 'person', 'asset') %}
-                {% if f.empty_list %}
-                <div class="hse-locked-box hse-empty-choice">Nothing set up yet</div>
-                <input type="hidden" id="hse-f-{{ f.name }}" value="">
-                {% else %}
-                <select class="form-input" id="hse-f-{{ f.name }}">
-                    <option value="">—</option>
-                    {% for opt in f.options %}
-                    <option value="{{ opt.value }}"{{ ' selected' if opt.value == f.value else '' }}>{{ opt.label }}</option>
-                    {% endfor %}
-                </select>
+                <div class="hse-select-row">
+                    {% if f.empty_list %}
+                    <div class="hse-locked-box hse-empty-choice">Nothing set up yet</div>
+                    <input type="hidden" id="hse-f-{{ f.name }}" value="">
+                    {% else %}
+                    <select class="form-input" id="hse-f-{{ f.name }}">
+                        <option value="">—</option>
+                        {% for opt in f.options %}
+                        <option value="{{ opt.value }}"{{ ' selected' if opt.value == f.value else '' }}
+                                {%- if f.show_serial %} data-serial="{{ opt.serial or '' }}"{% endif %}>{{ opt.label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+
+                    {# Quick-add a missing option without leaving the form. #}
+                    {% if f.type == 'choice' %}
+                    <button type="button" class="hse-quick-link" data-quick-add="{{ f.name }}"
+                            title="Add a new {{ f.label|lower }}" aria-label="Add a new {{ f.label|lower }}">+</button>
+                    {% endif %}
+                </div>
+
+                {# Read-only: the serial lives on the asset (Lists & people). #}
+                {% if f.show_serial %}
+                {% set picked = f.options | selectattr('value', 'equalto', f.value) | first %}
+                <span class="hse-serial hse-hint"
+                      data-serial-line{{ ' hidden' if not picked else '' }}>
+                    {%- if picked %}{{ 'Serial no. ' ~ picked.serial if picked.serial else 'No serial on file' }}{% endif -%}
+                </span>
                 {% endif %}
 
-                {# A missing type gets noticed mid-entry, not before it. Sending
-                   him to another page to add one is how the real answer ends up
-                   typed into the description instead. #}
                 {% if f.type == 'choice' %}
-                <button type="button" class="hse-quick-link" data-quick-add="{{ f.name }}">+ Add a new one</button>
                 <div class="hse-quick-add" data-quick-for="{{ f.name }}" data-kind="{{ f.choices_kind }}"
                      data-stores="{{ 'label' if f.stores_label else 'id' }}" hidden>
                     <input type="text" class="form-input hse-quick-input" placeholder="New {{ f.label|lower }}">
@@ -98,6 +101,14 @@
                 <input type="date" class="form-input" id="hse-f-{{ f.name }}"
                        value="{{ f.value or (today if f.name == 'entry_date' and not entry else '') }}">
 
+                {% elif f.type == 'time' %}
+                <input type="time" class="form-input" id="hse-f-{{ f.name }}" value="{{ f.value or '' }}">
+
+                {# Text, not number: an amount may carry thousands commas. #}
+                {% elif f.type == 'money' %}
+                <input type="text" inputmode="decimal" class="form-input" id="hse-f-{{ f.name }}"
+                       value="{{ f.value if f.value is not none else '' }}" placeholder="e.g. 1,250.50">
+
                 {% elif f.type == 'number' %}
                 <input type="number" class="form-input" id="hse-f-{{ f.name }}" value="{{ f.value if f.value is not none else '' }}">
 
@@ -108,21 +119,17 @@
                 <span class="hse-error" hidden></span>
             </div>
             {% endfor %}
+            </div>
 
-            {# Attachments need an entry to hang off, so they appear once it
-               exists. Creating one reopens this overlay in edit mode rather
-               than closing, so adding the report stays one continuous job. #}
+            {# Attachments need a saved entry; creating one reopens this overlay in edit mode. #}
             {% if entry %}
             <div class="form-group hse-files" id="hse-files"
                  data-upload-url="{{ url_for('hse.upload_attachment', entry_id=entry.id) }}">
                 <label>Attachments</label>
                 <div class="hse-file-list" id="hse-file-list">
-                    {# Preview opens the shared modal from base.html — the same
-                       one the project reference files use, already loaded with
-                       preview.js, so there is nothing to add here. A button
-                       rather than a thumbnail: there is no thumbnailing
-                       service, so a thumbnail would fetch every photo at full
-                       size just to sit in a list. #}
+                    {# Preview uses the shared modal in base.html (preview.js). No
+                       thumbnails: there is no thumbnailing service, so each
+                       would load the full-size file. #}
                     {% for f in entry.attachments %}
                     <div class="hse-file" data-file-id="{{ f.id }}">
                         <a class="hse-file-name" href="{{ url_for('hse.download_attachment', attachment_id=f.id) }}">{{ f.original_filename }}</a>

@@ -1,17 +1,10 @@
-{# Shared DI rail — top nav + project switcher. Included by board.html,
-   performance.html, templates.html and archive.html so every screen stays
-   visually identical without duplicating markup. The nav itself comes from
-   the shared module_rail macro; the Projects section below it is DI's own
-   and is passed in as the macro's call body.
+{# DI rail, included by every DI screen. The nav is the shared
+   module_rail macro; the Projects section is passed as its call body.
 
-   `active_nav` picks the active item: 'board' | 'performance' |
-   'templates' | 'archive'. `can_edit_board` hides each project's Close
-   button for anyone view-only (lib/access.py's can_edit_di_board) — the
-   Archive link stays visible to everyone, same as Board, since viewing
-   never needs the gate. "+ New project" lives in board.html's header, not
-   here. `project` marks the current project in the list and builds the
-   Board link — on templates.html/archive.html (not project-scoped) it's
-   the default project, so "Board" always has somewhere sensible to go. #}
+   `active_nav`: 'board' | 'performance' | 'templates' | 'settings' | 'archive'.
+   `can_edit_board` shows each project's Close button (can_edit_di_board).
+   `project` marks the current project and builds the Board link; on the
+   non-project screens it is the default project. #}
 {% from '_shared_macros.html' import module_rail %}
 {% set di_rail_items =
     [{'key': 'board', 'label': 'Board',
@@ -19,8 +12,10 @@
     + ([{'key': 'performance', 'label': 'Performance',
          'url': url_for('digital_innovation.performance_screen')}] if can_view_performance else [])
     + ([{'key': 'templates', 'label': 'Edit Templates',
-         'url': url_for('digital_innovation.templates_screen')}] if can_edit_templates else []) %}
-{% call module_rail(di_rail_items, active_nav) %}
+         'url': url_for('digital_innovation.templates_screen')},
+        {'key': 'settings', 'label': 'Settings',
+         'url': url_for('digital_innovation.settings_screen')}] if can_edit_templates else []) %}
+{% call module_rail(di_rail_items, active_nav, module='Digital Innovation') %}
     <div class="di-sidebar-section">
         <span class="di-sidebar-section-label">Projects</span>
         <ul class="di-project-list">
@@ -32,12 +27,8 @@
                     {{ p.name }}
                 </a>
                 {% if can_edit_board and not p.is_permanent %}
-                {# Closes this project (active -> closed) — it then moves to
-                   the Archive screen, reopenable from there. Never rendered
-                   for the permanent OVP board (lib/access.py's guard isn't
-                   what hides this — is_permanent is an object rule, not a
-                   role one — routes/projects.py's close_project refuses it
-                   too, so this is belt-and-suspenders, not the only guard). #}
+                {# Closes the project; it moves to Archive. Hidden for the
+                   permanent board, which close_project also refuses. #}
                 <button type="button" class="di-project-close-btn" data-di-project-id="{{ p.id }}" aria-label="Close project" title="Close project">&times;</button>
                 {% endif %}
             </li>

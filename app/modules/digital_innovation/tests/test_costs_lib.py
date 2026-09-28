@@ -1,6 +1,4 @@
-"""Coverage for the Digital Innovation cost ledger's business logic
-(lib/costs.py). No routes/HTTP here — exercises the rules directly
-against the database, the same way test_step_engine.py covers brain A."""
+"""Tests for lib/costs.py, called directly (no HTTP)."""
 import datetime
 
 import pytest

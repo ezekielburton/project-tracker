@@ -18,7 +18,7 @@
                         <a class="hse-btn hse-tab"
                            href="{{ url_for('hse.schedule_page') }}">+ New schedule</a>
                         {% if can('manage_hse', effective_user) %}
-                        <button type="button" class="hse-btn hse-btn--primary"
+                        <button type="button" class="hse-btn hse-btn--primary mobile-primary"
                                 data-hse-open-picker>+ Log entry</button>
                         {% endif %}
                     </div>

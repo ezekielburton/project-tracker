@@ -1,6 +1,6 @@
 /**
  * Editor.js block for wiki video: a YouTube/Vimeo link, or a self-hosted upload.
- * Uploads go to the existing /wiki/upload-video endpoint.
+ * Uploads go to config.uploadUrl (default /wiki/upload-video).
  */
 (function () {
     'use strict';

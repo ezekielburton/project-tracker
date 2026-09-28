@@ -1,23 +1,28 @@
 {# The register table. Columns come from the declaration via lib/table.py,
-   so this file never names a register or a field.
-
-   The card is the surface the wireframe shows: raised against the page, its
-   own border, and the count and paging inside it rather than floating
-   underneath. #}
+   so this file never names a register or a field. The count and paging sit
+   inside the card. #}
 {% from '_shared_macros.html' import status_pill %}
 <div class="hse-table-card">
     <div class="hse-table-scroll" id="hse-table-scroll">
-        <table class="data-table hse-table" id="hse-table">
+        {# table--cards: each row becomes a card on a phone (mobile.css). #}
+        <table class="data-table hse-table table--cards" id="hse-table">
             <thead>
                 <tr>{% for head in columns %}<th>{{ head }}</th>{% endfor %}</tr>
             </thead>
             <tbody>
                 {% for row in rows %}
+                {# data-peek feeds the hover card (hse_registers.js): the fields
+                   kept out of the table, and the full text of any cut short. #}
                 <tr data-entry-id="{{ row.id }}" data-search="{{ row.search }}"
+                    data-ref="{{ row.ref }}" data-title="{{ row.title }}"
+                    {%- if row.peek %} data-peek='{{ row.peek|tojson }}'{% endif %}
                     {%- if can('manage_hse', effective_user) %} class="clickable"
                     data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.id) }}"{% endif %}>
                     {% for c in row.cells %}
-                    <td class="{{ 'mono' if c.kind == 'mono' else '' }}{{ ' muted' if c.kind in ('muted', 'empty') else '' }}{{ ' hse-overdue' if c.tone == 'overdue' else '' }}">
+                    {# Phone card: ref top left, leading date top right; empty cells
+                       and long text hidden (the title covers it). #}
+                    <td data-label="{{ columns[loop.index0] }}"
+                        class="{{ 'mono' if c.kind == 'mono' else '' }}{{ ' muted' if c.kind in ('muted', 'empty') else '' }}{{ ' hse-clip' if c.kind == 'clip' else '' }}{{ ' hse-overdue' if c.tone == 'overdue' else '' }}{{ ' hse-expired' if c.tone == 'expired' else '' }}{{ ' card-kicker' if loop.first else '' }}{{ ' card-aside' if loop.index == 2 and row.aside else '' }}{{ ' card-hide' if c.kind in ('empty', 'clip') else '' }}">
                         {%- if c.kind == 'pill' %}{{ status_pill(c.text, c.modifier) }}
                         {%- else %}{{ c.text }}{% endif -%}
                     </td>

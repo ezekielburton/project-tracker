@@ -1,15 +1,11 @@
 """
-HSE — the officer's own lists.
+HSE Lists: reference lists, people and assets, managed by the officer
+(manage_hse) so no admin is needed to add a value.
 
-His page, gated manage_hse, not the admin panel: an officer who needs an
-admin to add a location keeps his locations in a spreadsheet, which is the
-thing this module exists to stop.
-
-Nothing is ever deleted. Entries already filed still point at a value, so a
-retired one is deactivated and simply stops appearing in dropdowns — the
-same rule CS Scopes follows.
+Nothing is deleted. Filed entries still point at values, so a retired one
+is deactivated and drops out of dropdowns.
 """
-from flask import abort, jsonify, render_template, request
+from flask import abort, jsonify, render_template, request, url_for
 from flask_login import login_required
 
 from app.modules.core.shared.extensions import db
@@ -19,7 +15,7 @@ from app.modules.hse.lib.lists import (
     serialize_asset, serialize_person, serialize_reference, tabs,
 )
 from app.modules.hse.lib.rail import rail_items
-from app.modules.hse.lib.query import open_counts_by_group
+from app.modules.hse.lib.query import open_counts_by_register
 from app.modules.hse.models import (
     ASSET_KINDS, REFERENCE_KINDS, HseAsset, HsePerson, HseReference,
 )
@@ -27,6 +23,7 @@ from app.modules.hse.routes.blueprint import hse_bp
 
 
 MAX_LABEL = 160
+MAX_SERIAL = 120
 
 
 def _clean(value, field='label'):
@@ -37,6 +34,14 @@ def _clean(value, field='label'):
     if len(text) > MAX_LABEL:
         return None, f'{field.capitalize()} is too long'
     return text, None
+
+
+def _serial(value):
+    """A trimmed serial number or None — or an error message."""
+    text = (value or '').strip()
+    if len(text) > MAX_SERIAL:
+        return None, 'Serial no. is too long'
+    return text or None, None
 
 
 @hse_bp.route('/lists')
@@ -52,10 +57,13 @@ def lists_page(tab_key=None):
         abort(404)
     return render_template(
         'hse/lists.html',
-        tabs=available, active_tab=tab_key,
         sections=panel_for(tab_key),
-        rail=rail_items(open_counts_by_group()),
+        rail=rail_items(open_counts_by_register()),
         active_group='lists',
+        active_sub=tab_key,
+        list_pages=[{'key': t['key'], 'label': t['label'],
+                     'url': url_for('hse.lists_page', tab_key=t['key'])}
+                    for t in available],
     )
 
 
@@ -165,9 +173,13 @@ def create_asset():
     label, error = _clean(data.get('label'))
     if error:
         return jsonify({'error': error}), 400
+    serial_no, error = _serial(data.get('serial_no'))
+    if error:
+        return jsonify({'error': error}), 400
 
     asset = HseAsset(kind=data['kind'], label=label,
-                     ref=(data.get('ref') or '').strip() or None)
+                     ref=(data.get('ref') or '').strip() or None,
+                     serial_no=serial_no)
     db.session.add(asset)
     db.session.commit()
     return jsonify({'row': serialize_asset(asset)}), 201
@@ -187,6 +199,11 @@ def update_asset(asset_id):
         asset.label = label
     if 'ref' in data:
         asset.ref = (data.get('ref') or '').strip() or None
+    if 'serial_no' in data:
+        serial_no, error = _serial(data.get('serial_no'))
+        if error:
+            return jsonify({'error': error}), 400
+        asset.serial_no = serial_no
     if 'active' in data:
         asset.active = bool(data.get('active'))
 
@@ -200,9 +217,8 @@ def update_asset(asset_id):
 @login_required
 @require_api('manage_hse')
 def quick_add_reference():
-    """Adding a missing type without leaving the form. He notices at 7am
-    mid-incident; making him go elsewhere and retype the entry is how the
-    real answer ends up typed into the description instead."""
+    """Adds a missing list value from inside the entry form, so the user
+    never has to leave a half-filled entry."""
     data = request.get_json(silent=True) or {}
     kind = data.get('kind')
     if kind not in REFERENCE_KINDS:

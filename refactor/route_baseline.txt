@@ -21,7 +21,6 @@
 /admin/api/activity/<int:entry_id>	DELETE	admin.delete_activity
 /admin/api/activity/clear	POST	admin.clear_activity
 /admin/api/activity/export	POST	admin.export_activity
-/admin/api/broadcast-update	POST	admin.broadcast_update
 /admin/api/clients	GET	admin.list_clients
 /admin/api/clients	POST	admin.create_client
 /admin/api/clients/<int:client_id>	DELETE	admin.delete_client
@@ -37,12 +36,10 @@
 /admin/api/design-directions	POST	admin.create_design_direction
 /admin/api/design-directions/<int:dir_id>	DELETE	admin.delete_design_direction
 /admin/api/design-directions/<int:dir_id>	PATCH	admin.update_design_direction
-/admin/api/design-directions/quick-add	POST	admin.quick_add_design_direction
 /admin/api/design-types	GET	admin.list_design_types
 /admin/api/design-types	POST	admin.create_design_type
 /admin/api/design-types/<int:type_id>	DELETE	admin.delete_design_type
 /admin/api/design-types/<int:type_id>	PATCH	admin.update_design_type
-/admin/api/design-types/quick-add	POST	admin.quick_add_design_type
 /admin/api/dev/wipe-projects	POST	admin.dev_wipe_projects
 /admin/api/drafts	GET	admin.list_drafts
 /admin/api/drafts/<int:draft_id>	DELETE	admin.delete_draft_admin
@@ -69,8 +66,6 @@
 /api/clients/<int:client_id>/contacts	GET	api.client_contacts
 /api/clients/<int:client_id>/projects	GET	api.client_projects
 /api/contacts/<int:contact_id>/projects	GET	api.contact_projects
-/api/projects/<int:project_id>/poll	GET	api.project_detail_poll
-/api/projects/poll	GET	api.projects_poll
 /api/version	GET	api.app_version
 /api/zip-download/<zip_id>	GET	api.zip_download
 /blog	GET	blog.index
@@ -85,6 +80,7 @@
 /blog/posts/<int:post_id>	PUT	blog.update_post
 /blog/posts/<int:post_id>/publish	POST	blog.toggle_publish
 /blog/upload-media	POST	blog.upload_media
+/bug-reports	GET	feedback.legacy_bug_link
 /bug-reports	POST	feedback.submit_bug
 /bug-reports/<int:bug_id>	DELETE	feedback.delete_bug
 /bug-reports/<int:bug_id>	GET	feedback.get_bug
@@ -152,9 +148,8 @@
 /digital-innovation/features/<int:feature_id>	GET	digital_innovation.feature_detail
 /digital-innovation/features/<int:feature_id>/close	POST	digital_innovation.close_feature_route
 /digital-innovation/features/<int:feature_id>/move	POST	digital_innovation.move_feature_stage
+/digital-innovation/features/<int:feature_id>/reopen	POST	digital_innovation.reopen_feature_route
 /digital-innovation/features/<int:feature_id>/steps	POST	digital_innovation.add_feature_step
-/digital-innovation/intake/<int:item_id>/dismiss	POST	digital_innovation.dismiss_intake_item
-/digital-innovation/intake/<int:item_id>/promote	POST	digital_innovation.promote_intake_item
 /digital-innovation/performance	GET	digital_innovation.performance_screen
 /digital-innovation/performance/export	GET	digital_innovation.export_performance
 /digital-innovation/performance/table	GET	digital_innovation.performance_table_fragment
@@ -165,6 +160,8 @@
 /digital-innovation/projects/<int:project_id>/reopen	POST	digital_innovation.reopen_project
 /digital-innovation/projects/<int:project_id>/track	PATCH	digital_innovation.update_project_track
 /digital-innovation/projects/search	GET	digital_innovation.search_projects
+/digital-innovation/settings	GET	digital_innovation.settings_screen
+/digital-innovation/settings	POST	digital_innovation.save_settings
 /digital-innovation/steps/<int:step_id>	DELETE	digital_innovation.delete_feature_step
 /digital-innovation/steps/<int:step_id>/tick	POST	digital_innovation.tick_feature_step
 /digital-innovation/template-steps/<int:template_id>	DELETE	digital_innovation.delete_template_step
@@ -176,6 +173,7 @@
 /directory/clients	GET	client_directory.index
 /directory/clients/companies	POST	client_directory.save_company
 /directory/clients/contacts	POST	client_directory.save_contact
+/feature-requests	GET	feedback.legacy_feature_link
 /feature-requests	POST	feedback.submit_feature
 /feature-requests/<int:feature_id>	DELETE	feedback.delete_feature
 /feature-requests/<int:feature_id>	GET	feedback.get_feature
@@ -248,7 +246,6 @@
 /projects/<int:project_id>/assign-concept-kv	POST	project_overlay.assign_concept_kv
 /projects/<int:project_id>/assign-lead	POST	project_overlay.assign_lead
 /projects/<int:project_id>/customers/add	POST	project_overlay.add_project_customer
-/projects/<int:project_id>/deliverables/<int:deliverable_id>/transfer	POST	transfer.transfer_deliverable
 /projects/<int:project_id>/draft	DELETE	project_overlay.delete_draft
 /projects/<int:project_id>/overlay	GET	project_overlay.overlay
 /projects/<int:project_id>/overlay/cancel	POST	project_overlay.overlay_cancel_project

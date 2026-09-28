@@ -1,9 +1,10 @@
 """
 Client Servicing — closing a project. Closing is CS-owned and final: it
-stamps closed_at on the ClientServicing row and never touches Project.
+stamps closed_at on the ClientServicing row. The only Project write is
+filling in a missing value.
 
-A cancelled project answers the invoicing question first, so its close
-carries invoice_needed and, when it has been invoiced, the invoice date.
+A cancelled project must answer the invoicing question, so its close
+carries invoice_needed and, if already invoiced, the invoice date.
 """
 from datetime import date, datetime
 
@@ -44,9 +45,8 @@ def close_project(project_id):
     if project.cancelled_at is not None and invoice_needed is None:
         return jsonify({'error': 'Answer the invoicing question first.'}), 400
 
-    # A project that still needs invoicing must carry a value — it lands on
-    # the Closed page's Value column and in the month's total. Enforced here,
-    # not only in the prompt, so the rule holds for any caller.
+    # A project that still needs invoicing must have a value (it feeds the
+    # Closed page's Value column and month total). Enforced server-side.
     project_value = None
     raw_value = data.get('project_value')
     if raw_value not in (None, ''):
@@ -75,9 +75,8 @@ def close_project(project_id):
     cs.closed_by_id = actor.id
     cs.invoice_needed = invoice_needed
     if project_value is not None:
-        # Written straight onto the project: this is a data fill during a
-        # close-out, not a value change anyone needs notifying about, and the
-        # close already writes its own activity entry.
+        # Direct write, skipping project mutations: a close-out data fill needs
+        # no notification, and the close logs its own activity entry.
         project.value = float(project_value)
     if invoice_date is not None:
         cs.invoice_date = invoice_date

@@ -1,23 +1,10 @@
 {#
-   app/templates/time_tracking.html
-   ───────────────────────────────────
-   Project + deliverable business-hours breakdown page (added 13 Jul 2026,
-   per Ezekiel — see app/routes/time_tracking.py and
-   app/time_tracking_logic.py for the backend). Reached by clicking the
-   "Average Time" stat tile on the main dashboard (management/admin only
-   for now).
-
-   `rows` (from time_tracking.index()) is a list of:
+   Time-tracking page. `rows` comes from logic.build_time_tracking_rows():
      {id, name, overall, by_status: {status: hours, ...}, deliverables: [
        {id, name, overall, by_status: {...}}, ...
      ]}
-
-   Deliverables are shown via a native <details>/<summary> per project —
-   no JS needed for the expand/collapse itself (works even if time_tracking.js
-   fails to load), same "don't reach for a JS mechanic when plain HTML
-   already does the job" instinct as this app's other lightweight reporting
-   views. time_tracking.js only adds the optional "Expand All"/"Collapse
-   All" convenience buttons on top.
+   Deliverables use native <details>; time_tracking.js only adds
+   Expand All / Collapse All.
 #}
 {% extends "base.html" %}
 

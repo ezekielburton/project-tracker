@@ -1,9 +1,8 @@
 """
-project_overlay/details.py — the Design > Details sub-tab (read + save),
-project start, the admin status-override actions (deliverable- and
-project-level), cancel/uncancel (project and customer), adding a project
-customer, the NAS folder link, hold toggling, and the edit-access-request
-flow (request/approve/deny).
+project_overlay/details.py — the overlay's Details page (read + save),
+Start Project, admin status overrides (deliverable and project level),
+cancel/reactivate (project and customer), Add Customer, the NAS folder
+link, On Hold, and Request Editing Access (request/approve/deny).
 """
 
 from datetime import datetime
@@ -30,19 +29,14 @@ from ._common import (
     ensure_posm_channels,
 )
 
-# ── Request Editing Access — an assigned designer's self-service path to full
-# deliverable-management rights on a project someone else leads, once the CS
-# Lead (or Secondary CS/management/admin) approves. See ProjectEditAccessRequest
-# and the request/approve/deny routes below. ──
+# ── Request Editing Access — an assigned designer asks for deliverable-
+# management rights on one project; the CS side approves or denies. ──
 
 def _is_assigned_designer(project, actor):
-    """True if actor has a real assignment on this project — deliverable-level
-    (DeliverableAssignment), project-level (ProjectDesigner), or Concept/KV
-    designer (C&CM). Same three surfaces notifications.py sweeps.
-
-    Role literal on purpose: this answers "is this person assigned work here",
-    and an admin is not. can('claim_work') would say yes for every admin
-    through the wildcard, and this feeds the notification sweeps."""
+    """True if actor is assigned work on this project: a deliverable
+    assignment, a team lead slot (ProjectDesigner), or Concept/KV designer.
+    Uses a role literal: can('claim_work') would pass every admin via the
+    wildcard."""
     if actor.role not in ('designer', 'team_lead'):
         return False
     if any(pd.user_id == actor.id for pd in project.assigned_designers):
@@ -56,15 +50,14 @@ def _is_assigned_designer(project, actor):
     )
 
 
-# Fixed one-time cutover line: Request Editing Access applies to projects that
-# existed when the feature shipped, not a rolling window.
+# Fixed cutoff, not a rolling window: only projects created before this
+# moment can use Request Editing Access.
 _EDIT_ACCESS_CUTOFF = datetime(2026, 8, 26, 13, 10, 0)
 
 
 def _project_edit_access_eligible(project):
-    """Which projects Request Editing Access applies to — any open project,
-    excluding drafts, cancelled projects, and anything created on/after the
-    cutoff (new projects use the normal assignment flow)."""
+    """True for an open project created before the cutoff; excludes drafts
+    and cancelled projects."""
     return (
         project.project_status != 'draft'
         and project.cancelled_at is None
@@ -76,10 +69,9 @@ def _project_edit_access_eligible(project):
 
 
 def _can_decide_edit_access_request(project, actor):
-    """Who can approve/deny a request — admin/management, CS Lead, Secondary
-    CS, or the assigned Project Owner. Deliberately NOT _can_manage_deliverables
-    (which now includes edit-access grants), so a just-granted designer can't
-    approve someone else's request."""
+    """Who can approve/deny a request: admin/management, CS Lead, Secondary
+    CS, or the assigned Project Owner. Not _can_manage_deliverables — that
+    includes edit-access grants, so a granted designer could approve others."""
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
     return (
         can('manage_projects', actor)
@@ -90,7 +82,7 @@ def _can_decide_edit_access_request(project, actor):
 
 
 def _can_cancel_project(project, actor):
-    """Cancel/Reactivate — admin/management, CS Lead, Secondary CS, or the
+    """Cancel/Reactivate: admin/management, CS Lead, Secondary CS, or the
     assigned Project Owner."""
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
     return (
@@ -102,9 +94,8 @@ def _can_cancel_project(project, actor):
 
 
 def _can_toggle_hold(project, actor):
-    """On Hold — admin, this project's CS Lead, or Secondary CS. Deliberately
-    narrower than _can_cancel_project (no Management/Project Owner) to match the
-    existing behaviour; worth revisiting if that's an oversight."""
+    """On Hold: admin, this project's CS Lead, or Secondary CS. Narrower than
+    _can_cancel_project (no Management or Project Owner)."""
     secondary_cs_ids = {a.user_id for a in project.secondary_cs_assignments}
     return (
         can('toggle_project_hold', actor)
@@ -113,43 +104,33 @@ def _can_toggle_hold(project, actor):
     )
 
 
-# ── Admin status override (deliverable-level, plus a project-level bulk
-# version; see override_project_status() below) ──
-# There is no stored project-pill override: project status is a live roll-up of
-# the project's deliverables, so a stored override would be clobbered on the
-# next deliverable change. The project-level control is instead a bulk WRITE —
-# it applies the picked status to every deliverable (and, for C&CM, every
-# ProjectPosmChannel), then the pill recomputes as usual. Both overrides write
-# the same real fields a normal status change would, so everything downstream
-# stays correct. Built for cleaning up old projects, not as a substitute for
-# the real status actions (Approve, Mark Done, Client Approval).
+# ── Admin status override (per deliverable, plus a project-level bulk) ──
+# Project status is a live roll-up of its deliverables, so there is no stored
+# project override (it would be clobbered on the next change). The project
+# control writes the picked status to every deliverable (and, for C&CM, every
+# ProjectPosmChannel), then the pill recomputes. Both write the same fields a
+# normal status change does. Meant for cleanup, not for everyday status actions.
 
-# Raw ProjectPosmChannel.status a project-level bulk override writes per label,
-# so the per-customer rows read back as the same label the deliverables got.
-# 'approved' is what a real Client Approval writes, reused here for
-# "Pre-Production".
+# ProjectPosmChannel.status the bulk override writes per label, so customer
+# rows read back as the same label. 'approved' is what Client Approval writes.
 _PROJECT_STATUS_OVERRIDE_CHANNEL_WRITE = {
     'In Design': 'in_queue',
     'Pre-Production': 'approved',
     'Handed to Production': 'handed_to_production',
 }
 
-# Raw Deliverable.status an "In Design" override writes — 'in_progress' as a
-# generic reset (every pre-approval raw value reads as "In Design"). The two
-# post-approval labels both write status='approved'; which one shows depends on
-# the needs_/status_ stream fields, handled in override_deliverable_status().
+# Deliverable.status for an "In Design" override ('in_progress'; every
+# pre-approval value reads as "In Design"). The two post-approval labels both
+# write 'approved' — see _write_deliverable_status_override().
 _DELIVERABLE_STATUS_WRITE = {
     'In Design': 'in_progress',
 }
 
 
 def _build_details_context(project, actor):
-    """Everything the Design > Details sub-tab needs — permissions, picker
-    option lists, designer rows, C&CM concept/kv data. Shared by the
-    initial /overlay fetch (which embeds Details directly) and the
-    standalone /overlay/details fetch (used when navigating back to
-    Details after visiting another sub-tab), so the two can never drift
-    apart from each other."""
+    """Template context for the Details page: permissions, picker options,
+    designer rows, C&CM data. Shared by /overlay and /overlay/details so the
+    two stay identical."""
     from app.modules.core.shared.models import User
     from app.modules.core.shared.lib.status_vocabulary import derive_project_status
     from app.modules.core.shared.services.status_tracking import project_status_started_at, project_client_approved_at
@@ -186,14 +167,12 @@ def _build_details_context(project, actor):
     else:
         owner_options = []
 
-    # status pill is a live roll-up, never written directly (see the block
-    # comment above). can_override_project_status gates the bulk write, not a
-    # stored override.
+    # can_override_project_status gates the bulk write (see block comment above).
     status_label, status_class = derive_project_status(project)
     can_override_project_status = can('override_status', actor)
-    # When the raw status last changed (None if it pre-dates ProjectStatusLog).
+    # None if the status pre-dates ProjectStatusLog.
     status_started_at = project_status_started_at(project)
-    # Client-approval moment — only shown separately once Handed to Production.
+    # Only shown separately once Handed to Production.
     client_approved_at = project_client_approved_at(project) if status_label == 'Handed to Production' else None
 
     requested_teams = [t.strip() for t in (project.design_teams_requested or '').split(',') if t.strip()]
@@ -234,19 +213,17 @@ def _build_details_context(project, actor):
 
     concept_kv_designer = project.concept_designer or project.kv_designer
 
-    # Start Project — the one manual gate that moves a project off "Briefed".
-    # Nothing deliverable-driven does; a project sits at Briefed until started.
+    # Start Project is the only way off "Briefed"; deliverable changes never move it.
     can_start_project = can('start_projects', actor) and project.project_status == 'briefed'
 
-    # Cancel/Reactivate — the template branches on project.cancelled_at directly.
+    # The template reads project.cancelled_at for the button state.
     can_cancel_project = _can_cancel_project(project, actor)
 
-    # On Hold — the template checks project.project_status == 'on_hold' directly.
+    # The template reads project.project_status == 'on_hold' for the button state.
     can_toggle_hold = _can_toggle_hold(project, actor)
 
-    # Cancel Customer — C&CM only. Built from project.project_customers directly
-    # (includes cancelled ones — this is the one place to see and reactivate
-    # them). Reuses can_cancel_project as the gate.
+    # Customer rows (C&CM) include cancelled customers — this is where they are
+    # reactivated. Gated by can_cancel_project.
     customer_rows = []
     if project.brief_type == 'ccm':
         from app.modules.core.shared.lib.status_vocabulary import derive_customer_pipeline_status
@@ -258,9 +235,8 @@ def _build_details_context(project, actor):
                 'status_class': css_class,
             })
 
-    # Add Customer — C&CM, for a campaign that expands after submission. Gated
-    # by _can_manage_deliverables (adding a customer creates its deliverables
-    # surface). Excludes already-linked customers; re-add via Reactivate above.
+    # Add Customer (C&CM). Excludes already-linked customers; cancelled ones
+    # come back via Reactivate.
     can_manage_customers = project.brief_type == 'ccm' and _can_manage_deliverables(project, actor)
     addable_customers_by_region = {}
     if can_manage_customers:
@@ -272,8 +248,7 @@ def _build_details_context(project, actor):
             for region in _CREATE_REGION_ORDER
         }
 
-    # Brief Flags — Details' Flags card covers 'project', 'concept', and 'kv'
-    # (Concept & KV is project-level info, not its own flaggable entity).
+    # Details' Flags card shows project-level flags: 'project', 'concept', 'kv'.
     from app.modules.core.shared.models import BriefFlag
     project_open_flags = (
         BriefFlag.query
@@ -286,15 +261,13 @@ def _build_details_context(project, actor):
         f.can_resolve = _can_resolve_flag(f, actor)
     can_manage_flags = _can_manage_flags(actor)
 
-    # Edit mode — Client/Type of Design are FKs, so the dropdowns need the full
-    # option lists. Only fetched for someone who can edit.
+    # Edit-mode dropdowns; only fetched for someone who can edit.
     from app.modules.core.shared.models import Client, DesignType
     client_options = Client.query.order_by(Client.name).all() if can_edit_project else []
     design_type_options = DesignType.query.order_by(DesignType.name).all() if can_edit_project else []
 
-    # Concurrent-edit check — the latest ActivityLog row stands in for a
-    # last-modified timestamp (Project has no updated_at). Snapshotted here,
-    # sent back with Save, and compared to reject a conflicting overwrite.
+    # Concurrent-edit check: Project has no updated_at, so the latest
+    # ActivityLog time stands in. Save sends it back; a mismatch returns 409.
     from app.modules.core.shared.models import ActivityLog
     latest_activity = (
         ActivityLog.query
@@ -304,13 +277,10 @@ def _build_details_context(project, actor):
     )
     edit_snapshot_at = latest_activity.created_at.isoformat() if latest_activity else ''
 
-    # Request Editing Access — sidebar button state. Status is None/pending/
-    # approved/denied; the button hides once approved and renders (in a
-    # different state) only for an eligible open project and an assigned designer.
+    # Request Editing Access button: status is None/pending/approved/denied.
+    # Shown to an assigned designer on an eligible project until approved.
     edit_access_request = None
-    # Role literal on purpose: this picks a branch meant for designers, and
-    # admin is deliberately outside it. can('claim_work') would let admin in
-    # through the wildcard.
+    # Role literal: can('claim_work') would let admin in via the wildcard.
     if actor.role in ('designer', 'team_lead'):
         from app.modules.core.shared.models import ProjectEditAccessRequest
         edit_access_request = ProjectEditAccessRequest.query.filter_by(
@@ -374,8 +344,8 @@ def overlay(project_id):
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     context = _build_details_context(project, actor)
-    # Clears the Projects table's "new updates" dot — fires on opening the
-    # overlay, not per sub-tab (Chat has its own watermark). Best-effort.
+    # Clears the Projects table's "new updates" dot on open (Chat has its own
+    # watermark). Best-effort.
     from app.modules.core.shared.lib.utils import mark_project_activity_seen
     mark_project_activity_seen(project, actor, 'update')
     return render_template('project_overlay/_overlay.html', project=project, **context)
@@ -383,11 +353,9 @@ def overlay(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/details')
 @login_required
 def overlay_details(project_id):
-    """Standalone Design > Details fragment. The initial /overlay fetch
-    above already embeds Details directly (so opening a project has no
-    extra round-trip) — this route's only caller is the sub-tab switcher
-    in project_list.js, used when navigating BACK to Details after
-    visiting another sub-tab."""
+    """Details page fragment alone. /overlay already embeds Details; this is
+    for project_list.js's page loader when returning to Details from another
+    page."""
     project = Project.query.get_or_404(project_id)
     actor = _get_actor()
     context = _build_details_context(project, actor)
@@ -399,10 +367,8 @@ def overlay_details(project_id):
 
 
 
-# field name (matches the templates' data-field) -> the label the field is
-# rendered under in Details, reused for both the Save log's field list and
-# the structured diff — if a field's label on screen ever changes, update
-# it here too so the activity log keeps matching what's actually shown.
+# data-field name -> its on-screen label in Details, used in the activity log.
+# Keep in sync with the template labels.
 _DETAILS_FIELD_LABELS = {
     'client_id': 'Client',
     'design_type_id': 'Type of Design',
@@ -421,10 +387,8 @@ _DETAILS_FIELD_LABELS = {
 
 
 def _display_value_for_log(field_name, value):
-    """JSON-safe, human-readable form of one field's old/new value for
-    ActivityLog.changes. client_id/design_type_id resolve to a name (a
-    diff full of raw ids isn't useful to read later); dates become ISO
-    strings; everything else already round-trips through json.dumps."""
+    """JSON-safe, readable form of a value for ActivityLog.changes: FK ids
+    become names, dates become ISO strings, the rest passes through."""
     if value is None:
         return None
     if field_name == 'client_id':
@@ -443,11 +407,9 @@ def _display_value_for_log(field_name, value):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/details/save', methods=['POST'])
 @login_required
 def overlay_details_save(project_id):
-    """Edit mode Save. Whitelisted field-by-field update, not a
-    generic setattr — every accepted field is named explicitly so this
-    route can never be tricked into writing a column the frontend didn't
-    actually render an editable row for. Logs which fields changed by name
-    plus a structured old/new diff in ActivityLog.changes."""
+    """Details edit-mode Save. Only whitelisted fields are written (security
+    boundary: never a generic setattr). Logs an old/new diff to
+    ActivityLog.changes."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ActivityLog
     from app.modules.core.shared.lib.utils import log_activity
@@ -483,25 +445,7 @@ def overlay_details_save(project_id):
             'error': 'This project was changed by someone else while you were editing. Reload and try again.',
         }), 409
 
-    # Job Number routes through the Projects module's shared write path
-    # (services/mutations.save_detail_field) — the same one the Client
-    # Servicing table uses — so an edit here produces the exact duplicate
-    # check, change notification and history entry a job-number edit made
-    # anywhere else does. That service self-commits/logs/notifies, so it's
-    # handled here on its own, apart from the whitelist batch below.
-    job_number_changed = False
-    if 'job_number' in fields:
-        from app.modules.projects.services import mutations as project_mutations
-        old_job_number = project.job_number
-        try:
-            new_job_number = project_mutations.save_detail_field(
-                project, actor, 'job_number', fields.get('job_number')
-            )
-        except project_mutations.FieldError as exc:
-            return jsonify({'success': False, 'error': f'Job Number {exc}.'}), 400
-        job_number_changed = new_job_number != old_job_number
-
-    # field name (matches the templates' data-field) -> (Project attr, parser)
+    # data-field name -> (Project attr, parser)
     FIELD_MAP = {
         'client_id': ('client_id', lambda v: int(v) if v else None),
         'design_type_id': ('design_type_id', lambda v: int(v) if v else None),
@@ -517,6 +461,8 @@ def overlay_details_save(project_id):
         'kv_requirements': ('kv_requirements', lambda v: v.strip() or None),
     }
 
+    # Parse every field before writing any, so a bad value leaves the whole
+    # save unapplied (Job Number included).
     changes = []
     for field_name, raw_value in fields.items():
         if field_name not in FIELD_MAP:
@@ -528,20 +474,15 @@ def overlay_details_save(project_id):
             return jsonify({'success': False, 'error': f'Invalid value for {field_name}.'}), 400
         old_value = getattr(project, attr_name)
         if old_value != new_value:
-            changes.append({'field': field_name, 'old': old_value, 'new': new_value})
-            setattr(project, attr_name, new_value)
+            changes.append({'field': field_name, 'attr': attr_name, 'old': old_value, 'new': new_value})
 
-    # Teams Required (design_teams_requested) — not a simple whitelisted field:
-    # dropping a team also clears that team's Design Lead (per Ezekiel), so it's
-    # reconciled here rather than through FIELD_MAP. Validated to the three
-    # known teams; stored canonically-ordered and comma-joined (same shape as
-    # the create brief writes).
-    removed_lead_notes = []
+    # Teams Required: dropping a team also removes that team's Design Lead.
+    # Stored canonically ordered and comma-joined, the same shape create writes.
+    dropped_teams = []
     if 'design_teams_requested' in fields:
-        from app.modules.core.shared.models import ProjectDesigner
         _TEAMS = ['2D', '3D', 'Technical']
         _canon = {'2d': '2D', '3d': '3D', 'technical': 'Technical'}
-        new_teams = []
+        parsed_teams = []
         for tok in (fields.get('design_teams_requested') or '').split(','):
             t = tok.strip()
             if not t:
@@ -549,19 +490,41 @@ def overlay_details_save(project_id):
             key = _canon.get(t.lower())
             if not key:
                 return jsonify({'success': False, 'error': f'Unknown design team: {t}'}), 400
-            if key not in new_teams:
-                new_teams.append(key)
-        new_value = ','.join(t for t in _TEAMS if t in new_teams)
+            if key not in parsed_teams:
+                parsed_teams.append(key)
+        new_value = ','.join(t for t in _TEAMS if t in parsed_teams)
         old_value = project.design_teams_requested or ''
         if new_value != old_value:
-            old_teams = [t.strip() for t in old_value.split(',') if t.strip()]
-            for team in [t for t in old_teams if t not in new_teams]:
-                assignment = ProjectDesigner.query.filter_by(project_id=project.id, team=team).first()
-                if assignment:
-                    removed_lead_notes.append(f'{team} lead {assignment.designer.name}')
-                    db.session.delete(assignment)
-            project.design_teams_requested = new_value
-            changes.append({'field': 'design_teams_requested', 'old': old_value, 'new': new_value})
+            dropped_teams = [t.strip() for t in old_value.split(',') if t.strip() and t.strip() not in parsed_teams]
+            changes.append({'field': 'design_teams_requested', 'attr': 'design_teams_requested',
+                            'old': old_value, 'new': new_value})
+
+    # Job Number goes through mutations.save_detail_field (shared with the
+    # Client Servicing table) for its duplicate check, notification and log.
+    # It commits on its own, so it runs only once everything else has parsed.
+    job_number_changed = False
+    if 'job_number' in fields:
+        from app.modules.projects.services import mutations as project_mutations
+        old_job_number = project.job_number
+        try:
+            new_job_number = project_mutations.save_detail_field(
+                project, actor, 'job_number', fields.get('job_number')
+            )
+        except project_mutations.FieldError as exc:
+            return jsonify({'success': False, 'error': f'Job Number {exc}.'}), 400
+        job_number_changed = new_job_number != old_job_number
+
+    for c in changes:
+        setattr(project, c['attr'], c['new'])
+
+    removed_lead_notes = []
+    if dropped_teams:
+        from app.modules.core.shared.models import ProjectDesigner
+        for team in dropped_teams:
+            assignment = ProjectDesigner.query.filter_by(project_id=project.id, team=team).first()
+            if assignment:
+                removed_lead_notes.append(f'{team} lead {assignment.designer.name}')
+                db.session.delete(assignment)
 
     if not changes:
         return jsonify({
@@ -590,8 +553,7 @@ def overlay_details_save(project_id):
         changes=logged_changes,
     )
 
-    # A separate, discoverable entry when a team drop cleared its Design Lead —
-    # mirrors assign_lead's own lead_* activity entries.
+    # Separate entry for leads removed by a team drop (matches assign_lead's lead_* entries).
     if removed_lead_notes:
         log_activity(
             'lead_removed',
@@ -609,11 +571,8 @@ def overlay_details_save(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/start', methods=['POST'])
 @login_required
 def overlay_start_project(project_id):
-    """Start Project — the manual gate off "Briefed" (see _build_details_
-    context's can_start_project + status_vocabulary.py's derive_project_
-    status). One button, one action, both brief types: flips project_status
-    from 'briefed' to 'in_progress', which the unified derivation reads as
-    "In Design" — no brief_type-specific logic needed here."""
+    """Start Project: moves project_status 'briefed' -> 'in_progress' (reads
+    as "In Design"). Same for both brief types."""
     from flask import jsonify
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.services.status_tracking import record_project_status
@@ -633,28 +592,14 @@ def overlay_start_project(project_id):
 
 
 def _write_deliverable_status_override(deliverable, label, actor):
-    """Writes the raw fields behind one deliverable-status override target —
-    factored out of override_deliverable_status() so
-    override_project_status() below can apply the exact same per-deliverable
-    logic in bulk without the two ever drifting apart. Does NOT call
-    sync_project_pipeline_status() or commit — callers do that once, after
-    every deliverable in scope has been written, not once per row.
+    """Write the raw fields for one deliverable's override label. Shared by
+    the single and bulk overrides. Does not sync or commit — callers do that
+    once. Returns False (nothing written) for an unknown label.
 
-    The two post-approval labels both write raw status='approved'
-    underneath; which one actually displays is entirely a function of
-    needs_2d/3d/technical + status_2d/status_3d/technical_status
-    (status_vocabulary.py's _post_approval_deliverable_status), so those
-    three fields are what this actually varies per target, not the status
-    column itself.
-
-    Note: picking "Pre-Production" on a deliverable that structurally
-    needs no 2D/3D/Technical follow-up (derive_preproduction_needs finds
-    nothing) will still read back as "Handed to Production" immediately —
-    same honest behavior a real approval would produce now, not a bug in
-    this override.
-
-    Returns False if `label` isn't one of the three real vocabulary
-    stages (fields left untouched); True otherwise."""
+    Both post-approval labels write status='approved'; the needs_* and
+    stream status fields decide which one displays. A deliverable with no
+    streams needed reads "Handed to Production" even when set to
+    "Pre-Production", same as a real approval."""
     from app.modules.core.shared.services.status_tracking import record_deliverable_status
     from app.modules.core.shared.lib.status_vocabulary import derive_preproduction_needs
 
@@ -666,13 +611,8 @@ def _write_deliverable_status_override(deliverable, label, actor):
         deliverable.needs_2d = needs_2d
         deliverable.needs_3d = needs_3d
         deliverable.needs_technical = needs_technical
-        # Pre-Production's real 3-state vocabulary is None (not started) ->
-        # 'uploaded' -> 'approved' (see project_preproduction.py's module
-        # docstring) — there's no 'in_progress' value anywhere else in that
-        # system, so picking "Pre-Production" here resets each needed
-        # stream to None (honestly "nothing uploaded yet") rather than
-        # inventing a 4th value the real Pre-Production tab wouldn't know
-        # how to render.
+        # Stream states are None -> 'uploaded' -> 'approved' (no 'in_progress'),
+        # so "Pre-Production" resets each needed stream to None.
         stream_value = 'approved' if label == 'Handed to Production' else None
         if needs_2d:
             deliverable.status_2d = stream_value
@@ -688,10 +628,8 @@ def _write_deliverable_status_override(deliverable, label, actor):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/deliverables/<int:deliverable_id>/status/override', methods=['POST'])
 @login_required
 def override_deliverable_status(project_id, deliverable_id):
-    """Admin, or a designer with an approved edit-access grant, status override
-    (3-stage vocabulary). See _write_deliverable_status_override() for the
-    fields it writes. Calls sync_project_pipeline_status() at the end, since an
-    override can flip the project's pill like a real approval would."""
+    """Override one deliverable's status. Admin, or a designer with an
+    approved edit-access grant. Syncs the project pill afterwards."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import Deliverable
     from app.modules.core.shared.services.status_tracking import sync_project_pipeline_status
@@ -717,43 +655,14 @@ def override_deliverable_status(project_id, deliverable_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/status/override', methods=['POST'])
 @login_required
 def override_project_status(project_id):
-    """Admin-only, project-wide version of override_deliverable_status()
-    above — sets EVERY deliverable on the project (and, for C&CM, every
-    ProjectPosmChannel) to the same one of the three real vocabulary stages
-    in one action. Standard: deliverables only (there's no channel concept
-    to touch on a Standard project anyway).
+    """Admin-only bulk override: sets every deliverable (and, for C&CM,
+    every ProjectPosmChannel) to one status, then syncs the pill. See the
+    block comment above _PROJECT_STATUS_OVERRIDE_CHANNEL_WRITE.
 
-    Not a stored project-level override — see the block comment above
-    _DELIVERABLE_STATUS_OVERRIDE_OPTIONS for why that is retired. This
-    writes the exact same real underlying
-    fields override_deliverable_status() would, at every deliverable (and
-    channel) the project has, then lets sync_project_pipeline_status()
-    recompute the pill fresh at the end, same as any other bulk action.
-
-    C&CM's per-customer expand rows read ProjectPosmChannel.status
-    independently of the deliverable-driven roll-up (status_vocabulary.py's
-    derive_customer_pipeline_status) — without also writing every channel
-    here, the project pill would update immediately while every customer
-    row underneath kept showing whatever stale status prompted this in the
-    first place. A cancelled customer's channel is written too rather than
-    skipped — harmless, since derive_customer_pipeline_status checks
-    .cancelled first and never looks at the channel for a cancelled
-    customer either way.
-
-    Briefed is bumped to 'in_progress' first, same raw transition Start
-    Project performs (see overlay_start_project() above), whenever the
-    project is still sitting there — sync_project_pipeline_status() is a
-    deliberate no-op while project_status == 'briefed' (see its own
-    docstring), so without this bump every deliverable underneath could
-    read Handed to Production and the project pill would still just sit
-    at Briefed, silently defeating the entire point of this action. On
-    Hold and Cancelled are NOT bumped the same way — those are deliberate,
-    reason-logged states with their own dedicated toggle (Sidebar
-    lifecycle actions), not a default unstarted gate, so this bulk action
-    leaves them alone: the deliverables/channels still get written, the
-    pill just keeps reading On Hold/Cancelled until someone clears that
-    state through the real control, exactly as sync_project_pipeline_status
-    already behaves for every other deliverable-affecting action."""
+    Channels must be written too: C&CM customer rows read channel status,
+    not the deliverable roll-up. A 'briefed' project is moved to
+    'in_progress' first, because sync is a no-op while briefed. On Hold and
+    Cancelled are left alone; the pill keeps showing them."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import Project
     from app.modules.core.shared.services.status_tracking import record_project_status, sync_project_pipeline_status
@@ -789,12 +698,9 @@ def override_project_status(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/cancel', methods=['POST'])
 @login_required
 def overlay_cancel_project(project_id):
-    """Cancel Project — cancel_reason/cancelled_at/cancelled_by_id already
-    existed on the model unused. Deliberately doesn't touch project_status
-    at all: derive_project_status() checks cancelled_at
-    first, ahead of the underlying pipeline stage, so cancelling never
-    overwrites (and reactivating never needs to restore) whatever stage the
-    project was actually in."""
+    """Cancel Project (reason required). Leaves project_status untouched:
+    derive_project_status() checks cancelled_at first, so Reactivate has
+    nothing to restore."""
     from datetime import datetime as dt
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.lib.utils import log_activity
@@ -827,10 +733,8 @@ def overlay_cancel_project(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/uncancel', methods=['POST'])
 @login_required
 def overlay_uncancel_project(project_id):
-    """Reactivate — clears the three cancel columns. No reason required,
-    same asymmetry as On Hold's Resume (no confirm/note either): reversing
-    a cancellation is the safe direction, only cancelling itself needs the
-    reason and the confirm gate."""
+    """Reactivate a cancelled project: clears the three cancel columns. No
+    reason required."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.lib.utils import log_activity
 
@@ -858,23 +762,10 @@ def overlay_uncancel_project(project_id):
 @project_overlay_bp.route('/project-customers/<int:project_customer_id>/cancel', methods=['POST'])
 @login_required
 def overlay_cancel_customer(project_customer_id):
-    """Cancel one C&CM customer within a project. Cancelling a customer
-    freezes its state for invoicing and can be undone. Same shape as
-    overlay_cancel_project() above, just scoped to a ProjectCustomer
-    instead of the whole Project — reuses the exact same permission gate
-    (_can_cancel_project), since who's allowed to cancel a customer within
-    a project is the same set of people allowed to cancel the project
-    itself.
-
-    "Freezes its state" is mostly free: pc.cancelled already existed and
-    every read site that builds the Deliverables/Submissions/Pre-
-    Production customer scope-select (_build_ccm_deliverable_sections,
-    _build_submission_regions, and the Pre-Production equivalents) already
-    excludes a cancelled customer from `all_customers` — so once cancelled,
-    that customer simply stops appearing anywhere further work would
-    happen, without a single extra guard needed. What was actually missing
-    was a way to SET the flag at all; this route (and overlay_uncancel_
-    customer below) is that."""
+    """Cancel one C&CM customer (reason required; reversible). Same gate as
+    cancelling the project. The Deliverables/Submissions/Pre-Production
+    builders skip cancelled customers, which freezes its state for
+    invoicing."""
     from datetime import datetime as dt
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectCustomer
@@ -910,9 +801,8 @@ def overlay_cancel_customer(project_customer_id):
 @project_overlay_bp.route('/project-customers/<int:project_customer_id>/uncancel', methods=['POST'])
 @login_required
 def overlay_uncancel_customer(project_customer_id):
-    """Reactivate — clears the four cancel columns, same asymmetry as
-    Project's Reactivate (no reason required, only cancelling itself
-    needs one)."""
+    """Reactivate a cancelled customer: clears the four cancel columns. No
+    reason required."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectCustomer
     from app.modules.core.shared.lib.utils import log_activity
@@ -972,19 +862,15 @@ def add_project_customer(project_id):
     pc = ProjectCustomer(project_id=project.id, customer_id=customer.id)
     db.session.add(pc)
 
-    # Keep ProjectRegion synced the same way the create-mode picker does —
-    # _build_ccm_design_folders() (nas.py) drives its Region/Customer
-    # folder tree off ProjectRegion, not off project_customers directly.
+    # Keep ProjectRegion in sync: the NAS folder tree is built from it, not
+    # from project_customers.
     if customer.region and not ProjectRegion.query.filter_by(project_id=project.id, region=customer.region).first():
         db.session.add(ProjectRegion(project_id=project.id, region=customer.region))
 
     db.session.flush()
 
-    # Self-heals this customer's own POSM submission channel the same way
-    # opening the Submissions tab already does for every customer — see
-    # ensure_posm_channels()'s docstring. Scoped to just the new row here
-    # (rather than rebuilding every region's full set) since that's the
-    # only thing that's actually new.
+    # Create the new customer's POSM submission channel now (Submissions
+    # would also self-heal it on open).
     if customer.region:
         ensure_posm_channels(project, {customer.region: [pc]})
 
@@ -996,10 +882,8 @@ def add_project_customer(project_id):
         user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
     )
 
-    # Same background NAS folder build every other customer-affecting
-    # mutation on a live project uses (see overlay_create_finalize above)
-    # — idempotent, so this just adds the new customer's folder without
-    # touching anything else in the tree.
+    # Background NAS folder build (as in create.py's finalize). Idempotent,
+    # so it only adds the new customer's folder.
     from flask import current_app as _app
     from app.modules.core.shared.services.nas import _run_in_background, create_project_folders
     _pid = project.id
@@ -1012,16 +896,19 @@ def add_project_customer(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/nas-folder-link')
 @login_required
 def overlay_nas_folder_link(project_id):
-    """Resolves the project's root NAS folder to a Synology Drive deep-link
-    — click-triggered rather than baked
-    into the sidebar at render time, since Drive needs a live API resolve
-    per folder (see app/nas.py's build_drive_folder_url()). Same path-
-    building this route replaces from the old nas_project_url() Jinja
-    global."""
+    """Resolve the project's root NAS folder to a Synology Drive link. Called
+    on click, since each resolve is a live NAS API call (see
+    services/nas.py's build_drive_folder_url())."""
     from flask import current_app, jsonify
     from app.modules.core.shared.services.nas import build_drive_folder_url
 
     project = Project.query.get_or_404(project_id)
+    # The Projects page's own gate; keeps workspace-less roles (HSE) out.
+    if not can('view_workspace', _get_actor()):
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+    # The folder path is keyed by creation year; without it there is no folder to find.
+    if project.created_at is None:
+        return jsonify({'success': False, 'error': 'This project has no NAS folder yet.'}), 404
     root = current_app.config.get('NAS_PROJECT_ROOT', '/Projects')
     client = project.client_brand.name if project.client_brand else 'Unknown Client'
     folder_path = f'{root}/{project.created_at.year}/{client}/{project.name}'
@@ -1035,8 +922,8 @@ def overlay_nas_folder_link(project_id):
 @project_overlay_bp.route('/projects/<int:project_id>/overlay/toggle-hold', methods=['POST'])
 @login_required
 def overlay_toggle_hold(project_id):
-    """Put on Hold / Resume (JSON). Brackets held_from_status so Resume restores
-    the prior status. Permission: _can_toggle_hold."""
+    """Put on Hold / Resume. held_from_status stores the prior status so
+    Resume can restore it."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.lib.utils import log_activity
     from app.modules.core.shared.services.status_tracking import record_project_status
@@ -1067,16 +954,14 @@ def overlay_toggle_hold(project_id):
     return jsonify({'success': True})
 
 
-# ── Request Editing Access — request_edit_access is the sidebar button's
-# endpoint; approve/deny are reached from the Approve/Deny buttons on the CS
-# Lead/Secondary CS's notification. ──
+# ── Request Editing Access routes. Approve/deny are called from the CS
+# notification's buttons. ──
 
 @project_overlay_bp.route('/projects/<int:project_id>/request-edit-access', methods=['POST'])
 @login_required
 def request_edit_access(project_id):
-    """Designer-initiated: creates (or, after a denial, resets) a pending
-    ProjectEditAccessRequest and notifies the CS Lead/Secondary CS. Grants
-    nothing itself — access only turns on once approved."""
+    """Create (or, after a denial, reset) a pending request and notify the
+    CS side. Grants nothing until approved."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectEditAccessRequest
     from app.modules.core.shared.lib.utils import log_activity
@@ -1097,10 +982,7 @@ def request_edit_access(project_id):
         return jsonify({'success': False, 'error': 'You already have editing access on this project.'}), 400
 
     if existing:
-        # Re-request after a denial — reset the same row rather than
-        # inserting a second one (UNIQUE(project_id, user_id) would reject
-        # that anyway), so there's never stale denied history left for the
-        # CS Lead to click past.
+        # Re-request after a denial reuses the row: UNIQUE(project_id, user_id).
         existing.status = 'pending'
         existing.requested_at = datetime.utcnow()
         existing.decided_at = None
@@ -1123,12 +1005,9 @@ def request_edit_access(project_id):
 @project_overlay_bp.route('/projects/edit-access-requests/<int:request_id>/approve', methods=['POST'])
 @login_required
 def approve_edit_access(request_id):
-    """CS Lead/Secondary CS/management/admin decision — approves a pending
-    Request Editing Access request, granting the requester
-    _can_manage_deliverables-tier access (deliverables + status override)
-    on that one project, permanently. See _can_decide_edit_access_request
-    for why this uses its own permission check rather than
-    _can_manage_deliverables directly."""
+    """Approve a pending request: the requester gets permanent
+    _can_manage_deliverables access (plus status override) on this project.
+    Gate: _can_decide_edit_access_request."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectEditAccessRequest
     from app.modules.core.shared.lib.utils import log_activity
@@ -1161,8 +1040,7 @@ def approve_edit_access(request_id):
 @project_overlay_bp.route('/projects/edit-access-requests/<int:request_id>/deny', methods=['POST'])
 @login_required
 def deny_edit_access(request_id):
-    """Same as approve_edit_access above, but denies. A denied request can
-    be re-requested later — see request_edit_access above."""
+    """Deny a pending request. The designer can request again later."""
     from app.modules.core.shared.extensions import db
     from app.modules.core.shared.models import ProjectEditAccessRequest
     from app.modules.core.shared.lib.utils import log_activity

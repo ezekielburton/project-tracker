@@ -1,9 +1,5 @@
-"""The weekly OVP champions — who holds each department, and the Friction Log
-write gate.
-
-Shared, not module-local: the Friction Log reads it now and Adoption reads it
-later. The designation rotates weekly and is orthogonal to User.role, so it is
-never a role.
+"""Weekly OVP champions: who holds each department's badge, and the Friction
+Log write gate. The badge rotates weekly and is separate from User.role.
 """
 from datetime import date, timedelta
 
@@ -12,10 +8,8 @@ from sqlalchemy.orm import joinedload
 from app.modules.core.shared.lib.capabilities import can
 from app.modules.core.shared.models import OvpChampion
 
-# The departments that rotate a champion, in the order the admin panel lists
-# them. Management and admin are absent on purpose — they hold the Friction Log
-# capability outright, so a badge would add nothing. Digital Innovation and HR
-# are absent because neither reports friction with the platform.
+# Departments that rotate a champion, in admin-panel order. Management and
+# admin already hold write_friction_log, so they get no badge.
 CHAMPION_DEPARTMENTS = [
     ('client_servicing', 'Client Servicing'),
     ('design', 'Design'),
@@ -24,14 +18,11 @@ CHAMPION_DEPARTMENTS = [
     ('finance', 'Finance'),
 ]
 
-DEPARTMENT_KEYS = [key for key, _ in CHAMPION_DEPARTMENTS]
 DEPARTMENT_LABELS = dict(CHAMPION_DEPARTMENTS)
 
 
-# How long a badge keeps working after a missed rotation. A departmental
-# champion who was never replaced still counts for this many weeks, so one
-# skipped Friday does not empty the Friction Log — but a badge from months ago
-# stops granting write access on its own.
+# A champion who was not replaced keeps the badge this many weeks, so one
+# missed rotation does not leave a department empty; older badges lapse.
 CHAMPION_CARRY_OVER_WEEKS = 2
 
 
@@ -46,23 +37,9 @@ def _carry_over_floor(week_start):
     return week_start - timedelta(weeks=CHAMPION_CARRY_OVER_WEEKS)
 
 
-def champion_for(department, week_start=None):
-    """One department's champion, falling back to that department's most recent
-    assignment within the carry-over window so a missed rotation never empties
-    it. None when never set, or when the last badge has lapsed."""
-    week_start = week_start or week_start_for()
-    row = (OvpChampion.query
-           .filter(OvpChampion.department == department,
-                   OvpChampion.week_start <= week_start,
-                   OvpChampion.week_start >= _carry_over_floor(week_start))
-           .order_by(OvpChampion.week_start.desc())
-           .first())
-    return row.user if row else None
-
-
 def champion_for_week(week_start):
-    """Who held each department that exact week — history, so no fallback.
-    Returns {department: User} for the departments assigned that week."""
+    """{department: User} for assignments made in that exact week; no
+    carry-over."""
     rows = (OvpChampion.query
             .filter_by(week_start=week_start)
             .options(joinedload(OvpChampion.user))
@@ -71,10 +48,9 @@ def champion_for_week(week_start):
 
 
 def current_champions():
-    """Every department's champion right now, keyed by department, in one query.
-    Bounded to the carry-over window — this runs on every permission check, so
-    it must never read the whole history. A department with no live assignment
-    is simply absent."""
+    """{department: User} for every live champion, in one query bounded to the
+    carry-over window (it runs on every Friction Log access check). Departments
+    with no live assignment are absent."""
     this_week = week_start_for()
     rows = (OvpChampion.query
             .filter(OvpChampion.week_start <= this_week,

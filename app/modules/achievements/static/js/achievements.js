@@ -1,16 +1,9 @@
-// Achievement card interactions on the profile page (Phase 4).
-// Two independent, small behaviours — neither requires a server round trip:
-//   1. Recent / Pinned tab toggle (own profile only)
-//   2. Show more / Show less on the full category checklist (own profile only)
-// Both are pure querySelector + no-op-if-missing, so this file is safe to
-// load on every profile page even though these controls only ever render
-// on your OWN profile — on someone else's page the selectors just find
-// nothing and the listeners are never attached.
+// Profile page achievement card: Recent / Pinned tabs, Show more / less on
+// the checklist, and the Customize modal (active badge + pins).
+// All controls are own-profile only; missing elements are skipped, so this
+// is safe on any profile.
 
-// Wrapped in an IIFE (not DOMContentLoaded) so it runs immediately whether
-// the page was loaded fresh OR navigated to via SPA (execScripts re-runs
-// this file after the new HTML is already in the DOM, so DOMContentLoaded
-// would never fire a second time on SPA navigation).
+// IIFE, not DOMContentLoaded, so it also runs after SPA navigation.
 (function () {
 
     // ── Recent / Pinned tab toggle ──────────────────────────────────────────
@@ -21,14 +14,9 @@
         btn.addEventListener('click', function () {
             var target = btn.dataset.achievementTab; // 'recent' or 'pinned'
 
-            // Move the active state to the clicked tab...
             achievementTabButtons.forEach(function (b) { b.classList.remove('active'); });
             btn.classList.add('active');
 
-            // ...and show only the matching tile row. Both rows are always
-            // in the DOM (rendered by the template) — this just toggles
-            // which one has the 'hidden' class, same pattern as the bio
-            // edit-wrap show/hide elsewhere on this page.
             document.querySelectorAll('[data-achievement-panel]').forEach(function (panel) {
                 panel.classList.toggle('hidden', panel.dataset.achievementPanel !== target);
             });
@@ -41,8 +29,6 @@
 
     if (showMoreBtn && checklist) {
         showMoreBtn.addEventListener('click', function () {
-            // Read state BEFORE toggling, so the button label reflects what
-            // just happened rather than what's about to happen.
             var wasHidden = checklist.classList.contains('hidden');
             checklist.classList.toggle('hidden');
             showMoreBtn.textContent = wasHidden ? 'Show less ↑' : 'Show more ↓';
@@ -50,20 +36,14 @@
     }
 
     // ── Customize achievements modal ─────────────────────────────────────────
-    // Driven entirely by window.PROFILE_CUSTOMIZE (serialised by profile.html).
-    // Only runs when that object and the modal element both exist — on other
-    // users' profiles neither will be present, so all getElementById() calls
-    // below just find nothing and every branch short-circuits cleanly.
-    //
-    // IMPORTANT: the modal HTML sits AFTER this <script> tag in the DOM, so
-    // all modal-related elements are looked up lazily (inside the functions
-    // that use them), not here at IIFE init time. openCustomizeBtn IS present
-    // at init time (it's inside the main content above this script), so that
-    // one is safe to cache now.
+    // Driven by window.PROFILE_CUSTOMIZE (set by profile.html, own profile only).
+    // The modal markup comes AFTER this <script> tag, so modal elements are
+    // looked up lazily inside the functions; the Customize button is above
+    // and safe to cache.
 
     var openCustomizeBtn = document.getElementById('edit-achievements-btn');
 
-    // Local state — mutated as user clicks; flushed to server on Save.
+    // Working state while the modal is open; sent on Save.
     var selectedBadgeUaId = null;   // ua_id or null (no badge)
     var selectedPinIds    = [];     // ordered list of ua_ids (max 5)
 
@@ -85,12 +65,11 @@
         if (!badgePickerGrid || !window.PROFILE_CUSTOMIZE) return;
 
         var data = window.PROFILE_CUSTOMIZE;
-        // Only badges that actually have an image are shown — achievements
-        // with no image can't be displayed as a badge on the avatar.
+        // Only achievements with an image can be a badge.
         var badgeable = data.earned.filter(function (ua) { return ua.badge_image; });
 
         var html = '';
-        // "None" option — clear the active badge entirely.
+        // "None" option clears the active badge.
         html += '<div class="badge-picker-item' + (selectedBadgeUaId === null ? ' badge-picker-item--selected' : '') +
                 '" data-ua-id="null" title="No badge">' +
                 '<span class="badge-picker-none">—</span>' +
@@ -106,8 +85,7 @@
 
         badgePickerGrid.innerHTML = html;
 
-        // Wire the click handler once — guard with a flag so re-renders don't
-        // stack up multiple identical listeners on the same grid element.
+        // Bind once; re-renders would otherwise stack listeners.
         if (!badgePickerGrid._helixBound) {
             badgePickerGrid._helixBound = true;
             badgePickerGrid.addEventListener('click', function (e) {
@@ -150,7 +128,7 @@
 
         pinPickerList.innerHTML = html;
 
-        // Wire once — same stacking-listener guard as the badge grid.
+        // Bind once, as for the badge grid.
         if (pinPickerList._helixBound) return;
         pinPickerList._helixBound = true;
         pinPickerList.addEventListener('click', function (e) {
@@ -161,10 +139,8 @@
             var idx = selectedPinIds.indexOf(uaId);
 
             if (idx !== -1) {
-                // Already pinned — unpin.
                 selectedPinIds.splice(idx, 1);
             } else {
-                // Not pinned — pin if under limit.
                 if (selectedPinIds.length >= 5) {
                     if (typeof showToast === 'function') showToast('Maximum 5 achievements can be pinned.', 'warning');
                     return;
@@ -180,7 +156,7 @@
         var customizeModal = document.getElementById('achievement-customize-modal');
         if (!customizeModal || !window.PROFILE_CUSTOMIZE) return;
 
-        // Copy current saved state into local working state so Cancel works.
+        // Copy the saved state so Cancel discards changes.
         selectedBadgeUaId = window.PROFILE_CUSTOMIZE.active_badge_ua_id;
         selectedPinIds    = (window.PROFILE_CUSTOMIZE.pinned_ids || []).slice();
 
@@ -191,15 +167,19 @@
         customizeModal.classList.remove('hidden');
         if (window.helixPolling) window.helixPolling.pause();
 
-        // Wire cancel + backdrop close here (once) now the modal exists.
+        // Wire cancel (once) and backdrop close now the modal exists.
         var cancelBtn = document.getElementById('achievement-customize-cancel-btn');
         if (cancelBtn && !cancelBtn._helixBound) {
             cancelBtn._helixBound = true;
             cancelBtn.addEventListener('click', closeCustomizeModal);
         }
-        customizeModal.addEventListener('click', function (e) {
-            if (e.target === customizeModal) closeCustomizeModal();
-        }, { once: true });
+        // Not {once:true}: a click inside the modal would use it up.
+        if (!customizeModal._helixBound) {
+            customizeModal._helixBound = true;
+            customizeModal.addEventListener('click', function (e) {
+                if (e.target === customizeModal) closeCustomizeModal();
+            });
+        }
     }
 
     function closeCustomizeModal() {
@@ -211,8 +191,13 @@
 
     if (openCustomizeBtn) openCustomizeBtn.addEventListener('click', openCustomizeModal);
 
-    // Save button — also looked up lazily since the modal HTML comes after this script.
-    document.addEventListener('click', function (e) {
+    // Save button, delegated because the modal comes after this script.
+    // The SPA router re-runs this script, so swap out the previous run's
+    // handler: stacking would save N times, and it holds stale picker state.
+    if (window._achievementSaveHandler) {
+        document.removeEventListener('click', window._achievementSaveHandler);
+    }
+    window._achievementSaveHandler = function (e) {
         if (!e.target.closest || e.target.id !== 'achievement-customize-save-btn') return;
         var saveBtn = e.target;
         if (!window.PROFILE_CUSTOMIZE) return;
@@ -255,6 +240,7 @@
                 if (typeof btnDone === 'function') btnDone(saveBtn);
                 if (typeof showToast === 'function') showToast('Save failed.', 'error');
             });
-    });
+    };
+    document.addEventListener('click', window._achievementSaveHandler);
 
 }());
