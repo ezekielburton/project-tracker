@@ -1,18 +1,24 @@
 """
 The Lists & people page: the editable reference data behind the dropdowns.
 
-Locations and Departments get their own tabs; every other reference kind
-shares "Other lists", so a new kind needs no change here. Severity and
-statuses are closed sets in code and are not editable here.
+One index of every list (basics, assets, choice lists) and one list open
+at a time, addressed by its key: a reference kind, an asset kind, or
+'people'. Severity and statuses are closed sets in code, not lists here.
 """
 
+from sqlalchemy import func
+
+from app.modules.core.shared.extensions import db
+from app.modules.hse.lib.registers import HSE_REGISTERS
 from app.modules.hse.models import (
     ASSET_KINDS, REFERENCE_KINDS, HseAsset, HsePerson, HseReference,
 )
 
 
-# Reference kinds that earn their own tab. Everything else is grouped.
-PROMINENT_KINDS = ('location', 'department')
+# Listed with People under Basics; every other reference kind is a choice list.
+BASIC_KINDS = ('location', 'department')
+
+PEOPLE = 'people'
 
 # Display names for the kinds. Missing kinds fall back to a capitalised key.
 KIND_LABELS = {
@@ -38,7 +44,7 @@ KIND_LABELS = {
     'compliance_item': 'Compliance items',
 }
 
-# Asset kinds that carry a serial number on this page.
+# Asset kinds that carry a serial number.
 SERIAL_ASSET_KINDS = ('machine',)
 
 ASSET_KIND_LABELS = {
@@ -48,23 +54,42 @@ ASSET_KIND_LABELS = {
     'area': 'Areas',
 }
 
+# What an asset's ref holds, per kind.
+REF_LABELS = {
+    'vehicle': 'Plate',
+    'forklift': 'Plate / serial',
+    'machine': 'Asset tag',
+}
+
 
 def kind_label(kind):
     return KIND_LABELS.get(kind, kind.replace('_', ' ').capitalize())
 
 
-def other_kinds():
-    """Reference kinds sharing the 'Other lists' tab."""
-    return tuple(k for k in REFERENCE_KINDS if k not in PROMINENT_KINDS)
+def list_label(key):
+    if key == PEOPLE:
+        return 'People'
+    if key in ASSET_KINDS:
+        return ASSET_KIND_LABELS.get(key, key.title())
+    return kind_label(key)
 
 
-def tabs():
-    """The tab strip, in order."""
-    out = [{'key': k, 'label': kind_label(k)} for k in PROMINENT_KINDS]
-    out.append({'key': 'people', 'label': 'People'})
-    out.append({'key': 'assets', 'label': 'Assets'})
-    out.append({'key': 'other', 'label': 'Other lists'})
-    return out
+def choice_kinds():
+    """Reference kinds shown as choice lists, A–Z by label."""
+    return tuple(sorted((k for k in REFERENCE_KINDS if k not in BASIC_KINDS),
+                        key=kind_label))
+
+
+def list_keys():
+    """Every list the page can open, in index order."""
+    return BASIC_KINDS + (PEOPLE,) + ASSET_KINDS + choice_kinds()
+
+
+def used_in(kind):
+    """Labels of the registers with a choice field filled from this
+    reference kind, in declaration order."""
+    return [r.label for r in HSE_REGISTERS
+            if any(f.type == 'choice' and f.choices_kind == kind for f in r.fields)]
 
 
 def serialize_reference(row):
@@ -75,7 +100,8 @@ def serialize_person(row):
     return {
         'id': row.id, 'label': row.name, 'role': row.role,
         'organisation': row.organisation, 'is_external': row.is_external,
-        'can_hold_actions': row.can_hold_actions, 'active': row.active,
+        'can_hold_actions': row.can_hold_actions, 'email': row.email,
+        'phone': row.phone, 'active': row.active,
     }
 
 
@@ -94,29 +120,55 @@ def people_rows():
     return HsePerson.query.order_by(HsePerson.active.desc(), HsePerson.name).all()
 
 
-def asset_rows():
-    return HseAsset.query.order_by(HseAsset.active.desc(), HseAsset.kind,
-                                   HseAsset.label).all()
+def asset_rows(kind):
+    return (HseAsset.query.filter_by(kind=kind)
+            .order_by(HseAsset.active.desc(), HseAsset.label).all())
 
 
-def panel_for(tab_key):
-    """What one tab shows: a list of sections, each with its own rows. Only
-    'other' has more than one section."""
-    if tab_key in PROMINENT_KINDS:
-        return [{'kind': tab_key, 'label': kind_label(tab_key),
-                 'rows': [serialize_reference(r) for r in reference_rows(tab_key)]}]
-    if tab_key == 'people':
-        return [{'kind': 'people', 'label': 'People',
-                 'rows': [serialize_person(r) for r in people_rows()]}]
-    if tab_key == 'assets':
-        rows = [serialize_asset(r) for r in asset_rows()]
-        return [{'kind': 'assets', 'label': ASSET_KIND_LABELS.get(k, k.title()),
-                 'asset_kind': k, 'has_serial': k in SERIAL_ASSET_KINDS,
-                 'rows': [r for r in rows if r['kind'] == k]}
-                for k in ASSET_KINDS]
-    return [{'kind': k, 'label': kind_label(k),
-             'rows': [serialize_reference(r) for r in reference_rows(k)]}
-            for k in other_kinds()]
+def index():
+    """The index: Basics, Assets and Choice lists, each list with how many
+    of its values are in use. People and assets can't be quick-added from a
+    form, so an empty one is flagged."""
+    refs = dict(db.session.query(HseReference.kind, func.count(HseReference.id))
+                .filter(HseReference.active.is_(True))
+                .group_by(HseReference.kind).all())
+    assets = dict(db.session.query(HseAsset.kind, func.count(HseAsset.id))
+                  .filter(HseAsset.active.is_(True))
+                  .group_by(HseAsset.kind).all())
+    people = HsePerson.query.filter_by(active=True).count()
+
+    def item(key, count, must_fill=False):
+        return {'key': key, 'label': list_label(key), 'count': count,
+                'empty': must_fill and not count}
+
+    return [
+        {'label': 'Basics',
+         'items': [item(k, refs.get(k, 0)) for k in BASIC_KINDS]
+                  + [item(PEOPLE, people, must_fill=True)]},
+        {'label': 'Assets',
+         'items': [item(k, assets.get(k, 0), must_fill=True) for k in ASSET_KINDS]},
+        {'label': 'Choice lists',
+         'items': [item(k, refs.get(k, 0)) for k in choice_kinds()]},
+    ]
+
+
+def list_view(key):
+    """One list: rows in use and retired rows kept apart, plus what the page
+    needs to label it. `key` must come from list_keys()."""
+    if key == PEOPLE:
+        rows = [serialize_person(r) for r in people_rows()]
+        view = {'kind': PEOPLE}
+    elif key in ASSET_KINDS:
+        rows = [serialize_asset(r) for r in asset_rows(key)]
+        view = {'kind': 'asset', 'has_serial': key in SERIAL_ASSET_KINDS,
+                'ref_label': REF_LABELS.get(key, 'Code')}
+    else:
+        rows = [serialize_reference(r) for r in reference_rows(key)]
+        view = {'kind': 'reference', 'used_in': used_in(key)}
+    view.update(key=key, label=list_label(key),
+                rows=[r for r in rows if r['active']],
+                retired=[r for r in rows if not r['active']])
+    return view
 
 
 def find_or_revive_reference(kind, label):

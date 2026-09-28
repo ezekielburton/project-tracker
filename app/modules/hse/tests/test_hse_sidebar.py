@@ -111,3 +111,25 @@ def test_daily_log_is_a_plain_link_between_statistics_and_calendar(app):
     assert daily['label'] == 'Daily log' and daily['count'] == 4
     assert daily['url'].endswith('/hse/daily_log/daily_log')
     assert 'children' not in daily
+
+
+def _rail_html(app, client, db_session, tag, role):
+    user = _user(db_session, tag, role)
+    login_as(client, app, user, 'password123')
+    with app.test_request_context():
+        url = url_for('hse.register_page', group_key='incidents', register_key='incidents')
+    html = client.get(url).get_data(as_text=True)
+    return html.split('<aside class="module-rail">')[1].split('</aside>')[0]
+
+
+def test_lists_and_performance_sit_under_training(app, client, db_session):
+    rail = _rail_html(app, client, db_session, 'rail-order', 'hse')
+    assert rail.index('Training') < rail.index('Lists &amp; people') < rail.index('My performance')
+    assert 'module-rail-foot' not in rail
+    assert 'hse-rail-divided' in rail
+
+
+def test_management_is_not_shown_lists_it_cannot_open(app, client, db_session):
+    rail = _rail_html(app, client, db_session, 'rail-mgmt', 'management')
+    assert 'Lists &amp; people' not in rail
+    assert 'My performance' in rail

@@ -1,86 +1,255 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
-{% block title %}HSE — Lists &amp; people{% endblock %}
+{% block title %}HSE — {{ view.label }}{% endblock %}
+
+{# One row of the open list. Names and codes are inputs that save when left;
+   a retired row is read-only until it is reactivated. People open the
+   side panel instead. #}
+{% macro list_row(r, view, retired=False) %}
+{%- set filter_text = [r.label, r.role, r.organisation, r.ref, r.serial_no] | select | join(' ') | lower -%}
+<tr class="hse-lists-row{{ ' is-retired' if retired else '' }}" data-id="{{ r.id }}"
+    data-filter="{{ filter_text }}"
+    {%- if view.kind == 'people' %} data-person='{{ r | tojson }}' tabindex="0"{% endif %}>
+    {% if view.kind == 'people' %}
+    <td class="hse-lists-name">{{ r.label }}</td>
+    <td>{{ r.role or '—' }}</td>
+    <td class="hse-lists-muted">
+        {{ r.organisation or '—' }}{% if r.is_external %} <span class="hse-tag">external</span>{% endif %}
+    </td>
+    <td>{% if r.can_hold_actions %}<span class="hse-lists-yes">Yes</span>{% else %}<span class="hse-lists-muted">—</span>{% endif %}</td>
+    {% elif retired %}
+    <td class="hse-lists-name">{{ r.label }}</td>
+    {% if view.has_serial %}<td class="hse-lists-code">{{ r.serial_no or '—' }}</td>{% endif %}
+    {% if view.kind == 'asset' %}<td class="hse-lists-code">{{ r.ref or '—' }}</td>{% endif %}
+    <td class="hse-lists-actions"><button type="button" class="hse-lists-act" data-toggle="on">Reactivate</button></td>
+    {% else %}
+    <td><input type="text" class="hse-lists-cell hse-lists-cell--name" data-field="label"
+               id="hse-list-{{ r.id }}-label" maxlength="160" value="{{ r.label }}"
+               data-value="{{ r.label }}" aria-label="Name"></td>
+    {% if view.has_serial %}
+    <td><input type="text" class="hse-lists-cell hse-lists-cell--code" data-field="serial_no"
+               id="hse-list-{{ r.id }}-serial" maxlength="120" value="{{ r.serial_no or '' }}"
+               data-value="{{ r.serial_no or '' }}" placeholder="—" aria-label="Serial no. for {{ r.label }}"></td>
+    {% endif %}
+    {% if view.kind == 'asset' %}
+    <td><input type="text" class="hse-lists-cell hse-lists-cell--code" data-field="ref"
+               id="hse-list-{{ r.id }}-ref" maxlength="80" value="{{ r.ref or '' }}"
+               data-value="{{ r.ref or '' }}" placeholder="—" aria-label="{{ view.ref_label }} for {{ r.label }}"></td>
+    {% endif %}
+    <td class="hse-lists-actions">
+        <button type="button" class="hse-lists-act" data-rename>Rename</button>
+        <button type="button" class="hse-lists-act" data-toggle="off">Deactivate</button>
+    </td>
+    {% endif %}
+</tr>
+{% endmacro %}
 
 {% block content %}
+{%- set columns = 4 if view.kind == 'people' else (2 + (1 if view.kind == 'asset' else 0) + (1 if view.has_serial else 0)) -%}
 <div class="module-page">
     <div class="module-shell">
         {% include 'hse/_rail.html' %}
         <div class="module-main hse-main">
-            <div class="hse-inner">
+            <div class="hse-inner hse-inner--fill">
 
                 <div class="hse-header">
                     <h1 class="hse-title">Lists &amp; people</h1>
-                    <span class="hse-header-note">Yours to edit</span>
+                    <div class="hse-header-actions">
+                        <span class="hse-header-note">Yours to edit</span>
+                        {{ help_button('hse.lists') }}
+                    </div>
                 </div>
 
-                <p class="hse-lists-intro">
-                    Every dropdown in the module is filled from these lists. Nothing here
-                    is ever deleted — entries already filed still point at it, so a value
-                    you retire is deactivated and simply stops being offered.
-                </p>
+                <div class="hse-lists">
 
-                {% for section in sections %}
-                <div class="hse-list-section"
-                     data-kind="{{ section.kind }}"
-                     {% if section.asset_kind %}data-asset-kind="{{ section.asset_kind }}"{% endif %}>
-                    <div class="hse-list-head">
-                        <h2 class="hse-list-title">{{ section.label }}</h2>
-                        <span class="hse-list-count">{{ section.rows | selectattr('active') | list | length }} in use</span>
-                    </div>
-
-                    <div class="hse-list-rows">
-                        {% for row in section.rows %}
-                        <div class="hse-list-row{{ '' if row.active else ' is-off' }}{{ ' hse-list-row--serial' if section.has_serial else '' }}" data-row-id="{{ row.id }}">
-                            <span class="hse-list-label">{{ row.label }}</span>
-                            {% if section.kind == 'people' %}
-                            <span class="hse-list-meta">
-                                {{ row.role or '—' }}{% if row.organisation %} · {{ row.organisation }}{% endif %}
-                                {%- if row.is_external %} <span class="hse-tag">external</span>{% endif %}
-                                {%- if row.can_hold_actions %} <span class="hse-tag">can hold an action</span>{% endif %}
-                            </span>
-                            {% elif section.kind == 'assets' and row.ref %}
-                            <span class="hse-list-meta mono">{{ row.ref }}</span>
-                            {% endif %}
-                            {# Edited in place; saves when the field is left. #}
-                            {% if section.has_serial %}
-                            <input type="text" class="form-input hse-list-serial mono" maxlength="120"
-                                   data-row-id="{{ row.id }}" value="{{ row.serial_no or '' }}"
-                                   placeholder="Serial no." aria-label="Serial no. for {{ row.label }}">
-                            {% endif %}
-                            <button type="button" class="hse-list-toggle"
-                                    data-row-id="{{ row.id }}" data-active="{{ 'yes' if row.active else 'no' }}">
-                                {{ 'Deactivate' if row.active else 'Reactivate' }}
-                            </button>
+                    {# Every list, with how many of its values are in use. #}
+                    <nav class="hse-lists-index" aria-label="Lists">
+                        <input type="search" class="form-input hse-lists-find" id="hse-lists-find"
+                               placeholder="Find a list…" aria-label="Find a list">
+                        <div class="hse-lists-index-scroll">
+                            {% for group in index %}
+                            <div class="hse-lists-group">
+                                <div class="hse-lists-group-label">{{ group.label }}</div>
+                                {% for item in group['items'] %}
+                                <a class="hse-lists-link{{ ' is-selected' if item.key == view.key else '' }}"
+                                   href="{{ url_for('hse.lists_page', list_key=item.key) }}"
+                                   data-label="{{ item.label | lower }}"
+                                   {%- if item.key == view.key %} aria-current="page"{% endif %}>
+                                    <span>{{ item.label }}</span>
+                                    {% if item.empty %}<span class="hse-lists-empty">Empty</span>
+                                    {% else %}<span class="hse-lists-n">{{ item.count }}</span>{% endif %}
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
                         </div>
-                        {% else %}
-                        <p class="hse-list-empty">Nothing here yet.</p>
-                        {% endfor %}
-                    </div>
+                    </nav>
 
-                    <div class="hse-list-add">
-                        {% if section.kind == 'people' %}
-                        <input type="text" class="form-input hse-add-name" placeholder="Name">
-                        <input type="text" class="form-input hse-add-role" placeholder="Role">
-                        <input type="text" class="form-input hse-add-org" placeholder="Organisation">
-                        <label class="hse-add-check">
-                            <input type="checkbox" class="hse-add-holds"> Actions can wait on them
-                        </label>
-                        {% elif section.kind == 'assets' %}
-                        <input type="text" class="form-input hse-add-name" placeholder="Name">
-                        <input type="text" class="form-input hse-add-ref"
-                               placeholder="{{ 'Asset tag' if section.has_serial else 'Plate / serial' }}">
-                        {% if section.has_serial %}
-                        <input type="text" class="form-input hse-add-serial" maxlength="120" placeholder="Serial no.">
+                    {# Phones: the index becomes one picker. #}
+                    <select class="form-input hse-lists-picker" id="hse-lists-picker" aria-label="Pick a list">
+                        {% for group in index %}
+                        <optgroup label="{{ group.label }}">
+                            {% for item in group['items'] %}
+                            <option value="{{ url_for('hse.lists_page', list_key=item.key) }}"
+                                    {{- ' selected' if item.key == view.key else '' }}>
+                                {{ item.label }} ({{ 'empty' if item.empty else item.count }})
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+
+                    <section class="hse-lists-card" data-kind="{{ view.kind }}" data-key="{{ view.key }}"
+                             {% if view.kind == 'people' %}
+                             data-create-url="{{ url_for('hse.create_person') }}"
+                             data-update-url="{{ url_for('hse.update_person', person_id=0) }}"
+                             {% elif view.kind == 'asset' %}
+                             data-create-url="{{ url_for('hse.create_asset') }}"
+                             data-update-url="{{ url_for('hse.update_asset', asset_id=0) }}"
+                             {% else %}
+                             data-create-url="{{ url_for('hse.create_reference') }}"
+                             data-update-url="{{ url_for('hse.update_reference', row_id=0) }}"
+                             {% endif %}>
+                        <div class="hse-lists-main">
+                            <div class="hse-lists-head">
+                                <div>
+                                    <h2 class="hse-lists-title">
+                                        {{ view.label }}<span class="hse-lists-inuse">{{ view.rows | length }} in use</span>
+                                    </h2>
+                                    <p class="hse-lists-used">
+                                        {% if view.kind == 'people' -%}
+                                        Fills Reported by, Owner, Subject and Waiting on. A person needs no OVP login.
+                                        {%- elif view.kind == 'asset' -%}
+                                        Picked wherever a register asks for an asset{{ '; the serial shows under the picker' if view.has_serial else '' }}.
+                                        {%- elif view.used_in -%}
+                                        Used in {{ view.used_in | join(', ') }}.
+                                        {%- endif %}
+                                    </p>
+                                </div>
+                                <div class="hse-lists-tools">
+                                    <input type="search" class="form-input hse-lists-filter" id="hse-lists-filter"
+                                           placeholder="Filter {{ view.label | lower }}…"
+                                           aria-label="Filter {{ view.label | lower }}">
+                                    {% if view.kind == 'people' %}
+                                    <button type="button" class="hse-btn hse-btn--primary" data-person-open>+ Add person</button>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="hse-lists-scroll">
+                                <table class="hse-lists-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            {% if view.kind == 'people' %}
+                                            <th>Role</th><th>Organisation</th><th>Waiting on</th>
+                                            {% else %}
+                                            {% if view.has_serial %}<th>Serial no.</th>{% endif %}
+                                            {% if view.kind == 'asset' %}<th>{{ view.ref_label }}</th>{% endif %}
+                                            <th aria-label="Actions"></th>
+                                            {% endif %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% if view.kind != 'people' %}
+                                        <tr class="hse-lists-add">
+                                            <td><input type="text" class="form-input" data-add="label" id="hse-add-label"
+                                                       maxlength="160" placeholder="Add to {{ view.label | lower }}…"
+                                                       aria-label="New name"></td>
+                                            {% if view.has_serial %}
+                                            <td><input type="text" class="form-input hse-lists-code" data-add="serial_no"
+                                                       id="hse-add-serial" maxlength="120" placeholder="Serial no."
+                                                       aria-label="Serial no."></td>
+                                            {% endif %}
+                                            {% if view.kind == 'asset' %}
+                                            <td><input type="text" class="form-input hse-lists-code" data-add="ref"
+                                                       id="hse-add-ref" maxlength="80"
+                                                       placeholder="{{ view.ref_label }}{{ ' (optional)' if view.has_serial else '' }}"
+                                                       aria-label="{{ view.ref_label }}"></td>
+                                            {% endif %}
+                                            <td class="hse-lists-actions">
+                                                <button type="button" class="hse-btn hse-btn--primary" data-add-submit>Add</button>
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                        {% for r in view.rows %}{{ list_row(r, view) }}{% endfor %}
+                                        {% if not view.rows %}
+                                        <tr class="hse-lists-none">
+                                            <td colspan="{{ columns }}">
+                                                Nothing here yet.{{ ' Add the first person.' if view.kind == 'people' else ' Add the first one above.' }}
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                    </tbody>
+                                    {% if view.retired %}
+                                    <tbody class="hse-lists-retired" hidden>
+                                        {% for r in view.retired %}{{ list_row(r, view, retired=True) }}{% endfor %}
+                                    </tbody>
+                                    {% endif %}
+                                </table>
+                            </div>
+
+                            <div class="hse-lists-foot">
+                                {% if view.retired %}
+                                <button type="button" class="hse-lists-more" data-show-retired
+                                        data-count="{{ view.retired | length }}" aria-expanded="false">
+                                    Show retired ({{ view.retired | length }})
+                                </button>
+                                {% endif %}
+                                <p class="hse-lists-note" role="status" aria-live="polite"></p>
+                                <span class="hse-lists-rule">Nothing is deleted. A retired value leaves the dropdowns but stays on the entries that use it.</span>
+                            </div>
+                        </div>
+
+                        {% if view.kind == 'people' %}
+                        <aside class="hse-lists-panel" hidden>
+                            <form class="hse-person-form" novalidate>
+                                <div class="hse-lists-panel-head">
+                                    <h3 class="hse-lists-panel-title">Add a person</h3>
+                                    <button type="button" class="hse-lists-close" data-person-close aria-label="Close">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                             stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                                    </button>
+                                </div>
+                                <label class="hse-lists-field">Name
+                                    <input type="text" class="form-input" name="name" id="hse-person-name" maxlength="160" required>
+                                </label>
+                                <label class="hse-lists-field">Role
+                                    <input type="text" class="form-input" name="role" id="hse-person-role" maxlength="160">
+                                </label>
+                                <label class="hse-lists-field">Organisation
+                                    <input type="text" class="form-input" name="organisation" id="hse-person-org" maxlength="160">
+                                </label>
+                                <label class="hse-lists-check">
+                                    <input type="checkbox" name="is_external" id="hse-person-external">
+                                    <span>External to the company</span>
+                                </label>
+                                <label class="hse-lists-check">
+                                    <input type="checkbox" name="can_hold_actions" id="hse-person-holds">
+                                    <span>Actions can wait on them
+                                        <small>Puts them in Waiting on. Time an action spends with them is not counted against your time to close.</small>
+                                    </span>
+                                </label>
+                                <label class="hse-lists-field">Email
+                                    <input type="email" class="form-input" name="email" id="hse-person-email" maxlength="200" placeholder="Optional">
+                                </label>
+                                <label class="hse-lists-field">Phone
+                                    <input type="tel" class="form-input" name="phone" id="hse-person-phone" maxlength="50" placeholder="Optional">
+                                </label>
+                                <p class="hse-lists-note" data-person-note role="status" aria-live="polite"></p>
+                                <div class="hse-lists-panel-foot">
+                                    <button type="button" class="hse-lists-act" data-person-toggle hidden>Deactivate</button>
+                                    <span class="hse-lists-panel-buttons">
+                                        <button type="button" class="hse-btn" data-person-close>Cancel</button>
+                                        <button type="submit" class="hse-btn hse-btn--primary">Save</button>
+                                    </span>
+                                </div>
+                            </form>
+                        </aside>
                         {% endif %}
-                        {% else %}
-                        <input type="text" class="form-input hse-add-name" placeholder="Add to {{ section.label|lower }}…">
-                        {% endif %}
-                        <button type="button" class="hse-btn hse-list-add-btn">Add</button>
-                    </div>
-                    <span class="hse-list-note"></span>
+                    </section>
                 </div>
-                {% endfor %}
 
             </div>
         </div>

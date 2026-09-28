@@ -2,6 +2,7 @@
 Reference lists: tab layout, closed sets kept out, and idempotent quick-add
 (reuse or revive an existing name, never a duplicate row).
 """
+import importlib.util
 import runpy
 from pathlib import Path
 
@@ -12,23 +13,30 @@ from config import TestingConfig
 from app.modules.core.shared.models import User
 from app.modules.core.shared.testing import login_as
 from app.modules.hse.lib import lists
-from app.modules.hse.models import REFERENCE_KINDS, HseAsset
+from app.modules.hse.models import ASSET_KINDS, REFERENCE_KINDS, HseAsset
 
 
 SERIAL_MIGRATION = (Path(__file__).resolve().parents[4]
                     / 'migrations' / 'add_hse_asset_serial.py')
 
 
-def test_every_reference_kind_is_reachable_from_some_tab():
-    """Every reference kind is editable from some tab."""
-    reachable = set(lists.PROMINENT_KINDS) | set(lists.other_kinds())
-    assert reachable == set(REFERENCE_KINDS)
+def test_every_list_has_one_address():
+    """Each reference kind, asset kind and People opens at its own key, and
+    no two share one."""
+    keys = lists.list_keys()
+    assert len(keys) == len(set(keys))
+    assert set(keys) == set(REFERENCE_KINDS) | set(ASSET_KINDS) | {'people'}
 
 
-def test_the_tab_strip_stays_short_as_registers_are_added():
-    """The tab strip is fixed; extra kinds share the 'Other lists' tab."""
-    keys = [t['key'] for t in lists.tabs()]
-    assert keys == ['location', 'department', 'people', 'assets', 'other']
+def test_choice_lists_read_a_to_z():
+    labels = [lists.kind_label(k) for k in lists.choice_kinds()]
+    assert labels == sorted(labels)
+
+
+def test_every_reference_list_feeds_some_register():
+    """A list no register reads is dead weight on the page."""
+    unused = [k for k in REFERENCE_KINDS if not lists.used_in(k)]
+    assert unused == [], f'No register field is filled from: {unused}'
 
 
 def test_a_kind_with_no_friendly_name_still_reads_properly():
@@ -38,7 +46,7 @@ def test_a_kind_with_no_friendly_name_still_reads_properly():
 
 def test_severity_and_status_are_not_editable_lists():
     """Severity and status are closed sets, never user-editable lists."""
-    editable = set(lists.PROMINENT_KINDS) | set(lists.other_kinds())
+    editable = set(lists.list_keys())
     assert 'severity' not in editable
     assert 'status' not in editable
 
@@ -103,11 +111,36 @@ def test_an_asset_saves_and_edits_its_serial(app, client, db_session):
     assert db_session.get(HseAsset, row['id']).serial_no is None
 
 
-def test_only_the_machines_section_offers_a_serial(app):
+def test_only_machines_offer_a_serial(app):
     with app.app_context():
-        sections = {s['asset_kind']: s['has_serial'] for s in lists.panel_for('assets')}
-    assert sections == {k: k in lists.SERIAL_ASSET_KINDS for k in sections}
-    assert sections['machine'] is True
+        views = {k: lists.list_view(k)['has_serial'] for k in ASSET_KINDS}
+    assert views == {k: k in lists.SERIAL_ASSET_KINDS for k in ASSET_KINDS}
+
+
+def test_an_empty_asset_list_is_flagged_and_retired_values_sit_apart(app, db_session):
+    db_session.add(HseAsset(kind='forklift', label='Index Lift', active=False))
+    db_session.flush()
+
+    items = {i['key']: i for g in lists.index() for i in g['items']}
+    assert items['forklift']['empty'] is True
+    assert items['body_part']['empty'] is False, 'choice lists can be quick-added'
+
+    view = lists.list_view('forklift')
+    assert view['rows'] == [] and [r['label'] for r in view['retired']] == ['Index Lift']
+
+
+def test_the_page_opens_a_list_and_old_tabs_still_land(app, client, db_session):
+    _officer(app, client, db_session)
+    with app.test_request_context():
+        machine = url_for('hse.lists_page', list_key='machine')
+        old = url_for('hse.lists_page', list_key='assets')
+        vehicle = url_for('hse.lists_page', list_key='vehicle')
+        missing = url_for('hse.lists_page', list_key='nope')
+
+    assert client.get(machine).status_code == 200
+    res = client.get(old)
+    assert res.status_code == 302 and res.headers['Location'].endswith(vehicle)
+    assert client.get(missing).status_code == 404
 
 
 class _HeldConnection:
@@ -146,3 +179,36 @@ def test_the_serial_migration_can_run_twice(app, monkeypatch):
     finally:
         conn.rollback()
         conn.close()
+
+
+# --- moving machine tags to the serial ------------------------------------
+
+TAG_MOVE = Path(__file__).resolve().parents[4] / 'migrations' / 'move_machine_tags_to_serial.py'
+
+
+def _load_tag_move():
+    spec = importlib.util.spec_from_file_location('move_machine_tags_to_serial', TAG_MOVE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_machine_tags_move_to_the_serial_and_the_move_is_safe_to_run_twice(db_session):
+    tagged = HseAsset(kind='machine', label='Move CNC', ref='X1-1325T')
+    placeholder = HseAsset(kind='machine', label='Move Bender', ref=' N/A ')
+    both = HseAsset(kind='machine', label='Move Saw', ref='MC-03', serial_no='SCY25A030')
+    vehicle = HseAsset(kind='vehicle', label='Move Figo', ref='T10413')
+    db_session.add_all([tagged, placeholder, both, vehicle])
+    db_session.flush()
+
+    move = _load_tag_move()
+    conn = db_session.connection().connection
+    first = move.run(conn)
+    assert first['moved'] >= 1 and first['cleared'] >= 1
+    assert move.run(conn) == {'cleared': 0, 'moved': 0}
+
+    db_session.expire_all()
+    assert (tagged.ref, tagged.serial_no) == (None, 'X1-1325T')
+    assert (placeholder.ref, placeholder.serial_no) == (None, None)
+    assert (both.ref, both.serial_no) == ('MC-03', 'SCY25A030')
+    assert (vehicle.ref, vehicle.serial_no) == ('T10413', None)

@@ -5,15 +5,15 @@ HSE Lists: reference lists, people and assets, managed by the officer
 Nothing is deleted. Filed entries still point at values, so a retired one
 is deactivated and drops out of dropdowns.
 """
-from flask import abort, jsonify, render_template, request, url_for
+from flask import abort, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import require, require_api
 from app.modules.hse.lib.flags import rail_counts
 from app.modules.hse.lib.lists import (
-    KIND_LABELS, find_or_revive_reference, kind_label, panel_for,
-    serialize_asset, serialize_person, serialize_reference, tabs,
+    choice_kinds, find_or_revive_reference, index, kind_label, list_keys,
+    list_view, serialize_asset, serialize_person, serialize_reference,
 )
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.models import (
@@ -45,25 +45,24 @@ def _serial(value):
 
 
 @hse_bp.route('/lists')
-@hse_bp.route('/lists/<tab_key>')
+@hse_bp.route('/lists/<list_key>')
 @login_required
 @require('manage_hse')
-def lists_page(tab_key=None):
-    available = tabs()
-    keys = [t['key'] for t in available]
-    if tab_key is None:
-        tab_key = keys[0]
-    if tab_key not in keys:
+def lists_page(list_key=None):
+    keys = list_keys()
+    list_key = list_key or keys[0]
+    # Tab addresses from before the index, so old bookmarks still land.
+    old_tabs = {'assets': ASSET_KINDS[0], 'other': choice_kinds()[0]}
+    if list_key in old_tabs:
+        return redirect(url_for('hse.lists_page', list_key=old_tabs[list_key]))
+    if list_key not in keys:
         abort(404)
     return render_template(
         'hse/lists.html',
-        sections=panel_for(tab_key),
+        index=index(),
+        view=list_view(list_key),
         rail=rail_items(rail_counts()),
         active_group='lists',
-        active_sub=tab_key,
-        list_pages=[{'key': t['key'], 'label': t['label'],
-                     'url': url_for('hse.lists_page', tab_key=t['key'])}
-                    for t in available],
     )
 
 

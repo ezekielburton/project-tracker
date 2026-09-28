@@ -8,6 +8,8 @@ link. A group with no registers renders as a non-link placeholder.
 
 from flask import url_for
 
+from app.modules.core.shared.lib.capabilities import can
+
 from app.modules.hse.lib.registers import RAIL_GROUPS, registers_in_group
 
 
@@ -33,6 +35,10 @@ CALENDAR_ICON = ('M4 6h16v14H4zM4 10h16M8 3v4M16 3v4'
 OVERVIEW_ICON = 'M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 8h6V4h-6z'
 
 STATISTICS_ICON = 'M4 20h16M5 16l4-5 4 3 6-7M15 7h4v4'
+
+LISTS_ICON = 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01'
+
+PERFORMANCE_ICON = 'M4 19V10M9.5 19V5M15 19v-7M20.5 19v-4'
 
 GROUP_ICONS = {
     'daily_log': 'M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5',
@@ -102,7 +108,18 @@ def rail_items(counts=None, active_group=None):
             {'key': 'schedule', 'label': 'Schedule', 'url': url_for('hse.schedule_page')},
         ],
     }
+    # About the officer rather than the site: last, under a rule. Lists &
+    # people only shows to those who can edit it.
+    tail = []
+    if can('manage_hse'):
+        tail.append({'key': 'lists', 'label': 'Lists & people',
+                     'icon': LISTS_ICON, 'url': url_for('hse.lists_page')})
+    tail.append({'key': 'performance', 'label': 'My performance',
+                 'icon': PERFORMANCE_ICON, 'url': url_for('hse.performance')})
+    tail[0]['extra_class'] = 'hse-rail-divided'
+
     return ([overview, statistics]
             + [g for g in groups if g['key'] in TOP_GROUPS]
             + [calendar]
-            + [g for g in groups if g['key'] not in TOP_GROUPS])
+            + [g for g in groups if g['key'] not in TOP_GROUPS]
+            + tail)
