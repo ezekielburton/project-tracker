@@ -1,4 +1,4 @@
-{% from '_shared_macros.html' import card %}
+{% from '_shared_macros.html' import card, help_button %}
 
 <div class="overlay-details-grid">
     {% set flagged_rows = rows | selectattr('is_flagged') | list %}
@@ -20,8 +20,11 @@
 
     <div class="overlay-card-full">
         {% set header_extra %}
-        <span class="overlay-preprod-progress-count">{{ completed_count }} of {{ total_count }} handed to
-            production</span>
+        <span class="overlay-card-header-actions">
+            <span class="overlay-preprod-progress-count">{{ completed_count }} of {{ total_count }} handed to
+                production</span>
+            {{ help_button('projects.preproduction') }}
+        </span>
         {% endset %}
         {% call card('Pre-Production', header_extra) %}
         <div class="overlay-card-controls-row">

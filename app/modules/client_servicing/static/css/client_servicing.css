@@ -760,6 +760,12 @@
     flex-shrink: 0;
 }
 
+.cs-dash-head-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
 .cs-dash-title {
     font-family: var(--font-headline);
     font-size: 1.55rem;
@@ -1516,7 +1522,7 @@
 
 /* ── Closed Projects page ──────────────────────────────────────────────
    Reuses the Invoicing KPI cards, selectors and table shell. */
-.cs-closed-head {
+.cs-page-head {
     display: flex;
     align-items: baseline;
     gap: var(--space-3);
@@ -1524,7 +1530,7 @@
     margin-bottom: var(--space-4);
 }
 
-.cs-closed-title {
+.cs-page-title {
     margin: 0;
     font-size: var(--text-xl);
 }

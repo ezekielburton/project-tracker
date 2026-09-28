@@ -1,4 +1,4 @@
-{% from '_shared_macros.html' import card %}
+{% from '_shared_macros.html' import card, help_button %}
 
 <div class="overlay-details-grid">
     {% for c in all_customers %}
@@ -22,7 +22,7 @@
     {% endfor %}
 
     <div class="overlay-card-full">
-        {% call card('Pre-Production') %}
+        {% call card('Pre-Production', help_button('projects.preproduction')) %}
         <div class="overlay-card-controls-row">
             <div class="overlay-submissions-view-toggle">
                 <button type="button" class="overlay-file-action-btn overlay-submissions-view-toggle-btn active"

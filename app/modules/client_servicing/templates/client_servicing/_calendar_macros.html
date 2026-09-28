@@ -1,9 +1,13 @@
 {# Installation Calendar macros: KPI header, drawer job card, agenda row.
    Editable cells carry data-field/data-value plus data-project-id, which
    client_servicing_calendar.js uses to save through the table's writeback. #}
-{% from '_shared_macros.html' import status_pill %}
+{% from '_shared_macros.html' import status_pill, help_button %}
 
 {% macro cal_header(active_view, kpis, month_label=None) %}
+<div class="cs-page-head">
+    <h1 class="cs-page-title">Calendar</h1>
+    {{ help_button('cs.calendar') }}
+</div>
 <div class="cs-inv-tabs">
     <a class="cs-inv-tab {{ 'cs-inv-tab--active' if active_view == 'month' else '' }}" href="{{ url_for('client_servicing.calendar') }}">Month</a>
     <a class="cs-inv-tab {{ 'cs-inv-tab--active' if active_view == 'agenda' else '' }}" href="{{ url_for('client_servicing.calendar', view='agenda') }}">Agenda</a>

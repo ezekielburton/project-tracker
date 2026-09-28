@@ -1,4 +1,4 @@
-{% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker, deliverable_assign_tag, status_override_picker %}
+{% from '_shared_macros.html' import card, tag, status_pill, deliverable_picker, deliverable_assign_tag, status_override_picker, help_button %}
 
 {% set skippable = (all_deliverables | rejectattr('status', 'equalto', 'approved') | list) if can_skip_preproduction else [] %}
 
@@ -19,7 +19,7 @@
     {% endfor %}
 
     <div class="overlay-card-full">
-        {% call card('Deliverables') %}
+        {% call card('Deliverables', help_button('projects.deliverables')) %}
         {# Same controls-row classes as the Submissions card. Gulf regions
         show as optgroups; the panel switch only needs a customer id. #}
         <div class="overlay-card-controls-row">

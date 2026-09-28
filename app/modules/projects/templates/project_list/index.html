@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from '_shared_macros.html' import card, person_chip, tag, status_pill %}
+{% from '_shared_macros.html' import card, person_chip, tag, status_pill, help_button %}
 
 {% block title %}Projects{% endblock %}
 
@@ -111,6 +111,7 @@ base.html's <head>. #}
                     data-create-view-url="{{ url_for('project_list.create_view') }}" {% if not is_dirty %}hidden{% endif %}>Save as
                     new view</button>
             </div>
+            {{ help_button('projects.table') }}
 
         </div>
     </div>

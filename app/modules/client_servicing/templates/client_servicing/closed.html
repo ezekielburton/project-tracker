@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}Client Servicing — Closed{% endblock %}
 
@@ -12,8 +13,9 @@
         {% endwith %}
         <div class="module-main">
             <div class="client-servicing-page">
-                <div class="cs-closed-head">
-                    <h1 class="cs-closed-title">Closed</h1>
+                <div class="cs-page-head">
+                    <h1 class="cs-page-title">Closed</h1>
+                    {{ help_button('cs.closed') }}
                 </div>
 
                 <div class="cs-inv-kpis">

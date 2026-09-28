@@ -34,6 +34,12 @@
     margin-bottom: 1rem;
 }
 
+.dash-cs-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
 .dash-last-updated {
     font-family: var(--font-mono);
     font-size: 0.78rem;

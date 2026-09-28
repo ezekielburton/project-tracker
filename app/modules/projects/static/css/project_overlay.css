@@ -404,6 +404,12 @@ Cancel/Reactivate), pinned to the bottom by margin-top:auto. */
     color: var(--black);
 }
 
+.project-overlay-chat-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
 .project-overlay-chat-close {
     background: none;
     border: none;
@@ -1260,6 +1266,12 @@ button.overlay-chat-reaction-chip:hover {
     text-transform: uppercase;
     letter-spacing: 0.02em;
     margin-bottom: var(--space-2);
+}
+
+.overlay-properties-heading--help {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .overlay-properties {
@@ -2992,6 +3004,12 @@ button.overlay-chat-reaction-chip:hover {
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--grey-dark);
+}
+
+.overlay-card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
 }
 
 .overlay-preprod-history-list {

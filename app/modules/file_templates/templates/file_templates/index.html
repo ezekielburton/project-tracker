@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}File Templates{% endblock %}
 
@@ -8,10 +9,13 @@
         <div>
             <p class="page-subtitle">Per-store design template files (.ai), organized by region and customer.</p>
         </div>
-        <button class="btn-secondary" id="open-simulation-files-btn"
-            data-url="{{ url_for('file_templates.get_simulation_files_link') }}">
-            Simulation Files
-        </button>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+            {{ help_button('file_templates.library') }}
+            <button class="btn-secondary" id="open-simulation-files-btn"
+                data-url="{{ url_for('file_templates.get_simulation_files_link') }}">
+                Simulation Files
+            </button>
+        </div>
     </div>
 
     {% if not regions_data %}

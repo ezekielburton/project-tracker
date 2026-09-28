@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}HSE — My performance{% endblock %}
 
@@ -22,6 +23,7 @@
                 <div class="hse-header">
                     <h1 class="hse-title">My performance</h1>
                     <div class="hse-header-actions">
+                        {{ help_button('hse.performance') }}
                         {# Month steps a month, Year steps twelve; the forward arrow
                            stops at the current month. See navigation(). #}
                         <span class="hse-pf-nav">

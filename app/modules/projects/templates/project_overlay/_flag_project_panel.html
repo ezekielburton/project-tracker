@@ -1,3 +1,4 @@
+{% from '_shared_macros.html' import help_button %}
 {# app/modules/projects/templates/project_overlay/_flag_project_panel.html
 Compact flags panel for both scopes: open flags always shown in a
 "Needs Attention" block, plus a Flag History toggle whose list is fetched
@@ -17,6 +18,7 @@ fetch to that customer). #}
         <button type="button"
             class="overlay-file-action-btn overlay-submissions-view-toggle-btn overlay-flag-history-toggle-btn">Flag
             History</button>
+        {{ help_button('projects.flags') }}
     </div>
 
     {% if flag_scope == 'deliverable' and can_manage_flags %}

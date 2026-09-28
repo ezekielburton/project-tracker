@@ -1,4 +1,4 @@
-{% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag %}
+{% from '_shared_macros.html' import card, person_chip, avatar_picker, status_pill, tag, help_button %}
 
 {# Flags sit in their own div above the Properties/Design Leads block. #}
 <div class="overlay-details-grid">
@@ -11,7 +11,7 @@
 
 <div class="overlay-details-columns" data-edit-snapshot="{{ edit_snapshot_at }}">
     <div class="overlay-details-left">
-        <div class="overlay-properties-heading">Properties</div>
+        <div class="overlay-properties-heading overlay-properties-heading--help">Properties {{ help_button('projects.details') }}</div>
         <div class="overlay-properties">
             {% include "project_overlay/_details_top_cards.html" %}
             <div class="overlay-property-row"{% if can_edit_project %} data-field="client_id"

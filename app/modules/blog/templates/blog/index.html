@@ -1,11 +1,13 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}App Updates{% endblock %}
 
 {% block content %}
 <div class="page-container">
 
-    <div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 0.75rem;">
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-bottom: 0.75rem;">
+        {{ help_button('blog.updates') }}
         {% if can('manage_blog', current_user) %}
         <a href="{{ url_for('blog.editor') }}" class="btn btn-primary">+ New Post</a>
         {% endif %}

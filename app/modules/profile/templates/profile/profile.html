@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}My Profile{% endblock %}
 
@@ -44,6 +45,7 @@
                         <button type="button" class="profile-edit-details-btn" id="edit-details-btn"
                             title="Edit details">✎</button>
                         {% endif %}
+                        {{ help_button('core.profile') }}
                     </div>
                     <div class="profile-meta-row">
                         <span class="profile-tag profile-tag--title">{{ fun_title }}</span>

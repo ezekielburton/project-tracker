@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}Digital Innovation — Edit Templates{% endblock %}
 
@@ -18,6 +19,7 @@
                     <h1 class="di-board-title">Edit Templates</h1>
                     <p class="di-board-subtitle">Department-wide default steps for each stage — editing here never changes steps already on an existing feature.</p>
                 </div>
+                {{ help_button('di.templates') }}
             </div>
 
             <div id="di-templates-body">

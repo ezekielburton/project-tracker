@@ -1,3 +1,4 @@
+{% from '_shared_macros.html' import help_button %}
 {#
    app/modules/projects/templates/project_list/_filter_panel_body.html
    ─────────────────────────────────────────────────────────────────
@@ -10,6 +11,7 @@
 <div class="filter-panel-header">
     <span class="filter-panel-count">Showing {{ rows|length }} of {{ view_total }} items</span>
     <div class="filter-panel-header-actions">
+        {{ help_button('projects.filters') }}
         <button type="button" class="filter-clear-all" id="filter-clear-all">Clear all</button>
     </div>
 </div>

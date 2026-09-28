@@ -61,12 +61,16 @@
 
 {% block content %}
 {% from 'dashboard/_dashboard_macros.html' import dash_designer_queue_row, dash_waiting_row, dash_stat_project_row %}
+{% from '_shared_macros.html' import help_button %}
 
 <div class="page-container">
 
     <div class="dash-cs-header">
         <h1 class="dashboard-greeting">Welcome, <span>{{ effective_user.name.split()[0] }}</span></h1>
-        <span class="dash-last-updated" id="dash-last-updated">Last updated just now</span>
+        <div class="dash-cs-header-actions">
+            <span class="dash-last-updated" id="dash-last-updated">Last updated just now</span>
+            {{ help_button('dashboard.overview') }}
+        </div>
     </div>
 
     {% include 'dashboard/_view_switcher.html' %}

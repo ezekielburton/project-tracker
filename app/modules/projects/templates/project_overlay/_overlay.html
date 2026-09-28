@@ -1,3 +1,4 @@
+{% from '_shared_macros.html' import help_button %}
 {# app/modules/projects/templates/project_overlay/_overlay.html
 The project overlay: header, side rail (one flat list of pages, then the
 lifecycle actions) and the content area. See project_overlay.js. #}
@@ -123,7 +124,10 @@ lifecycle actions) and the content area. See project_overlay.js. #}
             <div class="project-overlay-chat-drawer" id="project-overlay-chat-drawer">
                 <div class="project-overlay-chat-drawer-inner">
                     <div class="project-overlay-chat-header">
-                        <span class="project-overlay-chat-title">Chat</span>
+                        <div class="project-overlay-chat-title-row">
+                            <span class="project-overlay-chat-title">Chat</span>
+                            {{ help_button('chat.projects') }}
+                        </div>
                         <button type="button" class="project-overlay-chat-close" id="project-overlay-chat-close"
                             aria-label="Close chat">&times;</button>
                     </div>

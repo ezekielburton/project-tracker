@@ -1,9 +1,9 @@
 {# app/modules/projects/templates/project_overlay/_overlay_notes.html
 Site Visits page (rail tab data-main-tab="notes"): the site-visit log and
 logging form. Project notes live in the chat drawer (_overlay_chat.html). #}
-{% from '_shared_macros.html' import card, avatar_picker, person_chip %}
+{% from '_shared_macros.html' import card, avatar_picker, person_chip, help_button %}
 <div class="overlay-notes-section">
-{% call card('Site Visits') %}
+{% call card('Site Visits', help_button('projects.notes')) %}
 
 {% if can_log_site_visit %}
 <button type="button" class="overlay-file-action-btn overlay-file-action-btn--tangerine"

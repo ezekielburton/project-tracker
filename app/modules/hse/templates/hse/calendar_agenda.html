@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from 'hse/_calendar_tabs.html' import calendar_tabs %}
 {% from 'hse/_calendar_macros.html' import cal_kpis, cal_legend, drawer_card, log_picker %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}HSE — Agenda{% endblock %}
 
@@ -14,6 +15,7 @@
                 <div class="hse-header">
                     <h1 class="hse-title">Calendar</h1>
                     <div class="hse-header-actions">
+                        {{ help_button('hse.calendar') }}
                         <span class="hse-month-chip">Next {{ days_ahead }} days</span>
                         <a class="hse-btn hse-tab"
                            href="{{ url_for('hse.schedule_page') }}">+ New schedule</a>

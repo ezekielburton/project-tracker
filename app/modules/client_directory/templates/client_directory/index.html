@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {# Client Directory: search + company/contact list on the left, detail on the
    right. client_directory.js builds both panels from DIRECTORY_DATA below. #}
@@ -7,6 +8,7 @@
 
 {% block content %}
 <div class="directory-page-header">
+    {{ help_button('directory.clients') }}
     {% if can_edit %}
     <button type="button" class="btn-primary" id="btnAddCompanyDirectory">+ Add Company</button>
     {% endif %}

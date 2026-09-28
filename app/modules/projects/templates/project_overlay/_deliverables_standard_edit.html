@@ -1,8 +1,8 @@
-{% from '_shared_macros.html' import card %}
+{% from '_shared_macros.html' import card, help_button %}
 
 <div class="overlay-details-grid">
     <div class="overlay-card-full">
-        {% call card('Deliverables') %}
+        {% call card('Deliverables', help_button('projects.deliverables')) %}
         <div class="overlay-card-controls-row">
             <button type="button" class="overlay-file-action-btn" id="overlay-add-deliverable-btn">Add Deliverable</button>
             <div class="overlay-deliverables-controls-right">

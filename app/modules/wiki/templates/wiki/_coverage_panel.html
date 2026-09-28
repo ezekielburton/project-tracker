@@ -1,7 +1,11 @@
+{% from '_shared_macros.html' import help_button %}
 {# Coverage: every registered help key, and whether an article claims it. #}
 <aside class="wiki-coverage">
     <div class="wiki-coverage__head">
-        <h2 class="wiki-coverage__title">Coverage</h2>
+        <div class="wiki-coverage__title-row">
+            <h2 class="wiki-coverage__title">Coverage</h2>
+            {{ help_button('wiki.help-keys') }}
+        </div>
         <p class="wiki-coverage__count">
             <strong>{{ coverage.written }}</strong> of {{ coverage.total }} help keys have an article
         </p>

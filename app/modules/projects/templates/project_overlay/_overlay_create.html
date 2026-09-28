@@ -1,3 +1,4 @@
+{% from '_shared_macros.html' import help_button %}
 {# app/modules/projects/templates/project_overlay/_overlay_create.html
    Create-mode overlay for "+ New Project": Details step, then Deliverables,
    then a confirm summary. Its own shell because the rail is a step list and
@@ -8,6 +9,7 @@
     <div class="project-overlay-sheet" id="project-overlay-sheet">
         <div class="project-overlay-header" id="project-overlay-header">
             <div class="project-overlay-name" id="project-overlay-create-name">{{ project.name }}</div>
+            {{ help_button('projects.create') }}
             <button type="button" class="project-overlay-close" id="project-overlay-close"
                 aria-label="Close">&times;</button>
         </div>

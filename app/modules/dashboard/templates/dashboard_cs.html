@@ -90,6 +90,7 @@
 
 {% block content %}
 {% from 'dashboard/_dashboard_macros.html' import dash_priority_action_row, dash_waiting_row, dash_person_chip, dash_due_today_row, dash_escalation_history_row %}
+{% from '_shared_macros.html' import help_button %}
 
 <div class="page-container">
 
@@ -105,7 +106,10 @@
            clock-skew question a passed-in timestamp would raise. The
            static text here is just the pre-JS fallback, matching what the
            ticker shows at t=0. #}
-        <span class="dash-last-updated" id="dash-last-updated">Last updated just now</span>
+        <div class="dash-cs-header-actions">
+            <span class="dash-last-updated" id="dash-last-updated">Last updated just now</span>
+            {{ help_button('dashboard.overview') }}
+        </div>
     </div>
 
     {% include 'dashboard/_view_switcher.html' %}

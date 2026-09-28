@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}HSE — Schedule{% endblock %}
 
@@ -12,6 +13,7 @@
                 <div class="hse-header">
                     <h1 class="hse-title">Schedule</h1>
                     <div class="hse-header-actions">
+                        {{ help_button('hse.schedule') }}
                         <span class="hse-month-chip">
                             {{ count_live }} schedule{{ '' if count_live == 1 else 's' }}
                             {%- if count_overdue %} &middot; {{ count_overdue }} overdue{% endif %}

@@ -1,3 +1,4 @@
+{% from '_shared_macros.html' import help_button %}
 {# Dashboard panels. Included by dashboard.html and also rendered alone by the
    dashboard-panels fragment route for SSE refresh, so it defines its own
    macros. #}
@@ -14,7 +15,10 @@
 
 {# ── header ── #}
 <header class="cs-dash-head">
-  <h1 class="cs-dash-title">Dashboard</h1>
+  <div class="cs-dash-head-title">
+    <h1 class="cs-dash-title">Dashboard</h1>
+    {{ help_button('cs.dashboard') }}
+  </div>
   <span class="cs-dash-live"><span class="cs-dash-live-dot"></span>Live · {{ today.strftime('%a') }} {{ today.day }} {{ today.strftime('%b') }}</span>
 </header>
 

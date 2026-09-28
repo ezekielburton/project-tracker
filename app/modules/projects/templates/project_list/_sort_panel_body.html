@@ -1,3 +1,4 @@
+{% from '_shared_macros.html' import help_button %}
 {#
    app/modules/projects/templates/project_list/_sort_panel_body.html
    ───────────────────────────────────────────────────────────────
@@ -9,7 +10,10 @@
 #}
 <div class="sort-panel-header">
     <span class="sort-panel-title">Sort</span>
-    <button type="button" class="sort-clear-all" id="sort-clear-all">Clear</button>
+    <div class="filter-panel-header-actions">
+        {{ help_button('projects.filters') }}
+        <button type="button" class="sort-clear-all" id="sort-clear-all">Clear</button>
+    </div>
 </div>
 <div class="project-sort-panel-columns">
     <div class="project-sort-panel-col">

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}HSE — {{ reg.label }}{% endblock %}
 
@@ -14,6 +15,7 @@
                 <div class="hse-header">
                     <h1 class="hse-title">{{ reg.label }}</h1>
                     <div class="hse-header-actions">
+                        {{ help_button('hse.registers') }}
                         {# Filing needs manage_hse; the endpoints 403 without it too. #}
                         {% if can('manage_hse', effective_user) %}
                         <button type="button" class="hse-btn hse-btn--primary mobile-primary"

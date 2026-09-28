@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
 
 {% block title %}Client Servicing{% endblock %}
 
@@ -12,6 +13,10 @@
         {% endwith %}
         <div class="module-main">
             <div class="client-servicing-page">
+                <div class="cs-page-head">
+                    <h1 class="cs-page-title">Table</h1>
+                    {{ help_button('cs.table') }}
+                </div>
                 {# Cancelled projects waiting to be closed out. #}
                 {% include 'client_servicing/_close_strip.html' %}
                 {# Client-side search + filter (client_servicing.js). Kept outside

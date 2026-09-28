@@ -26,7 +26,7 @@ HELP_KEY_GROUPS = [
         ('projects.submissions', 'Submitting a draft for review'),
         ('projects.preproduction', 'Pre-production'),
         ('projects.flags', 'Raising a flag'),
-        ('projects.notes', 'Notes and chat'),
+        ('projects.notes', 'Site visits'),
     ]),
     ('Client Servicing', [
         ('cs.table', 'The CS table, column by column'),
