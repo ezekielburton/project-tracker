@@ -10,7 +10,7 @@ ships as a patch.
   service and stock flags, and this week at a glance.
 - **Statistics** — what happened on site over a month, three months or a
   year, against the period before: incidents, inspections, fleet, machines,
-  stores and training.
+  stores, training and spend.
   Weekly and monthly reports print the same figures on A4, with the incident
   log and what needs acting on.
 - **Daily log** — what he finds on his daily rounds, open until resolved.

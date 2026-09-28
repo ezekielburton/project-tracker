@@ -6,14 +6,17 @@ read the same view model.
 """
 
 from datetime import date
+from decimal import Decimal
 
 from app.modules.hse.lib.computed import next_due
 from app.modules.hse.lib.flags import as_number
-from app.modules.hse.lib.metrics import parse_money, training_delivered
+from app.modules.hse.lib.metrics import (
+    parse_money, spend_by_area, spend_of, training_delivered,
+)
 from app.modules.hse.lib.performance import delta, trend_months
 from app.modules.hse.lib.registers import BY_KEY, counts_as_done
 from app.modules.hse.lib.schedule import add_months
-from app.modules.hse.lib.spend import amount_text
+from app.modules.hse.lib.spend import aed, amount_text, area_rows
 from app.modules.hse.lib.vocab import OPEN_STATUSES
 
 
@@ -311,6 +314,46 @@ def training(entries, window):
     }
 
 
+# --- spend ------------------------------------------------------------------
+
+def _spent(rows, start, end):
+    return sum((spend_of(r) for r in rows
+                if r.entry_date is not None and start <= r.entry_date <= end), Decimal(0))
+
+
+def spend(rows, window):
+    """Spend in the window against the one before, by area, and month by
+    month for the chart's twelve months beside the same month a year
+    earlier. `rows` come from query.spend_entries(), like the Overview's.
+    Chart values are AED thousands so the axis labels stay short."""
+    now = _spent(rows, window['start'], window['end'])
+    before = _spent(rows, window['prev_start'], window['prev_end'])
+    series = []
+    for month in trend_months(window['end']):
+        year_ago = (add_months(month['start'], -12), add_months(month['end'], -12))
+        series.append({
+            'label': month['label'],
+            'spend': float(_spent(rows, month['start'], month['end'])) / 1000,
+            'before': float(_spent(rows, *year_ago)) / 1000,
+        })
+    split = spend_by_area(rows, window['start'], window['end'])
+    areas = area_rows(split)
+    ranked_areas = sorted(zip(split['areas'], areas), key=lambda pair: -pair[0]['amount'])
+    return {
+        'total': aed(now),
+        'previous': aed(before),
+        # Whole dirhams on the tile so the figure fits; neither more nor less
+        # spend is better, so it shows no verdict.
+        'tile': {'label': 'Spend', 'value': aed(round(now), unit=False), 'unit': 'AED',
+                 'delta': {'improved': None, 'from': aed(round(before), unit=False),
+                           'neutral': True}},
+        'areas': areas,
+        # The biggest three, for the reports' Spend card.
+        'top': [row for raw, row in ranked_areas if raw['amount']][:3],
+        'series': series,
+    }
+
+
 # --- the page ---------------------------------------------------------------
 
 def year_choices(today=None, first_year=None):
@@ -320,10 +363,12 @@ def year_choices(today=None, first_year=None):
     return list(range(today.year, first - 1, -1))
 
 
-def view_model(entries, window, today=None):
-    """Everything the page draws. `entries` must reach back to load_from()."""
+def view_model(entries, window, today=None, spend_rows=()):
+    """Everything the page draws. `entries` must reach back to load_from();
+    `spend_rows` are query.spend_entries()."""
     today = today or date.today()
     return {
+        'spend': spend(spend_rows, window),
         'window': window,
         'tiles': tiles(entries, window, today),
         'series': incident_series(entries, window['end']),

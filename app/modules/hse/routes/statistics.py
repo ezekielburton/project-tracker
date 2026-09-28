@@ -16,7 +16,7 @@ from app.modules.hse.lib import statistics as stats
 from app.modules.hse.lib.flags import load_flags, rail_counts
 from app.modules.hse.lib.overview import this_week
 from app.modules.hse.lib.query import (
-    dashboard_entries, first_entry_year, statistics_entries,
+    dashboard_entries, first_entry_year, spend_entries, statistics_entries,
 )
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.models import HseSchedule
@@ -32,7 +32,7 @@ def statistics():
     window = stats.period(request.args.get('period'),
                           int(raw_year) if raw_year.isdigit() else None, today)
     entries = statistics_entries(stats.load_from(window))
-    model = stats.view_model(entries, window, today)
+    model = stats.view_model(entries, window, today, spend_entries())
 
     def link(**args):
         return url_for('hse.statistics', **{k: v for k, v in args.items() if v})
@@ -42,6 +42,10 @@ def statistics():
         **model,
         bars=charts.grouped_bars(model['series'], keys=('incidents', 'near'),
                                  aria='Incidents and near misses, by month'),
+        spend_bars=charts.grouped_bars(model['spend']['series'], width=720, height=260,
+                                       keys=('spend', 'before'),
+                                       aria='Spend by month in AED thousands, '
+                                            'beside the same month a year earlier'),
         periods=[{'label': label, 'url': link(period=key),
                   'on': window['view'] == key}
                  for key, (label, _) in stats.PERIODS.items() if key != 'year'],
@@ -64,7 +68,7 @@ def statistics_report(kind):
 
     entries = statistics_entries(stats.load_from(window))
     schedules = HseSchedule.query.options(selectinload(HseSchedule.assets)).all()
-    model = stats.view_model(entries, window, today)
+    model = stats.view_model(entries, window, today, spend_entries())
 
     return render_template(
         'hse/statistics_report.html',

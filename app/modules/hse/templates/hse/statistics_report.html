@@ -221,6 +221,14 @@
             {{ line('People trained', training.attendees) }}
             {{ line('Toolbox talks held', training.talks) }}
         </div>
+        <div class="rp-card">
+            <h3 class="rp-h3">Spend (AED)</h3>
+            {{ line('This ' ~ kind, spend.total.replace('AED ', '')) }}
+            {{ line('The ' ~ kind ~ ' before', spend.previous.replace('AED ', '')) }}
+            {% for a in spend.top %}
+            {{ line('· ' ~ a.label, a.amount.replace('AED ', '')) }}
+            {% endfor %}
+        </div>
     </div>
 
     <p class="rp-method">

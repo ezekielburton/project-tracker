@@ -166,30 +166,6 @@
         min-height: 40px;
     }
 
-    /* A section with sub-pages carries a chevron: down while its list is
-       closed, up while open. Tapping it opens the list (module_rail.js). */
-    .module-rail-item--parent::after {
-        content: '';
-        flex-shrink: 0;
-        width: 7px;
-        height: 7px;
-        margin: 0 var(--space-1) 3px var(--space-3);
-        border-right: 2px solid currentColor;
-        border-bottom: 2px solid currentColor;
-        transform: rotate(45deg);
-        opacity: 0.6;
-    }
-
-    /* No count to push it right, so it pushes itself. */
-    .module-rail-item--parent:not(:has(.module-rail-count))::after {
-        margin-left: auto;
-    }
-
-    .module-rail-item--parent:not(:has(+ .module-rail-children--closed))::after {
-        margin-bottom: -3px;
-        transform: rotate(-135deg);
-    }
-
     /* Top of the rail drawer: which module this is (tap to switch), and close. */
     .module-rail-mobile {
         display: flex;

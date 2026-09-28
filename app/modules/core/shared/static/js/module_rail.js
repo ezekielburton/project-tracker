@@ -4,13 +4,14 @@
 // Loaded once from base.html; delegated on document, with a guard so it
 // never binds twice. A disabled item is a <span> with no href and stays inert.
 //
-// Phones: a section with sub-pages toggles its list instead of navigating;
-// mobile_menu.js keeps the menu open for it.
+// A section with sub-pages opens its list instead of loading a page, and
+// closes any other open list, so one section is open at a time.
+// mobile_menu.js keeps the phone menu open for it.
 (function () {
     if (window._moduleRailNavWired) return;
     window._moduleRailNavWired = true;
 
-    var phone = window.matchMedia('(max-width: 48em)');
+    var CLOSED = 'module-rail-children--closed';
 
     document.addEventListener('click', function (e) {
         var item = e.target.closest('.module-rail-item');
@@ -18,13 +19,18 @@
         // Modified and non-left clicks keep the browser's new tab/window behaviour.
         if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 
-        // On a wide screen the section link goes straight to its first page.
-        if (phone.matches && item.classList.contains('module-rail-item--parent')) {
+        if (item.classList.contains('module-rail-item--parent')) {
             e.preventDefault();
             var list = item.nextElementSibling;
-            if (list && list.classList.contains('module-rail-children')) {
-                list.classList.toggle('module-rail-children--closed');
+            if (!list || !list.classList.contains('module-rail-children')) return;
+            var opening = list.classList.contains(CLOSED);
+            var nav = item.closest('.module-rail-nav');
+            if (opening && nav) {
+                nav.querySelectorAll('.module-rail-children').forEach(function (other) {
+                    other.classList.add(CLOSED);
+                });
             }
+            list.classList.toggle(CLOSED, !opening);
             return;
         }
 

@@ -613,6 +613,40 @@ status pill. */
     display: none;
 }
 
+/* A section with sub-pages carries a chevron: down while its list is
+   closed, up while open. Clicking it opens the list (module_rail.js). */
+.module-rail-item--parent::after {
+    content: '';
+    display: inline-block;
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    margin: 0 var(--space-1) 3px var(--space-2);
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    opacity: 0.6;
+}
+
+/* No count to push it right, so it pushes itself. */
+.module-rail-item--parent:not(:has(.module-rail-count))::after {
+    margin-left: auto;
+}
+
+.module-rail-item--parent:not(:has(+ .module-rail-children--closed))::after {
+    margin-bottom: -3px;
+    transform: rotate(-135deg);
+}
+
+@media (max-width: 48em) {
+    .module-rail-item--parent::after {
+        width: 7px;
+        height: 7px;
+        margin-left: var(--space-3);
+        border-width: 2px;
+    }
+}
+
 .module-rail-subitem {
     display: flex;
     align-items: center;

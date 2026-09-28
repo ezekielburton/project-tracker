@@ -13,10 +13,10 @@
         window.watchFillHeight('.hse-inner--fill', '--fill-height');
     }
 
-    // On a phone the performance charts scroll sideways (hse.css); start
-    // them at the latest month.
+    // On a phone the charts scroll sideways (hse.css); start them at the
+    // latest month.
     if (window.matchMedia('(max-width: 48em)').matches) {
-        document.querySelectorAll('.hse-pf-card').forEach(function (card) {
+        document.querySelectorAll('.hse-pf-card, .hse-st-spend-chart').forEach(function (card) {
             if (card.querySelector('.hse-pf-svg')) { card.scrollLeft = card.scrollWidth; }
         });
     }

@@ -222,3 +222,30 @@ def test_the_page_needs_view_hse(app, client, db_session):
     with app.test_request_context():
         url = url_for('hse.statistics')
     assert client.get(url).status_code in (302, 403)
+
+
+# --- spend ------------------------------------------------------------------
+
+def test_spend_counts_the_window_against_the_one_before():
+    from app.modules.hse.lib.query import SpendRow
+    rows = [SpendRow('vehicle_service', date(2026, 9, 3), {'cost': '1,500'}),
+            SpendRow('machine_cost', date(2026, 9, 10), {'amount': '250.50'}),
+            SpendRow('vehicle_service', date(2026, 8, 4), {'cost': '900'}),
+            SpendRow('vehicle_service', date(2025, 9, 20), {'cost': '2000'})]
+    s = stats.spend(rows, _window())
+    assert (s['total'], s['previous']) == ('AED 1,750.50', 'AED 900')
+    assert s['tile']['value'] == '1,750' and s['tile']['delta'] == {
+        'improved': None, 'from': '900', 'neutral': True}, 'no better/worse for spend'
+    assert [a['label'] for a in s['top']] == ['Fleet', 'Machines']
+    sep = s['series'][-1]
+    assert sep['label'] == 'Sep' and sep['spend'] == 1.7505 and sep['before'] == 2.0
+
+
+def test_the_page_and_reports_show_spend(app, client, db_session):
+    _officer(app, client, db_session)
+    with app.test_request_context():
+        page = url_for('hse.statistics')
+        report = url_for('hse.statistics_report', kind='month')
+    html = client.get(page).get_data(as_text=True)
+    assert 'By month · AED thousands' in html and '>Spend<' in html
+    assert 'Spend (AED)' in client.get(report).get_data(as_text=True)

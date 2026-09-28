@@ -2183,6 +2183,19 @@ body.hse-modal-open {
 
 .hse-pf-bar--incidents, .hse-pf-sw--incidents { fill: var(--hse-s1); background: var(--hse-s1); }
 .hse-pf-bar--near, .hse-pf-sw--near { fill: var(--hse-s2); background: var(--hse-s2); }
+.hse-pf-bar--spend, .hse-pf-sw--spend { fill: var(--hse-s1); background: var(--hse-s1); }
+.hse-pf-bar--before, .hse-pf-sw--before { fill: var(--hse-s2); background: var(--hse-s2); }
+
+/* Spend: the monthly chart beside the split by area. */
+.hse-st-spend {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+}
+
+.hse-st-spend-chart .hse-pf-cardhead { margin-bottom: var(--space-2); }
+.hse-st-spend-chart .hse-spend-subhead { margin: 0; }
 
 .hse-st-body {
     flex: 1 0 auto;
@@ -2226,6 +2239,11 @@ body.hse-modal-open {
     margin-right: var(--space-2);
 }
 
+/* Below this the chart would shrink its labels too far; stack instead. */
+@media (max-width: 1300px) {
+    .hse-st-spend { grid-template-columns: 1fr; gap: var(--space-4); }
+}
+
 @media (max-width: 900px) {
     .hse-st-cols { grid-template-columns: 1fr; gap: var(--space-3); }
 }
@@ -2233,6 +2251,9 @@ body.hse-modal-open {
 @media (max-width: 48em) {
     .hse-st-grid { grid-template-columns: 1fr; }
     .hse-st-tiles .hse-pf-tile { flex: 1 1 130px; }
+    /* The spend card holds more than its chart: only the chart scrolls. */
+    .hse-st-body .hse-pf-card:has(.hse-st-spend) { overflow-x: visible; }
+    .hse-st-spend-chart { overflow-x: auto; }
     /* Five or more options: scroll sideways rather than wrap the header. */
     .hse-st-periods { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; }
     .hse-st-periods .hse-pf-toggle-opt { white-space: nowrap; }

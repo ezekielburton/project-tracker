@@ -46,12 +46,10 @@ def _figures(summary, today):
     ]
 
 
-def spend_panel(entries, today=None):
-    """The Overview panel: three figures, then this year's spend by area.
-    An area with more than one cost register lists its registers under it."""
-    today = today or date.today()
-    split = spend_by_area(entries, date(today.year, 1, 1), date(today.year, 12, 31))
-    areas = [{
+def area_rows(split):
+    """spend_by_area() for display. An area with more than one cost register
+    lists its registers under it. Shared by the Overview and Statistics."""
+    return [{
         'label': GROUP_LABELS.get(area['group'], area['group'].title()),
         'amount': aed(area['amount']),
         'share': area['share'],
@@ -59,9 +57,15 @@ def spend_panel(entries, today=None):
                        'share': r['share']}
                       for r in area['registers']] if len(area['registers']) > 1 else [],
     } for area in split['areas']]
+
+
+def spend_panel(entries, today=None):
+    """The Overview panel: three figures, then this year's spend by area."""
+    today = today or date.today()
+    split = spend_by_area(entries, date(today.year, 1, 1), date(today.year, 12, 31))
     return {
         'figures': _figures(spend_summary(entries, today), today),
-        'areas': areas,
+        'areas': area_rows(split),
         'year': today.year,
         'total': aed(split['total']),
     }
