@@ -137,7 +137,7 @@
 }
 
 .wiki-article-header h1 {
-    font-family: var(--font-heading);
+    font-family: var(--font-headline);
     font-size: 1.6rem;
     color: var(--black);
     margin: 0 0 0.25rem;
@@ -159,31 +159,6 @@
     color: var(--gray-444444);
     margin: 0 0 0.75rem;
     white-space: pre-line;
-}
-
-.wiki-block-richtext {
-    font-size: 0.9rem;
-    line-height: 1.7;
-    color: var(--gray-444444);
-    margin: 0 0 0.75rem;
-}
-
-.wiki-block-richtext strong {
-    font-weight: 700;
-}
-
-.wiki-block-richtext em {
-    font-style: italic;
-}
-
-.wiki-block-richtext ul,
-.wiki-block-richtext ol {
-    padding-left: 1.5rem;
-    margin: 0.4rem 0;
-}
-
-.wiki-block-richtext li {
-    margin-bottom: 0.25rem;
 }
 
 .wiki-block-h3 {
@@ -546,8 +521,7 @@ ol.wiki-block-list {
 
 /* ── Article editor: meta row ────────────────────────────────────────────── */
 
-/* Slimmer than .form-card, and full width so it lines up with the editor
-   below it rather than stopping short at 560px. */
+/* Slimmer than .form-card, and full width to line up with the editor below. */
 .wiki-editor-meta {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -614,8 +588,7 @@ ol.wiki-block-list {
     margin-top: 0.4rem;
 }
 
-/* A radio dot in the first column, label and description stacked beside it,
-   so it reads as a choice rather than a row of text. */
+/* Radio dot in the first column; label and description stacked beside it. */
 .wiki-template-option {
     align-items: start;
     background: var(--surface);
@@ -867,12 +840,6 @@ ol.wiki-block-list {
 /* ── Help tray ───────────────────────────────────────────────────────────── */
 
 .wiki-help {
-    padding: 1.5rem 1.75rem 1.75rem;
-}
-
-/* In the tray the article sits right against the panel edge, so it carries its
-   own gutter — scoped to the panel so page-level styles can't out-rank it. */
-.tray-panel__body .wiki-help {
     padding: 1.5rem 1.75rem 1.75rem;
 }
 
