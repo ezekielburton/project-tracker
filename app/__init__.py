@@ -118,6 +118,7 @@ def create_app(config=Config):
     from app.modules.hse.routes import calendar as hse_calendar  # registers the calendar month/agenda/day on hse_bp
     from app.modules.hse.routes import overview as hse_overview  # registers the module's front page on hse_bp
     from app.modules.hse.routes import performance as hse_performance  # registers My performance and its report on hse_bp
+    from app.modules.hse.routes import statistics as hse_statistics  # registers the Statistics page on hse_bp
     from app.modules.hse.routes.blueprint import hse_bp
 
 

@@ -35,7 +35,7 @@ def row(register, entry_date, **data):
 def test_the_cost_registers_are_the_ones_declaring_money():
     assert [r.key for r in money_registers()] == [
         'vehicle_service', 'machine_maintenance', 'machine_preventive',
-        'machine_cost', 'training_expenses']
+        'machine_cost', 'material_request', 'training_expenses']
 
 
 def test_money_fields_live_in_the_json_column():
@@ -114,7 +114,8 @@ AREA_ROWS = [
     row('machine_maintenance', date(2026, 4, 1), cost=2000),
     row('machine_cost', date(2026, 5, 1), amount=4000),
     row('machine_cost', date(2025, 5, 1), amount=99999),   # last year
-    row('training_expenses', date(2026, 6, 1), amount=3000),
+    row('material_request', date(2026, 7, 1), cost=1000),
+    row('training_expenses', date(2026, 6, 1), amount=2000),
 ]
 
 
@@ -122,10 +123,11 @@ def test_spend_by_area_splits_each_area_by_register():
     result = spend_by_area(AREA_ROWS, date(2026, 1, 1), date(2026, 12, 31))
     assert result['total'] == Decimal('10000')
     areas = {a['group']: a for a in result['areas']}
-    assert list(areas) == ['fleet', 'machines', 'training']
+    assert list(areas) == ['fleet', 'machines', 'stores', 'training']
     assert (areas['fleet']['amount'], areas['fleet']['share']) == (1000, 10)
     assert (areas['machines']['amount'], areas['machines']['share']) == (6000, 60)
-    assert (areas['training']['amount'], areas['training']['share']) == (3000, 30)
+    assert (areas['stores']['amount'], areas['stores']['share']) == (1000, 10)
+    assert (areas['training']['amount'], areas['training']['share']) == (2000, 20)
     machines = {r['key']: (r['amount'], r['share']) for r in areas['machines']['registers']}
     assert machines == {'machine_maintenance': (2000, 20),
                         'machine_preventive': (0, 0),
@@ -136,7 +138,7 @@ def test_an_empty_year_lists_every_area_at_zero():
     result = spend_by_area([], date(2026, 1, 1), date(2026, 12, 31))
     assert result['total'] == 0
     assert [(a['group'], a['share']) for a in result['areas']] == [
-        ('fleet', 0), ('machines', 0), ('training', 0)]
+        ('fleet', 0), ('machines', 0), ('stores', 0), ('training', 0)]
 
 
 def test_the_panel_lists_registers_only_under_a_split_area():

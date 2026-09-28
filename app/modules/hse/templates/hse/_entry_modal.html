@@ -9,13 +9,17 @@
      data-method="{{ 'PATCH' if entry else 'POST' }}"
      {# Set only when opened from a planned occurrence; the server re-checks it. #}
      data-schedule-id="{{ occurrence.schedule_id if occurrence else '' }}"
-     data-occurrence-date="{{ occurrence.date if occurrence else '' }}">
+     data-occurrence-date="{{ occurrence.date if occurrence else '' }}"
+     {%- if reg.repeat_fields and not entry %}
+     {# "Save & add another" reopens this form with these fields carried over. #}
+     data-new-url="{{ url_for('hse.new_entry_form', register_key=reg.key) }}"
+     data-repeat-fields="{{ reg.repeat_fields | join(',') }}"{% endif %}>
     <div class="modal-box hse-modal-box">
 
         <div class="hse-modal-head">
             <div>
                 <div class="modal-title">{{ 'Edit ' ~ entry.ref if entry else 'New entry' }}</div>
-                <div class="hse-modal-sub">{{ reg.label }} register</div>
+                <div class="hse-modal-sub">{{ reg.label }}{{ '' if reg.label.lower().endswith('register') else ' register' }}</div>
             </div>
             <button type="button" class="modal-close" id="hse-modal-close" aria-label="Close">&times;</button>
         </div>
@@ -34,7 +38,8 @@
             <div class="form-group hse-field{{ ' hse-field--wide' if f.type == 'textarea' else '' }}"
                  data-field="{{ f.name }}" data-type="{{ f.type }}">
                 <label for="hse-f-{{ f.name }}">
-                    {{ f.label }}{% if f.required %}<span class="hse-required">*</span>{% endif %}
+                    {{ f.label }}{% if f.required %}<span class="hse-required">*</span>
+                    {%- elif f.required_when %}<span class="hse-required" data-required-when="{{ f.required_when }}"{{ '' if f.required_now else ' hidden' }}>*</span>{% endif %}
                 </label>
 
                 {% if f.type in ('severity', 'event_class') %}
@@ -86,6 +91,11 @@
                 </span>
                 {% endif %}
 
+                {# Read-only: computed from the date and this frequency. #}
+                {% if next_due_note and f.name == reg.interval_field %}
+                <span class="hse-hint hse-next-due">{{ next_due_note }}</span>
+                {% endif %}
+
                 {% if f.type == 'choice' %}
                 <div class="hse-quick-add" data-quick-for="{{ f.name }}" data-kind="{{ f.choices_kind }}"
                      data-stores="{{ 'label' if f.stores_label else 'id' }}" hidden>
@@ -120,6 +130,31 @@
             </div>
             {% endfor %}
             </div>
+
+            {# Read-only; movements are added from the register row. #}
+            {% if moves is not none %}
+            <div class="form-group hse-moves">
+                <div class="hse-moves-head">
+                    <label>Stock movements</label>
+                    <span class="hse-moves-balance">Balance <strong class="mono">{{ balance }}</strong></span>
+                </div>
+                {% if moves %}
+                <div class="hse-moves-list">
+                    {% for m in moves %}
+                    <div class="hse-move hse-move--{{ m.kind }}">
+                        <span class="hse-move-date">{{ m.date.strftime('%d %b %Y') if m.date else '—' }}</span>
+                        <span class="hse-move-kind">{{ m.label }}</span>
+                        <span class="hse-move-qty mono">{{ '+' if m.kind == 'received' else ('−' if m.kind == 'issued' else '') }}{{ m.qty }}</span>
+                        <span class="hse-move-note">{{ m.note or '—' }}</span>
+                        <span class="hse-move-by">{{ m.by or '—' }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="hse-hint">No movements yet. Use + Received, − Issued or Count on the register row.</p>
+                {% endif %}
+            </div>
+            {% endif %}
 
             {# Attachments need a saved entry; creating one reopens this overlay in edit mode. #}
             {% if entry %}
@@ -161,6 +196,10 @@
             <span class="hse-modal-note" id="hse-modal-note"></span>
             <span class="hse-modal-actions">
                 <button type="button" class="hse-btn" id="hse-modal-cancel">Cancel</button>
+                {% if reg.repeat_fields and not entry %}
+                <button type="button" class="hse-btn" id="hse-modal-save-another"
+                        {{ 'disabled' if blocked_by else '' }}>Save &amp; add another</button>
+                {% endif %}
                 <button type="button" class="hse-btn hse-btn--primary" id="hse-modal-save"
                         {{ 'disabled' if blocked_by else '' }}>
                     {{ 'Save changes' if entry else 'Save entry' }}

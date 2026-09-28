@@ -8,7 +8,7 @@ paging both live here so chip counts and rows come from the same set.
 from collections import namedtuple
 from datetime import date, timedelta
 
-from sqlalchemy import Text, cast, extract, func, or_
+from sqlalchemy import Text, and_, cast, extract, func, or_
 from sqlalchemy.orm import aliased, selectinload
 
 from app.modules.hse.lib.computed import expiry_status
@@ -27,7 +27,8 @@ PAGE_SIZE = 25
 DASHBOARD_LOOKBACK_DAYS = 400
 
 
-def _eager(query):
+def eager(query):
+    """The query with every related record the tables and titles read."""
     return query.options(
         selectinload(HseEntry.location),
         selectinload(HseEntry.department),
@@ -40,8 +41,24 @@ def _eager(query):
 
 
 def empty_filters():
-    """The no-filter state, so callers never have to remember the keys."""
-    return {'status': None, 'severity': None, 'year': None, 'search': None}
+    """The no-filter state, so callers never have to remember the keys.
+    `flag` is a flag chip's value; `ids` the entries it keeps."""
+    return {'status': None, 'severity': None, 'year': None, 'search': None,
+            'flag': None, 'ids': None}
+
+
+def _only(query, ids):
+    """Rows among `ids`, when a flag chip is on."""
+    if ids is None:
+        return query
+    return query.filter(HseEntry.id.in_(list(ids) or [0]))
+
+
+def count_matching(register_key, filters, ids=None):
+    """Rows the non-status filters match, optionally only among `ids`: the
+    All and flag chip counts on a register with flag chips."""
+    query = _only(_matching(register_key, filters), ids)
+    return query.with_entities(func.count(HseEntry.id)).scalar() or 0
 
 
 def _searched(query, term):
@@ -109,7 +126,8 @@ def page_of(register_key, filters, page=1, today=None):
     """One page of a register, with its chip counts. Stored statuses count
     and page in SQL. Expiry statuses are computed, so that branch loads all
     matching rows and works in Python; expiry registers hold documents and
-    issued PPE, so the sets stay small."""
+    issued PPE, so the sets stay small. A grouped register also returns
+    'groups' and pages whole groups."""
     from app.modules.hse.lib.registers import register
 
     reg = register(register_key)
@@ -117,7 +135,7 @@ def page_of(register_key, filters, page=1, today=None):
     status = filters.get('status')
 
     if reg.status_source == 'expiry':
-        rows = _ordered(_eager(matching)).all()
+        rows = _ordered(eager(matching)).all()
         counts = {}
         for row in rows:
             label = expiry_status(row, today)
@@ -129,6 +147,8 @@ def page_of(register_key, filters, page=1, today=None):
         if status:
             rows = [r for r in rows if expiry_status(r, today) == status]
         total = len(rows)
+        if reg.group_by:
+            return _grouped_page(reg, rows, page, counts, total_all)
         page_rows = rows[(page - 1) * PAGE_SIZE:page * PAGE_SIZE]
     else:
         counts = dict(matching
@@ -137,8 +157,9 @@ def page_of(register_key, filters, page=1, today=None):
         counts.pop(None, None)
         total_all = sum(counts.values())
         query = matching.filter(HseEntry.status == status) if status else matching
+        query = _only(query, filters.get('ids'))
         total = query.with_entities(func.count(HseEntry.id)).scalar() or 0
-        page_rows = (_ordered(_eager(query))
+        page_rows = (_ordered(eager(query))
                      .limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE).all())
 
     pages = max(1, -(-total // PAGE_SIZE))  # ceiling division
@@ -152,6 +173,69 @@ def page_of(register_key, filters, page=1, today=None):
         'first': 0 if not total else (page - 1) * PAGE_SIZE + 1,
         'last': min(page * PAGE_SIZE, total),
     }
+
+
+def _group_label(entry, field):
+    """The name behind a group_by field: the related record's name or
+    label, or the JSONB value."""
+    if field.column is None:
+        return (entry.data or {}).get(field.name)
+    related = getattr(entry, field.column[:-len('_id')], None)
+    return getattr(related, 'name', None) or getattr(related, 'label', None)
+
+
+def groups_of(reg, rows):
+    """Rows grouped by the register's group_by field: groups A-Z by name,
+    rows in their existing order, anything ungrouped last."""
+    field = next(f for f in reg.fields if f.name == reg.group_by)
+    groups = {}
+    for row in rows:
+        key = (getattr(row, field.column) if field.column
+               else (row.data or {}).get(field.name))
+        groups.setdefault(key, []).append(row)
+    return sorted(groups.values(), key=lambda g: (
+        _group_label(g[0], field) is None,
+        (_group_label(g[0], field) or '').casefold()))
+
+
+def _grouped_page(reg, rows, page, counts, total_all):
+    """page_of for a grouped register. A page takes whole groups until it
+    holds PAGE_SIZE rows or more, so one group never splits across pages."""
+    pages, current = [], []
+    for group in groups_of(reg, rows):
+        current.append(group)
+        if sum(len(g) for g in current) >= PAGE_SIZE:
+            pages.append(current)
+            current = []
+    if current:
+        pages.append(current)
+
+    groups = pages[page - 1] if page <= len(pages) else []
+    before = sum(len(g) for p in pages[:page - 1] for g in p)
+    shown = sum(len(g) for g in groups)
+    return {
+        'rows': [r for g in groups for r in g],
+        'groups': groups,
+        'counts': counts,
+        'total': len(rows),
+        'total_all': total_all,
+        'page': page,
+        'pages': max(1, len(pages)),
+        'first': before + 1 if shown else 0,
+        'last': before + shown,
+    }
+
+
+def latest_ids(register_key):
+    """Ids of the latest entry per asset in a register: the ones with a
+    next due date."""
+    rows = (HseEntry.query
+            .with_entities(HseEntry.id)
+            .filter(HseEntry.register == register_key, HseEntry.asset_id.isnot(None))
+            .distinct(HseEntry.asset_id)
+            .order_by(HseEntry.asset_id, HseEntry.entry_date.desc(), HseEntry.id.desc())
+            .all())
+    return {r[0] for r in rows}
 
 
 def open_counts_by_register(today=None):
@@ -225,6 +309,8 @@ def spend_entries(register_keys=None, filters=None, today=None):
     by_expiry = bool(status) and reg.status_source == 'expiry'
     if status and not by_expiry:
         query = query.filter(HseEntry.status == status)
+    if filters:
+        query = _only(query, filters.get('ids'))
 
     columns = [HseEntry.register, HseEntry.entry_date]
     columns += [HseEntry.data[name].astext for name in names]
@@ -241,6 +327,29 @@ def spend_entries(register_keys=None, filters=None, today=None):
     return out
 
 
+# Read by Statistics whatever their date: stock lines (their movements carry
+# the dates), every PM job (on time is judged against the one before), every
+# LTI (days since the last) and unclosed inspections (still open).
+_STATISTICS_ALWAYS = ('materials_in_stock', 'machine_preventive', 'lost_time_injury')
+_INSPECTIONS = ('general_inspection', 'vehicle_inspection', 'forklift_inspection')
+
+
+def statistics_entries(since):
+    """Entries dated from `since`, plus the undated needs above."""
+    return (eager(HseEntry.query)
+            .filter(or_(HseEntry.entry_date >= since,
+                        HseEntry.register.in_(_STATISTICS_ALWAYS),
+                        and_(HseEntry.register.in_(_INSPECTIONS),
+                             HseEntry.closed_at.is_(None))))
+            .all())
+
+
+def first_entry_year():
+    """The year of the oldest entry, or None when there are none."""
+    first = HseEntry.query.with_entities(func.min(HseEntry.entry_date)).scalar()
+    return first.year if first else None
+
+
 def dashboard_entries(today=None, lookback=DASHBOARD_LOOKBACK_DAYS):
     """The entry set both the Overview and My performance read, so their
     metrics use the same window. Entries dated within the lookback, plus any
@@ -248,7 +357,7 @@ def dashboard_entries(today=None, lookback=DASHBOARD_LOOKBACK_DAYS):
     count)."""
     today = today or date.today()
     cutoff = today - timedelta(days=lookback)
-    return (_eager(HseEntry.query)
+    return (eager(HseEntry.query)
             .options(selectinload(HseEntry.waiting_on))
             .filter(or_(HseEntry.entry_date >= cutoff,
                         HseEntry.due_at.isnot(None)))

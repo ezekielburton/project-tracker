@@ -1,6 +1,7 @@
 // HSE register page: auto-submits the server-side filter bar (on select
-// change or after typing stops), shows the row hover card and remembers
-// the spend strip open. The page still works without this file.
+// change or after typing stops), shows the row hover card, remembers the
+// spend strip open and records stock movements. The page still works
+// without this file, except for stock movements.
 //
 // No DOMContentLoaded gate: page scripts re-run on every SPA swap and that
 // event never fires again.
@@ -139,7 +140,201 @@
         });
     }
 
+    // Stock movement popover: + Received, − Issued and Count on a stock
+    // line's row. Built on open and removed on close, placed by
+    // PopoverPosition. Document-delegated and guarded, like the hover card.
+    function initMoves() {
+        // A popover left open by the previous SPA page goes with it.
+        if (window._hseMovesClose) window._hseMovesClose();
+        if (window._hseMovesWired) return;
+        window._hseMovesWired = true;
+
+        var TITLES = { received: 'Stock received', issued: 'Stock issued', count: 'Stock count' };
+        var QTY_LABELS = { received: 'Quantity in', issued: 'Quantity out', count: 'Counted on hand' };
+        var FIELD_NAMES = { date: 'Date', qty: 'Quantity', note: 'Note', kind: 'Movement' };
+        var pop = null;
+
+        function isoToday() {
+            var d = new Date();
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+                '-' + String(d.getDate()).padStart(2, '0');
+        }
+
+        function close() {
+            if (!pop) return;
+            pop.remove();
+            pop = null;
+        }
+        window._hseMovesClose = close;
+
+        function field(name, label, input) {
+            var wrap = document.createElement('label');
+            wrap.className = 'hse-move-pop-field hse-move-pop-field--' + name;
+            var text = document.createElement('span');
+            text.className = 'hse-move-pop-label';
+            text.textContent = label;
+            input.name = name;
+            input.className = 'form-input';
+            wrap.appendChild(text);
+            wrap.appendChild(input);
+            return wrap;
+        }
+
+        function build(button) {
+            var kind = button.getAttribute('data-move');
+            var row = button.closest('tr');
+            var el = document.createElement('div');
+            el.className = 'hse-move-pop';
+            el.setAttribute('role', 'dialog');
+            el.setAttribute('aria-label', TITLES[kind]);
+
+            var head = document.createElement('div');
+            head.className = 'hse-move-pop-head';
+            var title = document.createElement('div');
+            title.className = 'hse-move-pop-title';
+            title.textContent = TITLES[kind];
+            var sub = document.createElement('div');
+            sub.className = 'hse-move-pop-sub';
+            var balance = row.querySelector('td[data-label="Balance"]');
+            sub.textContent = row.getAttribute('data-title') +
+                (balance ? ' · balance ' + balance.textContent.trim() : '');
+            head.appendChild(title);
+            head.appendChild(sub);
+
+            var date = document.createElement('input');
+            date.type = 'date';
+            date.value = isoToday();
+            date.max = date.value;
+            var qty = document.createElement('input');
+            qty.type = 'number';
+            qty.inputMode = 'numeric';
+            qty.step = '1';
+            qty.min = kind === 'count' ? '0' : '1';
+            var note = document.createElement('input');
+            note.type = 'text';
+            note.maxLength = 200;
+            note.placeholder = 'Optional';
+
+            var grid = document.createElement('div');
+            grid.className = 'hse-move-pop-grid';
+            grid.appendChild(field('date', 'Date', date));
+            grid.appendChild(field('qty', QTY_LABELS[kind], qty));
+            grid.appendChild(field('note', 'Note', note));
+
+            var error = document.createElement('div');
+            error.className = 'hse-error hse-move-pop-error';
+            error.hidden = true;
+
+            var foot = document.createElement('div');
+            foot.className = 'hse-move-pop-foot';
+            foot.innerHTML = '<button type="button" class="hse-btn" data-move-cancel>Cancel</button>' +
+                '<button type="button" class="hse-btn hse-btn--primary" data-move-save>Save</button>';
+
+            el.appendChild(head);
+            el.appendChild(grid);
+            el.appendChild(error);
+            el.appendChild(foot);
+            el._trigger = button;
+            el._kind = kind;
+            el._row = row;
+            el._url = button.closest('.hse-row-actions').getAttribute('data-move-url');
+            return el;
+        }
+
+        function open(button) {
+            close();
+            pop = build(button);
+            document.body.appendChild(pop);
+            window.PopoverPosition.place(pop, button);
+            pop.querySelector('input[name="qty"]').focus({ preventScroll: true });
+        }
+
+        function showErrors(errors) {
+            var lines = [];
+            pop.querySelectorAll('.hse-move-pop-field').forEach(function (wrap) {
+                var name = wrap.querySelector('input').name;
+                wrap.classList.toggle('has-error', Boolean(errors[name]));
+            });
+            Object.keys(errors).forEach(function (name) {
+                lines.push((FIELD_NAMES[name] || name) + ': ' + errors[name]);
+            });
+            var slot = pop.querySelector('.hse-move-pop-error');
+            slot.textContent = lines.join(' · ');
+            slot.hidden = false;
+        }
+
+        function save() {
+            var current = pop;
+            var button = current.querySelector('[data-move-save]');
+            var value = function (name) { return current.querySelector('input[name="' + name + '"]').value; };
+            button.disabled = true;
+            fetch(current._url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind: current._kind, date: value('date'),
+                                       qty: value('qty'), note: value('note') })
+            }).then(function (res) {
+                return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+            }).then(function (result) {
+                if (current !== pop) return;
+                button.disabled = false;
+                if (!result.ok) {
+                    showErrors(result.body.errors || { kind: result.body.error || 'Could not save.' });
+                    return;
+                }
+                // The balance cell is found by its column name (lib/table.py).
+                var cell = current._row.querySelector('td[data-label="Balance"]');
+                if (cell) {
+                    cell.textContent = result.body.balance_text;
+                    cell.classList.toggle('hse-low', result.body.low);
+                    if (result.body.low) cell.title = 'At or below the reorder level';
+                    else cell.removeAttribute('title');
+                    cell.classList.remove('is-updated');
+                    void cell.offsetWidth;  // restart the highlight
+                    cell.classList.add('is-updated');
+                }
+                close();
+            }).catch(function () {
+                if (current !== pop) return;
+                button.disabled = false;
+                showErrors({ kind: 'Could not reach the server.' });
+            });
+        }
+
+        document.addEventListener('click', function (e) {
+            var trigger = e.target.closest('.hse-row-actions [data-move]');
+            if (trigger) {
+                if (pop && pop._trigger === trigger) close();
+                else open(trigger);
+                return;
+            }
+            if (!pop) return;
+            if (e.target.closest('[data-move-save]')) { save(); return; }
+            if (e.target.closest('[data-move-cancel]') || !pop.contains(e.target)) close();
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (!pop) return;
+            if (e.key === 'Escape') close();
+            else if (e.key === 'Enter' && pop.contains(e.target) && e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                save();
+            }
+        });
+
+        // Follow the row while the table or page scrolls.
+        document.addEventListener('scroll', function () {
+            if (!pop) return;
+            if (pop._trigger.isConnected) window.PopoverPosition.place(pop, pop._trigger);
+            else close();
+        }, true);
+        window.addEventListener('resize', function () {
+            if (pop && pop._trigger.isConnected) window.PopoverPosition.place(pop, pop._trigger);
+        });
+    }
+
     initFilters();
     initPeek();
     initSpend();
+    initMoves();
 })();

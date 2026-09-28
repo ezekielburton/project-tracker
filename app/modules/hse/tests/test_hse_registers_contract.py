@@ -158,3 +158,54 @@ def test_default_and_closed_statuses_are_declared_statuses():
         if reg.closed_status:
             assert any(fl.column == 'closed_at' for fl in reg.fields), (
                 f'{reg.key}: closed_status needs a field mapped to closed_at')
+
+
+def test_the_optional_behaviours_point_at_real_fields():
+    """done_requires, interval_field, group_by, repeat_fields and unique_by
+    each name a field of their own register."""
+    for reg in HSE_REGISTERS:
+        names = {fl.name for fl in reg.fields}
+        named = list(reg.done_requires) + list(reg.repeat_fields) + [
+            n for n in (reg.interval_field, reg.group_by, reg.unique_by) if n]
+        missing = [n for n in named if n not in names]
+        assert not missing, f'{reg.key}: no such field(s): {missing}'
+
+
+def test_a_done_status_is_one_of_the_statuses_and_its_fields_are_optional_otherwise():
+    for reg in HSE_REGISTERS:
+        if reg.done_status:
+            assert reg.done_status in reg.statuses, reg.key
+        assert not reg.done_requires or reg.done_status, (
+            f'{reg.key}: done_requires needs a done_status')
+        fields = {fl.name: fl for fl in reg.fields}
+        forced = [n for n in reg.done_requires if fields[n].required]
+        assert not forced, f'{reg.key}: {forced} are always required already'
+
+
+def test_an_interval_comes_from_a_dated_choice_on_an_asset():
+    for reg in HSE_REGISTERS:
+        if not reg.interval_field:
+            continue
+        field = next(fl for fl in reg.fields if fl.name == reg.interval_field)
+        assert field.type == 'choice' and field.column is None, reg.key
+        assert any(fl.type == 'asset' for fl in reg.fields), reg.key
+        assert any(fl.column == 'entry_date' for fl in reg.fields), reg.key
+
+
+def test_grouping_is_only_on_expiry_registers():
+    """page_of pages whole groups from every loaded row, which only the
+    expiry branch loads."""
+    bad = [reg.key for reg in HSE_REGISTERS if reg.group_by and reg.status_source != 'expiry']
+    assert not bad, 'group_by on a register that pages in SQL: ' + ', '.join(bad)
+
+
+def test_a_ledger_is_a_log_with_one_line_per_item():
+    for reg in HSE_REGISTERS:
+        if reg.ledger:
+            assert reg.status_source == 'none', reg.key
+            assert reg.unique_by, f'{reg.key}: a ledger needs one line per item'
+            assert 'moves' not in {fl.name for fl in reg.fields}, (
+                f'{reg.key}: moves are kept by the ledger, not a form field')
+        if reg.unique_by:
+            field = next(fl for fl in reg.fields if fl.name == reg.unique_by)
+            assert field.type == 'text' and field.column is None, reg.key

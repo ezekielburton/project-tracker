@@ -12,6 +12,8 @@ schedule yields the same dates for any window size.
 from calendar import monthrange
 from datetime import date, timedelta
 
+from app.modules.hse.lib.registers import counts_as_done
+
 
 FREQUENCIES = ('daily', 'weekly', 'monthly', 'quarterly', 'annual')
 
@@ -43,6 +45,11 @@ def _month_index(d):
 
 def _from_index(index, day):
     return _clamp(index // 12, index % 12 + 1, day)
+
+
+def add_months(day, months):
+    """`day` moved by whole months, clamped to the target month's length."""
+    return _from_index(_month_index(day) + months, day.day)
 
 
 def _day_dates(schedule, lo, hi, step_days):
@@ -130,10 +137,13 @@ def schedule_targets(schedule):
 
 def _entry_index(entries):
     """Entries keyed by (schedule_id, occurrence_date). Entries missing
-    either are unplanned and left out."""
+    either are unplanned, and entries not yet done (a talk still scheduled)
+    tick nothing off; both are left out."""
     index = {}
     for e in entries:
         if e.schedule_id is None or e.occurrence_date is None:
+            continue
+        if not counts_as_done(e):
             continue
         index.setdefault((e.schedule_id, e.occurrence_date), []).append(e)
     return index

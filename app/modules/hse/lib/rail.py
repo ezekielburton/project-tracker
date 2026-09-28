@@ -32,6 +32,8 @@ CALENDAR_ICON = ('M4 6h16v14H4zM4 10h16M8 3v4M16 3v4'
 
 OVERVIEW_ICON = 'M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 8h6V4h-6z'
 
+STATISTICS_ICON = 'M4 20h16M5 16l4-5 4 3 6-7M15 7h4v4'
+
 GROUP_ICONS = {
     'daily_log': 'M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5',
     'incidents': 'M12 3l9 16H3zM12 9v5M12 17.2v.1',
@@ -82,6 +84,12 @@ def rail_items(counts=None, active_group=None):
         'icon': OVERVIEW_ICON,
         'url': url_for('hse.overview'),
     }
+    statistics = {
+        'key': 'statistics',
+        'label': 'Statistics',
+        'icon': STATISTICS_ICON,
+        'url': url_for('hse.statistics'),
+    }
     calendar = {
         'key': 'calendar',
         'label': 'Calendar',
@@ -94,7 +102,7 @@ def rail_items(counts=None, active_group=None):
             {'key': 'schedule', 'label': 'Schedule', 'url': url_for('hse.schedule_page')},
         ],
     }
-    return ([overview]
+    return ([overview, statistics]
             + [g for g in groups if g['key'] in TOP_GROUPS]
             + [calendar]
             + [g for g in groups if g['key'] not in TOP_GROUPS])

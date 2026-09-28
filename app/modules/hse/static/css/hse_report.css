@@ -296,6 +296,80 @@ h3.rp-h3 {
 
 .rp-empty { margin: 4mm 0 0; font-size: 10.5px; color: var(--muted); }
 
+/* ── weekly and monthly reports ── */
+
+.rp-stats--grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3mm; }
+.rp-stats--grid .rp-stat { padding: 3mm 3.5mm; }
+.rp-stats--grid .rp-statval { font-size: 26px; }
+.rp-stats--grid .rp-statsub { font-size: 8.5px; }
+.rp-statunit { font-family: var(--text); font-size: 11px; font-weight: 600; color: var(--muted); }
+
+.rp-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin-top: 5mm; }
+.rp-grid3 .rp-card { margin-top: 0; padding: 4mm 5mm; }
+
+.rp-cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 2mm; }
+
+.rp-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 4mm;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 10px;
+}
+
+.rp-line:last-child { border-bottom: none; }
+.rp-line .rp-num { font-family: var(--mono); white-space: nowrap; }
+.rp-ref { font-family: var(--mono); font-size: 8.5px; color: var(--muted); }
+
+.rp-attn { margin-top: 3mm; }
+.rp-more { margin: 2mm 0 0; font-size: 9.5px; color: var(--muted); }
+
+/* Narrow cards: a shorter label column that cuts long names. */
+.rp-row--tight { gap: 2mm; padding: 2px 0; }
+.rp-row--tight .rp-rowlab { flex: 0 0 22mm; font-size: 9.5px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+.rp-row--tight .rp-rowval { flex: 0 0 8mm; }
+.rp-row--tight .rp-track { height: 8px; }
+
+.rp-table--tight th, .rp-table--tight td { text-align: left; padding: 4px 6px 4px 0; font-size: 9.5px; }
+
+.rp-sw--incidents { background: var(--rust); }
+.rp-sw--near { background: var(--blue); }
+.hse-pf-bar--incidents { fill: var(--rust); }
+.hse-pf-bar--near { fill: var(--blue); }
+
+/* ── Email this report: the dialog, light only like the sheet ── */
+
+.hse-share {
+    width: min(440px, calc(100vw - 32px));
+    padding: 20px;
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    background: var(--card);
+    color: var(--ink);
+    font-family: var(--text);
+    box-shadow: 0 8px 32px rgba(31, 27, 22, .18);
+}
+
+.hse-share::backdrop { background: rgba(31, 27, 22, .45); }
+.hse-share-title { margin: 0; font-family: var(--head); font-size: 22px; text-transform: uppercase; }
+.hse-share-sub { margin: 4px 0 16px; font-size: 12px; color: var(--muted); }
+.hse-share-people { max-height: 36vh; overflow-y: auto; margin: 0 0 16px; padding: 0; border: 0; }
+.hse-share-label { display: block; margin-bottom: 8px; padding: 0; font-size: 12px; font-weight: 600; }
+.hse-share-person { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; cursor: pointer; }
+.hse-share-person input { width: 16px; height: 16px; margin: 0; accent-color: var(--rust); }
+.hse-share-role { font-size: 11px; font-weight: 400; color: var(--muted); }
+.hse-share-empty { margin: 0; font-size: 12px; color: var(--muted); }
+.hse-share-note { display: block; width: 100%; padding: 8px; border: 1px solid var(--rule);
+    border-radius: 6px; font: inherit; font-size: 13px; resize: vertical; }
+.hse-share-msg { margin: 12px 0 0; font-size: 12px; color: #B3261E; }
+.hse-share-msg.is-ok { color: var(--ink); }
+.hse-share-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.hse-share-btn { padding: 8px 14px; border: 1px solid var(--rule); border-radius: 6px;
+    background: var(--card); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.hse-share-btn--primary { border-color: var(--rust); background: var(--rust); color: #fff; }
+
 /* ── printing ── */
 
 @page { size: A4; margin: 0; }
@@ -304,11 +378,25 @@ h3.rp-h3 {
     body { background: var(--paper); }
     .rp-page { margin: 0; page-break-after: always; box-shadow: none; }
     .rp-page:last-child { page-break-after: auto; }
-    .rp-noprint { display: none !important; }
+    .rp-noprint, .rp-toolbar, .hse-share { display: none !important; }
 }
 
 @media screen {
     body { padding: 8mm 0; }
+    /* Step to the previous or next week or month; never printed. */
+    .rp-toolbar { position: fixed; top: 12px; left: 12px; display: flex; gap: 8px; }
+    .rp-toolbar a, .rp-toolbar button {
+        padding: 8px 14px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--ink);
+        font-size: 12px;
+        font-family: var(--text);
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+    }
     .rp-page { box-shadow: 0 2px 18px rgba(31, 27, 22, .13); }
     .rp-noprint {
         position: fixed;

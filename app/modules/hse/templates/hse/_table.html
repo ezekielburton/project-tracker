@@ -2,35 +2,74 @@
    so this file never names a register or a field. The count and paging sit
    inside the card. #}
 {% from '_shared_macros.html' import status_pill %}
+{% set can_edit = can('manage_hse', effective_user) %}
+{# Stock lines get movement buttons; hse_registers.js opens their popover. #}
+{% set move_actions = reg.ledger and can_edit %}
+{% set span = columns|length + (1 if move_actions else 0) %}
+
+{% macro table_row(row, columns, can_edit, move_actions) %}
+{# data-peek feeds the hover card (hse_registers.js): the fields
+   kept out of the table, and the full text of any cut short. #}
+<tr data-entry-id="{{ row.id }}" data-search="{{ row.search }}"
+    data-ref="{{ row.ref }}" data-title="{{ row.title }}"
+    {%- if row.peek %} data-peek='{{ row.peek|tojson }}'{% endif %}
+    {%- if can_edit %} class="clickable"
+    data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.id) }}"{% endif %}>
+    {% for c in row.cells %}
+    {# Phone card: ref top left, leading date top right; empty cells
+       and long text hidden (the title covers it). #}
+    <td data-label="{{ columns[loop.index0] }}"
+        class="{{ 'mono' if c.kind == 'mono' else '' }}{{ ' muted' if c.kind in ('muted', 'empty') else '' }}{{ ' hse-clip' if c.kind == 'clip' else '' }}{{ ' hse-overdue' if c.tone == 'overdue' else '' }}{{ ' hse-expired' if c.tone == 'expired' else '' }}{{ ' hse-low' if c.tone == 'low' else '' }}{{ ' card-kicker' if loop.first else '' }}{{ ' card-aside' if loop.index == 2 and row.aside else '' }}{{ ' card-hide' if c.kind in ('empty', 'clip') else '' }}"
+        {%- if c.tone == 'low' %} title="At or below the reorder level"{% endif %}>
+        {%- if c.kind == 'pill' %}{{ status_pill(c.text, c.modifier) }}
+        {%- else %}{{ c.text }}{% endif -%}
+    </td>
+    {% endfor %}
+    {% if move_actions %}
+    {# Clicks here never open the row's form (hse_entry_modal.js). #}
+    <td class="hse-row-actions" data-move-url="{{ url_for('hse.record_move', entry_id=row.id) }}">
+        <button type="button" class="hse-btn hse-btn--xs" data-move="received">+ Received</button>
+        <button type="button" class="hse-btn hse-btn--xs" data-move="issued">&minus; Issued</button>
+        <button type="button" class="hse-btn hse-btn--xs" data-move="count">Count</button>
+    </td>
+    {% endif %}
+</tr>
+{% endmacro %}
+
 <div class="hse-table-card">
     <div class="hse-table-scroll" id="hse-table-scroll">
         {# table--cards: each row becomes a card on a phone (mobile.css). #}
-        <table class="data-table hse-table table--cards" id="hse-table">
+        <table class="data-table hse-table table--cards{{ ' hse-table--grouped' if groups else '' }}" id="hse-table">
             <thead>
-                <tr>{% for head in columns %}<th>{{ head }}</th>{% endfor %}</tr>
+                <tr>{% for head in columns %}<th>{{ head }}</th>{% endfor %}
+                    {%- if move_actions %}<th><span class="hse-visually-hidden">Stock movements</span></th>{% endif %}</tr>
             </thead>
             <tbody>
-                {% for row in rows %}
-                {# data-peek feeds the hover card (hse_registers.js): the fields
-                   kept out of the table, and the full text of any cut short. #}
-                <tr data-entry-id="{{ row.id }}" data-search="{{ row.search }}"
-                    data-ref="{{ row.ref }}" data-title="{{ row.title }}"
-                    {%- if row.peek %} data-peek='{{ row.peek|tojson }}'{% endif %}
-                    {%- if can('manage_hse', effective_user) %} class="clickable"
-                    data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.id) }}"{% endif %}>
-                    {% for c in row.cells %}
-                    {# Phone card: ref top left, leading date top right; empty cells
-                       and long text hidden (the title covers it). #}
-                    <td data-label="{{ columns[loop.index0] }}"
-                        class="{{ 'mono' if c.kind == 'mono' else '' }}{{ ' muted' if c.kind in ('muted', 'empty') else '' }}{{ ' hse-clip' if c.kind == 'clip' else '' }}{{ ' hse-overdue' if c.tone == 'overdue' else '' }}{{ ' hse-expired' if c.tone == 'expired' else '' }}{{ ' card-kicker' if loop.first else '' }}{{ ' card-aside' if loop.index == 2 and row.aside else '' }}{{ ' card-hide' if c.kind in ('empty', 'clip') else '' }}">
-                        {%- if c.kind == 'pill' %}{{ status_pill(c.text, c.modifier) }}
-                        {%- else %}{{ c.text }}{% endif -%}
+                {% if groups %}
+                {% for group in groups %}
+                <tr class="hse-group-row">
+                    <td colspan="{{ span }}">
+                        <div class="hse-group-head">
+                            <span class="hse-group-name">{{ group.label }}</span>
+                            <span class="hse-group-count">{{ group.count }} item{{ '' if group.count == 1 else 's' }}</span>
+                            {% if group.soonest %}
+                            <span class="hse-group-next">
+                                <span class="hse-group-lab">Next replacement</span>
+                                <span class="hse-group-date">{{ group.soonest }}</span>
+                                {% if group.status %}{{ status_pill(group.status, group.modifier) }}{% endif %}
+                            </span>
+                            {% endif %}
+                        </div>
                     </td>
-                    {% endfor %}
                 </tr>
+                {% for row in group.rows %}{{ table_row(row, columns, can_edit, move_actions) }}{% endfor %}
+                {% endfor %}
+                {% else %}
+                {% for row in rows %}
+                {{ table_row(row, columns, can_edit, move_actions) }}
                 {% else %}
                 <tr class="hse-empty-row">
-                    <td colspan="{{ columns|length }}">
+                    <td colspan="{{ span }}">
                         {% if filters.search or filters.severity or filters.year or filters.status %}
                         Nothing matches those filters.
                         {% else %}
@@ -39,6 +78,7 @@
                     </td>
                 </tr>
                 {% endfor %}
+                {% endif %}
             </tbody>
         </table>
     </div>

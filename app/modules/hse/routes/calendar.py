@@ -18,8 +18,8 @@ from app.modules.hse.lib.calendar import (
     grid_bounds, items_by_day, kpis, month_grid, parse_day, parse_month,
     shift_month, state_chips,
 )
-from app.modules.hse.lib.registers import HSE_REGISTERS
-from app.modules.hse.lib.query import open_counts_by_register
+from app.modules.hse.lib.flags import rail_counts
+from app.modules.hse.lib.registers import HSE_REGISTERS, interval_registers
 from app.modules.hse.lib.rail import GROUP_LABELS, rail_items
 from app.modules.hse.models import HseEntry, HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
@@ -33,7 +33,8 @@ def _schedules():
 
 def _entries(start, end):
     """Every entry that could appear in the window, in one query: by filed
-    date, due/expiry date, or occurrence date."""
+    date, due/expiry date, or occurrence date, plus every PM entry, since a
+    machine's next due comes from its latest one wherever it falls."""
     return (HseEntry.query
             .options(selectinload(HseEntry.asset),
                      selectinload(HseEntry.reported_by),
@@ -45,6 +46,7 @@ def _entries(start, end):
                 HseEntry.entry_date.between(start, end),
                 HseEntry.due_at.between(start, end),
                 HseEntry.occurrence_date.between(start, end),
+                HseEntry.register.in_([r.key for r in interval_registers()]),
             ))
             .all())
 
@@ -117,7 +119,7 @@ def calendar_month():
         drawer=_drawer(grouped, selected, today),
         log_registers=_log_registers(),
         month_chip=month_start.strftime('%b %Y'),
-        rail=rail_items(open_counts_by_register(today), active_group='calendar'),
+        rail=rail_items(rail_counts(today), active_group='calendar'),
         active_group='calendar',
         active_sub='calendar',
     )
@@ -146,7 +148,7 @@ def _agenda(today, state):
         active_state=state,
         today=today,
         days_ahead=AGENDA_DAYS,
-        rail=rail_items(open_counts_by_register(today), active_group='calendar'),
+        rail=rail_items(rail_counts(today), active_group='calendar'),
         active_group='calendar',
         active_sub='calendar',
     )

@@ -142,7 +142,7 @@ def test_a_row_carries_the_phone_card_title_and_whether_it_leads_with_a_date():
 
 def _cost_cell(value):
     cells = row(Stub(ref='SRV-0001', data={'cost': value}), VEHICLE_SERVICE, TODAY)
-    index = [fl.name for fl in table_fields(VEHICLE_SERVICE)].index('cost') + 1
+    index = columns(VEHICLE_SERVICE).index('Cost (AED)')
     return cells[index]
 
 

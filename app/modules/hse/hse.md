@@ -7,7 +7,12 @@ ships as a patch.
 ## What's in it
 
 - **Overview** — what needs him now, what's waiting on others, what's expiring,
-  and this week at a glance.
+  service and stock flags, and this week at a glance.
+- **Statistics** — what happened on site over a month, three months or a
+  year, against the period before: incidents, inspections, fleet, machines,
+  stores and training.
+  Weekly and monthly reports print the same figures on A4, with the incident
+  log and what needs acting on.
 - **Daily log** — what he finds on his daily rounds, open until resolved.
 - **Calendar** — his week. Planned checks come from recurring schedules; he
   logs work straight from a day. The **Schedule** tab sets those schedules up.
@@ -21,7 +26,10 @@ ships as a patch.
   - Training: induction, toolbox talk, training expenses
 - **Lists & people** — his own locations, departments, people, assets and
   dropdown lists. He manages these himself, not an admin.
-- **My performance** — the numbers he takes to a review, with a printable PDF.
+- **My performance** — the numbers he takes to a review, with a printable PDF
+  and a CSV download.
+- **Email** — My performance and the weekly/monthly reports can be emailed to
+  anyone who can open HSE: the headline numbers plus a link, no attachment.
 
 ## How it works
 
@@ -34,6 +42,14 @@ ships as a patch.
 - Spend is the sum of every declared `money` field, by entry date, worked out
   when shown; the Overview and register strips share `query.spend_entries`.
 - A time field is `HH:MM` (24-hour), kept in the JSON column.
+- A machine's next PM is its latest entry's date plus the frequency, worked
+  out when shown; it shows in the table and on the calendar.
+- Materials in stock is one line per material. Received, issued and counted
+  stock are movements on the line; the balance is worked out from them.
+- Only a completed toolbox talk counts as held (coverage, training numbers).
+- Flags (`lib/flags.py`): a vehicle within 1,000 km of its next service, a
+  machine within 7 days of its next PM, stock at its reorder level. They feed
+  the Overview panel, a filter chip on those registers, and the rail badges.
 - A machine's serial number lives on the asset (`serial_no`, set in Lists &
   people) and shows read-only under the picker in the machine registers.
 - Nothing is deleted. Retired list items, people and assets are deactivated.

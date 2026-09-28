@@ -12,13 +12,12 @@ from sqlalchemy.orm import selectinload
 
 from app.modules.core.shared.lib.capabilities import require
 from app.modules.hse.lib.calendar import shift_month
+from app.modules.hse.lib.flags import load_flags, panel, rail_counts
 from app.modules.hse.lib.overview import (
-    expiring_panel, needs_you_now, severity_breakdown, this_week, tiles,
-    waiting_on_others,
+    PANEL_LIMIT, expiring_panel, needs_you_now, severity_breakdown, this_week,
+    tiles, waiting_on_others,
 )
-from app.modules.hse.lib.query import (
-    dashboard_entries, open_counts_by_register, spend_entries,
-)
+from app.modules.hse.lib.query import dashboard_entries, spend_entries
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.lib.spend import spend_panel
 from app.modules.hse.models import HseSchedule
@@ -46,6 +45,9 @@ def overview():
     # Severity covers the year: a month has too few incidents to be meaningful.
     year_start = date(today.year, 1, 1)
 
+    # Loaded once for the panel and the rail badges.
+    flagged = load_flags(today)
+
     return render_template(
         'hse/overview.html',
         tiles=counts,
@@ -53,6 +55,7 @@ def overview():
         needs=needs_you_now(entries, today),
         waiting=waiting_on_others(entries, today),
         expiring=expiring_panel(health, today),
+        flags=panel(flagged, PANEL_LIMIT),
         week=this_week(schedules, entries, week_start, week_end, today),
         week_label=week_start.strftime('%d %b'),
         severity=severity_breakdown(entries, year_start, today),
@@ -61,6 +64,6 @@ def overview():
         year_label=today.year,
         month_label=month_start.strftime('%B'),
         today=today,
-        rail=rail_items(open_counts_by_register(today), active_group='overview'),
+        rail=rail_items(rail_counts(today, flagged), active_group='overview'),
         active_group='overview',
     )

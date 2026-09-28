@@ -1,0 +1,237 @@
+{# The weekly and monthly HSE reports: A4 pages printed from the browser.
+   Does not extend base.html, so no app chrome ends up in the PDF. The
+   figures are the Statistics view model for the week or month. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HSE {{ 'Weekly' if kind == 'week' else 'Monthly' }} Report — {{ window.label }}</title>
+<link rel="stylesheet"
+      href="{{ url_for('hse_assets.static', filename='css/hse_report.css') }}?v={{ config.STATIC_VERSION }}">
+</head>
+<body>
+
+<div class="rp-toolbar">
+    <a href="{{ url_for('hse.statistics_report', kind=kind, at=nav.prev) }}">&lsaquo; Previous {{ kind }}</a>
+    {% if nav.next %}<a href="{{ url_for('hse.statistics_report', kind=kind, at=nav.next) }}">Next {{ kind }} &rsaquo;</a>{% endif %}
+    <button type="button" data-share-open>Email</button>
+</div>
+{% include 'hse/_share_dialog.html' %}
+<button class="rp-noprint" onclick="window.print()">Save as PDF</button>
+
+{% set pages = 2 if kind == 'week' else 3 %}
+{% set title = 'Weekly' if kind == 'week' else 'Monthly' %}
+{% macro foot(n) %}
+<div class="rp-foot">
+    <span>OVP — HSE {{ title }} Report · {{ window.label }}{% if n == pages %} · generated {{ today.strftime('%d %b %Y') }}{% endif %}</span>
+    <span>Page {{ n }} of {{ pages }}</span>
+</div>
+{% endmacro %}
+
+{% macro line(label, value) %}
+<div class="rp-line"><span>{{ label }}</span><span class="rp-num">{{ value }}</span></div>
+{% endmacro %}
+
+{% macro ranked(rows, empty) %}
+{% for r in rows %}
+<div class="rp-row rp-row--tight">
+    <span class="rp-rowlab">{{ r.label }}</span>
+    <span class="rp-track"><span class="rp-fill" style="width: {{ r.share }}%"></span></span>
+    <span class="rp-rowval">{{ r.text or r.value }}</span>
+</div>
+{% else %}
+<p class="rp-empty">{{ empty }}</p>
+{% endfor %}
+{% endmacro %}
+
+{% macro attention_list(title_text, block, empty) %}
+<div class="rp-attn">
+    <div class="rp-h3sub">{{ title_text }} · {{ block.total }}</div>
+    {% for r in block.rows %}
+    <div class="rp-line">
+        <span>{{ r.title }} <span class="rp-ref">{{ r.ref }}{% if r.label %} · {{ r.label }}{% endif %}</span></span>
+        <span class="rp-num">{{ r.detail }}</span>
+    </div>
+    {% else %}
+    <p class="rp-empty">{{ empty }}</p>
+    {% endfor %}
+    {% if block.more %}<p class="rp-more">and {{ block.more }} more</p>{% endif %}
+</div>
+{% endmacro %}
+
+{# ── page 1: the headline, the period at a glance, what needs acting on ── #}
+<section class="rp-page">
+    <div class="rp-badge">OVP</div>
+    <div class="rp-eyebrow">OVP · HSE &amp; Compliance</div>
+    <h1 class="rp-title">{{ title }} HSE Report</h1>
+    <div class="rp-rule"></div>
+    <div class="rp-meta">{{ window.label }} · compared with
+        {{ window.prev_start.strftime('%d %b') }} – {{ window.prev_end.strftime('%d %b %Y') }}</div>
+
+    <div class="rp-stats rp-stats--grid">
+        {% for t in tiles %}
+        <div class="rp-stat">
+            <div class="rp-statval">{% if t.value is none %}—{% else %}{{ t.value }}{% if t.unit %}<span class="rp-statunit"> {{ t.unit }}</span>{% endif %}{% endif %}</div>
+            <div class="rp-statlab">{{ t.label }}</div>
+            <div class="rp-statsub">
+                {% if t.delta %}
+                from {{ t.delta.from }} · {% if t.delta.improved %}better{% elif t.delta.improved is sameas false %}worse{% else %}no change{% endif %}
+                {% elif t.detail %}{{ t.detail }}{% else %}&nbsp;{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">The {{ kind }} at a glance</h3>
+        <div class="rp-h3sub">From the registers and the schedule</div>
+        <div class="rp-cols2">
+            <div>
+                {{ line('Inspections done / planned', glance.inspections_done ~ ' / ' ~ glance.inspections_due) }}
+                {{ line('Training sessions held', glance.trainings) }}
+            </div>
+            <div>
+                {{ line('Actions opened', glance.opened) }}
+                {{ line('Actions closed', glance.closed) }}
+            </div>
+        </div>
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">Needs acting on</h3>
+        <div class="rp-h3sub">As of {{ today.strftime('%d %b %Y') }}</div>
+        {{ attention_list('Actions over their service level', attention.late, 'Nothing over its service level.') }}
+        {{ attention_list('Service and stock', attention.flags, 'No services due and no stock running low.') }}
+        {{ attention_list('Renewals lapsed or due in 30 days', attention.renewals, 'Nothing expiring in the next month.') }}
+    </div>
+
+    {{ foot(1) }}
+</section>
+
+{% if kind == 'month' %}
+{# ── monthly page 2: the trend and where it happened ── #}
+<section class="rp-page">
+    <div class="rp-section">
+        <div class="rp-sectionhead">
+            <div>
+                <div class="rp-eyebrow">Section 01</div>
+                <h2 class="rp-h2">Incidents</h2>
+            </div>
+            <span class="rp-sectionnote">{{ breakdown.total }} logged this month</span>
+        </div>
+    </div>
+
+    <div class="rp-card">
+        <div class="rp-sectionhead" style="border:0; padding:0;">
+            <div>
+                <h3 class="rp-h3">Incidents and near misses</h3>
+                <div class="rp-h3sub">Twelve months to {{ window.end.strftime('%B %Y') }}</div>
+            </div>
+            <span class="rp-legend">
+                <span class="rp-key"><i class="rp-sw rp-sw--incidents"></i>Incidents</span>
+                <span class="rp-key"><i class="rp-sw rp-sw--near"></i>Near misses</span>
+            </span>
+        </div>
+        {% include 'hse/_pf_bars.html' %}
+    </div>
+
+    <div class="rp-grid3">
+        <div class="rp-card">
+            <h3 class="rp-h3">By type</h3>
+            {{ ranked(breakdown.by_type, 'Nothing logged.') }}
+        </div>
+        <div class="rp-card">
+            <h3 class="rp-h3">By location</h3>
+            {{ ranked(breakdown.by_location, 'Nothing logged.') }}
+        </div>
+        <div class="rp-card">
+            <h3 class="rp-h3">By severity</h3>
+            {{ ranked(breakdown.by_severity, 'Nothing logged.') }}
+        </div>
+    </div>
+
+    {{ foot(2) }}
+</section>
+{% endif %}
+
+{# ── last page: every incident, then the site by area ── #}
+<section class="rp-page">
+    <div class="rp-section">
+        <div class="rp-sectionhead">
+            <div>
+                <div class="rp-eyebrow">Section {{ '01' if kind == 'week' else '02' }}</div>
+                <h2 class="rp-h2">Incident log and the site</h2>
+            </div>
+            <span class="rp-sectionnote">{{ window.start.strftime('%d %b') }} – {{ window.end.strftime('%d %b %Y') }}</span>
+        </div>
+    </div>
+
+    <div class="rp-card">
+        <h3 class="rp-h3">Incidents and near misses</h3>
+        <div class="rp-h3sub">{{ incidents.total }} in the {{ kind }}</div>
+        <table class="rp-table rp-table--tight">
+            <tr><th>Ref</th><th>Date</th><th>Kind</th><th>Location</th><th>Type</th><th>Severity</th><th>Status</th></tr>
+            {% for r in incidents.rows %}
+            <tr>
+                <td class="rp-num">{{ r.ref }}</td>
+                <td class="rp-num">{{ r.date }}</td>
+                <td>{{ r.kind }}</td>
+                <td>{{ r.location }}</td>
+                <td>{{ r.type }}</td>
+                <td>{{ r.severity }}</td>
+                <td>{{ r.status }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="rp-empty" style="text-align:left;">Nothing logged in this {{ kind }}.</td></tr>
+            {% endfor %}
+        </table>
+        {% if incidents.more %}<p class="rp-more">and {{ incidents.more }} more in the Incident register</p>{% endif %}
+    </div>
+
+    <div class="rp-grid3">
+        <div class="rp-card">
+            <h3 class="rp-h3">Inspections</h3>
+            {{ line('Done', inspections.done) }}
+            {{ line('Found an issue', inspections.issues) }}
+            {{ line('Still open (all time)', inspections.open) }}
+        </div>
+        <div class="rp-card">
+            <h3 class="rp-h3">Fleet</h3>
+            {{ line('Km driven', fleet.km) }}
+            {{ line('Services done', fleet.services) }}
+            {{ line('Service spend (AED)', fleet.service_spend) }}
+        </div>
+        <div class="rp-card">
+            <h3 class="rp-h3">Machines</h3>
+            {{ line('Maintenance jobs', machines.jobs) }}
+            {{ line('Downtime (hrs)', machines.downtime) }}
+            {{ line('PM on time', (machines.pm_percent ~ '%') if machines.pm_percent is not none else '—') }}
+        </div>
+        <div class="rp-card">
+            <h3 class="rp-h3">Stores</h3>
+            {{ line('PPE items issued', stores.ppe_total) }}
+            {{ line('Material requests', stores.requests) }}
+            {% for s in stores.by_status if s.label in ('Issued', 'Rejected') %}
+            {{ line('· ' ~ s.label|lower, s.value) }}
+            {% endfor %}
+        </div>
+        <div class="rp-card">
+            <h3 class="rp-h3">Training</h3>
+            {{ line('Sessions held', training.sessions) }}
+            {{ line('People trained', training.attendees) }}
+            {{ line('Toolbox talks held', training.talks) }}
+        </div>
+    </div>
+
+    <p class="rp-method">
+        <strong>How this was measured.</strong> Every figure is worked out from the HSE
+        registers when the report is run; nothing is hand-entered. Incidents not marked
+        as a near miss count as incidents. Comparisons are with the {{ kind }} before.
+    </p>
+
+    {{ foot(pages) }}
+</section>
+
+<script src="{{ url_for('hse_assets.static', filename='js/hse_share.js') }}?v={{ config.STATIC_VERSION }}"></script>
+</body>
+</html>

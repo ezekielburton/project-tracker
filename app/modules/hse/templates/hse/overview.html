@@ -120,6 +120,38 @@
                             {% endif %}
                         </section>
 
+                        {# Vehicles due a service by km, machines due PM by date, and
+                           stock at or below its reorder level (lib/flags.py). #}
+                        <section class="hse-ov-panel">
+                            <div class="hse-ov-head">
+                                <h2 class="hse-ov-title">Service &amp; stock</h2>
+                                <span class="hse-ov-note">
+                                    {% if flags.total %}{{ flags.total }} flagged{% else %}all clear{% endif %}
+                                </span>
+                            </div>
+                            {% for row in flags.rows %}
+                            <a class="hse-ov-row{{ ' is-lapsed' if row.state == 'overdue' else '' }}" href="#"
+                               data-hse-form-url="{{ url_for('hse.edit_entry_form', entry_id=row.entry.id) }}">
+                                <span class="hse-ov-row-main">
+                                    <span class="hse-ov-row-title">{{ row.title }}</span>
+                                    <span class="hse-ov-row-sub">{{ row.register_label }} · {{ row.ref }}</span>
+                                </span>
+                                <span class="hse-ov-row-meta">
+                                    {% if row.state == 'soon' %}
+                                    <span class="hse-ov-age">{{ row.detail }}</span>
+                                    {% else %}
+                                    <span class="hse-ov-late">{{ row.detail }}</span>
+                                    {% endif %}
+                                </span>
+                            </a>
+                            {% else %}
+                            <p class="hse-ov-empty">No services due and no stock running low.</p>
+                            {% endfor %}
+                            {% if flags.more %}
+                            <p class="hse-ov-more">and {{ flags.more }} more</p>
+                            {% endif %}
+                        </section>
+
                         {# Every cost field in the registers, by entry date. Bars are
                            shares of the year's total, so a register sits inside its area. #}
                         <section class="hse-ov-panel hse-spend-panel">

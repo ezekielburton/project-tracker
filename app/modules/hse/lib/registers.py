@@ -34,11 +34,23 @@ Field.__new__.__defaults__ = (None, None, False, True)
 Register = namedtuple(
     'Register',
     'key label group ref_prefix status_source statuses fields schedulable '
-    'default_status closed_status')
+    'default_status closed_status done_status done_requires interval_field '
+    'group_by repeat_fields ledger unique_by km_due')
 # schedulable is opt-in: only registers for recurring work can carry a schedule.
 # default_status: a new entry's status. closed_status: saving it with no
 # closed date stamps today; saving any other status clears the closed date.
-Register.__new__.__defaults__ = (False, None, None)
+# done_status: only entries at it (or with no status) count as work done;
+# done_requires: fields required only at that status.
+# interval_field: a choice whose label is a repeat interval; the latest entry
+# per asset gets a computed next due date.
+# group_by: a field the table groups rows under, paging whole groups.
+# repeat_fields: carried into the next form by "Save & add another".
+# ledger: stock movements in data['moves']; the balance is computed.
+# unique_by: a text field no two entries may share (trimmed, any case).
+# km_due: (mileage field, interval field); the latest completed entry per
+# asset gets a computed next-service reading.
+Register.__new__.__defaults__ = (False, None, None, None, (), None, None, (),
+                                 False, None, None)
 
 
 def f(name, label, type_, column=None, choices_kind=None, required=False,
@@ -275,6 +287,7 @@ VEHICLE_SERVICE = Register(
     # so it is not stored, and this register is not schedulable.
     status_source='stored',
     statuses=('Scheduled', 'Completed'),
+    km_due=('mileage_at_service', 'service_interval'),
     fields=(
         f('entry_date', 'Service date', 'date', column='entry_date', required=True),
         f('asset', 'Vehicle', 'asset', column='asset_id', required=True),
@@ -356,10 +369,11 @@ MACHINE_PREVENTIVE = Register(
     label='Preventive maintenance',
     group='machines',
     ref_prefix='PM',
-    # Status is the machine's condition. PM has no calendar due date, so
-    # this register is not schedulable.
+    # Status is the machine's condition. Next due comes from the last date
+    # and the frequency, so this register is not schedulable.
     status_source='stored',
     statuses=('Working', 'Not Working', 'Under Maintenance'),
+    interval_field='pm_frequency',
     fields=(
         f('entry_date', 'Last maintenance date', 'date', column='entry_date',
           required=True),
@@ -397,6 +411,8 @@ PPE_REGISTER = Register(
     # Status is computed from the replacement date.
     status_source='expiry',
     statuses=(),
+    group_by='subject',
+    repeat_fields=('subject', 'department', 'entry_date'),
     fields=(
         f('subject', 'Employee', 'person', column='subject_id', required=True),
         f('department', 'Department', 'choice', column='department_id',
@@ -414,7 +430,7 @@ TOOLS_INVENTORY = Register(
     group='stores',
     ref_prefix='TL',
     status_source='stored',
-    statuses=('In Service', 'Under Repair', 'Decommissioned'),
+    statuses=('In Service', 'Under Repair', 'Decommissioned', 'Lost'),
     fields=(
         f('item', 'Tool', 'text', required=True),
         f('tool_category', 'Category', 'choice', choices_kind='tool_category'),
@@ -443,6 +459,9 @@ MATERIAL_REQUEST = Register(
           choices_kind='department', in_table=False),
         f('qty_requested', 'Qty requested', 'number', required=True),
         f('qty_issued', 'Qty issued', 'number'),
+        f('unit', 'Unit', 'choice', choices_kind='unit', in_table=False),
+        # The whole request, not a unit price.
+        f('cost', 'Cost (AED)', 'money'),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Issued date', 'date', column='closed_at', in_table=False),
     ),
@@ -453,21 +472,22 @@ MATERIALS_IN_STOCK = Register(
     label='Materials in stock',
     group='stores',
     ref_prefix='HSM',
-    # Closing stock and the reorder flag would be arithmetic on the quantity
-    # fields, so neither is stored; there is no status or filter chip.
+    # One line per material. Received, issued and counted stock are
+    # movements on the line; the balance is computed (lib/stock.py).
     status_source='none',
     statuses=(),
+    ledger=True,
+    unique_by='item',
     fields=(
-        f('entry_date', 'As of', 'date', column='entry_date', required=True),
         f('item', 'Material', 'text', required=True),
         f('material_category', 'Category', 'choice', choices_kind='material_category'),
-        f('unit', 'Unit', 'choice', choices_kind='unit'),
-        f('opening_stock', 'Opening stock', 'number', required=True),
-        f('received', 'Received', 'number'),
-        f('issued', 'Issued', 'number'),
-        f('reorder_level', 'Reorder level', 'number'),
+        f('unit', 'Unit', 'choice', choices_kind='unit', in_table=False),
         f('location', 'Stored at', 'choice', column='location_id',
           choices_kind='location'),
+        f('reorder_level', 'Reorder level', 'number'),
+        f('opening_stock', 'Opening stock', 'number', required=True, in_table=False),
+        f('entry_date', 'Added', 'date', column='entry_date', required=True,
+          in_table=False),
     ),
 )
 
@@ -504,9 +524,12 @@ TOOLBOX_TALK = Register(
     group='training',
     ref_prefix='TBT',
     schedulable=True,
-    # A log of talks held; no workflow.
-    status_source='none',
-    statuses=(),
+    # A talk can be planned ahead; only a completed one counts as held.
+    status_source='stored',
+    statuses=('Scheduled', 'Completed', 'Cancelled'),
+    default_status='Completed',
+    done_status='Completed',
+    done_requires=('attendees',),
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
         f('entry_time', 'Time', 'time', in_table=False),
@@ -515,9 +538,10 @@ TOOLBOX_TALK = Register(
           required=True),
         f('department', 'Department', 'choice', column='department_id',
           choices_kind='department'),
-        f('attendees', 'Attendees', 'number', required=True),
+        f('attendees', 'Attendees', 'number'),
         f('location', 'Location', 'choice', column='location_id',
           choices_kind='location'),
+        f('status', 'Status', 'status', column='status', required=True),
         f('notes', 'Notes', 'textarea', in_table=False),
     ),
 )
@@ -604,6 +628,21 @@ def asset_field(reg):
         if fl.type == 'asset':
             return fl
     return None
+
+
+def interval_registers():
+    """Registers whose latest entry per asset has a computed next due date."""
+    return tuple(r for r in HSE_REGISTERS if r.interval_field)
+
+
+def counts_as_done(entry):
+    """Whether an entry is work done: its register has no done_status, or
+    the entry is at it. No status (filed before the register had one)
+    counts as done."""
+    reg = BY_KEY.get(getattr(entry, 'register', None))
+    if reg is None or reg.done_status is None:
+        return True
+    return getattr(entry, 'status', None) in (None, reg.done_status)
 
 
 def shows_asset_serial(reg):

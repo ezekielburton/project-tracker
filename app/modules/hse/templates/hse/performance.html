@@ -47,6 +47,10 @@
                             <a class="hse-pf-toggle-opt{{ ' is-on' if window.view == 'year' else '' }}"
                                href="{{ url_for('hse.performance', view='year', month=nav.month) }}">Year</a>
                         </span>
+                        <a class="hse-btn"
+                           href="{{ url_for('hse.performance_csv', view=window.view, month=window.end.strftime('%Y-%m')) }}"
+                           download>CSV</a>
+                        <button type="button" class="hse-btn" data-share-open>Email</button>
                         <a class="hse-btn hse-tab"
                            href="{{ url_for('hse.performance_report', view=window.view, month=window.end.strftime('%Y-%m')) }}"
                            target="_blank" rel="noopener">Print</a>
@@ -165,8 +169,10 @@
         </div>
     </div>
 </div>
+{% include 'hse/_share_dialog.html' %}
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+<script src="{{ url_for('hse_assets.static', filename='js/hse_share.js') }}?v={{ config.STATIC_VERSION }}"></script>
 {% endblock %}

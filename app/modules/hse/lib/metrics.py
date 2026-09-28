@@ -13,7 +13,9 @@ from app.modules.hse.lib.computed import (
     EXPIRING_SOON_DAYS, closed_on_time, days_open, days_owned,
     days_to_expiry, expiry_status, sla_days,
 )
-from app.modules.hse.lib.registers import BY_KEY, money_fields, money_registers
+from app.modules.hse.lib.registers import (
+    BY_KEY, counts_as_done, money_fields, money_registers,
+)
 from app.modules.hse.lib.schedule import coverage
 
 
@@ -158,9 +160,9 @@ def near_miss_ratio(entries, start, end):
 
 def training_delivered(entries, start, end):
     """Sessions and attendees across both training registers, with a
-    per-type breakdown."""
+    per-type breakdown. A talk still scheduled or cancelled was not held."""
     rows = [e for e in entries
-            if e.register in TRAINING_REGISTERS
+            if e.register in TRAINING_REGISTERS and counts_as_done(e)
             and e.entry_date is not None and start <= e.entry_date <= end]
     by_type = {}
     attendees = 0

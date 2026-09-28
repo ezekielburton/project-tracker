@@ -9,13 +9,15 @@ work is stored as an ordinary HseEntry through the normal entry form.
 from calendar import Calendar
 from datetime import date, timedelta
 
-from app.modules.hse.lib.registers import BY_KEY
+from app.modules.hse.lib.computed import latest_by_asset, next_due
+from app.modules.hse.lib.registers import BY_KEY, counts_as_done, interval_registers
 from app.modules.hse.lib.schedule import coverage, occurrences
 from app.modules.hse.lib.schedules import cadence_text
 
 
 # The five things a day can show. 'planned', 'overdue' and 'done' come from
-# schedules; 'logged' is unplanned work; 'expiring' is a due date.
+# schedules; 'logged' is unplanned work; 'expiring' is a due date (a PM due
+# date turns 'overdue' once it has passed).
 STATES = ('overdue', 'expiring', 'planned', 'logged', 'done')
 
 # Sort rank; the worst state on a day colours its cell.
@@ -98,6 +100,8 @@ def logged_items(entries, start, end):
             continue                       # drawn on its expiry date instead
         if entry.schedule_id and entry.occurrence_date:
             continue                       # already inside its occurrence
+        if not counts_as_done(entry):
+            continue                       # not held (yet): not logged work
         if entry.entry_date is None or not (start <= entry.entry_date <= end):
             continue
         out.append(_item(
@@ -136,12 +140,40 @@ def expiry_items(entries, start, end):
     return out
 
 
+def pm_due_items(entries, start, end, today=None):
+    """Each machine's next preventive maintenance, from its latest entry
+    only. `entries` must hold every entry in those registers, not just the
+    window's, or an older entry would pass for the latest."""
+    today = today or date.today()
+    out = []
+    for reg in interval_registers():
+        latest = latest_by_asset(e for e in entries if e.register == reg.key)
+        for entry in latest.values():
+            due = next_due(entry, reg)
+            if due is None or not (start <= due <= end):
+                continue
+            asset = getattr(entry, 'asset', None)
+            out.append(_item(
+                'overdue' if due < today else 'expiring', due,
+                f'PM · {asset.label}' if asset is not None else 'PM due',
+                detail=entry.ref,
+                register=reg.key,
+                register_label=reg.label,
+                ref=entry.ref,
+                entry=entry,
+                kind='pm_due',
+                asset_id=entry.asset_id,
+            ))
+    return out
+
+
 def items_by_day(schedules, entries, start, end, today=None, state=None):
     """Everything on the grid, keyed by date. `state` narrows to one of
     STATES; an unknown value is ignored."""
     items = (occurrence_items(schedules, entries, start, end, today)
              + logged_items(entries, start, end)
-             + expiry_items(entries, start, end))
+             + expiry_items(entries, start, end)
+             + pm_due_items(entries, start, end, today))
 
     if state in STATES:
         items = [i for i in items if i['state'] == state]
@@ -282,8 +314,37 @@ def _target_card(item, target, today):
     }
 
 
+def _pm_card(item, today):
+    """Card for a machine's PM due date. "Log it" files the next PM for
+    that machine, which moves the due date on."""
+    day = item['date']
+    left = (day - today).days
+    if left < 0:
+        meta = f"Was due {_short(day)} · {-left} day{'' if left == -1 else 's'} overdue"
+    elif left == 0:
+        meta = 'Due today'
+    else:
+        meta = f"Due {_short(day)} · {left} day{'' if left == 1 else 's'} left"
+    return {
+        'state': item['state'],
+        'title': item['label'],
+        'subtitle': item['register_label'],
+        'meta': f"{meta} · last {item['ref']}",
+        'done': False,
+        'entry_id': None,
+        'ref': item['ref'],
+        'register': item['register'],
+        'schedule_id': None,
+        'asset_id': item['asset_id'],
+        # "Log it" dates the new PM today: it is done when it is logged.
+        'date': today,
+    }
+
+
 def _entry_card(item, today):
     """Card for a logged or expiring entry (no occurrence behind it)."""
+    if item.get('kind') == 'pm_due':
+        return _pm_card(item, today)
     entry = item['entry']
     if item['state'] == 'expiring':
         left = (item['date'] - today).days

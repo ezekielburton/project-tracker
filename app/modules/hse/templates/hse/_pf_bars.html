@@ -3,7 +3,7 @@
    the chart fills the card's width. #}
 <svg class="hse-pf-svg" viewBox="0 0 {{ bars.width }} {{ bars.height }}"
      width="100%" role="img"
-     aria-label="Inspections planned against completed, by month">
+     aria-label="{{ bars.aria }}">
     {% for g in bars.gridlines %}
     <line x1="0" y1="{{ g.y }}" x2="{{ bars.width }}" y2="{{ g.y }}" class="hse-pf-grid"/>
     <text x="0" y="{{ g.y - 5 }}" class="hse-pf-axis"

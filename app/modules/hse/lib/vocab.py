@@ -36,6 +36,7 @@ STATUS_MODIFIERS = {
     'Under Repair': 'canary',
     'Retired': 'oak',
     'Decommissioned': 'oak',
+    'Lost': 'poppy',
 }
 
 # Statuses that count as open. The rail badges, Overview and My performance

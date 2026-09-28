@@ -11,13 +11,16 @@ from flask import abort, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app.modules.core.shared.lib.capabilities import require
+from app.modules.hse.lib.flags import (
+    FLAG_CHIPS, flagged_ids, load_flags, rail_counts, service_context,
+)
 from app.modules.hse.lib.query import (
-    empty_filters, open_counts_by_register, page_of, spend_entries, years_for,
+    count_matching, empty_filters, latest_ids, page_of, spend_entries, years_for,
 )
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.lib.registers import money_fields, register, registers_in_group
 from app.modules.hse.lib.spend import spend_strip
-from app.modules.hse.lib.table import columns, status_chips, table_rows
+from app.modules.hse.lib.table import columns, status_chips, table_groups, table_rows
 from app.modules.hse.models import SEVERITIES
 from app.modules.hse.routes.blueprint import hse_bp
 
@@ -79,6 +82,12 @@ def register_page(group_key, register_key):
     status = request.args.get('status') or None
     filters['status'] = status
 
+    # Flag chip (Due / Low stock). It replaces the status filter.
+    flag_chip = FLAG_CHIPS.get(reg.key)
+    flagged = load_flags(today) if flag_chip else None
+    if flag_chip and request.args.get('flag') == flag_chip[0]:
+        filters.update(flag=flag_chip[0], ids=flagged_ids(flagged, reg.key), status=None)
+
     page = page_of(register_key, filters, _page_number(), today)
     if filters['status'] and not page['rows'] and filters['status'] not in page['counts']:
         filters['status'] = None
@@ -87,8 +96,9 @@ def register_page(group_key, register_key):
     # Every link on the page is this view with one thing changed; a new
     # filter only needs an entry in `carried`.
     carried = {k: v for k, v in (
-        ('status', filters['status']), ('severity', filters['severity']),
-        ('year', filters['year']), ('q', filters['search'])) if v}
+        ('status', filters['status']), ('flag', filters['flag']),
+        ('severity', filters['severity']), ('year', filters['year']),
+        ('q', filters['search'])) if v}
 
     def link(**changed):
         args = dict(carried, group_key=group_key, register_key=register_key)
@@ -104,18 +114,39 @@ def register_page(group_key, register_key):
                             filters['year'] or today.year, today)
 
     chips = status_chips(reg, page['counts'], page['total_all'], today)
+    if flag_chip and not chips:
+        # A log has no status chips, so the flag chip needs an All beside it.
+        chips = [{'label': 'All', 'value': None,
+                  'count': count_matching(reg.key, filters)}]
     for chip in chips:
         # Reset to page 1, or a narrower filter can land on an empty page.
-        chip['url'] = link(status=chip['value'], page=None)
+        chip['url'] = link(status=chip['value'], flag=None, page=None)
+        chip['selected'] = not filters['flag'] and chip['value'] == filters['status']
+    if flag_chip:
+        value, label = flag_chip
+        chips.append({
+            'label': label, 'value': None, 'selected': filters['flag'] == value,
+            'count': count_matching(reg.key, filters, flagged_ids(flagged, reg.key)),
+            'url': link(status=None, flag=value, page=None),
+        })
+
+    # Only the latest entry per asset has a next due date or next service.
+    current, readings = None, None
+    if reg.interval_field:
+        current = latest_ids(reg.key)
+    elif reg.km_due:
+        current, readings = service_context()
+    groups = page.get('groups')
 
     return render_template(
         'hse/registers.html',
         reg=reg,
-        rail=rail_items(open_counts_by_register(today), active_group=group_key),
+        rail=rail_items(rail_counts(today, flagged), active_group=group_key),
         active_group=group_key,
         active_sub=reg.key,
         columns=columns(reg),
-        rows=table_rows(page['rows'], reg, today),
+        rows=table_rows(page['rows'], reg, today, current, readings),
+        groups=table_groups(groups, reg, today) if groups is not None else None,
         chips=chips,
         prev_url=link(page=page['page'] - 1) if page['page'] > 1 else None,
         next_url=link(page=page['page'] + 1) if page['page'] < page['pages'] else None,

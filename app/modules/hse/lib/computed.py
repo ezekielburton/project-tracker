@@ -3,7 +3,10 @@ Every derived value in the module, computed at read time. Derived values
 are never written to the database.
 """
 
-from datetime import date
+import re
+from datetime import date, timedelta
+
+from app.modules.hse.lib.schedule import add_months
 
 
 # Days before expiry at which an item reads "Expiring soon".
@@ -94,3 +97,55 @@ def effective_status(entry, reg, today=None):
     if reg.status_source == 'expiry':
         return expiry_status(entry, today)
     return entry.status
+
+
+# Repeat intervals read from a frequency label, as (days, months). Labels are
+# matched lower-cased with dashes as spaces; anything else has no next due.
+_INTERVALS = {
+    'daily': (1, 0),
+    'weekly': (7, 0),
+    'fortnightly': (14, 0), 'bi weekly': (14, 0), 'biweekly': (14, 0),
+    'monthly': (0, 1),
+    'quarterly': (0, 3),
+    '6 monthly': (0, 6), 'six monthly': (0, 6), 'half yearly': (0, 6),
+    'semi annual': (0, 6), 'semi annually': (0, 6), 'semiannual': (0, 6),
+    'biannual': (0, 6), 'bi annual': (0, 6), 'biannually': (0, 6),
+    'annual': (0, 12), 'annually': (0, 12), 'yearly': (0, 12),
+}
+
+
+def interval_of(label):
+    """(days, months) for a frequency label, or None when it is not one."""
+    if not isinstance(label, str):
+        return None
+    return _INTERVALS.get(re.sub(r'[\s_-]+', ' ', label).strip().lower())
+
+
+def _is_later(entry, other):
+    """Later entry_date wins; on the same date the higher id."""
+    return ((entry.entry_date or date.min, entry.id or 0)
+            > (other.entry_date or date.min, other.id or 0))
+
+
+def latest_by_asset(entries):
+    """asset_id -> the latest entry for it. Entries with no asset are left out."""
+    latest = {}
+    for entry in entries:
+        if entry.asset_id is None:
+            continue
+        current = latest.get(entry.asset_id)
+        if current is None or _is_later(entry, current):
+            latest[entry.asset_id] = entry
+    return latest
+
+
+def next_due(entry, reg):
+    """entry_date plus the interval named by the register's interval_field.
+    Callers pass only the latest entry per asset; older ones have none."""
+    if not reg.interval_field or entry.entry_date is None:
+        return None
+    step = interval_of((entry.data or {}).get(reg.interval_field))
+    if step is None:
+        return None
+    days, months = step
+    return add_months(entry.entry_date, months) + timedelta(days=days)

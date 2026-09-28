@@ -61,10 +61,12 @@ def _gridlines(top, floor, span):
 
 
 def grouped_bars(series, width=SCREEN_WIDTH, height=270,
-                 pad_bottom=34, pad_top=16, pad_left=34):
-    """Planned vs completed, two bars per month. Returns a view model the
-    template draws; bar widths scale with the number of months."""
-    top = _nice_top(max([max(row['planned'], row['done']) for row in series] or [0]))
+                 pad_bottom=34, pad_top=16, pad_left=34, keys=('planned', 'done'),
+                 aria='Inspections planned against completed, by month'):
+    """Two bars per month, one per key (planned vs completed by default).
+    Returns a view model the template draws; bar widths scale with the
+    number of months. Each key names its bar's CSS series class."""
+    top = _nice_top(max([max(row[k] for k in keys) for row in series] or [0]))
     floor = height - pad_bottom
     span = floor - pad_top
 
@@ -76,7 +78,7 @@ def grouped_bars(series, width=SCREEN_WIDTH, height=270,
     bars = []
     for index, row in enumerate(series):
         left = pad_left + index * step + (step - group_w) / 2
-        for key, offset in (('planned', 0), ('done', bar_w + BAR_GAP)):
+        for key, offset in ((keys[0], 0), (keys[1], bar_w + BAR_GAP)):
             value = row[key] or 0
             bar_h = round(span * value / top, 1) if top else 0
             bars.append({
@@ -90,7 +92,7 @@ def grouped_bars(series, width=SCREEN_WIDTH, height=270,
         bars[-1]['label'] = row['label']
         bars[-1]['label_x'] = round(left + group_w / 2, 1)
 
-    return {'width': width, 'height': height, 'floor': floor,
+    return {'width': width, 'height': height, 'floor': floor, 'aria': aria,
             'label_y': height - 12, 'axis_font': AXIS_FONT,
             'tick_font': TICK_FONT,
             'gridlines': _gridlines(top, floor, span), 'bars': bars, 'top': top}

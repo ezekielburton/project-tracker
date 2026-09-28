@@ -7,19 +7,21 @@ with the Overview).
 """
 from datetime import date
 
-from flask import render_template, request
+from flask import Response, jsonify, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy.orm import selectinload
 
-from app.modules.core.shared.lib.capabilities import require
-from app.modules.hse.lib import charts
+from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
+from app.modules.core.shared.lib.utils import log_activity
+from app.modules.hse.lib import charts, share
+from app.modules.hse.lib.flags import rail_counts
 from app.modules.hse.lib.metrics import training_delivered
 from app.modules.hse.lib.performance import (
     age_series, closed_by_severity, compliance_panel, coverage_series,
     expiring_next, navigation, open_by_age, period, read_outs, reporting,
     schedule_coverage, sla_table, tiles, trend_months,
 )
-from app.modules.hse.lib.query import dashboard_entries, open_counts_by_register
+from app.modules.hse.lib.query import dashboard_entries
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.models import HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
@@ -80,10 +82,14 @@ def performance():
     model = _view_model()
     for key in ('_entries', '_schedules', '_cover', '_ageing'):
         model.pop(key)
+    window = model['window']
     return render_template(
         'hse/performance.html',
-        rail=rail_items(open_counts_by_register(model['today']), active_group='performance'),
+        rail=rail_items(rail_counts(model['today']), active_group='performance'),
         active_group='performance',
+        share_people=share.people(effective_user()),
+        share_url=url_for('hse.performance_share', view=window['view'],
+                          month=window['end'].strftime('%Y-%m')),
         **model)
 
 
@@ -117,3 +123,39 @@ def performance_report():
                            model['compliance'], model['ageing']),
         auto=request.args.get('auto') == '1',
         **model)
+
+
+@hse_bp.route('/performance/export.csv')
+@login_required
+@require('view_hse')
+def performance_csv():
+    """The page's figures for the period shown, as a spreadsheet."""
+    model = _view_model()
+    window = model['window']
+    name = f"hse-performance-{window['view']}-{window['end'].strftime('%Y-%m')}.csv"
+    return Response(share.performance_csv(model), mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename={name}'})
+
+
+@hse_bp.route('/performance/share', methods=['POST'])
+@login_required
+@require_api('view_hse')
+def performance_share():
+    """Email the tiles for the period in the query string, with a link to
+    the printable report."""
+    model = _view_model()
+    window = model['window']
+    sender = effective_user()
+    payload = request.get_json(silent=True) or {}
+    link = share.absolute_url(url_for('hse.performance_report', view=window['view'],
+                                      month=window['end'].strftime('%Y-%m')))
+    try:
+        sent = share.send(sender, payload.get('to'), payload.get('note'),
+                          'HSE performance', window['label'],
+                          share.figures(model['tiles']), link)
+    except share.ShareError as e:
+        return jsonify({'error': e.message}), e.status
+    log_activity('hse_report_emailed',
+                 f"{sender.name} emailed HSE performance ({window['label']}) to {len(sent)}",
+                 user=sender, entity_type='hse_report', entity_name=window['label'])
+    return jsonify({'sent': [u.name for u in sent]})

@@ -201,6 +201,7 @@
 /hse/entry/<int:entry_id>	PATCH	hse.update_entry
 /hse/entry/<int:entry_id>/files	POST	hse.upload_attachment
 /hse/entry/<int:entry_id>/form	GET	hse.edit_entry_form
+/hse/entry/<int:entry_id>/moves	POST	hse.record_move
 /hse/files/<int:attachment_id>	DELETE	hse.delete_attachment
 /hse/files/<int:attachment_id>	GET	hse.download_attachment
 /hse/files/<int:attachment_id>/preview	GET	hse.preview_attachment
@@ -215,7 +216,12 @@
 /hse/lists/reference/quick-add	POST	hse.quick_add_reference
 /hse/overview	GET	hse.overview
 /hse/performance	GET	hse.performance
+/hse/performance/export.csv	GET	hse.performance_csv
 /hse/performance/report	GET	hse.performance_report
+/hse/performance/share	POST	hse.performance_share
+/hse/statistics	GET	hse.statistics
+/hse/statistics/report/<kind>	GET	hse.statistics_report
+/hse/statistics/report/<kind>/share	POST	hse.statistics_report_share
 /login	GET,POST	auth.login
 /logout	GET	auth.logout
 /notifications/<int:notification_id>/archive	POST	notifications.archive_notification

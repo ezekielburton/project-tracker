@@ -7,11 +7,13 @@ computed at read time, so neither is a form field.
 import re
 from datetime import date, datetime
 
+from sqlalchemy import func
+
 from app.modules.hse.lib.metrics import parse_money
 from app.modules.hse.lib.registers import register, shows_asset_serial
 from app.modules.hse.lib.spend import stored_amount
 from app.modules.hse.models import (
-    EVENT_CLASSES, SEVERITIES, HseAsset, HsePerson, HseReference,
+    EVENT_CLASSES, SEVERITIES, HseAsset, HseEntry, HsePerson, HseReference,
 )
 
 
@@ -83,14 +85,21 @@ def form_fields(reg, entry=None, prefill=None):
             if field.type == 'status':
                 prefill.setdefault(field.name, reg.default_status)
     closed_field = next((f.name for f in reg.fields if f.column == 'closed_at'), None)
+    status_field = next((f for f in reg.fields if f.type == 'status'), None)
+    status = _current(entry, status_field, prefill) if status_field else None
     out = []
     for field in reg.fields:
         options = _options(field)
+        # Required only at the done status; the form toggles the star as the
+        # status changes (hse_entry_modal.js).
+        required_when = reg.done_status if field.name in reg.done_requires else None
         out.append({
             'name': field.name,
             'label': field.label,
             'type': field.type,
             'required': field.required,
+            'required_when': required_when,
+            'required_now': bool(required_when) and status == required_when,
             'options': options,
             'value': _current(entry, field, prefill),
             'statuses': list(reg.statuses) if field.type == 'status' else [],
@@ -185,6 +194,17 @@ def apply_payload(entry, reg, payload):
     if status_field and parsed.get(status_field.name) not in (None, *reg.statuses):
         errors[status_field.name] = 'Not a status for this register'
 
+    if status_field and reg.done_status and parsed.get(status_field.name) == reg.done_status:
+        for name in reg.done_requires:
+            if parsed.get(name) in (None, '') and name not in errors:
+                errors[name] = f'Required when the status is {reg.done_status}'
+
+    if reg.unique_by and reg.unique_by not in errors:
+        taken = _taken_by(entry, reg, parsed.get(reg.unique_by))
+        if taken is not None:
+            errors[reg.unique_by] = f'Already on {taken.ref}' + (
+                ' — record stock movements on that line instead' if reg.ledger else '')
+
     if errors:
         raise ValidationError(errors)
 
@@ -206,6 +226,19 @@ def apply_payload(entry, reg, payload):
             setattr(entry, field.column, value)
     entry.data = data
     return entry
+
+
+def _taken_by(entry, reg, value):
+    """Another entry in the register whose unique_by text matches `value`
+    (trimmed, any case), or None."""
+    text = str(value or '').strip().lower()
+    if not text:
+        return None
+    stored = func.lower(func.trim(HseEntry.data[reg.unique_by].astext))
+    query = HseEntry.query.filter(HseEntry.register == reg.key, stored == text)
+    if entry.id is not None:
+        query = query.filter(HseEntry.id != entry.id)
+    return query.order_by(HseEntry.id).first()
 
 
 def blocking_empty_lists(reg):

@@ -32,7 +32,7 @@
                     {% if chips %}
                     <div class="hse-chips">
                         {% for chip in chips %}
-                        <a class="hse-chip{{ ' is-selected' if chip.value == filters.status else '' }}"
+                        <a class="hse-chip{{ ' is-selected' if chip.selected else '' }}"
                            href="{{ chip.url }}">
                             {{ chip.label }}<span class="hse-chip-count">{{ chip.count }}</span>
                         </a>
@@ -45,6 +45,7 @@
                     <form class="hse-filters" method="get"
                           action="{{ url_for('hse.register_page', group_key=active_group, register_key=reg.key) }}">
                         {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+                        {% if filters.flag %}<input type="hidden" name="flag" value="{{ filters.flag }}">{% endif %}
 
                         {# Phones only: severity and year fold behind this
                            (hse_registers.js), leaving search on show. #}

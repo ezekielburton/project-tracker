@@ -30,7 +30,7 @@ def test_a_time_round_trips_through_save_and_reopen(app, client, db_session):
     db_session.flush()
 
     payload = {'entry_date': '2026-09-14', 'entry_time': '07:45', 'topic': 'Ladders',
-               'reported_by': str(trainer.id), 'attendees': '12'}
+               'reported_by': str(trainer.id), 'attendees': '12', 'status': 'Completed'}
     res = client.post(_url(app, 'hse.create_entry', register_key='toolbox_talk'), json=payload)
     assert res.status_code == 201, res.get_json()
     entry = db_session.get(HseEntry, res.get_json()['id'])

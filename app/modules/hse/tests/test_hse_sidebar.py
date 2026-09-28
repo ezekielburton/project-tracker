@@ -101,13 +101,13 @@ def test_a_section_lists_its_registers_and_badges_their_total(app):
     assert [c['key'] for c in items['calendar']['children']] == ['calendar', 'schedule']
 
 
-def test_daily_log_is_a_plain_link_right_under_overview(app):
-    """Daily log sits between Overview and Calendar, with no sub-list."""
+def test_daily_log_is_a_plain_link_between_statistics_and_calendar(app):
+    """Overview, Statistics, then Daily log with no sub-list, then Calendar."""
     from app.modules.hse.lib.rail import rail_items
     with app.test_request_context():
         items = rail_items({'daily_log': 4})
-    assert [i['key'] for i in items[:3]] == ['overview', 'daily_log', 'calendar']
-    daily = items[1]
+    assert [i['key'] for i in items[:4]] == ['overview', 'statistics', 'daily_log', 'calendar']
+    daily = items[2]
     assert daily['label'] == 'Daily log' and daily['count'] == 4
     assert daily['url'].endswith('/hse/daily_log/daily_log')
     assert 'children' not in daily

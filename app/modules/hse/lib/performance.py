@@ -92,7 +92,7 @@ def trend_months(end, count=TREND_MONTHS):
 
 # --- the four tiles -------------------------------------------------------
 
-def _delta(now, before, better):
+def delta(now, before, better):
     """The comparison under a tile. `better` is 'higher' or 'lower'. None
     when either value is missing, so no arrow is drawn."""
     if now is None or before is None:
@@ -133,7 +133,7 @@ def tiles(schedules, entries, window, today=None):
         'unit': '%',
         'label': 'Actions closed on time',
         'detail': f"{on_time['judged']} actions judged",
-        'delta': _delta(on_time['percent'], on_time_prev['percent'], 'higher'),
+        'delta': delta(on_time['percent'], on_time_prev['percent'], 'higher'),
         'delta_unit': '%',
     }, {
         'key': 'speed',
@@ -141,7 +141,7 @@ def tiles(schedules, entries, window, today=None):
         'unit': 'days',
         'label': 'Average time to close',
         'detail': f'{parked} of them waiting on others' if parked else None,
-        'delta': _delta(speed['days'], speed_prev['days'], 'lower'),
+        'delta': delta(speed['days'], speed_prev['days'], 'lower'),
         'delta_unit': '',
     }, {
         'key': 'coverage',
@@ -149,7 +149,7 @@ def tiles(schedules, entries, window, today=None):
         'unit': '%',
         'label': 'Inspection coverage',
         'detail': f"{cover['done']} of {cover['due']} planned",
-        'delta': _delta(cover['percent'], cover_prev['percent'], 'higher'),
+        'delta': delta(cover['percent'], cover_prev['percent'], 'higher'),
         'delta_unit': '%',
     }, {
         'key': 'training',
@@ -157,7 +157,7 @@ def tiles(schedules, entries, window, today=None):
         'unit': 'sessions',
         'label': 'Training delivered',
         'detail': f"{taught['attendees']} attendees",
-        'delta': _delta(taught['sessions'], taught_prev['sessions'], 'higher'),
+        'delta': delta(taught['sessions'], taught_prev['sessions'], 'higher'),
         'delta_unit': '',
     }]
 
@@ -194,7 +194,7 @@ def reporting(entries, window):
         'near_misses': now['near_misses'],
         'incidents': now['incidents'],
         'unclassified': now['unclassified'],
-        'delta': _delta(now['ratio'], before['ratio'], 'higher'),
+        'delta': delta(now['ratio'], before['ratio'], 'higher'),
     }
 
 

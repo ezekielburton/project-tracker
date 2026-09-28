@@ -96,9 +96,20 @@
         return payload;
     }
 
-    function save(modal) {
-        var button = modal.querySelector('#hse-modal-save');
+    // The next blank form after "Save & add another", carrying the
+    // register's repeat fields over from what was just saved.
+    function nextFormUrl(modal, payload) {
+        var params = new URLSearchParams();
+        modal.getAttribute('data-repeat-fields').split(',').forEach(function (name) {
+            if (payload[name]) params.set(name, payload[name]);
+        });
+        return modal.getAttribute('data-new-url') + '?' + params.toString();
+    }
+
+    function save(modal, again) {
+        var button = modal.querySelector(again ? '#hse-modal-save-another' : '#hse-modal-save');
         var note = modal.querySelector('#hse-modal-note');
+        var payload = collect(modal);
         button.disabled = true;
         note.classList.remove('is-error');
         note.textContent = 'Saving…';
@@ -106,13 +117,15 @@
         fetch(modal.getAttribute('data-save-url'), {
             method: modal.getAttribute('data-method'),
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(collect(modal))
+            body: JSON.stringify(payload)
         }).then(function (res) {
             return res.json().then(function (body) { return { ok: res.ok, body: body }; });
         }).then(function (result) {
             if (result.ok) {
                 window._hseTableStale = true;
-                if (modal.getAttribute('data-method') === 'POST' && result.body.id) {
+                if (again) {
+                    open(nextFormUrl(modal, payload), 'Saved ' + result.body.ref + '. Add the next one.');
+                } else if (modal.getAttribute('data-method') === 'POST' && result.body.id) {
                     // Reopen the new entry in edit mode so files can be attached.
                     open('/hse/entry/' + result.body.id + '/form');
                 } else {
@@ -284,7 +297,17 @@
         if (save) save.disabled = false;
     }
 
-    function open(url) {
+    // Stars on fields required only at one status follow the status picked.
+    function syncRequired(select) {
+        if (!select.closest('.hse-field[data-type="status"]')) return;
+        var modal = select.closest('#hse-entry-modal');
+        modal.querySelectorAll('[data-required-when]').forEach(function (star) {
+            star.hidden = select.value !== star.getAttribute('data-required-when');
+        });
+    }
+
+    // `message` shows in the footer once the form is in (after "Save & add another").
+    function open(url, message) {
         fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
             .then(function (res) {
                 if (!res.ok) throw new Error('load failed');
@@ -293,6 +316,8 @@
             .then(function (html) {
                 mount().innerHTML = html;
                 document.body.classList.add('hse-modal-open');
+                var slot = message && document.getElementById('hse-modal-note');
+                if (slot) slot.textContent = message;
             })
             .catch(function () {
                 window.alert('Could not open the form.');
@@ -310,7 +335,8 @@
 
     document.addEventListener('click', function (e) {
         var opener = e.target.closest('[data-hse-form-url]');
-        if (opener) {
+        // Row action buttons (stock movements) sit inside a clickable row.
+        if (opener && !e.target.closest('.hse-row-actions')) {
             e.preventDefault();
             open(opener.getAttribute('data-hse-form-url'));
             return;
@@ -338,7 +364,11 @@
             return;
         }
         if (e.target.closest('#hse-modal-save')) {
-            save(modal);
+            save(modal, false);
+            return;
+        }
+        if (e.target.closest('#hse-modal-save-another')) {
+            save(modal, true);
             return;
         }
 
@@ -377,6 +407,7 @@
         if (e.target.tagName === 'SELECT' && e.target.closest('#hse-entry-modal')) {
             showSerial(e.target);
             syncClosedDate(e.target);
+            syncRequired(e.target);
         }
     });
 

@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}HSE — Statistics{% endblock %}
+
+{% macro delta(d, unit='') %}
+    {# No delta when there is no previous period to compare against. #}
+    {% if d %}
+    <div class="hse-pf-delta{{ ' is-up' if d.improved else (' is-down' if d.improved is sameas false else '') }}">
+        {% if d.improved %}▲{% elif d.improved is sameas false %}▼{% else %}—{% endif %}
+        <span>from {{ d.from }}{{ ' ' ~ unit if unit else '' }}</span>
+    </div>
+    {% endif %}
+{% endmacro %}
+
+{# Ranked bars; each bar is a share of the largest. #}
+{% macro ranked(rows, empty) %}
+    {% for r in rows %}
+    <div class="hse-ov-bar">
+        <div class="hse-ov-barhead">
+            <span class="hse-st-barlabel">{{ r.label }}</span>
+            <span class="hse-spend-amt">{{ r.text or r.value }}</span>
+        </div>
+        <div class="hse-ov-track"><div class="hse-spend-fill" style="width: {{ r.share }}%"></div></div>
+    </div>
+    {% else %}
+    <p class="hse-ov-empty">{{ empty }}</p>
+    {% endfor %}
+{% endmacro %}
+
+{% macro line(label, value, last=False) %}
+    <div class="hse-pf-line{{ ' hse-pf-line--last' if last else '' }}">
+        <span>{{ label }}</span><span class="hse-pf-fig">{{ value }}</span>
+    </div>
+{% endmacro %}
+
+{% block content %}
+<div class="module-page">
+    <div class="module-shell">
+        {% include 'hse/_rail.html' %}
+        <div class="module-main hse-main">
+            <div class="hse-inner hse-inner--fill hse-inner--page">
+
+                <div class="hse-header">
+                    <h1 class="hse-title">Statistics</h1>
+                    <div class="hse-header-actions">
+                        <span class="hse-pf-toggle hse-st-periods">
+                            {% for p in periods %}
+                            <a class="hse-pf-toggle-opt{{ ' is-on' if p.on else '' }}" href="{{ p.url }}">{{ p.label }}</a>
+                            {% endfor %}
+                            {% for y in years %}
+                            <a class="hse-pf-toggle-opt{{ ' is-on' if y.on else '' }}" href="{{ y.url }}">{{ y.value }}</a>
+                            {% endfor %}
+                        </span>
+                        {# Printable A4 reports for the current week and month. #}
+                        <a class="hse-btn" href="{{ url_for('hse.statistics_report', kind='week') }}"
+                           target="_blank" rel="noopener">Weekly report</a>
+                        <a class="hse-btn" href="{{ url_for('hse.statistics_report', kind='month') }}"
+                           target="_blank" rel="noopener">Monthly report</a>
+                    </div>
+                </div>
+
+                <div class="hse-st-body">
+                    <p class="hse-st-range">
+                        <strong>{{ window.label }}</strong> ·
+                        {{ window.start.strftime('%d %b %Y') }} – {{ window.end.strftime('%d %b %Y') }},
+                        compared with {{ window.prev_start.strftime('%d %b %Y') }} – {{ window.prev_end.strftime('%d %b %Y') }}
+                    </p>
+
+                    <div class="hse-pf-tiles hse-st-tiles">
+                        {% for t in tiles %}
+                        <div class="hse-pf-tile">
+                            <div class="hse-pf-val">
+                                {% if t.value is none %}<span class="hse-pf-num">—</span>
+                                {% else %}<span class="hse-pf-num">{{ t.value }}</span>
+                                {% if t.unit %}<span class="hse-pf-unit">{{ t.unit }}</span>{% endif %}{% endif %}
+                            </div>
+                            <div class="hse-pf-lab">{{ t.label }}</div>
+                            {{ delta(t.delta, t.unit) }}
+                            {% if t.detail %}<div class="hse-pf-note">{{ t.detail }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <section class="hse-pf-card">
+                        <div class="hse-pf-cardhead">
+                            <h2 class="hse-pf-cardttl">Incidents and near misses</h2>
+                            <span class="hse-pf-legend">
+                                <span class="hse-pf-key"><i class="hse-pf-sw hse-pf-sw--incidents"></i>Incidents</span>
+                                <span class="hse-pf-key"><i class="hse-pf-sw hse-pf-sw--near"></i>Near misses</span>
+                            </span>
+                        </div>
+                        {% include 'hse/_pf_bars.html' %}
+                        <p class="hse-pf-foot">Last twelve months to {{ window.end.strftime('%B %Y') }}.</p>
+                    </section>
+
+                    <section class="hse-pf-card">
+                        <div class="hse-pf-cardhead">
+                            <h2 class="hse-pf-cardttl">Where and what</h2>
+                            <span class="hse-pf-sub">{{ breakdown.total }} incident{{ '' if breakdown.total == 1 else 's' }} and near misses</span>
+                        </div>
+                        <div class="hse-st-cols">
+                            <div>
+                                <h3 class="hse-spend-subhead">By type</h3>
+                                {{ ranked(breakdown.by_type, 'Nothing logged.') }}
+                            </div>
+                            <div>
+                                <h3 class="hse-spend-subhead">By location</h3>
+                                {{ ranked(breakdown.by_location, 'Nothing logged.') }}
+                            </div>
+                            <div>
+                                <h3 class="hse-spend-subhead">By severity</h3>
+                                {{ ranked(breakdown.by_severity, 'Nothing logged.') }}
+                            </div>
+                        </div>
+                    </section>
+
+                    <div class="hse-st-grid">
+
+                        <section class="hse-pf-card">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Inspections</h2>
+                            {{ line('Done', inspections.done) }}
+                            {{ line('Found an issue', inspections.issues) }}
+                            {{ line('Still open (all time)', inspections.open, last=True) }}
+                            <h3 class="hse-spend-subhead hse-st-subhead">By register</h3>
+                            {% for r in inspections.by_register %}
+                            {{ line(r.label, r.done ~ ' · ' ~ r.issues ~ ' with issues', last=loop.last) }}
+                            {% endfor %}
+                            <h3 class="hse-spend-subhead hse-st-subhead">Issues by area</h3>
+                            {{ ranked(inspections.by_area, 'No issues found.') }}
+                        </section>
+
+                        <section class="hse-pf-card">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Fleet</h2>
+                            {{ line('Km driven', fleet.km ~ ' km') }}
+                            {{ line('Services done', fleet.services) }}
+                            {{ line('Service spend (AED)', fleet.service_spend, last=True) }}
+                            <h3 class="hse-spend-subhead hse-st-subhead">Km by vehicle</h3>
+                            {{ ranked(fleet.by_vehicle, 'No mileage logged.') }}
+                        </section>
+
+                        <section class="hse-pf-card">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Machines</h2>
+                            {{ line('Maintenance jobs', machines.jobs) }}
+                            {{ line('Downtime', machines.downtime ~ ' hrs') }}
+                            {{ line('Preventive maintenance done', machines.pm_done) }}
+                            {{ line('PM on time',
+                                    (machines.pm_percent ~ '% · ' ~ machines.pm_on_time ~ ' of ' ~ machines.pm_counted)
+                                    if machines.pm_percent is not none else '—', last=True) }}
+                            <p class="hse-pf-foot">On time: done by the date the machine's previous PM set.</p>
+                        </section>
+
+                        <section class="hse-pf-card">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Stores</h2>
+                            {{ line('PPE items issued', stores.ppe_total) }}
+                            {% for s in stores.by_status %}
+                            {{ line('Requests ' ~ s.label|lower, s.value, last=loop.last) }}
+                            {% endfor %}
+                            <h3 class="hse-spend-subhead hse-st-subhead">PPE by type</h3>
+                            {{ ranked(stores.ppe, 'No PPE issued.') }}
+                            <h3 class="hse-spend-subhead hse-st-subhead">Materials issued</h3>
+                            {{ ranked(stores.materials, 'No materials issued.') }}
+                        </section>
+
+                        <section class="hse-pf-card">
+                            <h2 class="hse-pf-cardttl hse-pf-cardttl--ruled">Training</h2>
+                            {{ line('Sessions held', training.sessions) }}
+                            {{ line('People trained', training.attendees) }}
+                            {{ line('Inductions completed', training.inductions) }}
+                            {{ line('Toolbox talks held', training.talks, last=True) }}
+                            <h3 class="hse-spend-subhead hse-st-subhead">Attendees by type</h3>
+                            {{ ranked(training.by_type, 'No training held.') }}
+                        </section>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('hse_assets.static', filename='js/hse_nav.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

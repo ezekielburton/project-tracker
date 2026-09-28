@@ -280,6 +280,162 @@
     padding: var(--space-4) 0;
 }
 
+/* ── Grouped rows (PPE by employee) ── */
+
+.hse-table .hse-group-row td {
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-2);
+    background: var(--surface-hover);
+    border-top: 1px solid var(--border);
+}
+
+.hse-table tbody .hse-group-row:first-child td {
+    border-top: 0;
+}
+
+.hse-group-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+}
+
+.hse-group-name {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.hse-group-count,
+.hse-group-lab {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+/* Beside the name, not pushed right: a wide table scrolls sideways and a
+   right-aligned date would sit off screen. */
+.hse-group-next {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+/* ── Stock lines ── */
+
+/* Pinned right, so the buttons stay in reach when the table scrolls sideways. */
+.hse-table td.hse-row-actions {
+    position: sticky;
+    right: 0;
+    width: 1%;
+    text-align: right;
+    cursor: default;
+    background: var(--surface-raised);
+    box-shadow: -1px 0 0 var(--border-subtle);
+}
+
+.hse-row-actions .hse-btn + .hse-btn {
+    margin-left: var(--space-1);
+}
+
+/* At or below the reorder level. Scoped to outrank .data-table td's colour. */
+.hse-table td.hse-low {
+    color: var(--danger-text);
+    font-weight: 600;
+}
+
+.hse-table td.hse-low::after {
+    content: 'Low';
+    margin-left: var(--space-2);
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    font-weight: 600;
+}
+
+/* A balance just changed by a movement. */
+.hse-table td.is-updated {
+    animation: hse-updated 1.6s ease-out;
+}
+
+@keyframes hse-updated {
+    from { background-color: var(--surface-hover); box-shadow: inset 3px 0 0 var(--tangerine); }
+    to { background-color: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
+/* Movement popover (hse_registers.js), placed on <body> by PopoverPosition. */
+.hse-move-pop {
+    position: fixed;
+    z-index: 950;
+    width: 21rem;
+    max-width: calc(100vw - 16px);
+    padding: var(--space-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+}
+
+.hse-move-pop-title {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.hse-move-pop-sub {
+    margin-top: 2px;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.hse-move-pop-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.hse-move-pop-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.hse-move-pop-field--note {
+    grid-column: 1 / -1;
+}
+
+.hse-move-pop-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* Compact: the shared .form-input is sized for full forms. */
+.hse-move-pop .form-input {
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+    padding: 0 var(--space-2);
+    font-size: var(--text-sm);
+}
+
+.hse-move-pop-field.has-error .form-input {
+    border-color: var(--danger-text);
+    box-shadow: 0 0 0 1px var(--danger-text);
+}
+
+.hse-move-pop-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+}
+
 /* ── Entry overlay ──
    Built on .modal-overlay/.modal-box. Floating UI inside it must use
    PopoverPosition, not its own position:fixed. */
@@ -439,6 +595,64 @@
 /* The page behind the overlay must not scroll with it. */
 body.hse-modal-open {
     overflow: hidden;
+}
+
+/* Stock movements on a line, newest first; read-only. */
+.hse-moves {
+    margin: var(--space-5) 0;
+}
+
+.hse-moves-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2);
+}
+
+.hse-moves-balance {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-moves-balance strong {
+    color: var(--text);
+}
+
+.hse-moves-list {
+    max-height: 15rem;
+    overflow-y: auto;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.hse-move {
+    display: grid;
+    grid-template-columns: 6.5rem 4.5rem 4rem minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.hse-move + .hse-move {
+    border-top: 1px solid var(--border-subtle);
+}
+
+.hse-move-date,
+.hse-move-by {
+    color: var(--text-muted);
+}
+
+.hse-move-qty {
+    text-align: right;
+    font-weight: 600;
+}
+
+.hse-move-note {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* ── Attachments ── */
@@ -1879,6 +2093,151 @@ body.hse-modal-open {
     font-weight: 600;
 }
 
+/* ── Email this report (_share_dialog.html; the report sheet styles its own
+   copy in hse_report.css) ── */
+
+.hse-share {
+    width: min(440px, calc(100vw - 32px));
+    max-height: 85vh;
+    padding: var(--space-5);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--surface-raised);
+    color: var(--text);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.hse-share::backdrop { background: rgba(0, 0, 0, 0.45); }
+
+.hse-share-title { margin: 0; font-size: var(--text-xl); color: var(--text); }
+
+.hse-share-sub {
+    margin: var(--space-1) 0 var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-share-people {
+    max-height: 36vh;
+    overflow-y: auto;
+    margin: 0 0 var(--space-4);
+    padding: 0;
+    border: 0;
+}
+
+.hse-share-label {
+    display: block;
+    margin-bottom: var(--space-2);
+    padding: 0;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.hse-share-person {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 0;
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+
+.hse-share-person input { width: 16px; height: 16px; margin: 0; accent-color: var(--tangerine); }
+.hse-share-role { font-size: var(--text-xs); font-weight: 400; color: var(--text-muted); }
+.hse-share-empty { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+
+.hse-share-note {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--text-sm);
+    resize: vertical;
+}
+
+.hse-share-msg { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--danger-text); }
+.hse-share-msg.is-ok { color: var(--text); }
+
+.hse-share-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+}
+
+@media (max-width: 48em) {
+    /* 16px stops iOS zooming into the field. */
+    .hse-share-note { font-size: 16px; }
+    .hse-share-actions .hse-btn { flex: 1; height: 44px; justify-content: center; }
+}
+
+/* ── Statistics ──
+   Reuses the My performance tiles, cards and lines; the incident chart is
+   the same SVG bars with its own two series. */
+
+.hse-pf-bar--incidents, .hse-pf-sw--incidents { fill: var(--hse-s1); background: var(--hse-s1); }
+.hse-pf-bar--near, .hse-pf-sw--near { fill: var(--hse-s2); background: var(--hse-s2); }
+
+.hse-st-body {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.hse-st-range {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.hse-st-range strong { color: var(--text); }
+
+.hse-st-tiles { flex-wrap: wrap; }
+.hse-st-tiles .hse-pf-tile { flex: 1 1 150px; }
+
+/* Three ranked lists side by side inside one card. */
+.hse-st-cols {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-5);
+}
+
+.hse-st-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--space-3);
+    align-items: start;
+}
+
+.hse-st-subhead { margin-top: var(--space-4); }
+
+.hse-st-barlabel {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: var(--space-2);
+}
+
+@media (max-width: 900px) {
+    .hse-st-cols { grid-template-columns: 1fr; gap: var(--space-3); }
+}
+
+@media (max-width: 48em) {
+    .hse-st-grid { grid-template-columns: 1fr; }
+    .hse-st-tiles .hse-pf-tile { flex: 1 1 130px; }
+    /* Five or more options: scroll sideways rather than wrap the header. */
+    .hse-st-periods { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; }
+    .hse-st-periods .hse-pf-toggle-opt { white-space: nowrap; }
+}
+
 @media (max-width: 1100px) {
     .hse-pf-body { flex-direction: column; }
     .hse-pf-side { flex: 1 1 auto; width: 100%; }
@@ -2450,6 +2809,84 @@ body.hse-modal-open {
         border-top: 0;
     }
 
+    /* A group heads its cards as a plain line, not a card of its own. */
+    table.hse-table > tbody > tr.hse-group-row {
+        display: block;
+        margin: var(--space-4) 0 var(--space-2);
+        padding: 0;
+        background: none;
+        border: 0;
+    }
+
+    table.hse-table > tbody > tr.hse-group-row:first-child {
+        margin-top: 0;
+    }
+
+    .hse-table .hse-group-row td {
+        padding: 0;
+        background: none;
+        border-top: 0;
+    }
+
+    .hse-group-name {
+        font-size: 1rem;
+    }
+
+    .hse-group-next {
+        flex-basis: 100%;
+        margin-left: 0;
+    }
+
+    /* Movement buttons take the card's full width, no label. */
+    table.table--cards > tbody > tr > td.hse-row-actions {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: var(--space-2);
+        position: static;
+        width: auto;
+        background: none;
+        box-shadow: none;
+    }
+
+    table.table--cards > tbody > tr > td.hse-row-actions::before {
+        content: none;
+    }
+
+    .hse-row-actions .hse-btn {
+        flex: 1;
+        justify-content: center;
+        height: 40px;
+        font-size: var(--text-sm);
+    }
+
+    .hse-row-actions .hse-btn + .hse-btn {
+        margin-left: 0;
+    }
+
+    .hse-move-pop .form-input {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    /* The modal already scrolls; no scroll box inside it. */
+    .hse-moves-list {
+        max-height: none;
+    }
+
+    .hse-move {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-areas: "date kind qty" "note note by";
+        row-gap: 2px;
+    }
+
+    .hse-move-by { text-align: right; }
+
+    .hse-move-date { grid-area: date; }
+    .hse-move-kind { grid-area: kind; }
+    .hse-move-qty { grid-area: qty; }
+    .hse-move-note { grid-area: note; }
+    .hse-move-by { grid-area: by; }
+
     /* Schedule card: the title is the schedule's name, so the top line
        only needs the register it files into. */
     .hse-sched-table .card-kicker .hse-sched-what {
@@ -2552,6 +2989,16 @@ body.hse-modal-open {
 
     .hse-modal-actions .hse-btn--primary {
         flex: 2;
+    }
+
+    /* Three buttons: "Save & add another" takes its own row above. */
+    .hse-modal-actions:has(#hse-modal-save-another) {
+        flex-wrap: wrap;
+    }
+
+    .hse-modal-actions #hse-modal-save-another {
+        order: -1;
+        flex-basis: 100%;
     }
 
     /* 16px stops an iPhone zooming into the field; 44px fits a thumb. */

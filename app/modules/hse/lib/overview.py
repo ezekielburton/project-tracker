@@ -13,7 +13,7 @@ from app.modules.hse.lib.metrics import (
     compliance_health, done_vs_due, expiring_soon_count, sla_pressure,
 )
 from app.modules.hse.lib.vocab import OPEN_STATUSES
-from app.modules.hse.lib.registers import BY_KEY
+from app.modules.hse.lib.registers import BY_KEY, counts_as_done
 
 # Rows per panel before it shows "and N more".
 PANEL_LIMIT = 6
@@ -224,7 +224,7 @@ def this_week(schedules, entries, start, end, today=None):
         'near_misses': near,
         'inspections_done': cov['done'],
         'inspections_due': cov['due'],
-        'trainings': len(filed('training')),
+        'trainings': sum(1 for e in filed('training') if counts_as_done(e)),
         'opened': sum(1 for e in entries
                       if e.entry_date is not None and start <= e.entry_date <= end
                       and BY_KEY.get(e.register) is not None

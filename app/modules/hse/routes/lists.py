@@ -10,12 +10,12 @@ from flask_login import login_required
 
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import require, require_api
+from app.modules.hse.lib.flags import rail_counts
 from app.modules.hse.lib.lists import (
     KIND_LABELS, find_or_revive_reference, kind_label, panel_for,
     serialize_asset, serialize_person, serialize_reference, tabs,
 )
 from app.modules.hse.lib.rail import rail_items
-from app.modules.hse.lib.query import open_counts_by_register
 from app.modules.hse.models import (
     ASSET_KINDS, REFERENCE_KINDS, HseAsset, HsePerson, HseReference,
 )
@@ -58,7 +58,7 @@ def lists_page(tab_key=None):
     return render_template(
         'hse/lists.html',
         sections=panel_for(tab_key),
-        rail=rail_items(open_counts_by_register()),
+        rail=rail_items(rail_counts()),
         active_group='lists',
         active_sub=tab_key,
         list_pages=[{'key': t['key'], 'label': t['label'],

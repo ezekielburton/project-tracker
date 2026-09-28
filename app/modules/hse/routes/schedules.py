@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
 from app.modules.core.shared.lib.utils import log_activity
-from app.modules.hse.lib.query import open_counts_by_register
+from app.modules.hse.lib.flags import rail_counts
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.lib.schedules import (
     LOOKBACK_DAYS, ValidationError, apply_payload, clean_payload, display_row,
@@ -89,7 +89,7 @@ def schedule_page():
         people=[{'id': p.id, 'label': p.name} for p in people],
         assets=[{'id': a.id, 'label': a.label, 'kind': a.kind, 'ref': a.ref}
                 for a in _active_assets()],
-        rail=rail_items(open_counts_by_register(today), active_group='calendar'),
+        rail=rail_items(rail_counts(today), active_group='calendar'),
         active_group='calendar',
         active_sub='schedule',
     )

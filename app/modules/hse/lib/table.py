@@ -3,8 +3,11 @@ Turns a register declaration into table columns and cell view models, so
 cell text and pill colours are testable without rendering HTML.
 """
 
+from datetime import date
+
+from app.modules.hse.lib import flags, stock
 from app.modules.hse.lib.computed import (
-    days_open, days_to_expiry, effective_status,
+    days_open, days_to_expiry, effective_status, expiry_status,
 )
 from app.modules.hse.lib.overview import entry_title
 from app.modules.hse.lib.registers import shows_asset_serial, table_fields
@@ -29,24 +32,47 @@ RELATION_ATTRS = {
 
 
 def _trailing_label(reg):
-    """Header of the trailing computed column, or None for a log."""
+    """Header of the trailing computed column, or None for a log. A
+    register with a done_status logs things that happen, so nothing in it
+    is ever open."""
     if reg.status_source == 'expiry':
         return 'Days to expiry'
-    if reg.status_source == 'stored':
+    if reg.status_source == 'stored' and not reg.done_status:
         return 'Days open'
     return None
+
+
+def _shown_fields(reg):
+    """Table fields less the group_by field, which heads each group instead."""
+    return tuple(f for f in table_fields(reg) if f.name != reg.group_by)
+
+
+def _layout(reg):
+    """Column plan shared by columns() and row(): ('field', f) per shown
+    field, with Next due after the interval field and Next service after the
+    mileage field, then the computed ones."""
+    plan = []
+    for field in _shown_fields(reg):
+        plan.append(('field', field))
+        if field.name == reg.interval_field:
+            plan.append(('next_due', 'Next due'))
+        if reg.km_due and field.name == reg.km_due[0]:
+            plan.append(('next_service', 'Next service'))
+    if reg.ledger:
+        plan.append(('balance', 'Balance'))
+    if reg.status_source == 'expiry':
+        plan.append(('status', 'Status'))
+    trailing = _trailing_label(reg)
+    if trailing:
+        plan.append(('trailing', trailing))
+    return plan
 
 
 def columns(reg):
     """Header labels: Ref, each in_table field, then computed columns. An
     expiry register has no status field, so it gets an extra Status column."""
-    heads = ['Ref'] + [f.label for f in table_fields(reg)]
-    if reg.status_source == 'expiry':
-        heads.append('Status')
-    trailing = _trailing_label(reg)
-    if trailing:
-        heads.append(trailing)
-    return heads
+    return ['Ref'] + [spec.label if kind == 'field' else spec
+                      for kind, spec in _layout(reg)]
 
 
 def _cell(kind, text, modifier=None, tone=None):
@@ -91,16 +117,56 @@ def cell(entry, field, reg, today=None):
     return _cell('text', value)
 
 
-def row(entry, reg, today=None):
-    """Every cell for one entry, in the same order as columns()."""
+# Flag state -> cell tone: overdue reads red, due soon bold.
+_FLAG_TONES = {'overdue': 'expired', 'soon': 'overdue'}
+
+
+def _next_due_cell(entry, reg, current, today=None):
+    """Next due for the latest entry per asset (`current` ids)."""
+    if current is None or entry.id not in current:
+        return _cell('empty', '—')
+    state, due = flags.pm_state(entry, today or date.today(), reg)
+    if due is None:
+        return _cell('empty', '—')
+    return _cell('text', due.strftime(DATE_FORMAT), tone=_FLAG_TONES.get(state))
+
+
+def _next_service_cell(entry, current, readings):
+    """Next service reading for the latest completed service per vehicle
+    (`current` ids), against the vehicle's odometer in `readings`."""
+    due_km = flags.next_service_km(entry) if current and entry.id in current else None
+    if due_km is None:
+        return _cell('empty', '—')
+    state, _ = flags.service_state(entry, (readings or {}).get(entry.asset_id))
+    return _cell('mono', flags.km_text(due_km), tone=_FLAG_TONES.get(state))
+
+
+def _balance_cell(entry):
+    """Balance with its unit; at or below the reorder level reads low."""
+    return _cell('mono', stock.balance_text(entry),
+                 tone='low' if stock.is_low_stock(entry) else None)
+
+
+def row(entry, reg, today=None, current=None, readings=None):
+    """Every cell for one entry, in the same order as columns(). `current`:
+    ids of the latest entry per asset, for Next due and Next service;
+    `readings`: odometer per vehicle, for Next service."""
     cells = [_cell('mono', entry.ref)]
-    cells += [cell(entry, f, reg, today) for f in table_fields(reg)]
-    if reg.status_source == 'expiry':
-        label = effective_status(entry, reg, today)
-        cells.append(_cell('pill', label, status_modifier(label)) if label
-                     else _cell('empty', '—'))
-    if _trailing_label(reg):
-        cells.append(_trailing(entry, reg, today))
+    for kind, spec in _layout(reg):
+        if kind == 'field':
+            cells.append(cell(entry, spec, reg, today))
+        elif kind == 'next_due':
+            cells.append(_next_due_cell(entry, reg, current, today))
+        elif kind == 'next_service':
+            cells.append(_next_service_cell(entry, current, readings))
+        elif kind == 'balance':
+            cells.append(_balance_cell(entry))
+        elif kind == 'status':
+            label = effective_status(entry, reg, today)
+            cells.append(_cell('pill', label, status_modifier(label)) if label
+                         else _cell('empty', '—'))
+        else:
+            cells.append(_trailing(entry, reg, today))
     return cells
 
 
@@ -155,19 +221,40 @@ def peek(entry, reg, today=None):
     return out
 
 
-def table_rows(entries, reg, today=None):
+def table_rows(entries, reg, today=None, current=None, readings=None):
     """View rows: cells, hover card, and lowercased text for client-side
     search. On phones `title` heads the card, and `aside` (first field is a
     date) puts that date top right beside the ref."""
-    fields = table_fields(reg)
+    fields = _shown_fields(reg)
     lead_is_date = bool(fields) and fields[0].type == 'date'
     out = []
     for entry in entries:
-        cells = row(entry, reg, today)
+        cells = row(entry, reg, today, current, readings)
         searchable = ' '.join(
             str(c['text']) for c in cells if c['kind'] != 'empty' and c['text'] is not None
         ).lower()
         out.append({'id': entry.id, 'ref': entry.ref, 'cells': cells,
                     'peek': peek(entry, reg, today), 'search': searchable,
                     'title': entry_title(entry), 'aside': lead_is_date})
+    return out
+
+
+def table_groups(groups, reg, today=None):
+    """Grouped view rows. Each group heads with its name, item count and
+    soonest due date (with that date's expiry status)."""
+    field = next(f for f in reg.fields if f.name == reg.group_by)
+    out = []
+    for entries in groups:
+        name = _raw(entries[0], field)
+        dated = [e for e in entries if e.due_at is not None]
+        soonest = min(dated, key=lambda e: e.due_at) if dated else None
+        status = expiry_status(soonest, today) if soonest else None
+        out.append({
+            'label': name or f'No {field.label.lower()}',
+            'count': len(entries),
+            'soonest': soonest.due_at.strftime(DATE_FORMAT) if soonest else None,
+            'status': status,
+            'modifier': status_modifier(status) if status else None,
+            'rows': table_rows(entries, reg, today),
+        })
     return out

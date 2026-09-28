@@ -10,12 +10,17 @@ from flask_login import login_required
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
 from app.modules.core.shared.lib.utils import log_activity
+from app.modules.core.shared.models import User
+from app.modules.hse.lib import stock
+from app.modules.hse.lib.computed import next_due
 from app.modules.hse.lib.forms import (
     ValidationError, apply_payload, blocking_empty_lists, form_fields,
 )
+from app.modules.hse.lib.query import latest_ids
 from app.modules.hse.lib.refs import next_ref
 from app.modules.hse.lib.registers import register
 from app.modules.hse.lib.schedule import falls_due_on
+from app.modules.hse.lib.table import DATE_FORMAT
 from app.modules.hse.models import HseEntry, HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
 
@@ -35,8 +40,9 @@ def _parse_date(raw):
 
 
 def _prefill(reg, args):
-    """Form prefill from the calendar: the clicked day and the occurrence's
-    asset. Fields are found by column/type, so any field name works."""
+    """Form prefill from the calendar (the clicked day and the occurrence's
+    asset) and from "Save & add another" (the register's repeat_fields, by
+    field name). Calendar fields are found by column/type."""
     out = {}
     day = args.get('date')
     asset = args.get('asset')
@@ -45,7 +51,33 @@ def _prefill(reg, args):
             out[field.name] = day
         if asset and asset.isdigit() and field.type == 'asset':
             out[field.name] = int(asset)
+        value = args.get(field.name)
+        if field.name in reg.repeat_fields and value:
+            # Column-backed pickers match their options by id.
+            if field.column and field.type in ('choice', 'person', 'asset'):
+                if value.isdigit():
+                    out[field.name] = int(value)
+            else:
+                out[field.name] = value
     return out
+
+
+def _next_due_note(entry, reg):
+    """The read-only line under the interval field, or None."""
+    if not reg.interval_field:
+        return None
+    if entry.id not in latest_ids(reg.key):
+        return 'No next due: a later entry exists for this machine'
+    due = next_due(entry, reg)
+    return f'Next due {due.strftime(DATE_FORMAT)}' if due else 'No next due for this frequency'
+
+
+def _move_history(entry):
+    """A stock line's movements, newest first, with who recorded each."""
+    ids = stock.mover_ids(entry)
+    names = ({u.id: u.name for u in User.query.filter(User.id.in_(ids)).all()}
+             if ids else {})
+    return stock.history(entry, names)
 
 
 def _occurrence(reg, schedule_id, occurrence_date):
@@ -91,6 +123,7 @@ def new_entry_form(register_key):
         blocked_by=blocking_empty_lists(reg),
         occurrence=occurrence,
         today=date.today().isoformat(),
+        next_due_note=None, moves=None, balance=None,
     )
 
 
@@ -108,6 +141,9 @@ def edit_entry_form(entry_id):
         blocked_by=blocking_empty_lists(reg),
         occurrence=None,
         today=date.today().isoformat(),
+        next_due_note=_next_due_note(entry, reg),
+        moves=_move_history(entry) if reg.ledger else None,
+        balance=stock.balance_text(entry) if reg.ledger else None,
     )
 
 
@@ -165,3 +201,30 @@ def update_entry(entry_id):
     log_activity('hse_entry_updated', f'{actor.name} updated {entry.ref}',
                  user=actor, entity_type='hse_entry', entity_name=entry.ref, entity_id=entry.id)
     return jsonify({'id': entry.id, 'ref': entry.ref})
+
+
+@hse_bp.route('/entry/<int:entry_id>/moves', methods=['POST'])
+@login_required
+@require_api('manage_hse')
+def record_move(entry_id):
+    """Add a received, issued or count movement to a stock line. Returns
+    the new balance for the row."""
+    entry = HseEntry.query.get_or_404(entry_id)
+    reg = _register_or_404(entry.register)
+    if not reg.ledger:
+        abort(404)
+    actor = effective_user()
+
+    try:
+        stock.add_move(entry, request.get_json(silent=True), actor.id)
+    except ValidationError as e:
+        return jsonify({'errors': e.errors}), 400
+
+    db.session.commit()
+    move = entry.data['moves'][-1]
+    log_activity('hse_stock_moved',
+                 f"{actor.name} recorded {move['kind']} {move['qty']} on {entry.ref}",
+                 user=actor, entity_type='hse_entry', entity_name=entry.ref, entity_id=entry.id)
+    return jsonify({'id': entry.id, 'balance': stock.balance(entry),
+                    'balance_text': stock.balance_text(entry),
+                    'low': stock.is_low_stock(entry)})
