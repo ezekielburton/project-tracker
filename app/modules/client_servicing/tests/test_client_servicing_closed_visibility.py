@@ -11,7 +11,7 @@ from app.modules.core.shared.testing import login_as
 from app.modules.client_servicing.models import ClientServicing
 from app.modules.client_servicing.lib import summary as summary_lib
 from app.modules.client_servicing.lib.calendar import build_install
-from app.modules.client_servicing.lib.dashboard import _active
+from app.modules.client_servicing.routes.table import _active_projects
 
 
 def _user(db_session, tag, role='cs'):
@@ -120,8 +120,7 @@ def test_closed_job_card_has_no_editable_cells(app, client, db_session):
 
 def test_dashboard_drops_closed_projects(app, db_session):
     user = _user(db_session, 'g')
-    closed = _project(db_session, user, 'Closed Board Job', closed=True)
-    live = _project(db_session, user, 'Live Board Job')
+    _project(db_session, user, 'Closed Board Job', closed=True)
+    _project(db_session, user, 'Live Board Job')
 
-    names = [p.name for p in _active([closed, live])]
-    assert names == ['Live Board Job']
+    assert [p.name for p in _active_projects().all()] == ['Live Board Job']

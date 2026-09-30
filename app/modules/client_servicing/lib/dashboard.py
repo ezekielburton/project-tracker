@@ -2,7 +2,8 @@
 Client Servicing dashboard: the module's landing panels and its feed for the
 global Dashboard. Read-only.
 
-Reuses the Table, Calendar and Invoicing helpers so numbers match those pages.
+Loads the active set through _active_projects, the loader Invoicing By Project
+shares, and reuses the Calendar and Invoicing helpers so numbers match those pages.
 Finance figures need can_view_finance; page access alone is not enough.
 """
 from datetime import date, timedelta
@@ -15,7 +16,8 @@ from app.modules.client_servicing.lib.access import (
 from app.modules.client_servicing.lib.status import effective_cs_status
 from app.modules.client_servicing.lib.calendar import effective_risk, build_install
 from app.modules.client_servicing.lib.summary import year_summary, due_this_month, stuck_this_month
-from app.modules.client_servicing.routes.table import _base_projects
+from app.modules.client_servicing.lib.data_gaps import MISSING_DATA_CHIP, missing_fields
+from app.modules.client_servicing.routes.table import _active_projects
 
 
 # Days ahead the feed looks for installs; rows shown in Upcoming Installs.
@@ -49,15 +51,6 @@ def _signal_sort(item):
     return (_URGENCY_RANK.get(item['urgency'], 3), item['date'] or date.max)
 
 
-def _active(projects):
-    """Projects minus cancelled and closed ones."""
-    return [
-        p for p in projects
-        if p.cancelled_at is None
-        and not (p.client_servicing is not None and p.client_servicing.closed_at is not None)
-    ]
-
-
 def _snapshot(active, today):
     """Status and risk resolved once per project, for every panel to share."""
     snap = []
@@ -74,9 +67,9 @@ def _projects_link(project_id):
     return url_for('project_list.index', project=project_id)
 
 
-def _table_link(project_id):
-    """The CS table focused on one project (where install date and value are edited)."""
-    return url_for('client_servicing.table', project=project_id)
+def _missing_data_link():
+    """The Table with its Missing-data chip on."""
+    return url_for('client_servicing.table', chip=MISSING_DATA_CHIP)
 
 
 def _invoicing_project_link(project_id):
@@ -163,14 +156,11 @@ def _upcoming(snap, today):
     return [build_install(r['p'], today) for r in dated[:_UPCOMING_LIMIT]]
 
 
-def _gaps(p):
-    # No lead check: Project.cs_lead_id is NOT NULL.
-    gaps = []
-    if p.installation_date is None:
-        gaps.append('install date')
-    if p.value is None:
-        gaps.append('value')
-    return gaps
+def _data_gaps(snap):
+    """Jobs missing an install date or value, counted once each. Shown as one
+    strip so they can't bury the risk and money rows."""
+    count = sum(1 for r in snap if missing_fields(r['p']))
+    return {'count': count, 'link': _missing_data_link()}
 
 
 def _finance_signals(due, today):
@@ -195,6 +185,8 @@ def _finance_signals(due, today):
 
 
 def _urgent_actions(snap, due, today, show_finance):
+    """At-risk installs plus, for finance viewers, the month's money items.
+    Missing data is counted separately by _data_gaps."""
     items = []
     for r in snap:
         p = r['p']
@@ -205,13 +197,6 @@ def _urgent_actions(snap, due, today, show_finance):
                 'link': _calendar_link(p.installation_date),
                 'urgency': 'urgent' if r['risk'] == 'At Risk' else 'warning',
                 'date': p.installation_date,
-            })
-        gaps = _gaps(p)
-        if gaps:
-            items.append({
-                'source': 'client_servicing', 'kind': 'data_gap', 'title': p.name,
-                'detail': 'Missing ' + ', '.join(gaps), 'link': _table_link(p.id),
-                'urgency': 'info', 'date': None,
             })
     if show_finance:
         items += _finance_signals(due, today)
@@ -242,7 +227,7 @@ def dashboard_context(user):
     for finance viewers."""
     today = date.today()
     show_finance = can_view_finance(user)
-    snap = _snapshot(_active(_base_projects().all()), today)
+    snap = _snapshot(_active_projects().all(), today)
 
     month_row = due = None
     stuck = []
@@ -262,6 +247,7 @@ def dashboard_context(user):
         'workload': _workload(snap),
         'upcoming': _upcoming(snap, today),
         'urgent_actions': _urgent_actions(snap, due or [], today, show_finance),
+        'data_gaps': _data_gaps(snap),
         'invoicing_health': month_row,
         'stuck_projects': stuck,
     }
@@ -273,7 +259,7 @@ def feed_items(user):
     if not can_access_client_servicing(user):
         return []
     today = date.today()
-    snap = _snapshot(_active(_base_projects().all()), today)
+    snap = _snapshot(_active_projects().all(), today)
     items = _feed_installs(snap, today)
     if can_view_finance(user):
         items += _finance_signals(due_this_month(today.year, today.month), today)

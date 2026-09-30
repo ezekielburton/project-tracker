@@ -18,6 +18,8 @@ app/modules/client_servicing/
     calendar.py             # install risk + month/agenda data service
     summary.py              # Monthly Summary rollup (computed live, nothing stored)
     dashboard.py            # Dashboard aggregations (six panels) + module feed items
+    data_gaps.py            # missing_fields() + MISSING_DATA_CHIP — shared by the Dashboard strip and the Table chip
+    quick_chips.py          # the Table's quick filter chips (CHIPS) and row_chips() — which rows each matches
   services/
     dashboard_feed.py       # feed_for(user) — the module's feed for the global Dashboard
   routes/
@@ -45,6 +47,15 @@ owner, job number, value, deadlines, SPOC) is written to the same project
 record — one source of truth, not a copy that drifts. Draft projects are
 excluded everywhere in the module via the shared `table.py::_base_projects()`
 (`project_status != 'draft'`) — a draft isn't a real project yet.
+
+Three loaders in `routes/table.py`, each narrower than the last:
+- `_base_projects()` — every non-draft project. Monthly Summary, Calendar, Closed.
+- `_open_projects()` — minus closed. The Table (it splits off cancelled jobs
+  into the close-out strip itself).
+- `_active_projects()` — minus cancelled jobs awaiting close-out too. The
+  **active set**: the Dashboard and Invoicing By Project both load through it,
+  so their counts can't differ. A test checks Dashboard, Invoicing and Table
+  count the same jobs.
 
 ## Data model
 - **`ClientServicing`** — 1:1 with a project (`project_id` unique, `ON DELETE
@@ -97,12 +108,13 @@ has edits attributed as that person; the admin-only Scope CRUD stays on
 ## Dashboard (`routes/dashboard.py`, `lib/dashboard.py`)
 The module landing (`GET /`) and first rail entry — the daily-standup "where
 does everything stand" view. Read-only, no new models: one eager-loaded
-`_base_projects()` fetch, composed from the existing helpers so numbers can't
+`_active_projects()` fetch, composed from the existing helpers so numbers can't
 drift from the Table / Calendar / Invoicing pages.
 
 Six panels:
 - **KPI band** — Active · Installs (month) · Next 7 days · At Risk · Pipeline · Stuck.
-- **Urgent Actions** — at-risk/attention installs + finance items (LPO / overdue / unbilled) + data gaps; each row deep-links (Calendar / Invoicing / Open in Projects). Scrolls internally.
+- **Urgent Actions** — at-risk/attention installs + finance items (LPO / overdue / unbilled); each row deep-links (Calendar / Invoicing). The red badge counts only these. Scrolls internally.
+- **Missing-data strip** — one line at the top of Urgent Actions: "N jobs need data · install date or value", linking to the Table with the Missing data chip on (`?chip=missing_data`). Counts jobs, not gaps; hidden at zero. Kept out of the list so dozens of identical gap rows can't bury a real risk or money item.
 - **Status Spread** — active count per lifecycle family (segmented bar + legend).
 - **Upcoming Installs** — next installs, risk dot + relative day. Scrolls internally.
 - **Invoicing Health** — month pipeline / confirmed / invoiced + progress + stuck count/amount.
@@ -130,12 +142,38 @@ load, the CSS `calc()` fallback takes over.
 Reuses the projects-table patterns: the shared `UserTableLayout` model
 (`table_key = 'client_servicing:table'`) for per-user column widths/order,
 data-driven columns, client-side click-to-sort (no server round-trip, no saved
-sort), column resize/reorder, a sticky Project-name column, and an "Open in
-Projects" button per row that deep-links to that project's overlay
-(`?project=<id>`). No project overlay here — every cell is edited in place.
+sort) and column resize/reorder. No project overlay here — every cell is
+edited in place.
 
-**Search + filter** (client-side, in `client_servicing.js`) — a toolbar above
-the table: a search box (client / project / job no) and a Filter panel of chips
+- **Project column** — always first, sticky left, not draggable. The name is
+  the link to that project on the Projects page (`?project=<id>`). Rows are one
+  line tall.
+- **Row menu** — a faint "⋯" at the right of the Project cell, for roles that
+  can close. It opens one shared menu (`#cs-row-menu`, parked on `<body>` via
+  `PopoverPosition` while open) with *Close project…*, which opens the same
+  confirm prompt (`client_servicing_close.js`).
+- **Default column order** (`COLUMNS`) follows the CS meeting: Project · Client
+  · Status · CS Contact · Installation Date · Value · LPO · Job No · then the
+  rest. A saved layout keeps its own order; `migrations/reset_cs_table_column_order.py`
+  resets saved layouts to the default (widths kept) when the default changes.
+
+**Quick filter chips** — **My jobs · Missing data · At risk · Installs this
+month**, in the toolbar. The server decides which chips each row matches
+(`lib/quick_chips.py::row_chips`, stamped on the `<tr>` as `data-chips`), using
+the Dashboard's own rules: *mine* = the effective user is the CS lead or project
+owner (emulation-aware); *missing data* = `data_gaps.missing_fields()`; *at risk*
+= `effective_risk() == 'At Risk'`; *installs this month* = the same month test as
+the Installs KPI. A test checks chip counts equal the Dashboard's. The JS only
+filters: chips combine (AND) with each other, the search and the Filter panel;
+each shows a faceted count; `?chip=a,b` preselects them and is kept in step via
+`history.replaceState`, so the Dashboard strip (`?chip=missing_data`) and later
+pages can deep-link. `client_servicing.js` declares the chip ids, the row
+attribute and the bar id as `TEMPLATE_CONTRACT`;
+`test_client_servicing_quick_chips.py` reads it and checks the template, the
+row attribute and the server's `CHIPS` still match.
+
+**Search + filter** (client-side, in `client_servicing.js`) — a search box
+(client / project / job no) and a Filter panel of chips
 (Client, CS Contact, Project Owner, Status, Scope, Priority). Options and
 faceted counts are built from the loaded rows, so they always match what's in
 the table. Filtering hides rows and re-runs the sort, and re-applies after each
@@ -176,8 +214,10 @@ first.
 Two tabs behind an in-page strip; drafts excluded from both.
 
 - **By Project** (`GET /invoicing`) — a fixed-column finance table over the
-  same projects, with the finance columns in an "Invoicing — Master Control"
-  band. Finance cells are inline-edited (text/date/number, a GR toggle, a
+  active set (`_active_projects()`, same as the Dashboard: closed jobs and
+  cancelled jobs awaiting close-out are out; the CSV export matches), with the finance columns in an "Invoicing — Master Control"
+  band. The band is a neutral surface; red (salmon) is kept for the No LPO /
+  Overdue pills so it only ever means "flagged". Finance cells are inline-edited (text/date/number, a GR toggle, a
   validation dropdown) via the shared `PATCH /<project_id>`. Days Pending is a
   badge coloured by the configurable thresholds; no anchor date → a muted dash.
 - **Monthly Summary** (`GET /invoicing/summary?year=&month=`) — computed live,
@@ -190,6 +230,10 @@ Two tabs behind an in-page strip; drafts excluded from both.
 - **Day thresholds** — green/amber/red day cut-offs in `ClientServicingSetting`,
   edited by admin/management from a toolbar button + modal. The toolbar's
   search / month & validation filters / Export are present but not yet wired.
+
+## KPI tiles
+Every KPI tile number in the module — Dashboard, Calendar, Invoicing summary,
+Closed — is `var(--font-mono)` at weight 500, so the figures read as one set.
 
 ## Scope option list
 CS-managed. Users add options inline from the Scope dropdown (`/scopes/quick-add`);

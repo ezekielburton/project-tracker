@@ -7,7 +7,7 @@ from flask import url_for
 
 from app.modules.core.shared.models import User, UserTableLayout
 from app.modules.core.shared.testing import login_as
-from app.modules.client_servicing.routes.table import TABLE_KEY, COLUMNS
+from app.modules.client_servicing.routes.table import TABLE_KEY, COLUMNS, reset_to_default_order
 
 
 def _user(db_session, tag, role='cs'):
@@ -183,3 +183,19 @@ def test_project_column_is_pinned_first_even_if_saved_layout_says_otherwise(app,
     order = _rendered_column_order(client, app)
     assert order[0] == 'project'
     assert order[1:3] == ['priority', 'client']
+
+
+def test_default_order_follows_the_meeting(app, client, db_session):
+    user = _user(db_session, 'default-order')
+    login_as(client, app, user, 'password123')
+    order = _rendered_column_order(client, app)
+    assert order[:8] == ['project', 'client', 'status', 'cs_lead',
+                         'installation_date', 'value', 'lpo', 'job_number']
+
+
+def test_reset_keeps_widths_and_restores_default_order():
+    saved = [{'key': 'priority', 'width': 90}, {'key': 'gone', 'width': 50},
+             {'key': 'client', 'width': 140}, {'key': 'project', 'width': 260}]
+    assert reset_to_default_order(saved) == [
+        {'key': 'project', 'width': 260}, {'key': 'client', 'width': 140},
+        {'key': 'priority', 'width': 90}]

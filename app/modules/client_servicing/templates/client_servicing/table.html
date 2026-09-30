@@ -29,6 +29,15 @@
                         <button type="button" id="cs-search-clear" class="cs-search-clear"
                                 aria-label="Clear search" hidden>&times;</button>
                     </div>
+                    {# Quick filters (client_servicing.js TEMPLATE_CONTRACT). They combine;
+                       ?chip=a,b preselects them, so other pages can deep-link. #}
+                    <div class="cs-quick-chips" id="cs-quick-chips" role="group" aria-label="Quick filters">
+                        {% for chip_id, label in quick_chips %}
+                        <button type="button" class="cs-quick-chip" data-chip="{{ chip_id }}" aria-pressed="false">
+                            {{ label }}<span class="cs-quick-chip-count"></span>
+                        </button>
+                        {% endfor %}
+                    </div>
                     <div class="cs-filter">
                         <button type="button" id="cs-filter-toggle" class="cs-filter-toggle">Filter</button>
                         <div id="cs-filter-panel" class="cs-filter-panel" hidden>
@@ -51,6 +60,12 @@
         </div>
     </div>
 </div>
+{% if can_close %}
+{# One menu shared by every row's "⋯"; parked on <body> while open. #}
+<div id="cs-row-menu" class="cs-row-menu" role="menu" hidden>
+    <button type="button" class="cs-row-menu-item" id="cs-row-menu-close" role="menuitem">Close project…</button>
+</div>
+{% endif %}
 {% include 'client_servicing/_close_modals.html' %}
 {# Page JS stays in the content block. Never nest a <main> above it:
    spa_strip_response() cuts at the first </main> and would drop this. #}

@@ -2,8 +2,8 @@
    #client-servicing-table-body, re-rendered on each live refresh.
 
    `columns` (table.py's COLUMNS) sets which columns show and their order;
-   each <td> comes from a macro in _columns.html. "Open in Projects" is
-   pinned first and is not in `columns`, so it cannot be resized or moved.
+   each <td> comes from a macro in _columns.html. Project is always first
+   and pinned; its cell carries the link to Projects and the row menu.
 
    The <colgroup> applies saved widths (column_widths) on first paint. The
    resize JS (client_servicing.js) is delegated on the container because
@@ -24,14 +24,12 @@
 } %}
 <table class="cs-table" id="cs-table" data-table-key="{{ table_key }}" data-save-layout-url="{{ url_for('client_servicing.save_layout') }}">
     <colgroup>
-        <col class="cs-col-open">
         {% for col in columns %}
         <col data-col-key="{{ col.key }}"{% if column_widths.get(col.key) %} style="width: {{ column_widths[col.key] }}px;"{% endif %}>
         {% endfor %}
     </colgroup>
     <thead>
         <tr>
-            <th class="cs-col-open"></th>
             {% for col in columns %}
             <th data-col-key="{{ col.key }}">{{ col.label }}<span class="cs-resize-handle" data-col-key="{{ col.key }}"></span></th>
             {% endfor %}
@@ -41,21 +39,13 @@
         {% for row in rows %}
         {# data-row-order: the server's default order (by name). Sorting is
            client-side, so clearing a sort restores rows from this. #}
-        <tr data-project-id="{{ row.id }}" data-row-order="{{ loop.index }}">
-            <td class="cs-col-open">
-                <a class="btn-secondary cs-open-btn" href="{{ url_for('project_list.index', project=row.id) }}">Open in Projects</a>
-                {% if can_close %}
-                <button type="button" class="btn-secondary cs-close-btn"
-                        data-close-url="{{ url_for('client_servicing.close_project', project_id=row.id) }}"
-                        data-project-name="{% if row.client %}{{ row.client }} — {% endif %}{{ row.name }}">Close</button>
-                {% endif %}
-            </td>
+        <tr data-project-id="{{ row.id }}" data-row-order="{{ loop.index }}" data-chips="{{ row.chips|join(' ') }}">
             {% for col in columns %}
-            {{ CELL_RENDERERS[col.key](row) }}
+            {% if col.key == 'project' %}{{ cell_project(row, can_close) }}{% else %}{{ CELL_RENDERERS[col.key](row) }}{% endif %}
             {% endfor %}
         </tr>
         {% else %}
-        <tr><td colspan="{{ columns|length + 1 }}" class="cs-empty">No projects to show.</td></tr>
+        <tr><td colspan="{{ columns|length }}" class="cs-empty">No projects to show.</td></tr>
         {% endfor %}
     </tbody>
 </table>

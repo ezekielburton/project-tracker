@@ -11,7 +11,8 @@ from app.modules.client_servicing.models import ClientServicing
 from app.modules.client_servicing.lib.access import can_view_finance
 from app.modules.client_servicing.lib import dashboard as dash
 from app.modules.client_servicing.services.dashboard_feed import feed_for
-from app.modules.client_servicing.routes.table import _base_projects
+from app.modules.client_servicing.routes.table import _active_projects
+from app.modules.client_servicing.lib.data_gaps import MISSING_DATA_CHIP, missing_fields
 
 TODAY = date(2026, 9, 15)
 
@@ -43,7 +44,7 @@ def _project(db_session, tag, creator, install=None, cs_status=None,
 
 
 def _snap(today=TODAY):
-    return dash._snapshot(dash._active(_base_projects().all()), today)
+    return dash._snapshot(_active_projects().all(), today)
 
 
 # ── finance gate ───────────────────────────────────────────────────────────
@@ -114,22 +115,62 @@ def test_upcoming_future_only_and_sorted(db_session):
 
 
 # ── urgent actions (links need a request context) ──────────────────────────
-def test_urgent_actions_selection_and_order(app, db_session):
+def test_urgent_actions_keep_risk_and_money_only(app, db_session):
     lead = _user(db_session, 'ua')
     _project(db_session, 'ua_risk', lead, install=TODAY + timedelta(days=1), cs_status='Briefing', value=Decimal('1000'))
     _project(db_session, 'ua_att', lead, install=TODAY + timedelta(days=5), cs_status='Briefing', value=Decimal('1000'))
-    _project(db_session, 'ua_gap', lead, cs_status='Pending LPO')  # has lead; no install / value
-    snap = _snap()
+    _project(db_session, 'ua_gap', lead, cs_status='Pending LPO')  # no install / value
     with app.test_request_context():
-        items = dash._urgent_actions(snap, [], TODAY, False)
-    kinds = [i['kind'] for i in items]
-    assert 'install_risk' in kinds and 'data_gap' in kinds
-    assert items[0]['urgency'] == 'urgent'    # At Risk sorts first
-    assert items[-1]['urgency'] == 'info'     # data gap last
-    risk = next(i for i in items if i['kind'] == 'install_risk' and i['urgency'] == 'urgent')
-    gap = next(i for i in items if i['kind'] == 'data_gap')
-    assert '/client-servicing/calendar' in risk['link']
-    assert 'project=' in gap['link'] and 'Missing' in gap['detail']
+        items = dash._urgent_actions(_snap(), [], TODAY, False)
+    assert 'data_gap' not in [i['kind'] for i in items]
+    assert [i['urgency'] for i in items] == ['urgent', 'warning']   # At Risk first
+    assert '/client-servicing/calendar' in items[0]['link']
+
+
+def test_missing_fields_names_install_date_and_value():
+    p = Project(name='Gap check')
+    assert missing_fields(p) == ['install date', 'value']
+    p.installation_date, p.value = TODAY, 10
+    assert missing_fields(p) == []
+
+
+def test_data_gaps_count_jobs_once_and_link_to_the_chip(app, db_session):
+    lead = _user(db_session, 'dg')
+    _project(db_session, 'dg_both', lead, cs_status='Briefing')                       # two gaps, one job
+    _project(db_session, 'dg_value', lead, install=TODAY, cs_status='Briefing')       # no value
+    _project(db_session, 'dg_full', lead, install=TODAY, value=Decimal('10'), cs_status='Briefing')
+    with app.test_request_context():
+        gaps = dash._data_gaps(_snap())
+    assert gaps['count'] == 2
+    assert '/client-servicing/table' in gaps['link']
+    assert 'chip=' + MISSING_DATA_CHIP in gaps['link']
+
+
+def test_dashboard_shows_gap_strip_and_badge_counts_risk_only(app, client, db_session):
+    today = date.today()
+    lead = _user(db_session, 'gs')
+    _project(db_session, 'gs_risk', lead, install=today + timedelta(days=1),
+             cs_status='Briefing', value=Decimal('1000'))
+    _project(db_session, 'gs_gap1', lead, cs_status='Briefing')
+    _project(db_session, 'gs_gap2', lead, cs_status='Briefing')
+    with app.test_request_context():
+        url = url_for('client_servicing.index')
+    login_as(client, app, lead, 'password123')
+
+    body = client.get(url).get_data(as_text=True)
+    assert 'cs-dash-gapstrip-count">2</span>' in body
+    assert 'cs-dash-badge">1</span>' in body        # the at-risk install only
+    assert 'Missing install date' not in body       # no per-job gap rows
+
+
+def test_gap_strip_hidden_when_nothing_is_missing(app, client, db_session):
+    lead = _user(db_session, 'gh')
+    _project(db_session, 'gh_full', lead, install=date.today() + timedelta(days=30),
+             cs_status='Briefing', value=Decimal('10'))
+    with app.test_request_context():
+        url = url_for('client_servicing.index')
+    login_as(client, app, lead, 'password123')
+    assert 'cs-dash-gapstrip' not in client.get(url).get_data(as_text=True)
 
 
 def test_finance_signals_urgency(app):

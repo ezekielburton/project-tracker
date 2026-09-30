@@ -41,15 +41,18 @@
     var confirmBtn = document.getElementById('cs-close-confirm');
     var closeCancel = document.getElementById('cs-close-cancel');
 
-    page.addEventListener('click', function (e) {
-        var btn = e.target.closest ? e.target.closest('.cs-close-btn') : null;
-        if (!btn) return;
-        pending = btn.dataset.closeUrl;
-        subject.textContent = btn.dataset.projectName || '';
-        clearError(closeError);
-        confirmBtn.disabled = false;
-        show(closeModal);
-    });
+    // The row menu sits on <body> while open, outside .cs-page, so its item
+    // is wired directly. client_servicing.js copies the row's details onto it.
+    var menuClose = document.getElementById('cs-row-menu-close');
+    if (menuClose) {
+        menuClose.addEventListener('click', function () {
+            pending = menuClose.dataset.closeUrl;
+            subject.textContent = menuClose.dataset.projectName || '';
+            clearError(closeError);
+            confirmBtn.disabled = false;
+            show(closeModal);
+        });
+    }
 
     closeCancel.addEventListener('click', function () { hide(closeModal); });
     closeModal.addEventListener('click', function (e) { if (e.target === closeModal) hide(closeModal); });

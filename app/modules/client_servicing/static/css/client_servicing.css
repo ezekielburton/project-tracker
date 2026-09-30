@@ -98,47 +98,97 @@
     white-space: normal !important;
 }
 
-.cs-col-open {
-    width: 1%;
-}
-
-/* "Open in Projects" and Project stay pinned as the table scrolls right.
-   Project is always first and never reordered (table.py _ordered_columns).
-   Scoped to th/td to skip the resize-handle span with the same data-col-key. */
-.cs-table th.cs-col-open,
-.cs-table td.cs-col-open,
+/* Project stays pinned left as the table scrolls right. It is always first
+   and never reordered (table.py _ordered_columns). Scoped to th/td to skip
+   the resize-handle span with the same data-col-key. */
 .cs-table th[data-col-key="project"],
 .cs-table td[data-col-key="project"] {
     position: sticky;
+    left: 0;
     z-index: 2;
     background: var(--surface);
 }
 
-/* Pinned corner: sticky top and left, so it must outrank both the sticky
-   header row and the sticky body columns. */
-.cs-table thead th.cs-col-open,
+/* Pinned corner: sticky top and left, so it outranks the sticky header row
+   and the sticky body column. */
 .cs-table thead th[data-col-key="project"] {
     z-index: 3;
     background: var(--surface-raised);
 }
 
-.cs-table th.cs-col-open,
-.cs-table td.cs-col-open {
-    left: 0;
+/* Project cell: the name links to Projects; "⋯" sits at the right edge. */
+.cs-project-cell {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
 }
 
-.cs-table th[data-col-key="project"],
-.cs-table td[data-col-key="project"] {
-    /* Set by syncStickyProjectOffset() (client_servicing.js) to the Open
-       column's rendered width, which varies with its text button. */
-    left: var(--cs-sticky-project-left, 0px);
+.cs-project-link {
+    flex: 1;
+    min-width: 0;
+    color: var(--text);
+    text-decoration: none;
 }
 
-.cs-open-btn,
-.cs-close-btn {
-    padding: 0.35rem 0.75rem;
-    font-size: var(--text-xs);
-    white-space: nowrap;
+.cs-project-link:hover {
+    color: var(--tangerine);
+    text-decoration: underline;
+}
+
+/* Always visible so it's found without hovering; strengthens on row hover. */
+.cs-row-menu-btn {
+    flex-shrink: 0;
+    border: 0;
+    background: none;
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-sm);
+    color: var(--text-faint);
+    font-size: var(--text-sm);
+    line-height: 1.3;
+    cursor: pointer;
+}
+
+.cs-table tbody tr:hover .cs-row-menu-btn,
+.cs-row-menu-btn[aria-expanded="true"],
+.cs-row-menu-btn:focus-visible {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+
+/* PopoverPosition sets top/left and parks it on <body> while open, so it is
+   styled by id, never through a table ancestor. */
+#cs-row-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 160px;
+    padding: var(--space-1);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+}
+
+#cs-row-menu[hidden] {
+    display: none;
+}
+
+.cs-row-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.cs-row-menu-item:hover,
+.cs-row-menu-item:focus-visible {
+    background: var(--surface-hover);
 }
 
 .cs-table .person-chip {
@@ -379,8 +429,8 @@
 }
 
 .cs-inv-table thead th.cs-inv-fin {
-    color: var(--coral);
-    background: color-mix(in srgb, var(--coral) 12%, var(--surface));
+    color: var(--text-muted);
+    background: var(--surface-raised);
 }
 
 .cs-inv-glab {
@@ -392,12 +442,7 @@
 }
 
 .cs-inv-glab--fin {
-    color: var(--coral);
-}
-
-/* Finance band tint on body cells */
-.cs-inv-fin {
-    background: color-mix(in srgb, var(--coral) 5%, transparent);
+    color: var(--text);
 }
 
 .cs-inv-table tbody td {
@@ -409,10 +454,6 @@
 
 .cs-inv-table tbody tr:hover td {
     background: var(--surface-hover);
-}
-
-.cs-inv-table tbody tr:hover td.cs-inv-fin {
-    background: color-mix(in srgb, var(--coral) 12%, var(--surface-hover));
 }
 
 .cs-inv-proj {
@@ -575,7 +616,7 @@
 .cs-inv-kpi-value {
     font-family: var(--font-mono);
     font-size: var(--text-xl);
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text);
 }
 
@@ -632,7 +673,7 @@
 .cs-cal-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 15px; position: relative; }
 .cs-cal-kpi--accent { border-color: color-mix(in srgb, var(--coral) 45%, var(--border)); }
 .cs-cal-kpi-lab { font-size: var(--text-xs); letter-spacing: .04rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
-.cs-cal-kpi-val { font-size: 1.7rem; font-weight: 700; color: var(--text); line-height: 1; }
+.cs-cal-kpi-val { font-size: 1.7rem; font-family: var(--font-mono); font-weight: 500; color: var(--text); line-height: 1; }
 .cs-cal-kpi-dot { position: absolute; top: 13px; right: 13px; width: 9px; height: 9px; border-radius: 50%; }
 .cs-cal-kpi--ontrack .cs-cal-kpi-dot { background: var(--clover); }
 .cs-cal-kpi--attention .cs-cal-kpi-dot { background: var(--canary); }
@@ -1004,6 +1045,27 @@
 .cs-sig--warning .cs-dash-row-dot { background: var(--canary); }
 .cs-sig--info { border-left-color: var(--border-strong); }
 
+/* Missing-data strip: a neutral to-do line above Urgent Actions, not an alarm. */
+.cs-dash-gapstrip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border-top: 1px solid var(--border);
+    background: var(--surface-sunken);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-decoration: none;
+}
+.cs-dash-gapstrip:hover {
+    background: var(--surface-hover);
+}
+.cs-dash-gapstrip-count {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text);
+}
+
 /* ── Status Spread ── */
 .cs-dash-bar {
     display: flex;
@@ -1238,6 +1300,50 @@
     align-items: center;
     gap: var(--space-3);
     margin-bottom: var(--space-4);
+}
+
+/* Quick filter chips: one tap each; they combine with each other, the search
+   and the Filter panel. */
+.cs-quick-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.cs-quick-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.cs-quick-chip:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+
+.cs-quick-chip[aria-pressed="true"] {
+    color: var(--tangerine);
+    background: color-mix(in srgb, var(--tangerine) 12%, transparent);
+    border-color: color-mix(in srgb, var(--tangerine) 38%, transparent);
+}
+
+.cs-quick-chip-count {
+    font-family: var(--font-mono);
+    color: var(--text-faint);
+}
+
+.cs-quick-chip[aria-pressed="true"] .cs-quick-chip-count {
+    color: var(--tangerine);
 }
 
 /* search */
@@ -1486,13 +1592,6 @@
     padding: 0.2rem 0.7rem;
     font-size: var(--text-xs);
     white-space: nowrap;
-}
-
-/* Close button stacks under Open in the pinned cell; sized with .cs-open-btn above. */
-.cs-close-btn {
-    margin-top: var(--space-1);
-    display: block;
-    width: 100%;
 }
 
 .cs-close-subject {

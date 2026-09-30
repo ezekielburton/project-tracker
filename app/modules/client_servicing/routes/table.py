@@ -16,31 +16,32 @@ from app.modules.client_servicing.models import ClientServicing, ClientServicing
 from app.modules.client_servicing.lib.status import (
     effective_cs_status, cs_design_indicator, CS_STATUS_OPTIONS,
 )
+from app.modules.client_servicing.lib.calendar import effective_risk
+from app.modules.client_servicing.lib.quick_chips import CHIPS, row_chips
 from app.modules.core.shared.lib.capabilities import effective_user
 from app.modules.client_servicing.lib.access import can_close_projects, require_cs
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
 
 
-# Every reorderable/resizable column, in default order. key must match a
-# macro in _columns.html ("cell_" + key) and, for editable columns, the
-# data-field edit.py expects. The pinned "Open in Projects" column is not
-# listed because it cannot be moved or resized.
+# Every reorderable/resizable column, in default order: the meeting's
+# columns first, then the rest. key must match a macro in _columns.html
+# ("cell_" + key) and, for editable columns, the data-field edit.py expects.
 COLUMNS = [
-    {'key': 'client', 'label': 'Client'},
     {'key': 'project', 'label': 'Project'},
+    {'key': 'client', 'label': 'Client'},
+    {'key': 'status', 'label': 'Status'},
+    {'key': 'cs_lead', 'label': 'CS Contact'},
+    {'key': 'installation_date', 'label': 'Installation Date'},
+    {'key': 'value', 'label': 'Project Value (AED)'},
+    {'key': 'lpo', 'label': 'LPO'},
+    {'key': 'job_number', 'label': 'Job No'},
     {'key': 'brief_date', 'label': 'Brief Date'},
     {'key': 'designers', 'label': 'Lead Designer(s)'},
     {'key': 'client_approval', 'label': 'Client Approval'},
-    {'key': 'status', 'label': 'Status'},
-    {'key': 'job_number', 'label': 'Job No'},
-    {'key': 'cs_lead', 'label': 'CS Contact'},
     {'key': 'project_owner', 'label': 'Project Owner'},
     {'key': 'client_spoc', 'label': 'Client SPOC'},
-    {'key': 'installation_date', 'label': 'Installation Date'},
-    {'key': 'value', 'label': 'Project Value (AED)'},
     {'key': 'due_date', 'label': 'Due Date'},
     {'key': 'scope', 'label': 'Scope'},
-    {'key': 'lpo', 'label': 'LPO'},
     {'key': 'store_location', 'label': 'Store / Location'},
     {'key': 'removal_date', 'label': 'Removal Date'},
     {'key': 'invoice_month', 'label': 'Invoice Month'},
@@ -90,6 +91,14 @@ def _column_widths(saved):
     }
 
 
+def reset_to_default_order(layout):
+    """A saved layout re-sorted into COLUMNS order, widths kept and unknown
+    keys dropped. The one-off migration uses it when the default order changes."""
+    rank = {col['key']: i for i, col in enumerate(COLUMNS)}
+    entries = [e for e in (layout or []) if isinstance(e, dict) and e.get('key') in rank]
+    return sorted(entries, key=lambda e: rank[e['key']])
+
+
 def _serialize_person(user):
     if not user:
         return None
@@ -109,10 +118,11 @@ def _eager_load(query):
     )
 
 
-def _serialize_row(p, contacts_by_id, client_approved_at):
+def _serialize_row(p, contacts_by_id, client_approved_at, me_id, today):
     cs = p.client_servicing
     contact = contacts_by_id.get(p.contact_id) if p.contact_id else None
     status_label, status_class, status_is_auto = effective_cs_status(p)
+    risk = effective_risk(p, status_label, today)[0]
     status_indicators = cs_design_indicator(p) if (status_is_auto and status_label == 'In Design') else []
     designers = [_serialize_person(pd.designer) for pd in p.assigned_designers]
     return {
@@ -148,6 +158,7 @@ def _serialize_row(p, contacts_by_id, client_approved_at):
         'inward_cost': cs.inward_cost if cs else None,
         'margin_percent': cs.margin_percent if cs else None,
         'priority': cs.priority if cs else None,
+        'chips': row_chips(p, risk, me_id, today),
     }
 
 
@@ -173,8 +184,7 @@ def _contacts_by_client(client_ids):
 
 def _base_projects():
     """Every non-draft project, eager-loaded, closed ones included. The base
-    query for the Calendar, Monthly Summary, Closed, Dashboard and
-    _open_projects()."""
+    query for the Calendar, Monthly Summary, Closed and _open_projects()."""
     return _eager_load(Project.query).filter(Project.project_status != 'draft')
 
 
@@ -184,6 +194,13 @@ def _open_projects():
     return _base_projects().outerjoin(
         ClientServicing, ClientServicing.project_id == Project.id,
     ).filter(ClientServicing.closed_at.is_(None))
+
+
+def _active_projects():
+    """The worklist every CS page counts: open projects minus cancelled ones
+    waiting in the close-out strip. The Dashboard and Invoicing By Project
+    both load through this, so their counts can't differ."""
+    return _open_projects().filter(Project.cancelled_at.is_(None))
 
 
 def _awaiting_close_out(project):
@@ -221,13 +238,15 @@ def _page_context():
         if contact_ids else {}
     )
     client_approved_at = bulk_project_client_approved_at([p.id for p in projects])
-    rows = [_serialize_row(p, contacts_by_id, client_approved_at) for p in projects]
+    me = effective_user()
+    today = date.today()
+    rows = [_serialize_row(p, contacts_by_id, client_approved_at, me.id, today) for p in projects]
 
     client_ids = {p.client_id for p in projects if p.client_id}
     saved = _saved_layout()
     return {
         'rows': rows,
-        'today': date.today(),
+        'today': today,
         'columns': _ordered_columns(saved),
         'table_key': TABLE_KEY,
         'column_widths': _column_widths(saved),
@@ -237,7 +256,8 @@ def _page_context():
         'project_owner_options': _person_options('project_owner'),
         'contacts_by_client': _contacts_by_client(client_ids),
         'to_close_out': [_close_out_row(p) for p in to_close_out],
-        'can_close': can_close_projects(effective_user()),
+        'can_close': can_close_projects(me),
+        'quick_chips': CHIPS,
     }
 
 

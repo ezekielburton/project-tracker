@@ -169,7 +169,8 @@ def test_close_out_strip_hidden_from_a_role_that_cannot_close(app, client, db_se
 
     html = client.get(_table_url(app)).get_data(as_text=True)
     assert 'cs-closeout-btn' not in html
-    assert 'cs-close-btn' not in html
+    assert 'cs-row-menu-btn' not in html
+    assert 'id="cs-row-menu"' not in html
 
 
 def test_close_out_skips_the_value_question_when_the_project_has_one(app, client, db_session):
@@ -187,3 +188,17 @@ def test_close_out_skips_the_value_question_when_the_project_has_one(app, client
 
     assert has_value('Valued Cancelled Job') == '1'
     assert has_value('Unvalued Cancelled Job') == '0'
+
+
+def test_row_menu_replaces_the_stacked_buttons(app, client, db_session):
+    user = _user(db_session, 'rm')
+    project = _project(db_session, user, name='Menu Row Job')
+    login_as(client, app, user, 'password123')
+    with app.test_request_context():
+        projects_url = url_for('project_list.index', project=project.id)
+
+    html = client.get(_table_url(app)).get_data(as_text=True)
+    assert 'Open in Projects' not in html
+    assert 'cs-col-open' not in html
+    assert 'class="cs-project-link" href="{}"'.format(projects_url) in html
+    assert 'cs-row-menu-btn' in html and 'id="cs-row-menu-close"' in html

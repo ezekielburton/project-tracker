@@ -566,6 +566,13 @@ status pill. */
     gap: var(--space-2);
 }
 
+/* A section with sub-pages is a flex line even without an icon or count,
+   so its chevron can sit at the right edge. */
+.module-rail-item--parent {
+    display: flex;
+    align-items: center;
+}
+
 /* Tangerine wash marks the active item; it reads on both themes, so no dark override. */
 .module-rail-item--active {
     background: rgba(242, 127, 85, 0.14);

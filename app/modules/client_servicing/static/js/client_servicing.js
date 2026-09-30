@@ -10,15 +10,6 @@
     var body = document.getElementById('client-servicing-table-body');
     if (!body) return;
 
-    // The sticky Project column's left offset must equal the "Open in Projects"
-    // column's rendered width. Re-run after every refresh (the table is replaced).
-    function syncStickyProjectOffset() {
-        var table = document.getElementById('cs-table');
-        var openHeaderCell = table && table.querySelector('thead th.cs-col-open');
-        if (!table || !openHeaderCell) return;
-        table.style.setProperty('--cs-sticky-project-left', openHeaderCell.getBoundingClientRect().width + 'px');
-    }
-
     // Sizes the table box to fill down to the footer (shared fill_height.js).
     // If that script is missing, the CSS calc() height is the fallback.
     function syncTableScrollHeight() {
@@ -91,7 +82,6 @@
             .then(function (html) {
                 if (html === null) return;
                 body.innerHTML = html;
-                syncStickyProjectOffset();
                 applySort(); // keep whatever sort was active through the swap
                 updateSortIndicators();
             })
@@ -548,7 +538,7 @@
     body.addEventListener('mousedown', function (e) {
         if (e.target.closest('.cs-resize-handle')) return; // the resize handler above owns this
         var th = e.target.closest('th[data-col-key]');
-        // Project stays pinned after "Open in Projects"; the sticky CSS
+        // Project stays pinned first; the sticky CSS
         // assumes it never moves.
         if (!th || th.dataset.colKey === 'project') return;
         e.preventDefault();
@@ -595,15 +585,13 @@
         toggleSort(th.dataset.colKey);
     });
 
-    // ── Sticky column wiring ──────────────────────────────────────────
-    syncStickyProjectOffset();
+    // ── Height wiring ─────────────────────────────────────────────────
     syncTableScrollHeight();
 
     // window listeners outlive SPA swaps: bind once per session so visits do
-    // not stack them. Both handlers re-query the DOM on each call.
+    // not stack them. The handler re-queries the DOM on each call.
     if (!window.__csTableResizeBound) {
         window.__csTableResizeBound = true;
-        window.addEventListener('resize', syncStickyProjectOffset);
         window.addEventListener('resize', syncTableScrollHeight);
     }
 })();
@@ -624,6 +612,19 @@
     var columnsEl = document.getElementById('cs-filter-columns');
     var countEl = document.getElementById('cs-filter-count');
     var clearBtn = document.getElementById('cs-filter-clear');
+
+    // Quick filter chips. test_client_servicing_quick_chips.py reads this and
+    // checks table.html and the server's CHIPS still match; change them together.
+    var TEMPLATE_CONTRACT = {
+        'chipBar': 'cs-quick-chips',
+        'rowAttribute': 'data-chips',
+        'chips': ['mine', 'missing_data', 'at_risk', 'installs_month']
+    };
+    var chipBar = document.getElementById(TEMPLATE_CONTRACT.chipBar);
+    var activeChips = {};  // chip id -> true
+    (new URLSearchParams(window.location.search).get('chip') || '').split(',').forEach(function (id) {
+        if (TEMPLATE_CONTRACT.chips.indexOf(id) !== -1) activeChips[id] = true;
+    });
 
     // key = the column's data-col-key.
     var FIELDS = [
@@ -668,15 +669,55 @@
         return !!sel[tokenOf(tr, key)];
     }
 
-    // Search plus every field except `except` (for faceted counts; null = all).
-    function passes(tr, term, except) {
-        if (!matchesSearch(tr, term)) return false;
+    function rowHasChip(tr, id) {
+        var ids = ' ' + (tr.getAttribute(TEMPLATE_CONTRACT.rowAttribute) || '') + ' ';
+        return ids.indexOf(' ' + id + ' ') !== -1;
+    }
+
+    // Every active chip must match; `except` skips one, for that chip's own count.
+    function matchesChips(tr, except) {
+        for (var id in activeChips) {
+            if (id !== except && !rowHasChip(tr, id)) return false;
+        }
+        return true;
+    }
+
+    // Every panel field except `except` (for faceted counts; null = all).
+    function passesFields(tr, except) {
         for (var i = 0; i < FIELDS.length; i++) {
             var k = FIELDS[i].key;
             if (k === except) continue;
             if (!matchesField(tr, k)) return false;
         }
         return true;
+    }
+
+    function passes(tr, term, except) {
+        return matchesSearch(tr, term) && matchesChips(tr, null) && passesFields(tr, except);
+    }
+
+    // A chip's count: rows passing search, the panel and the OTHER chips.
+    function updateQuickChips(all, term) {
+        if (!chipBar) return;
+        Array.prototype.forEach.call(chipBar.querySelectorAll('[data-chip]'), function (btn) {
+            var id = btn.dataset.chip;
+            var n = 0;
+            all.forEach(function (tr) {
+                if (rowHasChip(tr, id) && matchesSearch(tr, term) && passesFields(tr, null) && matchesChips(tr, id)) n++;
+            });
+            btn.querySelector('.cs-quick-chip-count').textContent = n;
+            btn.setAttribute('aria-pressed', activeChips[id] ? 'true' : 'false');
+        });
+    }
+
+    // Keeps ?chip= in step, so a reload or a shared link shows the same chips.
+    function syncChipUrl() {
+        var params = new URLSearchParams(window.location.search);
+        var ids = TEMPLATE_CONTRACT.chips.filter(function (id) { return activeChips[id]; });
+        if (ids.length) params.set('chip', ids.join(','));
+        else params.delete('chip');
+        var qs = params.toString();
+        history.replaceState(history.state, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
     }
 
     function displayLabel(token) {
@@ -788,9 +829,11 @@
         });
         setNoMatches(all.length > 0 && visible === 0);
         updateChips(all, term);
+        updateQuickChips(all, term);
         var filterN = updateBadge();
         searchClear.hidden = !term;
-        countEl.textContent = (term || filterN) ? ('Showing ' + visible + ' of ' + all.length) : 'Showing all';
+        var chipN = Object.keys(activeChips).length;
+        countEl.textContent = (term || filterN || chipN) ? ('Showing ' + visible + ' of ' + all.length) : 'Showing all';
     }
 
     // ── events ──
@@ -835,6 +878,19 @@
         apply();
     });
 
+    // Delegated on the bar, which sits outside the refreshed table.
+    if (chipBar) {
+        chipBar.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-chip]');
+            if (!btn) return;
+            var id = btn.dataset.chip;
+            if (activeChips[id]) delete activeChips[id];
+            else activeChips[id] = true;
+            syncChipUrl();
+            apply();
+        });
+    }
+
     // Re-apply after the SSE refresh swaps the table. Disconnect the previous
     // visit's observer so only one is active.
     if (window.__csFilterObserver) window.__csFilterObserver.disconnect();
@@ -848,4 +904,64 @@
 
     buildChips();
     apply();
+})();
+
+
+/* ── Row menu ("⋯" in the Project cell) ──────────────────────────────────
+   One shared menu for every row. Opening copies the row's close details onto
+   the menu item; client_servicing_close.js opens the prompt from there.
+   Parked on <body> while open so no ancestor offsets its fixed position. */
+(function () {
+    var body = document.getElementById('client-servicing-table-body');
+    var menu = document.getElementById('cs-row-menu');
+    var item = document.getElementById('cs-row-menu-close');
+    if (!body || !menu || !item || !window.PopoverPosition) return;
+
+    var trigger = null;
+
+    function closeMenu() {
+        if (menu.hidden) return;
+        menu.hidden = true;
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        trigger = null;
+        window.PopoverPosition.release(menu);
+    }
+
+    function openMenu(btn) {
+        trigger = btn;
+        item.dataset.closeUrl = btn.dataset.closeUrl;
+        item.dataset.projectName = btn.dataset.projectName || '';
+        window.PopoverPosition.attach(menu);
+        menu.hidden = false;
+        window.PopoverPosition.place(menu, btn);
+        btn.setAttribute('aria-expanded', 'true');
+        item.focus();
+    }
+
+    body.addEventListener('click', function (e) {
+        var btn = e.target.closest('.cs-row-menu-btn');
+        if (!btn) return;
+        e.stopPropagation();
+        var wasOpen = trigger === btn;
+        closeMenu();
+        if (!wasOpen) openMenu(btn);
+    });
+
+    item.addEventListener('click', closeMenu);
+    var scroller = document.getElementById('cs-table-scroll');
+    if (scroller) scroller.addEventListener('scroll', closeMenu, { passive: true });
+
+    // document and window outlive SPA swaps: bind once and always call the
+    // current visit's closeMenu.
+    window.__csCloseRowMenu = closeMenu;
+    if (!window.__csRowMenuBound) {
+        window.__csRowMenuBound = true;
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('#cs-row-menu')) window.__csCloseRowMenu();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') window.__csCloseRowMenu();
+        });
+        window.addEventListener('resize', function () { window.__csCloseRowMenu(); });
+    }
 })();

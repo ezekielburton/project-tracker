@@ -8,7 +8,7 @@
     'On Hold': 'poppy'
 } %}
 {% set LINK_LABEL = {
-    'install_risk': 'Calendar →', 'data_gap': 'Open →',
+    'install_risk': 'Calendar →',
     'lpo_outstanding': 'Invoicing →', 'invoice_overdue': 'Invoicing →', 'invoice_due': 'Invoicing →'
 } %}
 {% macro money(v) %}{% set n = v|float %}{% if n >= 1000000 %}{{ '%.2f'|format(n/1000000) }}M{% elif n >= 1000 %}{{ '%.0f'|format(n/1000) }}K{% else %}{{ '%.0f'|format(n) }}{% endif %}{% endmacro %}
@@ -62,6 +62,14 @@
       {% if urgent_actions %}<span class="cs-dash-badge">{{ urgent_actions|length }}</span>{% endif %}
       <span class="cs-dash-panel-note">needs you today</span>
     </div>
+    {# Missing data is one line, not a row per job, so it can't bury risk and money. #}
+    {% if data_gaps.count %}
+    <a class="cs-dash-gapstrip" href="{{ data_gaps.link }}">
+      <span class="cs-dash-gapstrip-count">{{ data_gaps.count }}</span>
+      <span>{{ 'job needs' if data_gaps.count == 1 else 'jobs need' }} data · install date or value</span>
+      <span class="cs-dash-row-link">Complete them →</span>
+    </a>
+    {% endif %}
     <div class="cs-dash-panel-body">
       {% for it in urgent_actions %}
       <a class="cs-dash-row cs-sig--{{ it.urgency }}" href="{{ it.link }}">

@@ -12,7 +12,20 @@
 
 {% macro cell_client(row) %}<td data-col-key="client" data-sort-value="{{ row.client or '' }}">{{ row.client or '—' }}</td>{% endmacro %}
 
-{% macro cell_project(row) %}<td data-col-key="project" data-sort-value="{{ row.name or '' }}">{{ row.name }}</td>{% endmacro %}
+{# The name links to Projects. "⋯" opens the shared row menu (table.html);
+   it carries what the close prompt needs. #}
+{% macro cell_project(row, can_close=False) %}
+<td data-col-key="project" data-sort-value="{{ row.name or '' }}">
+    <div class="cs-project-cell">
+        <a class="cs-project-link" href="{{ url_for('project_list.index', project=row.id) }}">{{ row.name }}</a>
+        {% if can_close %}
+        <button type="button" class="cs-row-menu-btn" aria-label="Row actions" aria-haspopup="menu" aria-expanded="false"
+                data-close-url="{{ url_for('client_servicing.close_project', project_id=row.id) }}"
+                data-project-name="{% if row.client %}{{ row.client }} — {% endif %}{{ row.name }}">⋯</button>
+        {% endif %}
+    </div>
+</td>
+{% endmacro %}
 
 {% macro cell_brief_date(row) %}<td data-col-key="brief_date" data-sort-value="{{ row.briefing_date.isoformat() if row.briefing_date else '' }}">{{ row.briefing_date.strftime('%d %b %Y') if row.briefing_date else '—' }}</td>{% endmacro %}
 

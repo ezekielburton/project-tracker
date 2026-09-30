@@ -146,6 +146,10 @@ up out of reach.
   away from it. HSE uses it for *Lists & people* and *My performance*.
 - **`.module-rail-item--active` is tangerine**, matching `.settings-nav-item.active`.
   The alpha wash reads on both grounds, so there is no dark override.
+- **A section with sub-pages (`--parent`) is always a flex line**, like a
+  `--rich` item. Its chevron is an `::after` pushed right with `margin-left:
+  auto`, which only works in a flex row — as a plain block the chevron sat
+  against the label.
 
 ## Testing
 The shared pytest harness lives here:
