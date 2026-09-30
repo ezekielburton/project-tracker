@@ -24,10 +24,12 @@ ships as a patch.
   - Machines: maintenance, preventive maintenance, machine cost
   - Stores: PPE register, tools inventory, material request, materials in stock
   - Training: induction, toolbox talk, training expenses
+- Lists & people and My performance sit at the end of the side rail.
 - **Lists & people** — his own locations, departments, people, assets and
-  dropdown lists. He manages these himself, not an admin.
-- **My performance** — the numbers he takes to a review, with a printable PDF
-  and a CSV download.
+  dropdown lists: an index of every list beside the one he has open. He
+  manages these himself, not an admin. Retired values stay hidden until asked for.
+- **My performance** — the numbers he takes to a review, spend included, with
+  a printable PDF and a CSV download.
 - **Email** — My performance and the weekly/monthly reports can be emailed to
   anyone who can open HSE: the headline numbers plus a link, no attachment.
 
@@ -52,6 +54,13 @@ ships as a patch.
   the Overview panel, a filter chip on those registers, and the rail badges.
 - A machine's serial number lives on the asset (`serial_no`, set in Lists &
   people) and shows read-only under the picker in the machine registers.
+- Every entry names who reported it and who it was reported to. Where someone
+  does the work (treated, inspected, repaired, trained), that is Done by.
+  Person pickers list HSE people first; a new entry's Reported by starts on
+  the signed-in user.
+- Number fields are whole numbers, 0 or more.
+- The spend figures and by-area bars are one template (`_spend.html`), shared
+  by the Overview, Statistics and My performance.
 - Nothing is deleted. Retired list items, people and assets are deactivated.
 - Time an action spends waiting on someone else doesn't count against him.
 - Attachments are stored on the NAS under `/HSE/<register>/<ref>`.

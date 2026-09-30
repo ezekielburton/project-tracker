@@ -22,6 +22,7 @@
         class="{{ 'mono' if c.kind == 'mono' else '' }}{{ ' muted' if c.kind in ('muted', 'empty') else '' }}{{ ' hse-clip' if c.kind == 'clip' else '' }}{{ ' hse-overdue' if c.tone == 'overdue' else '' }}{{ ' hse-expired' if c.tone == 'expired' else '' }}{{ ' hse-low' if c.tone == 'low' else '' }}{{ ' card-kicker' if loop.first else '' }}{{ ' card-aside' if loop.index == 2 and row.aside else '' }}{{ ' card-hide' if c.kind in ('empty', 'clip') else '' }}"
         {%- if c.tone == 'low' %} title="At or below the reorder level"{% endif %}>
         {%- if c.kind == 'pill' %}{{ status_pill(c.text, c.modifier) }}
+        {%- elif c.kind == 'clip' %}<span class="hse-clip-text">{{ c.text }}</span>
         {%- else %}{{ c.text }}{% endif -%}
     </td>
     {% endfor %}

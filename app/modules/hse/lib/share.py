@@ -170,6 +170,8 @@ def performance_csv(model):
     r = model['reporting']
     w.writerow(['Near misses per incident', _blank(r['ratio']),
                 _blank(r['delta']['from']) if r.get('delta') else '', ''])
+    s = model['spend']['tile']
+    w.writerow(['Spend', s['value'], s['delta']['from'], 'AED'])
     w.writerow([])
     c = model['compliance']
     w.writerow(['Compliance', 'Count'])

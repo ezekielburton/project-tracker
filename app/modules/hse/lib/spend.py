@@ -59,12 +59,18 @@ def area_rows(split):
     } for area in split['areas']]
 
 
+def figures(entries, today=None):
+    """This month, this year and all time, as of today."""
+    today = today or date.today()
+    return _figures(spend_summary(entries, today), today)
+
+
 def spend_panel(entries, today=None):
     """The Overview panel: three figures, then this year's spend by area."""
     today = today or date.today()
     split = spend_by_area(entries, date(today.year, 1, 1), date(today.year, 12, 31))
     return {
-        'figures': _figures(spend_summary(entries, today), today),
+        'figures': figures(entries, today),
         'areas': area_rows(split),
         'year': today.year,
         'total': aed(split['total']),
@@ -77,7 +83,7 @@ def spend_strip(entries, year, today=None):
     today = today or date.today()
     by_month = spend_by_month(entries, year)
     return {
-        'figures': _figures(spend_summary(entries, today), today),
+        'figures': figures(entries, today),
         'year': year,
         'months': [{'label': label, 'value': aed(amount, unit=False) if amount else None}
                    for label, amount in zip(MONTH_LABELS, by_month['months'])],

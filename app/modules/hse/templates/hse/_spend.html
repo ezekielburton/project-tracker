@@ -1,0 +1,39 @@
+{# Spend figures and by-area bars, shared by the Overview, Statistics and My
+   performance. `figures` from lib/spend.py::figures, `areas` from area_rows. #}
+
+{% macro spend_figures(figures) %}
+<div class="hse-spend-figs">
+    {% for fig in figures %}
+    <div class="hse-spend-fig">
+        <div class="hse-spend-lab">{{ fig.label }}</div>
+        <div class="hse-spend-val">{{ fig.value }}</div>
+        <div class="hse-spend-sub">{{ fig.sub }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro spend_areas(areas) %}
+{% for area in areas %}
+<div class="hse-ov-bar hse-spend-area">
+    <div class="hse-ov-barhead">
+        <span>{{ area.label }}</span>
+        <span class="hse-spend-amt">{{ area.amount }}<span class="hse-spend-share">{{ area.share }}%</span></span>
+    </div>
+    <div class="hse-ov-track"><div class="hse-spend-fill" style="width: {{ area.share }}%"></div></div>
+    {% for r in area.registers %}
+    <div class="hse-spend-reg">
+        <div class="hse-ov-barhead">
+            <span>{{ r.label }}</span>
+            <span class="hse-spend-amt">{{ r.amount }}<span class="hse-spend-share">{{ r.share }}%</span></span>
+        </div>
+        <div class="hse-ov-track hse-spend-track--reg">
+            <div class="hse-spend-fill hse-spend-fill--reg" style="width: {{ r.share }}%"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="hse-ov-empty">No spend recorded.</p>
+{% endfor %}
+{% endmacro %}

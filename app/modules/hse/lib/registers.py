@@ -60,6 +60,17 @@ def f(name, label, type_, column=None, choices_kind=None, required=False,
     return Field(name, label, type_, column, choices_kind, required, in_table)
 
 
+def reported_by():
+    """Who reported it. Every register carries it; new entries start on the
+    signed-in user's person record."""
+    return f('reported_by', 'Reported by', 'person', column='reported_by_id', in_table=False)
+
+
+def reported_to():
+    """Who it was reported to."""
+    return f('assigned_to', 'Reported to', 'person', column='assigned_to_id', in_table=False)
+
+
 DAILY_LOG = Register(
     key='daily_log',
     label='Daily log',
@@ -76,8 +87,8 @@ DAILY_LOG = Register(
           choices_kind='location', required=True),
         f('description', 'What you found', 'textarea', required=True),
         f('severity', 'Severity', 'severity', column='severity', required=True),
-        f('reported_by', 'Logged by', 'person', column='reported_by_id', required=True),
-        f('assigned_to', 'Owner', 'person', column='assigned_to_id'),
+        f('reported_by', 'Reported by', 'person', column='reported_by_id', required=True),
+        f('assigned_to', 'Reported to', 'person', column='assigned_to_id'),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Resolved date', 'date', column='closed_at', in_table=False),
     ),
@@ -104,7 +115,7 @@ INCIDENTS = Register(
         f('description', 'What happened', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
         f('reported_by', 'Reported by', 'person', column='reported_by_id', required=True, in_table=False),
-        f('assigned_to', 'Owner', 'person', column='assigned_to_id'),
+        f('assigned_to', 'Reported to', 'person', column='assigned_to_id'),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Resolution date', 'date', column='closed_at', in_table=False),
     ),
@@ -124,9 +135,10 @@ GENERAL_INSPECTION = Register(
         # "Area" here and "Location" on incidents share one list of places.
         f('location', 'Area', 'choice', column='location_id',
           choices_kind='location', required=True),
-        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True, in_table=False),
+        f('performed_by', 'Inspector', 'person', column='performed_by_id', required=True, in_table=False),
         f('issue_type', 'Type of issue found', 'choice', choices_kind='issue_type'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
+        reported_by(),
         f('assigned_to', 'Reported to', 'person', column='assigned_to_id'),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
@@ -147,7 +159,8 @@ COMPLIANCE_RENEWAL = Register(
         f('compliance_type', 'Type', 'choice', choices_kind='compliance_type'),
         f('entry_date', 'Issue date', 'date', column='entry_date', required=True),
         f('due_at', 'Expiry date', 'date', column='due_at', required=True),
-        f('assigned_to', 'Responsible person', 'person', column='assigned_to_id'),
+        reported_by(),
+        f('assigned_to', 'Reported to', 'person', column='assigned_to_id'),
     ),
 )
 
@@ -170,8 +183,10 @@ FIRST_AID = Register(
         f('injury_type', 'Injury type', 'choice', choices_kind='injury_type',
           required=True),
         f('treatment', 'Treatment given', 'textarea'),
-        f('reported_by', 'Treated by', 'person', column='reported_by_id', required=True, in_table=False),
+        f('performed_by', 'Treated by', 'person', column='performed_by_id', required=True, in_table=False),
         # No "follow-up required" field: an open case is the follow-up.
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
@@ -195,7 +210,8 @@ PPE_NON_CONFORMITY = Register(
         f('description', 'What was wrong', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
         f('corrective_action', 'Corrective action', 'textarea', in_table=False),
-        f('assigned_to', 'Owner', 'person', column='assigned_to_id'),
+        reported_by(),
+        f('assigned_to', 'Reported to', 'person', column='assigned_to_id'),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
@@ -220,6 +236,8 @@ LOST_TIME_INJURY = Register(
         # Uses the shared severity scale (it drives the SLA clock), so a
         # fatality is recorded as Critical.
         f('severity', 'Severity', 'severity', column='severity', required=True),
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
         # Days lost is computed as closed_at - entry_date.
         f('closed_at', 'Return to work date', 'date', column='closed_at'),
@@ -248,7 +266,9 @@ VEHICLE_INSPECTION = Register(
           choices_kind='inspection_type', required=True),
         f('issues_found', 'Issues found', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
-        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True, in_table=False),
+        f('performed_by', 'Inspector', 'person', column='performed_by_id', required=True, in_table=False),
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
@@ -270,7 +290,9 @@ FORKLIFT_INSPECTION = Register(
         f('checklist', 'Checklist summary', 'text', in_table=False),
         f('issues_found', 'Issues found', 'textarea'),
         f('severity', 'Severity', 'severity', column='severity', required=True),
-        f('reported_by', 'Inspector', 'person', column='reported_by_id', required=True, in_table=False),
+        f('performed_by', 'Inspector', 'person', column='performed_by_id', required=True, in_table=False),
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Closed date', 'date', column='closed_at', in_table=False),
     ),
@@ -296,7 +318,8 @@ VEHICLE_SERVICE = Register(
         f('mileage_at_service', 'Mileage at service (km)', 'number'),
         f('service_interval', 'Service interval (km)', 'number', in_table=False),
         f('cost', 'Cost (AED)', 'money'),
-        f('reported_by', 'Logged by', 'person', column='reported_by_id', in_table=False),
+        f('reported_by', 'Reported by', 'person', column='reported_by_id', in_table=False),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
     ),
 )
@@ -318,7 +341,8 @@ VEHICLE_REG_INSURANCE = Register(
         f('policy_number', 'Policy or document no.', 'text', in_table=False),
         f('entry_date', 'Issued', 'date', column='entry_date', required=True),
         f('due_at', 'Expires', 'date', column='due_at', required=True),
-        f('assigned_to', 'Responsible person', 'person', column='assigned_to_id'),
+        reported_by(),
+        f('assigned_to', 'Reported to', 'person', column='assigned_to_id'),
     ),
 )
 
@@ -337,6 +361,8 @@ VEHICLE_MILEAGE = Register(
         f('odometer', 'Odometer reading (km)', 'number'),
         f('subject', 'Driver', 'person', column='subject_id'),
         f('notes', 'Notes', 'textarea', in_table=False),
+        reported_by(),
+        reported_to(),
     ),
 )
 
@@ -356,9 +382,11 @@ MACHINE_MAINTENANCE = Register(
         f('maintenance_type', 'Maintenance type', 'choice',
           choices_kind='maintenance_type', required=True),
         f('description', 'Description', 'textarea'),
-        f('reported_by', 'Technician', 'person', column='reported_by_id', in_table=False),
+        f('performed_by', 'Technician', 'person', column='performed_by_id', in_table=False),
         f('cost', 'Cost (AED)', 'money'),
         f('downtime_hrs', 'Downtime (hrs)', 'number'),
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Completed date', 'date', column='closed_at', in_table=False),
     ),
@@ -382,6 +410,8 @@ MACHINE_PREVENTIVE = Register(
         f('pm_frequency', 'Frequency', 'choice', choices_kind='pm_frequency'),
         f('cost', 'Cost (AED)', 'money'),
         f('notes', 'Notes', 'textarea', in_table=False),
+        reported_by(),
+        reported_to(),
         f('status', 'Machine status', 'status', column='status', required=True),
     ),
 )
@@ -398,6 +428,8 @@ MACHINE_COST = Register(
         f('asset', 'Machine', 'asset', column='asset_id', required=True),
         f('amount', 'Weekly spend (AED)', 'money', required=True),
         f('notes', 'Notes', 'textarea'),
+        reported_by(),
+        reported_to(),
     ),
 )
 
@@ -421,6 +453,8 @@ PPE_REGISTER = Register(
         f('entry_date', 'Issue date', 'date', column='entry_date', required=True),
         f('due_at', 'Replacement due', 'date', column='due_at', required=True),
         f('qty', 'Qty issued', 'number'),
+        reported_by(),
+        reported_to(),
     ),
 )
 
@@ -439,6 +473,8 @@ TOOLS_INVENTORY = Register(
           choices_kind='location'),
         f('condition', 'Condition', 'choice', choices_kind='condition'),
         f('entry_date', 'Last inspection', 'date', column='entry_date', required=True),
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
     ),
 )
@@ -453,7 +489,7 @@ MATERIAL_REQUEST = Register(
     fields=(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
         f('item', 'Material', 'text', required=True),
-        f('reported_by', 'Requested by', 'person', column='reported_by_id',
+        f('reported_by', 'Reported by', 'person', column='reported_by_id',
           required=True),
         f('department', 'Department', 'choice', column='department_id',
           choices_kind='department', in_table=False),
@@ -462,6 +498,7 @@ MATERIAL_REQUEST = Register(
         f('unit', 'Unit', 'choice', choices_kind='unit', in_table=False),
         # The whole request, not a unit price.
         f('cost', 'Cost (AED)', 'money'),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
         f('closed_at', 'Issued date', 'date', column='closed_at', in_table=False),
     ),
@@ -488,6 +525,8 @@ MATERIALS_IN_STOCK = Register(
         f('opening_stock', 'Opening stock', 'number', required=True, in_table=False),
         f('entry_date', 'Added', 'date', column='entry_date', required=True,
           in_table=False),
+        reported_by(),
+        reported_to(),
     ),
 )
 
@@ -510,10 +549,12 @@ INDUCTION_TRAINING = Register(
         f('department', 'Department trained', 'choice', column='department_id',
           choices_kind='department'),
         f('attendees', 'Attendees', 'number', required=True),
-        f('reported_by', 'Trainer', 'person', column='reported_by_id', required=True),
+        f('performed_by', 'Trainer', 'person', column='performed_by_id', required=True),
         # Department list, but stored in JSONB, so it holds the label, not the id.
         f('trainer_department', 'Trainer department', 'choice',
           choices_kind='department', in_table=False),
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
     ),
 )
@@ -534,13 +575,15 @@ TOOLBOX_TALK = Register(
         f('entry_date', 'Date', 'date', column='entry_date', required=True),
         f('entry_time', 'Time', 'time', in_table=False),
         f('topic', 'Topic', 'text', required=True),
-        f('reported_by', 'Conducted by', 'person', column='reported_by_id',
+        f('performed_by', 'Conducted by', 'person', column='performed_by_id',
           required=True),
         f('department', 'Department', 'choice', column='department_id',
           choices_kind='department'),
         f('attendees', 'Attendees', 'number'),
         f('location', 'Location', 'choice', column='location_id',
           choices_kind='location'),
+        reported_by(),
+        reported_to(),
         f('status', 'Status', 'status', column='status', required=True),
         f('notes', 'Notes', 'textarea', in_table=False),
     ),
@@ -561,6 +604,8 @@ TRAINING_EXPENSES = Register(
         f('vendor', 'Vendor / paid to', 'text'),
         f('amount', 'Amount (AED)', 'money', required=True),
         f('notes', 'Notes', 'textarea', in_table=False),
+        reported_by(),
+        reported_to(),
     ),
 )
 

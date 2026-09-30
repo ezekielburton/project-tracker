@@ -41,7 +41,7 @@
                                     <th>Frequency</th>
                                     <th>Next due</th>
                                     <th>Last done</th>
-                                    <th>Owner</th>
+                                    <th>Reported to</th>
                                 </tr>
                             </thead>
                             <tbody id="hse-sched-rows">
@@ -71,7 +71,7 @@
                                         {% if row.last_done %}{{ row.last_done.strftime('%d %b %Y') }}
                                         {% else %}<span class="hse-hint">—</span>{% endif %}
                                     </td>
-                                    <td data-label="Owner">{{ row.owner or '—' }}</td>
+                                    <td data-label="Reported to">{{ row.owner or '—' }}</td>
                                 </tr>
                                 {% else %}
                                 <tr class="hse-sched-empty">
@@ -156,7 +156,7 @@
                         </div>
 
                         <div class="form-group hse-field">
-                            <label>Owner <span class="hse-hint">optional</span></label>
+                            <label>Reported to <span class="hse-hint">optional</span></label>
                             <select class="form-input" name="owner_id"></select>
                             <span class="hse-error" data-error-for="owner_id"></span>
                         </div>

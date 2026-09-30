@@ -68,8 +68,8 @@
     --font-body: 'Public Sans', sans-serif;
     --font-logo: 'Museo', sans-serif;
 
-    --sidebar-min: 90px;
-    --sidebar-max: 340px;
+    --sidebar-min: 64px;
+    --sidebar-max: 260px;
     --sidebar-transition: 0.25s ease;
     --radius: 6px;
     --radius-sm: 4px;
@@ -608,12 +608,12 @@ textarea {
     align-items: center;
     justify-content: center;
     gap: 0.3rem;
-    padding: 0.6rem 0.25rem;
+    padding: 0.45rem 0.2rem;
     border-radius: var(--radius);
     transition: background-color 0.15s ease, color 0.15s ease;
     color: var(--grey-dark);
     text-align: center;
-    min-height: 52px;
+    min-height: 44px;
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
@@ -628,8 +628,12 @@ textarea {
     color: var(--black);
 }
 
+/* CSS beats the markup's width/height attributes, so every nav icon
+   shrinks from here without touching base.html. */
 .sidebar-item svg {
     flex-shrink: 0;
+    width: 17px;
+    height: 17px;
 }
 
 /* Item text label — hidden in minimized, visible when expanded */
@@ -693,36 +697,8 @@ textarea {
     padding: 0 3px;
 }
 
-/* Toggle chevron flips direction when expanded */
-.sidebar.sidebar--expanded .sidebar-toggle-btn svg,
-.sidebar.sidebar--pinned .sidebar-toggle-btn svg {
-    transform: rotate(180deg);
-}
-
-/* Collapse button — shown only when expanded. When minimized, the expand tab
-   or a click on the sidebar background expands it. */
-.sidebar-toggle-btn {
-    display: none;
-    color: var(--grey-mid);
-    padding: 0.3rem;
-    border-radius: var(--radius);
-    align-items: center;
-    justify-content: center;
-    transition: color 0.15s ease;
-    flex-shrink: 0;
-}
-
-.sidebar.sidebar--expanded .sidebar-toggle-btn,
-.sidebar.sidebar--pinned .sidebar-toggle-btn {
-    display: flex;
-}
-
-.sidebar-toggle-btn:hover {
-    color: var(--tangerine);
-}
-
 /* Expand tab — a .sidebar-item at the top of the rail (base.html). Hidden once
-   expanded/pinned; .sidebar-toggle-btn collapses from there. */
+   expanded/pinned; a click outside or the pin closes it. */
 .sidebar.sidebar--expanded .sidebar-expand-tab,
 .sidebar.sidebar--pinned .sidebar-expand-tab {
     display: none;

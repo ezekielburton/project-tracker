@@ -71,7 +71,7 @@ class HseAsset(db.Model):
 
 
 class HsePerson(db.Model):
-    """Anyone named on an entry (reporter, owner, subject, waiting-on).
+    """Anyone named on an entry (reporter, reported-to, done by, subject, waiting-on).
     Needs no OVP login; `user_id` links one if they have it."""
     __tablename__ = 'hse_people'
 
@@ -172,6 +172,11 @@ class HseEntry(db.Model):
     subject_id = db.Column(
         db.Integer, db.ForeignKey('hse_people.id', ondelete='SET NULL'), nullable=True)
 
+    # Who did the work: treated, inspected, repaired, trained. Not the
+    # reporter, who may be someone else.
+    performed_by_id = db.Column(
+        db.Integer, db.ForeignKey('hse_people.id', ondelete='SET NULL'), nullable=True)
+
     # The certificate a compliance entry is about. A reference, so a rename
     # keeps its renewal history together.
     compliance_item_id = db.Column(
@@ -202,6 +207,7 @@ class HseEntry(db.Model):
     reported_by = db.relationship('HsePerson', foreign_keys=[reported_by_id])
     assigned_to = db.relationship('HsePerson', foreign_keys=[assigned_to_id])
     subject = db.relationship('HsePerson', foreign_keys=[subject_id])
+    performed_by = db.relationship('HsePerson', foreign_keys=[performed_by_id])
     compliance_item = db.relationship('HseReference', foreign_keys=[compliance_item_id])
     waiting_on = db.relationship('HsePerson', foreign_keys=[waiting_on_id])
     schedule = db.relationship('HseSchedule', foreign_keys=[schedule_id])

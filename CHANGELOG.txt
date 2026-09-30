@@ -3,7 +3,7 @@ VITAMIN HELIX — CHANGELOG
 ===============================================================================
 
 =======================================================================================
-v2.5.2 - Optimizations & Wiki Reader
+v2.5.4 - Optimizations & Wiki Reader
 =======================================================================================
 
 New Features:
@@ -17,6 +17,10 @@ Adjustments:
 - Cleaned up UI on all side rails.
 
 Bug Fixes:
+
+- Fixed multiple HSE module bugs visually
+- Fixed HSE navigation loading on every click
+
 
 
 =======================================================================================

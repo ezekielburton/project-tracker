@@ -47,6 +47,7 @@ HELP_KEY_GROUPS = [
         ('hse.schedule', 'Scheduling inspections'),
         ('hse.calendar', 'The HSE calendar'),
         ('hse.performance', 'HSE performance'),
+        ('hse.lists', 'Lists & people'),
     ]),
     ('Other tools', [
         ('directory.clients', 'The client directory'),

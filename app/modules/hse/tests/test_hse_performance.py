@@ -171,7 +171,7 @@ def test_the_coverage_tile_reads_the_engine_rather_than_recounting():
     tile = next(t for t in tiles([walk], [], window, TODAY) if t['key'] == 'coverage')
     engine = coverage([walk], [], window['start'], window['end'], TODAY)
     assert tile['value'] == engine['percent']
-    assert tile['detail'] == f"{engine['done']} of {engine['due']} planned"
+    assert tile['detail'] == f"0 carried out · {engine['done']} of {engine['due']} planned"
 
 
 # --- the charts -----------------------------------------------------------
@@ -453,3 +453,36 @@ def test_the_arrows_step_a_month_or_a_year_and_stop_at_now():
     year = navigation(period('year', date(2026, 1, 1)), TODAY)
     assert year['prev'] == '2025-01'
     assert year['next'] == '2026-09'     # would overshoot, so lands on now
+
+
+def test_a_lone_point_at_the_right_edge_labels_to_its_left():
+    series = [{'label': str(m), 'days': None} for m in range(11)] + [{'label': 'Sep', 'days': 0.0}]
+    drawn = charts.line(series)
+    assert drawn['last'] is None
+    assert drawn['first']['anchor'] == 'end'
+    assert drawn['first']['label_x'] < drawn['first']['x']
+
+
+def test_gridlines_are_evenly_spaced_and_the_top_clears_the_data():
+    empty = charts.grouped_bars([{'label': 'Jan', 'planned': 0, 'done': 0}])
+    assert [g['value'] for g in empty['gridlines']] == [1, 2, 3]
+    for high in (1.1, 2.9, 4, 7.5, 16, 31):
+        drawn = charts.line([{'label': 'Jan', 'days': high}, {'label': 'Feb', 'days': 0}])
+        assert drawn['top'] >= high, f'top {drawn["top"]} is below {high}'
+
+
+class _Logged:
+    def __init__(self, register, day, status=None, event_class=None):
+        self.register, self.entry_date, self.status = register, day, status
+        self.data = {'event_class': event_class} if event_class else {}
+
+
+def test_reporting_counts_what_was_logged_and_what_is_still_open():
+    from app.modules.hse.lib.performance import period, reporting
+    window = period('month', date(2026, 9, 15))
+    rows = [_Logged('incidents', date(2026, 9, 3), 'Open', 'Near miss'),
+            _Logged('incidents', date(2026, 9, 9), 'Resolved', 'Incident'),
+            _Logged('incidents', date(2026, 8, 30), 'Open', 'Incident'),
+            _Logged('first_aid', date(2026, 9, 4), 'Open')]
+    r = reporting(rows, window)
+    assert (r['logged'], r['still_open']) == (2, 1)

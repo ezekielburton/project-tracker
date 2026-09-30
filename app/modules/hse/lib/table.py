@@ -26,6 +26,7 @@ RELATION_ATTRS = {
     'reported_by_id': ('reported_by', 'name'),
     'assigned_to_id': ('assigned_to', 'name'),
     'subject_id': ('subject', 'name'),
+    'performed_by_id': ('performed_by', 'name'),
     'waiting_on_id': ('waiting_on', 'name'),
     'compliance_item_id': ('compliance_item', 'label'),
 }

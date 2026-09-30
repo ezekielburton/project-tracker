@@ -119,7 +119,7 @@
                                     </h2>
                                     <p class="hse-lists-used">
                                         {% if view.kind == 'people' -%}
-                                        Fills Reported by, Owner, Subject and Waiting on. A person needs no OVP login.
+                                        Fills Reported by, Reported to, Done by, Subject and Waiting on. A person needs no OVP login.
                                         {%- elif view.kind == 'asset' -%}
                                         Picked wherever a register asks for an asset{{ '; the serial shows under the picker' if view.has_serial else '' }}.
                                         {%- elif view.used_in -%}

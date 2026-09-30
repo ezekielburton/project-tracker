@@ -51,7 +51,7 @@ class _Stub:
             setattr(self, name, None)
 
 
-PAYLOAD = {'entry_date': '2026-09-14', 'topic': 'Ladders', 'reported_by': '2'}
+PAYLOAD = {'entry_date': '2026-09-14', 'topic': 'Ladders', 'performed_by': '2'}
 
 
 # --- the declaration ------------------------------------------------------

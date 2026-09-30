@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'hse/_spend.html' import spend_areas %}
 
 {% block title %}HSE — Statistics{% endblock %}
 
@@ -133,26 +134,7 @@
                             </div>
                             <div>
                                 <h3 class="hse-spend-subhead">By area · this period</h3>
-                                {% for area in spend.areas %}
-                                <div class="hse-ov-bar hse-spend-area">
-                                    <div class="hse-ov-barhead">
-                                        <span>{{ area.label }}</span>
-                                        <span class="hse-spend-amt">{{ area.amount }}<span class="hse-spend-share">{{ area.share }}%</span></span>
-                                    </div>
-                                    <div class="hse-ov-track"><div class="hse-spend-fill" style="width: {{ area.share }}%"></div></div>
-                                    {% for r in area.registers %}
-                                    <div class="hse-spend-reg">
-                                        <div class="hse-ov-barhead">
-                                            <span>{{ r.label }}</span>
-                                            <span class="hse-spend-amt">{{ r.amount }}<span class="hse-spend-share">{{ r.share }}%</span></span>
-                                        </div>
-                                        <div class="hse-ov-track hse-spend-track--reg">
-                                            <div class="hse-spend-fill hse-spend-fill--reg" style="width: {{ r.share }}%"></div>
-                                        </div>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                                {% endfor %}
+                                {{ spend_areas(spend.areas) }}
                             </div>
                         </div>
                         <p class="hse-pf-foot">By entry date, as on the Overview. Machine cost and machine maintenance can record the same work, so both are shown.</p>

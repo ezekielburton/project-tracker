@@ -17,13 +17,12 @@ from app.modules.hse.lib.performance import delta, trend_months
 from app.modules.hse.lib.registers import BY_KEY, counts_as_done
 from app.modules.hse.lib.schedule import add_months
 from app.modules.hse.lib.spend import aed, amount_text, area_rows
-from app.modules.hse.lib.vocab import OPEN_STATUSES
+from app.modules.hse.lib.vocab import INSPECTION_REGISTERS, OPEN_STATUSES
 
 
 # Period choices: key -> (label, months covered).
 PERIODS = {'month': ('This month', 1), 'quarter': ('Last 3 months', 3), 'year': ('Year', 12)}
 
-INSPECTION_REGISTERS = ('general_inspection', 'vehicle_inspection', 'forklift_inspection')
 
 # Rows shown per ranked list; the rest fold into "Other".
 RANK_LIMIT = 6

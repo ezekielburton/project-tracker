@@ -160,3 +160,12 @@ def test_emailing_needs_view_hse(app, client, people, outbox):
     res = client.post(_urls(app)['share'], json={'to': [people['manager'].id]})
     assert res.status_code in (302, 403)
     assert outbox == []
+
+
+def test_the_page_and_csv_carry_spend(app, client, people):
+    login_as(client, app, people['officer'], 'password123')
+    urls = _urls(app)
+    html = client.get(urls['page']).get_data(as_text=True)
+    assert 'Spend — September 2026' in html and 'hse-spend-figs' in html
+    rows = list(csv.reader(io.StringIO(client.get(urls['csv']).get_data(as_text=True))))
+    assert any(row[:1] == ['Spend'] and row[-1] == 'AED' for row in rows)

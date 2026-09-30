@@ -5,7 +5,7 @@ dropdowns always reflect the current reference lists.
 from datetime import date
 
 from flask import abort, jsonify, render_template, request
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
@@ -14,7 +14,7 @@ from app.modules.core.shared.models import User
 from app.modules.hse.lib import stock
 from app.modules.hse.lib.computed import next_due
 from app.modules.hse.lib.forms import (
-    ValidationError, apply_payload, blocking_empty_lists, form_fields,
+    ValidationError, apply_payload, blocking_empty_lists, default_reporter, form_fields,
 )
 from app.modules.hse.lib.query import latest_ids
 from app.modules.hse.lib.refs import next_ref
@@ -107,6 +107,16 @@ def _occurrence(reg, schedule_id, occurrence_date):
     return {'schedule_id': schedule.id, 'date': day}, None
 
 
+def _new_prefill(reg):
+    """Calendar and repeat prefill, plus Reported by on the signed-in user."""
+    prefill = _prefill(reg, request.args)
+    if any(f.name == 'reported_by' for f in reg.fields):
+        who = default_reporter(current_user)
+        if who:
+            prefill.setdefault('reported_by', who)
+    return prefill
+
+
 @hse_bp.route('/<register_key>/form')
 @login_required
 @require('manage_hse')
@@ -119,7 +129,7 @@ def new_entry_form(register_key):
     return render_template(
         'hse/_entry_modal.html',
         reg=reg, entry=None,
-        fields=form_fields(reg, prefill=_prefill(reg, request.args)),
+        fields=form_fields(reg, prefill=_new_prefill(reg)),
         blocked_by=blocking_empty_lists(reg),
         occurrence=occurrence,
         today=date.today().isoformat(),

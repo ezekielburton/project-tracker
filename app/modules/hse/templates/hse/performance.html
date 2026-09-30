@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from '_shared_macros.html' import help_button %}
+{% from 'hse/_spend.html' import spend_figures, spend_areas %}
 
 {% block title %}HSE — My performance{% endblock %}
 
@@ -7,7 +8,7 @@
     {# No delta when there is no previous period to compare against. #}
     {% if d %}
     <div class="hse-pf-delta{{ ' is-up' if d.improved else (' is-down' if d.improved is sameas false else '') }}">
-        {% if d.improved %}▲{% elif d.improved is sameas false %}▼{% else %}—{% endif %}
+        {% if d.neutral %}{% elif d.improved %}▲{% elif d.improved is sameas false %}▼{% else %}—{% endif %}
         <span>from {{ d.from }}{{ unit }}</span>
     </div>
     {% endif %}
@@ -64,7 +65,7 @@
                     <div class="hse-pf-col">
 
                         <div class="hse-pf-tiles">
-                            {% for t in tiles %}
+                            {% for t in tiles + [spend.tile] %}
                             <div class="hse-pf-tile">
                                 <div class="hse-pf-val">
                                     {% if t.value is none %}<span class="hse-pf-num">—</span>
@@ -72,11 +73,22 @@
                                     <span class="hse-pf-unit">{{ t.unit }}</span>{% endif %}
                                 </div>
                                 <div class="hse-pf-lab">{{ t.label }}</div>
-                                {{ delta(t.delta, t.delta_unit) }}
+                                {{ delta(t.delta, t.delta_unit if t.delta_unit is defined else ' ' ~ t.unit) }}
                                 {% if t.detail %}<div class="hse-pf-note">{{ t.detail }}</div>{% endif %}
                             </div>
                             {% endfor %}
                         </div>
+
+                        <section class="hse-pf-card">
+                            <div class="hse-pf-cardhead">
+                                <h2 class="hse-pf-cardttl">Spend — {{ window.label }}</h2>
+                                <span class="hse-pf-sub">{{ spend.total }} · from {{ spend.previous }} the period before</span>
+                            </div>
+                            {{ spend_figures(spend_to_date) }}
+                            <h3 class="hse-spend-subhead">By area · {{ window.label }}</h3>
+                            {{ spend_areas(spend.areas) }}
+                            <p class="hse-pf-foot">By entry date, as on the Overview and Statistics. Machine cost and machine maintenance can record the same work, so both are shown.</p>
+                        </section>
 
                         <section class="hse-pf-card">
                             <div class="hse-pf-cardhead">
@@ -112,6 +124,7 @@
                             {% if reporting.unclassified %}
                             <div class="hse-pf-note">{{ reporting.unclassified }} not yet classified</div>
                             {% endif %}
+                            <div class="hse-pf-note">{{ reporting.logged }} logged · {{ reporting.still_open }} still open</div>
                             {# Keep this callout: without it a rising number reads as a worse site. #}
                             <p class="hse-pf-callout">
                                 <strong>Read this one carefully.</strong> More near misses reported is a
@@ -160,6 +173,9 @@
                                 waiting on {{ ageing.oldest.waiting_on }}{% endif %}.
                             </p>
                             {% endif %}
+                            <p class="hse-pf-foot">
+                                What needs you today is on the <a href="{{ url_for('hse.overview') }}">Overview</a>.
+                            </p>
                         </section>
 
                     </div>

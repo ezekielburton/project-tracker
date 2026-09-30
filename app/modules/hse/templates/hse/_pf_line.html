@@ -13,14 +13,15 @@
     {% endfor %}
     {% if line.first %}
     <circle cx="{{ line.first.x }}" cy="{{ line.first.y }}" r="{{ line.dot_r }}" class="hse-pf-dot"/>
-    <text x="{{ line.first.x + line.dot_r + 6 }}" y="{{ line.first.y - 12 }}"
-          class="hse-pf-point" style="font-size: {{ line.tick_font }}px">{{ line.first.days }} days</text>
+    <text x="{{ line.first.label_x }}" y="{{ line.first.y - 12 }}"
+          class="hse-pf-point" style="font-size: {{ line.tick_font }}px"
+          text-anchor="{{ line.first.anchor }}">{{ line.first.days }} days</text>
     {% endif %}
     {% if line.last %}
     <circle cx="{{ line.last.x }}" cy="{{ line.last.y }}" r="{{ line.dot_r }}" class="hse-pf-dot"/>
-    <text x="{{ line.last.x - line.dot_r - 6 }}" y="{{ line.last.y - 12 }}"
+    <text x="{{ line.last.label_x }}" y="{{ line.last.y - 12 }}"
           class="hse-pf-point" style="font-size: {{ line.tick_font }}px"
-          text-anchor="end">{{ line.last.days }} days</text>
+          text-anchor="{{ line.last.anchor }}">{{ line.last.days }} days</text>
     {% endif %}
     {% for p in line.points %}
     {% if p.show_label %}

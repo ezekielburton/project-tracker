@@ -21,7 +21,7 @@ class Stub:
         self.data = kw.pop('data', {})
         for name in ('entry_date', 'status', 'severity', 'closed_at', 'due_at',
                      'waiting_since', 'location', 'department', 'asset',
-                     'reported_by', 'assigned_to', 'waiting_on'):
+                     'reported_by', 'assigned_to', 'waiting_on', 'performed_by'):
             setattr(self, name, kw.pop(name, None))
         assert not kw, f'Unknown field(s): {sorted(kw)}'
 

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from '_shared_macros.html' import help_button %}
+{% from 'hse/_spend.html' import spend_figures, spend_areas %}
 
 {% block title %}HSE — Overview{% endblock %}
 
@@ -159,38 +160,9 @@
                                 <h2 class="hse-ov-title">Spend</h2>
                                 <span class="hse-ov-note">From the cost registers</span>
                             </div>
-                            <div class="hse-spend-figs">
-                                {% for fig in spend.figures %}
-                                <div class="hse-spend-fig">
-                                    <div class="hse-spend-lab">{{ fig.label }}</div>
-                                    <div class="hse-spend-val">{{ fig.value }}</div>
-                                    <div class="hse-spend-sub">{{ fig.sub }}</div>
-                                </div>
-                                {% endfor %}
-                            </div>
+                            {{ spend_figures(spend.figures) }}
                             <h3 class="hse-spend-subhead">By area · {{ spend.year }}</h3>
-                            {% for area in spend.areas %}
-                            <div class="hse-ov-bar hse-spend-area">
-                                <div class="hse-ov-barhead">
-                                    <span>{{ area.label }}</span>
-                                    <span class="hse-spend-amt">{{ area.amount }}<span class="hse-spend-share">{{ area.share }}%</span></span>
-                                </div>
-                                <div class="hse-ov-track">
-                                    <div class="hse-spend-fill" style="width: {{ area.share }}%"></div>
-                                </div>
-                                {% for r in area.registers %}
-                                <div class="hse-spend-reg">
-                                    <div class="hse-ov-barhead">
-                                        <span>{{ r.label }}</span>
-                                        <span class="hse-spend-amt">{{ r.amount }}<span class="hse-spend-share">{{ r.share }}%</span></span>
-                                    </div>
-                                    <div class="hse-ov-track hse-spend-track--reg">
-                                        <div class="hse-spend-fill hse-spend-fill--reg" style="width: {{ r.share }}%"></div>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% endfor %}
+                            {{ spend_areas(spend.areas) }}
                             <p class="hse-ov-foot">
                                 {{ spend.total }} in {{ spend.year }}. Machine cost and machine maintenance can record the same work, so both are shown.
                             </p>

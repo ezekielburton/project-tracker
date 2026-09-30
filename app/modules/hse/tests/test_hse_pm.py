@@ -40,6 +40,7 @@ class _Entry:
         self.closed_at = self.created_by = self.created_at = None
         self.location = self.department = self.reported_by = None
         self.assigned_to = self.subject = self.waiting_on = self.waiting_since = None
+        self.performed_by = None
         self.severity = None
 
 

@@ -209,3 +209,11 @@ def test_a_ledger_is_a_log_with_one_line_per_item():
         if reg.unique_by:
             field = next(fl for fl in reg.fields if fl.name == reg.unique_by)
             assert field.type == 'text' and field.column is None, reg.key
+
+
+def test_every_register_has_reported_by_and_reported_to():
+    from app.modules.hse.lib.registers import HSE_REGISTERS
+    for reg in HSE_REGISTERS:
+        cols = {f.name: (f.label, f.column) for f in reg.fields}
+        assert cols.get('reported_by') == ('Reported by', 'reported_by_id'), reg.key
+        assert cols.get('assigned_to') == ('Reported to', 'assigned_to_id'), reg.key

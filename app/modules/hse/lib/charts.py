@@ -31,15 +31,16 @@ _STEPS = (1, 2, 3, 4, 5, 6, 8, 10)
 
 def _nice_top(value):
     """The smallest round axis top at or above `value`, so gridlines land
-    on round numbers."""
+    on round numbers. An empty chart gets one line per unit."""
     if value <= 0:
-        return 4
+        return GRID_LINES
     raw = value / GRID_LINES
     magnitude = 10 ** math.floor(math.log10(raw))
     for step in _STEPS:
         if step * magnitude >= raw:
-            return int(round(step * magnitude * GRID_LINES))
-    return int(round(10 * magnitude * GRID_LINES))
+            # Rounded first so float noise (3.0000000004) can't ceil up a step.
+            return math.ceil(round(step * magnitude * GRID_LINES, 6))
+    return math.ceil(round(10 * magnitude * GRID_LINES, 6))
 
 
 def _gridlines(top, floor, span):
@@ -98,6 +99,14 @@ def grouped_bars(series, width=SCREEN_WIDTH, height=270,
             'gridlines': _gridlines(top, floor, span), 'bars': bars, 'top': top}
 
 
+def _labelled(point, width, gap):
+    """The point plus where its value label sits: beside it, on the side
+    with room, so a label near either edge stays inside the chart."""
+    left = point['x'] > width / 2
+    return {**point, 'anchor': 'end' if left else 'start',
+            'label_x': round(point['x'] - gap if left else point['x'] + gap, 1)}
+
+
 def line(series, width=SCREEN_WIDTH, height=340,
          pad_bottom=34, pad_top=34, pad_left=34):
     """Average days to close, month by month. A month with nothing closed
@@ -135,13 +144,15 @@ def line(series, width=SCREEN_WIDTH, height=340,
         paths.append(run)
 
     drawn = [p for p in points if p['y'] is not None]
+    dot_r = round(width / 190, 1)
+    gap = dot_r + 6
     return {
         'width': width, 'height': height, 'label_y': height - 10,
         'axis_font': AXIS_FONT, 'tick_font': TICK_FONT,
         'gridlines': _gridlines(top, floor, span), 'points': points, 'top': top,
-        'dot_r': round(width / 190, 1),
+        'dot_r': dot_r,
         'paths': [' '.join(f"{'M' if i == 0 else 'L'}{p['x']} {p['y']}"
                            for i, p in enumerate(run)) for run in paths],
-        'first': drawn[0] if drawn else None,
-        'last': drawn[-1] if len(drawn) > 1 else None,
+        'first': _labelled(drawn[0], width, gap) if drawn else None,
+        'last': _labelled(drawn[-1], width, gap) if len(drawn) > 1 else None,
     }

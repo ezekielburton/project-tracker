@@ -1,7 +1,10 @@
 """
-Entry form validation: apply_payload is all-or-nothing. No database needed.
+Entry form validation: apply_payload is all-or-nothing. Most tests need no
+database; the person picker and the Done-by data script do.
 """
+import importlib.util
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -202,3 +205,54 @@ def test_a_blank_optional_amount_is_allowed_and_a_required_one_is_not():
     with pytest.raises(ValidationError) as caught:
         apply_payload(Stub(), TRAINING_EXPENSES, dict(EXPENSE, amount=''))
     assert caught.value.errors == {'amount': 'Required'}
+
+
+def test_a_negative_count_is_refused():
+    reg = Register(key='count_test', label='Count test', group='training',
+                   ref_prefix='CT', status_source='none', statuses=(),
+                   fields=(f('attendees', 'Attendees', 'number'),))
+    with pytest.raises(ValidationError) as e:
+        apply_payload(Stub(), reg, {'attendees': '-3'})
+    assert e.value.errors['attendees'] == 'Must be 0 or more'
+    assert apply_payload(Stub(), reg, {'attendees': '0'}).data['attendees'] == 0
+
+
+def test_hse_people_come_first_in_a_person_picker(db_session):
+    from app.modules.hse.lib.forms import _groups, _options
+    from app.modules.hse.models import HsePerson
+    db_session.add_all([HsePerson(name='Aaron Admin', role='Clerk'),
+                        HsePerson(name='Moses Danquah', role='HSE Officer')])
+    db_session.flush()
+    field = next(f for f in INCIDENTS.fields if f.name == 'reported_by')
+    groups = _groups(_options(field))
+    assert [g['label'] for g in groups] == ['HSE', 'Everyone else']
+    assert groups[0]['options'][0]['label'].startswith('Moses Danquah')
+
+
+DOER_MOVE = Path(__file__).resolve().parents[4] / 'migrations' / 'move_doers_to_done_by.py'
+
+
+def test_doers_move_to_done_by_and_reported_by_is_filled_once(db_session):
+    from app.modules.hse.models import HseEntry, HsePerson
+    officer = HsePerson(name='Doer Officer', role='HSE Officer')
+    nurse = HsePerson(name='Doer Nurse', role='Nurse')
+    db_session.add_all([officer, nurse])
+    db_session.flush()
+    aid = HseEntry(register='first_aid', ref='DMV-1', entry_date=date(2026, 9, 14),
+                   reported_by_id=nurse.id, data={})
+    log = HseEntry(register='vehicle_mileage', ref='DMV-2', entry_date=date(2026, 9, 14), data={})
+    db_session.add_all([aid, log])
+    db_session.flush()
+
+    spec = importlib.util.spec_from_file_location('move_doers_to_done_by', DOER_MOVE)
+    move = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(move)
+    conn = db_session.connection().connection
+    first = move.run(conn)
+    assert first['reporter'] == officer.id
+    second = move.run(conn)
+    assert (second['moved'], second['filled']) == (0, 0)
+
+    db_session.expire_all()
+    assert (aid.performed_by_id, aid.reported_by_id) == (nurse.id, officer.id)
+    assert log.reported_by_id == officer.id

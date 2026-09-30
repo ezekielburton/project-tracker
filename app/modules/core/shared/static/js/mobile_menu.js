@@ -65,7 +65,7 @@
         // the menu stays open for the pick.
         if (e.target.closest('.module-rail-item--parent')) return;
         // Something chosen inside the menu: let it do its job, then close.
-        if (e.target.closest('.module-rail a, .sidebar a, .sidebar button.sidebar-item, #sidebar-toggle-btn')) {
+        if (e.target.closest('.module-rail a, .sidebar a, .sidebar button.sidebar-item')) {
             close();
         }
     });

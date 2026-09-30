@@ -21,7 +21,9 @@ from app.modules.hse.lib.performance import (
     expiring_next, navigation, open_by_age, period, read_outs, reporting,
     schedule_coverage, sla_table, tiles, trend_months,
 )
-from app.modules.hse.lib.query import dashboard_entries
+from app.modules.hse.lib.query import dashboard_entries, spend_entries
+from app.modules.hse.lib.spend import figures as spend_to_date
+from app.modules.hse.lib.statistics import spend as period_spend
 from app.modules.hse.lib.rail import rail_items
 from app.modules.hse.models import HseSchedule
 from app.modules.hse.routes.blueprint import hse_bp
@@ -56,6 +58,7 @@ def _view_model(today=None):
     months = trend_months(window['end'])
     cover = coverage_series(schedules, entries, months, today)
     ageing = age_series(entries, months)
+    spend_rows = spend_entries()
     return {
         'window': window,
         'nav': navigation(window, today),
@@ -65,6 +68,9 @@ def _view_model(today=None):
         'reporting': reporting(entries, window),
         'compliance': compliance_panel(entries, window, today),
         'ageing': open_by_age(entries, today),
+        # Statistics' loader and function, so the two pages agree.
+        'spend': period_spend(spend_rows, window),
+        'spend_to_date': spend_to_date(spend_rows, today),
         'today': today,
         # Report-only inputs (extra sections, print-width charts); the page
         # pops them before rendering.

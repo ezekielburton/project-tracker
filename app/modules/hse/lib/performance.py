@@ -14,7 +14,7 @@ from app.modules.hse.lib.metrics import (
     done_vs_due, near_miss_ratio, training_delivered,
 )
 from app.modules.hse.lib.registers import BY_KEY
-from app.modules.hse.lib.vocab import OPEN_STATUSES
+from app.modules.hse.lib.vocab import INSPECTION_REGISTERS, OPEN_STATUSES
 
 VIEWS = ('month', 'year')
 TREND_MONTHS = 12
@@ -103,6 +103,12 @@ def delta(now, before, better):
     return {'improved': improved, 'from': before}
 
 
+def _logged(entries, registers, start, end):
+    """Entries in `registers` dated inside the window."""
+    return [e for e in entries if e.register in registers
+            and e.entry_date is not None and start <= e.entry_date <= end]
+
+
 def tiles(schedules, entries, window, today=None):
     """Actions closed on time · Average time to close · Inspection coverage ·
     Training delivered. Compliance health is a separate panel, since it
@@ -121,6 +127,8 @@ def tiles(schedules, entries, window, today=None):
 
     taught = training_delivered(entries, start, end)
     taught_prev = training_delivered(entries, *prev)
+
+    inspected = len(_logged(entries, INSPECTION_REGISTERS, start, end))
 
     # Closed entries that spent time waiting on others; footnote under the average.
     closed = [e for e in entries
@@ -148,7 +156,7 @@ def tiles(schedules, entries, window, today=None):
         'value': cover['percent'],
         'unit': '%',
         'label': 'Inspection coverage',
-        'detail': f"{cover['done']} of {cover['due']} planned",
+        'detail': f"{inspected} carried out · {cover['done']} of {cover['due']} planned",
         'delta': delta(cover['percent'], cover_prev['percent'], 'higher'),
         'delta_unit': '%',
     }, {
@@ -185,15 +193,19 @@ def age_series(entries, months):
 # --- the three panels -----------------------------------------------------
 
 def reporting(entries, window):
-    """Near misses per incident for the period, with its delta. Higher is
-    better (more hazards reported before harm)."""
+    """Near misses per incident for the period, with its delta, and how many
+    were logged and are still open. Higher is better (more hazards reported
+    before harm)."""
     now = near_miss_ratio(entries, window['start'], window['end'])
     before = near_miss_ratio(entries, window['prev_start'], window['prev_end'])
+    logged = _logged(entries, ('incidents',), window['start'], window['end'])
     return {
         'ratio': now['ratio'],
         'near_misses': now['near_misses'],
         'incidents': now['incidents'],
         'unclassified': now['unclassified'],
+        'logged': len(logged),
+        'still_open': sum(1 for e in logged if e.status in OPEN_STATUSES),
         'delta': delta(now['ratio'], before['ratio'], 'higher'),
     }
 

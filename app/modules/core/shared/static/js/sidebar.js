@@ -9,7 +9,6 @@
        Logged-out pages have no #sidebar; only the theme toggle runs there. */
     var sidebar     = document.getElementById('sidebar');
     var expandTab   = document.getElementById('sidebar-expand-tab');
-    var toggleBtn   = document.getElementById('sidebar-toggle-btn');
     var pinBtn      = document.getElementById('sidebar-pin-btn');
     var mainContent = document.getElementById('main-content');
     var loadingBar = document.getElementById('header-loading-bar');
@@ -92,16 +91,6 @@
     expandTab.addEventListener('click', function (e) {
         e.stopPropagation();
         expand();
-    });
-
-    // Chevron: unpins if pinned, otherwise collapses.
-    toggleBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (isPinned()) {
-            setPin(false);
-        } else {
-            collapse();
-        }
     });
 
     pinBtn.addEventListener('click', function (e) {

@@ -68,10 +68,15 @@
                     {% else %}
                     <select class="form-input" id="hse-f-{{ f.name }}">
                         <option value="">—</option>
-                        {% for opt in f.options %}
-                        <option value="{{ opt.value }}"{{ ' selected' if opt.value == f.value else '' }}
-                                {%- if f.show_serial %} data-serial="{{ opt.serial or '' }}"{% endif %}>{{ opt.label }}</option>
+                        {% macro opt_tag(opt, f) %}<option value="{{ opt.value }}"{{ ' selected' if opt.value == f.value else '' }}
+                                {%- if f.show_serial %} data-serial="{{ opt.serial or '' }}"{% endif %}>{{ opt.label }}</option>{% endmacro %}
+                        {% if f.groups %}
+                        {% for g in f.groups %}
+                        <optgroup label="{{ g.label }}">{% for opt in g.options %}{{ opt_tag(opt, f) }}{% endfor %}</optgroup>
                         {% endfor %}
+                        {% else %}
+                        {% for opt in f.options %}{{ opt_tag(opt, f) }}{% endfor %}
+                        {% endif %}
                     </select>
                     {% endif %}
 
@@ -120,7 +125,7 @@
                        value="{{ f.value if f.value is not none else '' }}" placeholder="e.g. 1,250.50">
 
                 {% elif f.type == 'number' %}
-                <input type="number" class="form-input" id="hse-f-{{ f.name }}" value="{{ f.value if f.value is not none else '' }}">
+                <input type="number" min="0" class="form-input" id="hse-f-{{ f.name }}" value="{{ f.value if f.value is not none else '' }}">
 
                 {% else %}
                 <input type="text" class="form-input" id="hse-f-{{ f.name }}" value="{{ f.value or '' }}">

@@ -30,7 +30,8 @@ class _Line:
         self.data = dict({'item': 'Gloves', 'opening_stock': opening, 'unit': unit,
                           'reorder_level': reorder, 'moves': list(moves)}, **extra)
         for name in ('status', 'severity', 'closed_at', 'due_at', 'location',
-                     'department', 'asset', 'reported_by', 'assigned_to', 'subject'):
+                     'department', 'asset', 'reported_by', 'assigned_to', 'subject',
+                     'performed_by'):
             setattr(self, name, None)
 
 
@@ -135,7 +136,7 @@ def test_the_table_shows_the_balance_and_marks_low_stock():
 def test_the_old_snapshot_fields_are_gone_from_the_form():
     names = [f.name for f in MATERIALS_IN_STOCK.fields]
     assert names == ['item', 'material_category', 'unit', 'location', 'reorder_level',
-                     'opening_stock', 'entry_date']
+                     'opening_stock', 'entry_date', 'reported_by', 'assigned_to']
 
 
 # --- one line per material ------------------------------------------------

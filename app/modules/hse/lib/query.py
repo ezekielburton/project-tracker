@@ -36,6 +36,7 @@ def eager(query):
         selectinload(HseEntry.reported_by),
         selectinload(HseEntry.assigned_to),
         selectinload(HseEntry.subject),
+        selectinload(HseEntry.performed_by),
         selectinload(HseEntry.compliance_item),
     )
 
@@ -63,13 +64,14 @@ def count_matching(register_key, filters, ids=None):
 
 def _searched(query, term):
     """Free-text filter across ref, status, the JSONB blob, and the names
-    behind the foreign keys. Adds seven outer joins, so only call it when
+    behind the foreign keys. Adds eight outer joins, so only call it when
     there is a search term."""
     like = f'%{term}%'
     location, department = aliased(HseReference), aliased(HseReference)
     compliance = aliased(HseReference)
     asset = aliased(HseAsset)
     reporter, owner, subject = aliased(HsePerson), aliased(HsePerson), aliased(HsePerson)
+    doer = aliased(HsePerson)
 
     query = (query
              .outerjoin(location, HseEntry.location_id == location.id)
@@ -78,7 +80,8 @@ def _searched(query, term):
              .outerjoin(asset, HseEntry.asset_id == asset.id)
              .outerjoin(reporter, HseEntry.reported_by_id == reporter.id)
              .outerjoin(owner, HseEntry.assigned_to_id == owner.id)
-             .outerjoin(subject, HseEntry.subject_id == subject.id))
+             .outerjoin(subject, HseEntry.subject_id == subject.id)
+             .outerjoin(doer, HseEntry.performed_by_id == doer.id))
 
     return query.filter(or_(
         HseEntry.ref.ilike(like),
@@ -93,6 +96,7 @@ def _searched(query, term):
         reporter.name.ilike(like),
         owner.name.ilike(like),
         subject.name.ilike(like),
+        doer.name.ilike(like),
     ))
 
 

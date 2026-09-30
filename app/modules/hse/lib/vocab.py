@@ -44,6 +44,9 @@ STATUS_MODIFIERS = {
 # without the models.
 OPEN_STATUSES = ('Open', 'In Progress', 'Escalated')
 
+# The registers an inspection is logged in.
+INSPECTION_REGISTERS = ('general_inspection', 'vehicle_inspection', 'forklift_inspection')
+
 # Computed expiry statuses that count as needing attention.
 OPEN_EXPIRY_STATUSES = ('Expiring soon', 'Expired')
 

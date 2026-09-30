@@ -40,6 +40,7 @@ def _entries(start, end):
                      selectinload(HseEntry.reported_by),
                      selectinload(HseEntry.assigned_to),
                      selectinload(HseEntry.subject),
+                     selectinload(HseEntry.performed_by),
                      # The drawer says who filed a done job and when.
                      selectinload(HseEntry.created_by))
             .filter(or_(

@@ -17,6 +17,26 @@ from app.modules.hse.models import (
 )
 
 
+# "HSE" as a whole word in a person's name or role puts them first in pickers.
+HSE_WORD = re.compile(r'\bhse\b', re.IGNORECASE)
+
+
+def is_hse(person):
+    return bool(HSE_WORD.search(f'{person.name} {person.role or ""}'))
+
+
+def default_reporter(user):
+    """The person a new entry's Reported by starts on: the one linked to
+    `user`, else the only HSE person on the list. None when neither holds."""
+    if user is None or getattr(user, 'id', None) is None:
+        return None
+    linked = HsePerson.query.filter_by(user_id=user.id, active=True).first()
+    if linked:
+        return linked.id
+    hse = [p for p in HsePerson.query.filter_by(active=True).all() if is_hse(p)]
+    return hse[0].id if len(hse) == 1 else None
+
+
 # 'HH:MM', 24-hour: what <input type="time"> submits.
 TIME_PATTERN = re.compile(r'([01]\d|2[0-3]):[0-5]\d')
 
@@ -48,7 +68,10 @@ def _options(field):
         return [{'value': r.id, 'label': r.label} for r in rows]
     if field.type == 'person':
         rows = HsePerson.query.filter_by(active=True).order_by(HsePerson.name).all()
-        return [{'value': r.id, 'label': f'{r.name} — {r.role}' if r.role else r.name}
+        # HSE people first, each group A–Z (the sort is stable).
+        rows.sort(key=lambda r: not is_hse(r))
+        return [{'value': r.id, 'label': f'{r.name} — {r.role}' if r.role else r.name,
+                 'group': 'HSE' if is_hse(r) else 'Everyone else'}
                 for r in rows]
     if field.type == 'asset':
         rows = HseAsset.query.filter_by(active=True).order_by(HseAsset.label).all()
@@ -73,6 +96,19 @@ def _current(entry, field, prefill=None):
     if isinstance(value, date):
         return value.isoformat()
     return value
+
+
+def _groups(options):
+    """Options split by their 'group', in first-seen order, or [] when
+    there is at most one group."""
+    groups = []
+    for opt in options:
+        if 'group' not in opt:
+            return []
+        if not groups or groups[-1]['label'] != opt['group']:
+            groups.append({'label': opt['group'], 'options': []})
+        groups[-1]['options'].append(opt)
+    return groups if len(groups) > 1 else []
 
 
 def form_fields(reg, entry=None, prefill=None):
@@ -101,6 +137,8 @@ def form_fields(reg, entry=None, prefill=None):
             'required_when': required_when,
             'required_now': bool(required_when) and status == required_when,
             'options': options,
+            # Person pickers split into HSE and everyone else when both exist.
+            'groups': _groups(options),
             'value': _current(entry, field, prefill),
             'statuses': list(reg.statuses) if field.type == 'status' else [],
             # A choice field with nothing behind it cannot be filled in yet.
@@ -172,10 +210,15 @@ def _parse(field, raw, errors):
 
     if field.type == 'number':
         try:
-            return int(raw)
+            number = int(raw)
         except (TypeError, ValueError):
             errors[field.name] = 'Not a number'
             return None
+        # Every number field is a count or a reading.
+        if number < 0:
+            errors[field.name] = 'Must be 0 or more'
+            return None
+        return number
 
     return raw
 
