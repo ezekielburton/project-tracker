@@ -153,7 +153,9 @@ ROLE_CAPABILITIES = {
         'view_hse', 'manage_hse',
     },
 
-    'hr': set(_READ_ONLY_STAFF),
+    # HR also reads HSE (injuries and lost time are theirs too), so it can be
+    # sent the HSE reports.
+    'hr': set(_READ_ONLY_STAFF) | {'view_hse'},
     'production': set(_READ_ONLY_STAFF),
     'logistics': set(_READ_ONLY_STAFF),
 }

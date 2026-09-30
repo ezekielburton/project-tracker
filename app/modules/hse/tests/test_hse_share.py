@@ -169,3 +169,8 @@ def test_the_page_and_csv_carry_spend(app, client, people):
     assert 'Spend — September 2026' in html and 'hse-spend-figs' in html
     rows = list(csv.reader(io.StringIO(client.get(urls['csv']).get_data(as_text=True))))
     assert any(row[:1] == ['Spend'] and row[-1] == 'AED' for row in rows)
+
+
+def test_hr_can_be_sent_hse_reports(db_session):
+    hr = _user(db_session, 'Share HR', 'hr', email='share-hr@example.com')
+    assert hr in share.recipients()

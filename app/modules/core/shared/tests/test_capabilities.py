@@ -117,6 +117,8 @@ _TABLE = [
     ('hr', 'view_all_projects', True),
     ('hr', 'edit_finance', False),
     ('hr', 'create_projects', False),
+    ('hr', 'view_hse', True),
+    ('hr', 'manage_hse', False),
     ('hr', 'close_projects', False),
     ('hr', 'review_submissions', False),
     ('hr', 'raise_flags', False),
@@ -135,7 +137,9 @@ def test_capability_table(db_session, role, capability, expected):
 
 
 def test_the_three_read_only_roles_hold_the_same_capabilities():
-    assert ROLE_CAPABILITIES['hr'] == ROLE_CAPABILITIES['production'] == ROLE_CAPABILITIES['logistics']
+    """HR also reads HSE; otherwise the three match."""
+    assert (ROLE_CAPABILITIES['hr'] - {'view_hse'}
+            == ROLE_CAPABILITIES['production'] == ROLE_CAPABILITIES['logistics'])
 
 
 def test_an_unknown_role_holds_nothing(db_session):

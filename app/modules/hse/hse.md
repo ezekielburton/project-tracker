@@ -71,6 +71,7 @@ ships as a patch.
 - **HSE officer** — reads and edits everything in the module, and sees only this
   module in his sidebar.
 - **Management** — reads everything, edits nothing.
+- **HR** — reads everything, edits nothing; can be sent the HSE reports.
 - **Admin** — reads and edits everything.
 - **My performance** — everyone sees their own; management and admin see anyone's.
 
