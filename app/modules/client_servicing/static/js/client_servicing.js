@@ -81,6 +81,8 @@
             .then(function (response) { return response.ok ? response.text() : null; })
             .then(function (html) {
                 if (html === null) return;
+                // The open row menu points at a row about to be replaced.
+                if (window.__csCloseRowMenu) window.__csCloseRowMenu();
                 body.innerHTML = html;
                 applySort(); // keep whatever sort was active through the swap
                 updateSortIndicators();
@@ -538,8 +540,7 @@
     body.addEventListener('mousedown', function (e) {
         if (e.target.closest('.cs-resize-handle')) return; // the resize handler above owns this
         var th = e.target.closest('th[data-col-key]');
-        // Project stays pinned first; the sticky CSS
-        // assumes it never moves.
+        // Project stays pinned first; the sticky CSS assumes it never moves.
         if (!th || th.dataset.colKey === 'project') return;
         e.preventDefault();
 
@@ -912,6 +913,14 @@
    the menu item; client_servicing_close.js opens the prompt from there.
    Parked on <body> while open so no ancestor offsets its fixed position. */
 (function () {
+    // A menu left open across a page swap is still parked on <body>, pointing
+    // at a row that has gone; drop it. The current visit's menu lives in the page.
+    function dropParked() {
+        Array.prototype.forEach.call(document.querySelectorAll('body > #cs-row-menu'),
+            function (el) { el.parentNode.removeChild(el); });
+    }
+    dropParked();
+
     var body = document.getElementById('client-servicing-table-body');
     var menu = document.getElementById('cs-row-menu');
     var item = document.getElementById('cs-row-menu-close');
@@ -919,12 +928,15 @@
 
     var trigger = null;
 
-    function closeMenu() {
+    function closeMenu(returnFocus) {
         if (menu.hidden) return;
+        var opener = trigger;
         menu.hidden = true;
-        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        if (opener) opener.setAttribute('aria-expanded', 'false');
         trigger = null;
         window.PopoverPosition.release(menu);
+        // Only Escape asks for this; click and scroll listeners pass an event.
+        if (returnFocus === true && opener && opener.isConnected) opener.focus();
     }
 
     function openMenu(btn) {
@@ -960,8 +972,10 @@
             if (!e.target.closest('#cs-row-menu')) window.__csCloseRowMenu();
         });
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') window.__csCloseRowMenu();
+            if (e.key === 'Escape') window.__csCloseRowMenu(true);
         });
         window.addEventListener('resize', function () { window.__csCloseRowMenu(); });
+        // SPA navigation, Back included, leaves no row to point at.
+        document.addEventListener('helix:navigated', dropParked);
     }
 })();

@@ -19,7 +19,7 @@ from app.modules.core.shared.lib.capabilities import can, effective_user
 from app.modules.client_servicing.lib.access import require_cs
 from app.modules.client_servicing.lib.months import format_month, month_input_value, parse_month
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
-from app.modules.client_servicing.routes.table import _active_projects
+from app.modules.client_servicing.lib.project_sets import active_projects
 from app.modules.client_servicing.lib import summary as summary_lib
 
 # Stored validation value -> (pill label, status-pill colour modifier).
@@ -111,7 +111,7 @@ def _invoice_month_options():
 def _filtered_projects(invoice_month, validation):
     """The active set narrowed by the toolbar filters. Shared by the page and
     the CSV export so both filter the same way."""
-    query = _active_projects()
+    query = active_projects()
     if invoice_month:
         query = query.filter(ClientServicing.invoice_month_date == invoice_month)
     if validation == 'none':

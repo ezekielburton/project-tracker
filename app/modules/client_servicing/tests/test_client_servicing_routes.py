@@ -1,9 +1,11 @@
 """Client Servicing routes: page access, the table and invoicing views, day
 thresholds, and the review lock."""
+from datetime import date, timedelta
+
 from flask import url_for
 
 from app.modules.core.shared.models import User, Project
-from app.modules.core.shared.testing import login_as
+from app.modules.core.shared.testing import count_queries, login_as
 from app.modules.client_servicing.models import ClientServicing, ClientServicingScope
 
 
@@ -290,3 +292,30 @@ def test_review_lock_lets_management_through(app, client, db_session):
         finally:
             app.config['CLIENT_SERVICING_REVIEW_ONLY'] = False
         assert resp.status_code == 200, f'{role} was locked out of its own review'
+
+
+def test_table_rows_query_count_stays_flat(app, client, db_session):
+    """Risk and chips are worked out per row; more rows must not mean more queries."""
+    lead = _user(db_session, 'rowsn', role='cs')
+
+    def seed(n, tag):
+        for i in range(n):
+            p = Project(name=f'Rows {tag}{i}', created_by_id=lead.id, cs_lead_id=lead.id,
+                        project_status='briefed',
+                        installation_date=date.today() + timedelta(days=i % 5))
+            db_session.add(p)
+            db_session.flush()
+            db_session.add(ClientServicing(project_id=p.id, cs_status='Briefing'))
+        db_session.flush()
+
+    with app.test_request_context():
+        url = url_for('client_servicing.table_rows')
+    login_as(client, app, lead, 'password123')
+    seed(3, 'a')
+    client.get(url)  # warm-up: first-request caches don't count
+    with count_queries() as small:
+        assert client.get(url).status_code == 200
+    seed(6, 'b')
+    with count_queries() as big:
+        client.get(url)
+    assert big[0] == small[0], (small[0], big[0])

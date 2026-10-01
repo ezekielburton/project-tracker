@@ -11,7 +11,7 @@ from app.modules.core.shared.testing import login_as
 from app.modules.client_servicing.models import ClientServicing
 from app.modules.client_servicing.lib import summary as summary_lib
 from app.modules.client_servicing.lib.calendar import build_install
-from app.modules.client_servicing.routes.table import _active_projects
+from app.modules.client_servicing.lib.project_sets import active_projects
 
 
 def _user(db_session, tag, role='cs'):
@@ -123,4 +123,4 @@ def test_dashboard_drops_closed_projects(app, db_session):
     _project(db_session, user, 'Closed Board Job', closed=True)
     _project(db_session, user, 'Live Board Job')
 
-    assert [p.name for p in _active_projects().all()] == ['Live Board Job']
+    assert [p.name for p in active_projects().all()] == ['Live Board Job']

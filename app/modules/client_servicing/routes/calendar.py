@@ -13,7 +13,7 @@ from app.modules.client_servicing.lib.calendar import (
 )
 from app.modules.client_servicing.lib.status import CS_STATUS_OPTIONS
 from app.modules.client_servicing.routes.blueprint import client_servicing_bp
-from app.modules.client_servicing.routes.table import _base_projects
+from app.modules.client_servicing.lib.project_sets import base_projects
 
 
 def _parse_month(raw):
@@ -63,7 +63,7 @@ def _selected_day(weeks, target):
 def calendar():
     today = date.today()
     if request.args.get('view') == 'agenda':
-        groups, kpis = agenda_groups(_base_projects().all(), today)
+        groups, kpis = agenda_groups(base_projects().all(), today)
         return render_template(
             'client_servicing/calendar_agenda.html',
             active_view='agenda', kpis=kpis, groups=groups,
@@ -71,7 +71,7 @@ def calendar():
         )
 
     year, month = _parse_month(request.args.get('month'))
-    weeks, kpis = month_grid(_base_projects().all(), year, month, today)
+    weeks, kpis = month_grid(base_projects().all(), year, month, today)
     prev_y, prev_m = _shift_month(year, month, -1)
     next_y, next_m = _shift_month(year, month, 1)
     selected = _default_selected(weeks, today)
@@ -100,7 +100,7 @@ def calendar_day(datestr):
     today = date.today()
     installs = [
         build_install(p, today)
-        for p in _base_projects().filter_by(installation_date=target).all()
+        for p in base_projects().filter_by(installation_date=target).all()
     ]
     installs.sort(key=lambda i: i['client'] or '')
     return render_template(

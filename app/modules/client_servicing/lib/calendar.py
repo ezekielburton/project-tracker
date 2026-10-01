@@ -73,7 +73,7 @@ def effective_risk(project, status_label=None, today=None):
 
 def build_install(project, today):
     """Per-install view model for the month drawer and the agenda row. Reads
-    only relationships _base_projects eager-loads, so no N+1 queries."""
+    only relationships base_projects() eager-loads, so no N+1 queries."""
     cs = project.client_servicing
     status_label, status_class, status_is_auto = effective_cs_status(project)
     risk_label, risk_class, risk_is_auto = effective_risk(project, status_label, today)

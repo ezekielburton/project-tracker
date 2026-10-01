@@ -2,7 +2,7 @@
 Client Servicing dashboard: the module's landing panels and its feed for the
 global Dashboard. Read-only.
 
-Loads the active set through _active_projects, the loader Invoicing By Project
+Loads the active set through active_projects(), the loader Invoicing By Project
 shares, and reuses the Calendar and Invoicing helpers so numbers match those pages.
 Finance figures need can_view_finance; page access alone is not enough.
 """
@@ -17,7 +17,7 @@ from app.modules.client_servicing.lib.status import effective_cs_status
 from app.modules.client_servicing.lib.calendar import effective_risk, build_install
 from app.modules.client_servicing.lib.summary import year_summary, due_this_month, stuck_this_month
 from app.modules.client_servicing.lib.data_gaps import MISSING_DATA_CHIP, missing_fields
-from app.modules.client_servicing.routes.table import _active_projects
+from app.modules.client_servicing.lib.project_sets import active_projects
 
 
 # Days ahead the feed looks for installs; rows shown in Upcoming Installs.
@@ -62,10 +62,6 @@ def _snapshot(active, today):
 
 
 # --- links -----------------------------------------------------------------
-
-def _projects_link(project_id):
-    return url_for('project_list.index', project=project_id)
-
 
 def _missing_data_link():
     """The Table with its Missing-data chip on."""
@@ -227,7 +223,7 @@ def dashboard_context(user):
     for finance viewers."""
     today = date.today()
     show_finance = can_view_finance(user)
-    snap = _snapshot(_active_projects().all(), today)
+    snap = _snapshot(active_projects().all(), today)
 
     month_row = due = None
     stuck = []
@@ -259,7 +255,7 @@ def feed_items(user):
     if not can_access_client_servicing(user):
         return []
     today = date.today()
-    snap = _snapshot(_active_projects().all(), today)
+    snap = _snapshot(active_projects().all(), today)
     items = _feed_installs(snap, today)
     if can_view_finance(user):
         items += _finance_signals(due_this_month(today.year, today.month), today)

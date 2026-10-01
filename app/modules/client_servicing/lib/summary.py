@@ -1,6 +1,6 @@
 """
 Rollups for Invoicing > Monthly Summary, computed live from the finance fields.
-Builds on _base_projects() (drafts excluded, closed kept). Money is returned
+Builds on base_projects() (drafts excluded, closed kept). Money is returned
 as Decimal; the template formats it.
 
 A project's value is Project.value, the same figure the Table, Invoicing and
@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.modules.client_servicing.lib.money import money
-from app.modules.client_servicing.routes.table import _base_projects
+from app.modules.client_servicing.lib.project_sets import base_projects
 
 
 # Validation states that count a project as "stuck" even when it has an LPO.
@@ -54,7 +54,7 @@ def year_summary(year):
                    'invoiced': Decimal('0'), 'stuck': 0,
                    'stuck_amount': Decimal('0')} for m in range(1, 13)}
 
-    for p in _base_projects().all():
+    for p in base_projects().all():
         bm = _billing_month(p)
         if not bm or bm[0] != year:
             continue
@@ -100,7 +100,7 @@ def stuck_this_month(year, month):
     tells the Dashboard to link to the Closed page, as closed projects are
     not on the Invoicing table."""
     out = []
-    for p in _base_projects().all():
+    for p in base_projects().all():
         if _billing_month(p) != (year, month):
             continue
         cs = p.client_servicing
@@ -123,7 +123,7 @@ def due_this_month(year, month):
     """The month's projects not yet invoiced. validation is returned raw;
     the route maps it to a pill."""
     out = []
-    for p in _base_projects().all():
+    for p in base_projects().all():
         if _billing_month(p) != (year, month):
             continue
         cs = p.client_servicing

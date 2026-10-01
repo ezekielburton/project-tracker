@@ -45,14 +45,14 @@ The CS-only and finance fields live on a companion table, never on the shared
 `Project`. Everything a CS user edits that also exists on the project (CS lead,
 owner, job number, value, deadlines, SPOC) is written to the same project
 record — one source of truth, not a copy that drifts. Draft projects are
-excluded everywhere in the module via the shared `table.py::_base_projects()`
+excluded everywhere in the module via the shared `lib/project_sets.py::base_projects()`
 (`project_status != 'draft'`) — a draft isn't a real project yet.
 
-Three loaders in `routes/table.py`, each narrower than the last:
-- `_base_projects()` — every non-draft project. Monthly Summary, Calendar, Closed.
-- `_open_projects()` — minus closed. The Table (it splits off cancelled jobs
+Three loaders in `lib/project_sets.py`, each narrower than the last:
+- `base_projects()` — every non-draft project. Monthly Summary, Calendar, Closed.
+- `open_projects()` — minus closed. The Table (it splits off cancelled jobs
   into the close-out strip itself).
-- `_active_projects()` — minus cancelled jobs awaiting close-out too. The
+- `active_projects()` — minus cancelled jobs awaiting close-out too. The
   **active set**: the Dashboard and Invoicing By Project both load through it,
   so their counts can't differ. A test checks Dashboard, Invoicing and Table
   count the same jobs.
@@ -108,7 +108,7 @@ has edits attributed as that person; the admin-only Scope CRUD stays on
 ## Dashboard (`routes/dashboard.py`, `lib/dashboard.py`)
 The module landing (`GET /`) and first rail entry — the daily-standup "where
 does everything stand" view. Read-only, no new models: one eager-loaded
-`_active_projects()` fetch, composed from the existing helpers so numbers can't
+`active_projects()` fetch, composed from the existing helpers so numbers can't
 drift from the Table / Calendar / Invoicing pages.
 
 Six panels:
@@ -214,7 +214,7 @@ first.
 Two tabs behind an in-page strip; drafts excluded from both.
 
 - **By Project** (`GET /invoicing`) — a fixed-column finance table over the
-  active set (`_active_projects()`, same as the Dashboard: closed jobs and
+  active set (`active_projects()`, same as the Dashboard: closed jobs and
   cancelled jobs awaiting close-out are out; the CSV export matches), with the finance columns in an "Invoicing — Master Control"
   band. The band is a neutral surface; red (salmon) is kept for the No LPO /
   Overdue pills so it only ever means "flagged". Finance cells are inline-edited (text/date/number, a GR toggle, a
@@ -228,8 +228,7 @@ Two tabs behind an in-page strip; drafts excluded from both.
   = Σ project value, Confirmed = has LPO, Invoiced = Σ invoice amount, Stuck =
   no LPO or overdue/no-LPO validation. Calendar-year window for now.
 - **Day thresholds** — green/amber/red day cut-offs in `ClientServicingSetting`,
-  edited by admin/management from a toolbar button + modal. The toolbar's
-  search / month & validation filters / Export are present but not yet wired.
+  edited by admin/management from a toolbar button + modal.
 
 ## KPI tiles
 Every KPI tile number in the module — Dashboard, Calendar, Invoicing summary,
@@ -259,8 +258,6 @@ uses it. The listener is document-delegated and
 guarded (`_csNavDispatcherWired`), so it survives SPA swaps without stacking.
 
 ## Remaining scope
-- **Invoicing toolbar** — search, month/validation filters and Export are
-  visual only; not wired.
 - **Data import** — mapping the real master spreadsheet to `Project` +
   `ClientServicing` (matching/creating projects, handling non-matching rows).
   Not built; `seed_invoicing_demo.py` is the pattern to adapt.

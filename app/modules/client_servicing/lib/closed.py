@@ -1,7 +1,7 @@
 """
 Data for the Closed page, computed live from ClientServicing.closed_at.
 
-Builds on _base_projects(), which keeps closed projects; _open_projects()
+Builds on base_projects(), which keeps closed projects; open_projects()
 drops them.
 """
 from datetime import date, datetime, time, timedelta
@@ -14,17 +14,17 @@ from app.modules.core.shared.models import Project
 
 from app.modules.client_servicing.lib.money import money
 from app.modules.client_servicing.models import ClientServicing
-from app.modules.client_servicing.routes.table import _base_projects
+from app.modules.client_servicing.lib.project_sets import base_projects
 
 
 _QUARTER_MONTHS = {1: (1, 2, 3), 2: (4, 5, 6), 3: (7, 8, 9), 4: (10, 11, 12)}
 
 
 def _closed_query():
-    """Every closed project, newest close first. _base_projects() excludes
+    """Every closed project, newest close first. base_projects() excludes
     drafts and eager-loads the rows; closed_by is loaded here as only this page shows it."""
     return (
-        _base_projects()
+        base_projects()
         .join(ClientServicing, ClientServicing.project_id == Project.id)
         .options(joinedload(Project.client_servicing).joinedload(ClientServicing.closed_by))
         .filter(ClientServicing.closed_at.isnot(None))

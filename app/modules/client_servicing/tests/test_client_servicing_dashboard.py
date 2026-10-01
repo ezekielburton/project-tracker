@@ -11,7 +11,7 @@ from app.modules.client_servicing.models import ClientServicing
 from app.modules.client_servicing.lib.access import can_view_finance
 from app.modules.client_servicing.lib import dashboard as dash
 from app.modules.client_servicing.services.dashboard_feed import feed_for
-from app.modules.client_servicing.routes.table import _active_projects
+from app.modules.client_servicing.lib.project_sets import active_projects
 from app.modules.client_servicing.lib.data_gaps import MISSING_DATA_CHIP, missing_fields
 
 TODAY = date(2026, 9, 15)
@@ -44,7 +44,7 @@ def _project(db_session, tag, creator, install=None, cs_status=None,
 
 
 def _snap(today=TODAY):
-    return dash._snapshot(_active_projects().all(), today)
+    return dash._snapshot(active_projects().all(), today)
 
 
 # ── finance gate ───────────────────────────────────────────────────────────

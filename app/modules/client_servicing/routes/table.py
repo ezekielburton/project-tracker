@@ -6,17 +6,17 @@ from datetime import date
 
 from flask import render_template
 from flask_login import login_required
-from sqlalchemy.orm import joinedload, selectinload
 
-from app.modules.core.shared.models import Project, ProjectDesigner, Contact, UserTableLayout
+from app.modules.core.shared.models import Project, Contact, UserTableLayout
 from app.modules.core.shared.lib.users import active_users
 from app.modules.core.shared.services.status_tracking import bulk_project_client_approved_at
 
-from app.modules.client_servicing.models import ClientServicing, ClientServicingScope
+from app.modules.client_servicing.models import ClientServicingScope
 from app.modules.client_servicing.lib.status import (
     effective_cs_status, cs_design_indicator, CS_STATUS_OPTIONS,
 )
 from app.modules.client_servicing.lib.calendar import effective_risk
+from app.modules.client_servicing.lib.project_sets import open_projects
 from app.modules.client_servicing.lib.quick_chips import CHIPS, row_chips
 from app.modules.core.shared.lib.capabilities import effective_user
 from app.modules.client_servicing.lib.access import can_close_projects, require_cs
@@ -105,19 +105,6 @@ def _serialize_person(user):
     return {'id': user.id, 'name': user.name, 'avatar_filename': user.avatar_filename}
 
 
-def _eager_load(query):
-    """Bulk-loads every relationship the row serializer touches, to avoid
-    N+1 queries. lib/calendar.py relies on these being loaded too."""
-    return query.options(
-        joinedload(Project.cs_lead),
-        joinedload(Project.project_owner),
-        joinedload(Project.client_brand),
-        selectinload(Project.assigned_designers).joinedload(ProjectDesigner.designer),
-        joinedload(Project.client_servicing).joinedload(ClientServicing.scope),
-        selectinload(Project.project_deliverables),
-    )
-
-
 def _serialize_row(p, contacts_by_id, client_approved_at, me_id, today):
     cs = p.client_servicing
     contact = contacts_by_id.get(p.contact_id) if p.contact_id else None
@@ -182,27 +169,6 @@ def _contacts_by_client(client_ids):
     return by_client
 
 
-def _base_projects():
-    """Every non-draft project, eager-loaded, closed ones included. The base
-    query for the Calendar, Monthly Summary, Closed and _open_projects()."""
-    return _eager_load(Project.query).filter(Project.project_status != 'draft')
-
-
-def _open_projects():
-    """_base_projects() minus closed ones; used by the table and Invoicing
-    By Project. Left join, so a project with no CS row still lists."""
-    return _base_projects().outerjoin(
-        ClientServicing, ClientServicing.project_id == Project.id,
-    ).filter(ClientServicing.closed_at.is_(None))
-
-
-def _active_projects():
-    """The worklist every CS page counts: open projects minus cancelled ones
-    waiting in the close-out strip. The Dashboard and Invoicing By Project
-    both load through this, so their counts can't differ."""
-    return _open_projects().filter(Project.cancelled_at.is_(None))
-
-
 def _awaiting_close_out(project):
     """A cancelled project not yet closed. It shows in the close-out strip
     above the table, not in the rows."""
@@ -228,7 +194,7 @@ def _page_context():
     """Template context: rows, close-out strip and dropdown options. Contact
     options are keyed by client_id, since a row's Client SPOC must belong to
     its project's client."""
-    listed = _open_projects().order_by(Project.name.asc()).all()
+    listed = open_projects().order_by(Project.name.asc()).all()
     to_close_out = [p for p in listed if _awaiting_close_out(p)]
     projects = [p for p in listed if not _awaiting_close_out(p)]
 
