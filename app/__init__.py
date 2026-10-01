@@ -28,6 +28,22 @@ def _compute_static_version():
     return str(int(newest)) if newest else str(int(time.time()))
 
 
+def _compute_app_version():
+    """APP_VERSION for the footer: the git tag of the running code.
+    Production sits on the tag (e.g. v2.6); dev shows commits past it
+    (e.g. v2.6-3-gabc1234). Falls back to 'dev' if git isn't available."""
+    import subprocess
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        out = subprocess.run(
+            ['git', 'describe', '--tags'],
+            cwd=app_dir, capture_output=True, text=True, timeout=5,
+        )
+        return out.stdout.strip() or 'dev'
+    except Exception:
+        return 'dev'
+
+
 def create_app(config=Config):
     app = Flask(__name__)
     app.config.from_object(config)
@@ -42,6 +58,10 @@ def create_app(config=Config):
 
     # Cache-buster for every static tag in base.html (?v=...).
     app.config['STATIC_VERSION'] = _compute_static_version()
+
+    # App version shown in the footer — read from the git tag at startup.
+    app.config['APP_VERSION'] = _compute_app_version()
+    app.jinja_env.globals['app_version'] = app.config['APP_VERSION']
 
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'
