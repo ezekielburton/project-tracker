@@ -31,7 +31,7 @@
     var list = document.getElementById(ids.list);
     if (!list) return;
 
-    // The list and load panels fill to the footer and scroll inside.
+    // The list panel fills to the footer and scrolls inside.
     if (window.watchFillHeight) {
         window.watchFillHeight('#' + ids.body, '--fill-height');
     }

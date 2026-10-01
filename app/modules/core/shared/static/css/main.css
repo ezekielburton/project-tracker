@@ -2843,6 +2843,68 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     opacity: 0.55;
 }
 
+/* Admin accounts — row "⋯" actions menu. Parked on <body> while open,
+   so it's styled by its own class, never through the row. */
+.account-menu-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    color: var(--grey-mid);
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.account-menu-btn:hover,
+.account-menu-btn[aria-expanded="true"] {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+}
+
+.account-row-menu {
+    position: fixed;
+    z-index: 5100; /* above .admin-panel (5000) */
+    min-width: 170px;
+    padding: 0.25rem;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.account-row-menu[hidden] {
+    display: none;
+}
+
+.account-row-menu button {
+    display: block;
+    width: 100%;
+    height: auto;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: var(--radius);
+    padding: 0.45rem 0.75rem;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.account-row-menu button:hover,
+.account-row-menu button:focus-visible {
+    background: var(--surface-hover);
+}
+
+.account-row-menu .account-delete-btn,
+.account-row-menu .account-delete-btn:hover {
+    color: var(--danger-text);
+}
+
 .pt-inline-edit {
     display: flex;
     align-items: center;

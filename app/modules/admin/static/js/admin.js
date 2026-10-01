@@ -416,8 +416,8 @@ function adminEsc(value) {
     function renderAccountDisplay(user) {
         var teamTag = user.team ? '<span class="account-user-team">' + adminEsc(user.team) + '</span>' : '';
         var activeToggle = user.is_active
-            ? '<button type="button" class="account-deactivate-btn">Deactivate</button>'
-            : '<button type="button" class="account-reactivate-btn">Reactivate</button>';
+            ? '<button type="button" class="account-deactivate-btn" role="menuitem">Deactivate</button>'
+            : '<button type="button" class="account-reactivate-btn" role="menuitem">Reactivate</button>';
         return '<div class="account-user-display">' +
             renderAvatarCell(user) +
             '<div class="account-user-info">' +
@@ -426,10 +426,13 @@ function adminEsc(value) {
             teamTag +
             '</div>' +
             '<div class="account-user-actions">' +
+            '<button type="button" class="account-menu-btn" aria-haspopup="menu" aria-expanded="false" title="Actions">&#8943;</button>' +
+            '<div class="account-row-menu" role="menu" hidden>' +
+            '<button type="button" class="account-edit-btn" role="menuitem" data-name="' + adminEsc(user.name) + '" data-role="' + adminEsc(user.role) + '" data-team="' + adminEsc(user.team) + '">Edit</button>' +
             activeToggle +
-            '<button type="button" class="account-edit-btn" data-name="' + adminEsc(user.name) + '" data-role="' + adminEsc(user.role) + '" data-team="' + adminEsc(user.team) + '">Edit</button>' +
-            '<button type="button" class="account-reset-btn" data-name="' + adminEsc(user.name) + '">&#8635;</button>' +
-            '<button type="button" class="account-delete-btn" data-name="' + adminEsc(user.name) + '">&times;</button>' +
+            '<button type="button" class="account-reset-btn" role="menuitem" data-name="' + adminEsc(user.name) + '">Reset password</button>' +
+            '<button type="button" class="account-delete-btn" role="menuitem" data-name="' + adminEsc(user.name) + '">Delete</button>' +
+            '</div>' +
             '</div>' +
             '</div>';
     }
@@ -536,8 +539,6 @@ function adminEsc(value) {
                         .then(function (r) { return r.json(); })
                         .then(function (data) {
                             if (data.success) {
-                                resetBtn.textContent = '✓';
-                                setTimeout(function () { resetBtn.innerHTML = '&#8635;'; }, 2000);
                                 // Shown once only; the server keeps just the hash.
                                 showConfirm('New password for ' + user.name + ': ' + data.temp_password +
                                     '\nShare it with them now; it will not be shown again.',
@@ -597,6 +598,48 @@ function adminEsc(value) {
             });
         }
     }
+
+    // Account row "⋯" menu — one open at a time. Parked on <body> while open
+    // (PopoverPosition): the admin panel's transform would offset a fixed
+    // popover. Item buttons keep the listeners attachRowActions bound.
+    var openAccountMenu = null;
+
+    function closeAccountMenu() {
+        if (!openAccountMenu) return;
+        var m = openAccountMenu;
+        openAccountMenu = null;
+        m.menu.hidden = true;
+        m.btn.setAttribute('aria-expanded', 'false');
+        window.PopoverPosition.release(m.menu);
+    }
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.account-menu-btn');
+        if (btn) {
+            var wasOpen = openAccountMenu && openAccountMenu.btn === btn;
+            closeAccountMenu();
+            if (wasOpen) return;
+            var menu = btn.parentNode.querySelector('.account-row-menu');
+            if (!menu) return;
+            window.PopoverPosition.attach(menu);
+            menu.hidden = false;
+            window.PopoverPosition.place(menu, btn);
+            // Right-align under the button — it sits at the row's right edge.
+            var r = btn.getBoundingClientRect();
+            menu.style.left = Math.max(8, r.right - menu.offsetWidth) + 'px';
+            btn.setAttribute('aria-expanded', 'true');
+            openAccountMenu = { btn: btn, menu: menu };
+            return;
+        }
+        // An item or an outside click closes it. Item handlers run first
+        // (bound on the buttons), so Edit re-renders before release.
+        closeAccountMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeAccountMenu();
+    });
+    document.addEventListener('scroll', closeAccountMenu, true);
+    window.addEventListener('resize', closeAccountMenu);
 
     if (addUserToggle) {
         addUserToggle.addEventListener('click', function () {

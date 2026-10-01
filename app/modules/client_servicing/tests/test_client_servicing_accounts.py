@@ -1,6 +1,6 @@
 """Accounts: grouping, the secondary CS counted once, totals, month parity
-with the Monthly Summary, the finance gate on invoicing figures, the load
-panel, and a flat query count."""
+with the Monthly Summary, the finance gate on invoicing figures, the
+not-invoiced total, and a flat query count."""
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -74,7 +74,6 @@ def test_a_secondary_cs_is_a_tag_and_the_job_counts_once(db_session):
     assert len(rows) == 1 and rows[0]['lead'] == lead.name
     assert rows[0]['secondary'] == [second.name]
     assert second.name not in [g['name'] for g in view['groups']]
-    assert [r['jobs'] for r in view['load'] if r['lead_id'] == second.id] == []
 
 
 def test_a_job_with_no_client_groups_under_no_client(db_session):
@@ -118,12 +117,10 @@ def test_invoicing_figures_are_left_out_without_finance(db_session, owner_withou
     assert 'invoiced' not in view['kpis'] and 'not_invoiced' not in view['kpis']
     assert all('invoiced' not in r for g in view['groups'] for r in g['rows'])
     assert all('invoiced' not in g for g in view['groups'])
-    assert all('invoiced' not in r and 'invoiced_amount' not in r for r in view['load'])
-    assert 'invoiced' not in view['load_total']
     assert view['kpis']['value'] > 0      # Value stays visible to every page role
 
 
-def test_load_panel_active_no_lpo_and_total(db_session):
+def test_not_invoiced_skips_invoiced_and_cancelled_jobs(db_session):
     admin, lead = _admin(db_session), _user(db_session, 'l7')
     _job(db_session, 'open', lead, value=100, removal_date=date(2026, 9, 5))
     _job(db_session, 'done', lead, value=200, lpo='LPO-1',
@@ -131,11 +128,7 @@ def test_load_panel_active_no_lpo_and_total(db_session):
     _job(db_session, 'gone', lead, value=300, cancelled=True, removal_date=date(2026, 9, 7))
 
     view = accounts_view(admin, month=SEP)
-    row = next(r for r in view['load'] if r['lead_id'] == lead.id)
-    assert (row['jobs'], row['active'], row['invoiced'], row['no_lpo']) == (3, 1, 1, 1)
-    assert row['value'] == Decimal('600') and row['invoiced_amount'] == Decimal('200')
-    for key in ('jobs', 'active', 'no_lpo', 'value', 'invoiced', 'invoiced_amount'):
-        assert view['load_total'][key] == sum(r[key] for r in view['load'])
+    assert 'load' not in view
     assert view['kpis']['not_invoiced'] == Decimal('100')
 
 

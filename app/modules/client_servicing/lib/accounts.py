@@ -1,6 +1,6 @@
 """
 Accounts: every job grouped by client or by CS lead, invoiced history
-included, plus each lead's load for a billing month. Read-only.
+included. Read-only.
 
 Loads through base_projects() and buckets months with summary.billing_month,
 so its figures match the Monthly Summary. Invoicing figures are left out for
@@ -16,7 +16,7 @@ from app.modules.client_servicing.lib.access import can_view_finance
 from app.modules.client_servicing.lib.money import money
 from app.modules.client_servicing.lib.project_sets import base_projects
 from app.modules.client_servicing.lib.status import effective_cs_status
-from app.modules.client_servicing.lib.summary import billing_month, has_lpo, is_invoiced
+from app.modules.client_servicing.lib.summary import billing_month, is_invoiced
 
 
 GROUPS = ('client', 'lead')
@@ -102,37 +102,6 @@ def _groups(rows, group, finance):
     return out
 
 
-def _load(projects, finance):
-    """(rows, total): one row per CS lead, largest value first. Active = not
-    invoiced and not cancelled; No LPO skips cancelled jobs."""
-    leads = {}
-    for p in projects:
-        cs = p.client_servicing
-        row = leads.get(p.cs_lead_id)
-        if row is None:
-            row = {'lead_id': p.cs_lead_id, 'lead': p.cs_lead.name if p.cs_lead else NO_LEAD,
-                   'jobs': 0, 'active': 0, 'no_lpo': 0, 'value': Decimal('0')}
-            if finance:
-                row.update(invoiced=0, invoiced_amount=Decimal('0'))
-            leads[p.cs_lead_id] = row
-        cancelled = p.cancelled_at is not None
-        invoiced = is_invoiced(cs)
-        row['jobs'] += 1
-        row['value'] += money(p.value)
-        if not invoiced and not cancelled:
-            row['active'] += 1
-        if not cancelled and not has_lpo(cs):
-            row['no_lpo'] += 1
-        if finance and invoiced:
-            row['invoiced'] += 1
-            row['invoiced_amount'] += money(cs.invoice_amount)
-    rows = sorted(leads.values(), key=lambda r: (-r['value'], r['lead'].casefold()))
-    keys = ['jobs', 'active', 'no_lpo', 'value'] + (['invoiced', 'invoiced_amount'] if finance else [])
-    total = {k: sum((r[k] for r in rows), Decimal('0') if k in ('value', 'invoiced_amount') else 0)
-             for k in keys}
-    return rows, total
-
-
 def _options(projects):
     """Client, lead and billing-month choices from every job, whatever the filters."""
     clients = {(p.client_id, p.client_brand.name) for p in projects if p.client_brand}
@@ -147,8 +116,8 @@ def _options(projects):
 
 def accounts_view(user, group='client', client_id=None, lead_id=None, month=None):
     """The Accounts page. `month` is (year, month) or None for All time; the
-    client and lead filters narrow the list and tiles, the load panel follows
-    the month only. Invoicing figures are absent unless can_view_finance(user)."""
+    client and lead filters narrow the list and tiles. Invoicing figures are
+    absent unless can_view_finance(user)."""
     group = group if group in GROUPS else 'client'
     finance = can_view_finance(user)
     projects = _load_projects()
@@ -164,14 +133,11 @@ def accounts_view(user, group='client', client_id=None, lead_id=None, month=None
         kpis['invoiced'] = sum((g['invoiced'] for g in groups), Decimal('0'))
         kpis['not_invoiced'] = sum((r['value'] for r in rows
                                     if r['invoiced'] is None and not r['cancelled']), Decimal('0'))
-    load_rows, load_total = _load(in_month, finance)
     return {
         'group': group,
         'finance': finance,
         'groups': groups,
         'kpis': kpis,
-        'load': load_rows,
-        'load_total': load_total,
         'month': month_value(month) if month else '',
         'month_label': month_label(month) if month else 'All time',
         'client_id': client_id,

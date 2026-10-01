@@ -63,6 +63,11 @@ class Config:
     # the module to its full role set — no code change needed.
     CLIENT_SERVICING_REVIEW_ONLY = os.environ.get('CLIENT_SERVICING_REVIEW_ONLY', 'true').lower() == 'true'
 
+    # Client Servicing close-out strip — cancelled jobs waiting to be closed
+    # out, listed above the Table. Off for now; set
+    # CLIENT_SERVICING_SHOW_CLOSE_OUT=true in .env to show it again.
+    CLIENT_SERVICING_SHOW_CLOSE_OUT = os.environ.get('CLIENT_SERVICING_SHOW_CLOSE_OUT', 'false').lower() == 'true'
+
     # Dev-only tools — set DEV_TOOLS_ENABLED=true in .env on your local machine only.
     # NEVER set this on the production server — it exposes destructive data operations.
     DEV_TOOLS_ENABLED = os.environ.get('DEV_TOOLS_ENABLED', 'false').lower() == 'true'

@@ -4,7 +4,7 @@ its ClientServicing row, if it has one. Field writes live in edit.py.
 """
 from datetime import date
 
-from flask import render_template
+from flask import current_app, render_template
 from flask_login import login_required
 
 from app.modules.core.shared.models import Project, Contact, UserTableLayout
@@ -194,7 +194,10 @@ def _page_context():
     options are keyed by client_id, since a row's Client SPOC must belong to
     its project's client."""
     listed = open_projects().order_by(Project.name.asc()).all()
-    to_close_out = [p for p in listed if _awaiting_close_out(p)]
+    # Cancelled jobs never list as rows; the strip shows them only when the
+    # close-out switch is on.
+    to_close_out = ([p for p in listed if _awaiting_close_out(p)]
+                    if current_app.config.get('CLIENT_SERVICING_SHOW_CLOSE_OUT') else [])
     projects = [p for p in listed if not _awaiting_close_out(p)]
 
     contact_ids = {p.contact_id for p in projects if p.contact_id}

@@ -4,7 +4,7 @@
 {% block title %}Client Servicing — Accounts{% endblock %}
 
 {% block content %}
-{# Accounts: jobs grouped by client or CS lead, plus each lead's load. Read-only.
+{# Accounts: jobs grouped by client or CS lead. Read-only.
    Filters are server-side GET; search, folding and the saved view are the page
    JS. Groups start collapsed; cs-acc-fin marks finance-only figures (test hook). #}
 {% set by_client = group == 'client' %}
@@ -139,62 +139,6 @@
                             </table>
                         </div>
                     </div>
-
-                    <aside class="cs-acc-load" aria-labelledby="cs-acc-load-title">
-                        <div class="cs-acc-load-head">
-                            <h2 class="cs-dash-panel-title" id="cs-acc-load-title">CS load</h2>
-                            <span class="cs-dash-panel-note">{{ month_label }}</span>
-                        </div>
-                        <div class="cs-acc-load-scroll cs-acc-scrollbox">
-                            <table class="cs-acc-loadtable{{ '' if finance else ' cs-acc-loadtable--nofin' }}">
-                                <colgroup>
-                                    <col class="cs-acc-col-lead">
-                                    <col><col>{% if finance %}<col>{% endif %}<col>
-                                </colgroup>
-                                <thead>
-                                    <tr>
-                                        <th>Lead</th>
-                                        <th>Jobs</th>
-                                        <th>Active</th>
-                                        {% if finance %}<th class="cs-acc-fin">Invoiced</th>{% endif %}
-                                        <th>No LPO</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for r in load %}
-                                    <tr>
-                                        <td>
-                                            <div class="cs-acc-lname">{{ r.lead }}</div>
-                                            <div class="cs-acc-sub">AED {{ fmt.format(r.value) }}</div>
-                                            {% if finance %}<div class="cs-acc-sub cs-acc-fin">{{ fmt.format(r.invoiced_amount) }} invoiced</div>{% endif %}
-                                        </td>
-                                        <td class="cs-inv-num">{{ r.jobs }}</td>
-                                        <td class="cs-inv-num">{{ r.active }}</td>
-                                        {% if finance %}<td class="cs-inv-num cs-acc-fin">{{ r.invoiced }}</td>{% endif %}
-                                        <td class="cs-inv-num{% if r.no_lpo %} cs-inv-kpi-value--alert{% endif %}">{{ r.no_lpo }}</td>
-                                    </tr>
-                                    {% else %}
-                                    <tr><td colspan="{{ 5 if finance else 4 }}" class="cs-inv-empty">No jobs in this period.</td></tr>
-                                    {% endfor %}
-                                </tbody>
-                                {% if load %}
-                                <tfoot>
-                                    <tr>
-                                        <td>
-                                            <div class="cs-acc-lname">Total</div>
-                                            <div class="cs-acc-sub">AED {{ fmt.format(load_total.value) }}</div>
-                                            {% if finance %}<div class="cs-acc-sub cs-acc-fin">{{ fmt.format(load_total.invoiced_amount) }} invoiced</div>{% endif %}
-                                        </td>
-                                        <td class="cs-inv-num">{{ load_total.jobs }}</td>
-                                        <td class="cs-inv-num">{{ load_total.active }}</td>
-                                        {% if finance %}<td class="cs-inv-num cs-acc-fin">{{ load_total.invoiced }}</td>{% endif %}
-                                        <td class="cs-inv-num">{{ load_total.no_lpo }}</td>
-                                    </tr>
-                                </tfoot>
-                                {% endif %}
-                            </table>
-                        </div>
-                    </aside>
                 </div>
             </div>
         </div>

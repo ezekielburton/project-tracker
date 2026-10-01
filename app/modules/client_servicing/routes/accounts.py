@@ -1,7 +1,7 @@
 """
-Client Servicing — Accounts. Every job grouped by client or CS lead, with
-each lead's load for a billing month. Read-only; the figures come from
-lib/accounts.py, the saved view from lib/accounts_state.py.
+Client Servicing — Accounts. Every job grouped by client or CS lead.
+Read-only; the figures come from lib/accounts.py, the saved view from
+lib/accounts_state.py.
 """
 from flask import jsonify, render_template, request
 from flask_login import login_required
