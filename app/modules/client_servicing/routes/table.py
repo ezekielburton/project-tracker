@@ -179,7 +179,6 @@ def _awaiting_close_out(project):
 def _close_out_row(project):
     """One close-out strip entry: enough to identify the project and open
     the close prompt."""
-    cs = project.client_servicing
     return {
         'id': project.id,
         'client': project.client_brand.name if project.client_brand else None,

@@ -17,7 +17,7 @@ from app.modules.client_servicing.lib.project_sets import base_projects
 _STUCK_VALIDATION = {'no_lpo', 'overdue'}
 
 
-def _billing_month(project):
+def billing_month(project):
     """(year, month) a project counts in: invoice_date, else invoice_month_date,
     else removal_date. None (in no month) if all are unset.
     Do not add Project.first_output_deadline: it is a design deadline, not billing."""
@@ -28,22 +28,19 @@ def _billing_month(project):
     return (d.year, d.month) if d else None
 
 
-def _has_lpo(cs):
+def has_lpo(cs):
     return bool(cs and cs.lpo)
 
 
-def _is_invoiced(cs):
+def is_invoiced(cs):
     return bool(cs and cs.invoice_date)
 
 
 def _is_stuck(cs):
     """No LPO at all, or an LPO whose validation is flagged No LPO / Overdue."""
-    if not _has_lpo(cs):
+    if not has_lpo(cs):
         return True
     return cs.validation_status in _STUCK_VALIDATION
-
-
-
 
 
 def year_summary(year):
@@ -55,15 +52,15 @@ def year_summary(year):
                    'stuck_amount': Decimal('0')} for m in range(1, 13)}
 
     for p in base_projects().all():
-        bm = _billing_month(p)
+        bm = billing_month(p)
         if not bm or bm[0] != year:
             continue
         cs = p.client_servicing
         b = buckets[bm[1]]
         b['pipeline'] += money(p.value)
-        if _has_lpo(cs):
+        if has_lpo(cs):
             b['confirmed'] += money(p.value)
-        if _is_invoiced(cs):
+        if is_invoiced(cs):
             b['invoiced'] += money(cs.invoice_amount if cs else None)
         if _is_stuck(cs):
             b['stuck'] += 1
@@ -101,7 +98,7 @@ def stuck_this_month(year, month):
     not on the Invoicing table."""
     out = []
     for p in base_projects().all():
-        if _billing_month(p) != (year, month):
+        if billing_month(p) != (year, month):
             continue
         cs = p.client_servicing
         if not _is_stuck(cs):
@@ -124,10 +121,10 @@ def due_this_month(year, month):
     the route maps it to a pill."""
     out = []
     for p in base_projects().all():
-        if _billing_month(p) != (year, month):
+        if billing_month(p) != (year, month):
             continue
         cs = p.client_servicing
-        if _is_invoiced(cs):
+        if is_invoiced(cs):
             continue
         out.append({
             'client': p.client_brand.name if p.client_brand else None,

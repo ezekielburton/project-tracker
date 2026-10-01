@@ -17,6 +17,9 @@ app/modules/client_servicing/
     status.py               # effective_cs_status (manual overlay + derived) + design-stream chips
     calendar.py             # install risk + month/agenda data service
     summary.py              # Monthly Summary rollup (computed live, nothing stored)
+    project_sets.py         # base_projects / open_projects / active_projects — the module's three loaders
+    accounts.py             # Accounts page: jobs by client or CS lead, CS load per billing month
+    accounts_state.py       # each user's saved Accounts view (UserTableLayout, key client_servicing:accounts)
     dashboard.py            # Dashboard aggregations (six panels) + module feed items
     data_gaps.py            # missing_fields() + MISSING_DATA_CHIP — shared by the Dashboard strip and the Table chip
     quick_chips.py          # the Table's quick filter chips (CHIPS) and row_chips() — which rows each matches
@@ -31,6 +34,7 @@ app/modules/client_servicing/
     scopes_admin.py         # CS Scope option-list CRUD + inline quick-add
     calendar.py             # Installation Calendar — Month + Agenda
     invoicing.py            # Invoicing section — By Project + Monthly Summary tabs, thresholds endpoint
+    accounts.py             # Accounts — jobs grouped by client or CS lead (read-only)
   templates/client_servicing/
   tests/
 ```
@@ -38,6 +42,7 @@ Routes are one concern per file. Static (in the module):
 `static/js/client_servicing.js` (table inline-edit, sort, search + filter),
 `static/js/client_servicing_dashboard.js` (dashboard SSE refresh),
 `static/js/client_servicing_calendar.js`, `static/js/client_servicing_invoicing.js`,
+`static/js/client_servicing_accounts.js` (Accounts fold + search),
 `static/css/client_servicing.css` (table, calendar, dashboard, toolbar).
 
 ## Architecture
@@ -49,7 +54,7 @@ excluded everywhere in the module via the shared `lib/project_sets.py::base_proj
 (`project_status != 'draft'`) — a draft isn't a real project yet.
 
 Three loaders in `lib/project_sets.py`, each narrower than the last:
-- `base_projects()` — every non-draft project. Monthly Summary, Calendar, Closed.
+- `base_projects()` — every non-draft project. Monthly Summary, Calendar, Closed, Accounts.
 - `open_projects()` — minus closed. The Table (it splits off cancelled jobs
   into the close-out strip itself).
 - `active_projects()` — minus cancelled jobs awaiting close-out too. The
@@ -104,6 +109,7 @@ has edits attributed as that person; the admin-only Scope CRUD stays on
 - `GET /invoicing` — By Project finance table. `GET /invoicing/summary?year=&month=` — Monthly Summary.
 - `POST /invoicing/day-thresholds` — save the Days Pending thresholds (admin/management).
 - `GET /calendar` — Installation Calendar (Month + Agenda).
+- `GET /accounts?group=&client=&lead=&month=` — Accounts (read-only). `POST /accounts/state` — save the user's Accounts view.
 
 ## Dashboard (`routes/dashboard.py`, `lib/dashboard.py`)
 The module landing (`GET /`) and first rail entry — the daily-standup "where
@@ -224,15 +230,37 @@ Two tabs behind an in-page strip; drafts excluded from both.
   nothing stored. Four KPI cards for the selected month, a 12-month rollup
   (pipeline / confirmed / invoiced / progress / stuck + FY total), and a
   "due this month" list of that month's uninvoiced projects. Each project is
-  bucketed by billing month (invoice date › removal date › due date); Pipeline
+  bucketed by billing month (invoice date › invoice month › removal date); Pipeline
   = Σ project value, Confirmed = has LPO, Invoiced = Σ invoice amount, Stuck =
   no LPO or overdue/no-LPO validation. Calendar-year window for now.
 - **Day thresholds** — green/amber/red day cut-offs in `ClientServicingSetting`,
   edited by admin/management from a toolbar button + modal.
 
+## Accounts (`routes/accounts.py`, `lib/accounts.py`)
+The GM's CS Client and CS Contact sheets as one read-only page: every job from
+`base_projects()` (closed and invoiced included), grouped by client or CS lead
+(`?group=`), filtered by client, lead and billing month (All time by default).
+- Billing month and No LPO reuse `summary.billing_month` / `has_lpo`, so a
+  month's Value equals the Monthly Summary's Pipeline (a test pins it).
+- Value = `Project.value`; Cost to Client is not read. Active = not invoiced
+  and not cancelled. A secondary CS shows as a +N tag; the job counts once,
+  under its lead.
+- The CS load panel follows the billing month only, not the client/lead filters.
+- Invoicing figures (Invoiced column, two tiles, load-panel invoiced) need
+  `can_view_finance`. They carry `cs-acc-fin` so a test can prove a project
+  owner gets none of them.
+- Groups start collapsed. Each user's last Group by and open groups per view
+  are saved server-side (`lib/accounts_state.py`, reusing `UserTableLayout`),
+  rendered on load, and posted back debounced. No `?group=` reopens the last view.
+- The list has a min-width (640px, 560 without finance) and scrolls sideways
+  only below it. The page is a size container: under 990px of its own width
+  the load panel drops below the list, so a pinned sidebar is accounted for.
+- `client_servicing_accounts.js` declares a TEMPLATE_CONTRACT (ids, classes,
+  attributes), tested against the template.
+
 ## KPI tiles
 Every KPI tile number in the module — Dashboard, Calendar, Invoicing summary,
-Closed — is `var(--font-mono)` at weight 500, so the figures read as one set.
+Closed, Accounts — is `var(--font-mono)` at weight 500, so the figures read as one set.
 
 ## Scope option list
 CS-managed. Users add options inline from the Scope dropdown (`/scopes/quick-add`);
@@ -247,10 +275,10 @@ never touches real data; `--wipe` clears only. Not the real importer.
 
 ## Sections
 Sidebar shell, in order: **Dashboard** (landing) · **Table** · **Invoicing** ·
-**Calendar** — all built. Opening CS lands on the Dashboard. The global
+**Accounts** · **Calendar** · **Closed** — all built. Opening CS lands on the Dashboard. The global
 app-sidebar entry is a live link pointing at `client_servicing.index`.
 
-Internal nav between the four sections is SPA soft-nav:
+Internal nav between the sections is SPA soft-nav:
 core/shared's `module_rail.js` routes `.module-rail-item` clicks through the
 app's `window.navigateTo`. The global `sidebar.js` only intercepts its own
 `.sidebar-item--nav`, so the shared rail SPA-ifies itself for every module that

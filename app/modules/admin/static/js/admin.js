@@ -640,6 +640,7 @@ function adminEsc(value) {
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     if (data.success) {
+                        btnDone(submitBtn);
                         addUserForm.reset();
                         newUserTeam.classList.add('hidden');
                         addUserForm.classList.add('hidden');

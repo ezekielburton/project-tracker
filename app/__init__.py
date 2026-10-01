@@ -109,6 +109,7 @@ def create_app(config=Config):
     from app.modules.client_servicing.routes import calendar as client_servicing_calendar  # Calendar sidebar section
     from app.modules.client_servicing.routes import close as client_servicing_close  # close / close-out endpoint
     from app.modules.client_servicing.routes import closed as client_servicing_closed  # Closed Projects sidebar section
+    from app.modules.client_servicing.routes import accounts as client_servicing_accounts  # Accounts sidebar section
     from app.modules.client_servicing.routes.blueprint import client_servicing_bp
     from app.modules.hse.routes import registers as hse_registers  # registers the register surface on hse_bp
     from app.modules.hse.routes import entries as hse_entries  # registers the entry overlay + save endpoints on hse_bp

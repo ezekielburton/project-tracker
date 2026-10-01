@@ -33,6 +33,7 @@ HELP_KEY_GROUPS = [
         ('cs.dashboard', 'The CS dashboard'),
         ('cs.calendar', 'The CS calendar'),
         ('cs.invoicing', 'The invoicing tab'),
+        ('cs.accounts', 'Accounts — jobs by client or CS lead'),
         ('cs.closed', 'Closed projects'),
     ]),
     ('Digital Innovation', [

@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+
+{% block title %}Client Servicing — Accounts{% endblock %}
+
+{% block content %}
+{# Accounts: jobs grouped by client or CS lead, plus each lead's load. Read-only.
+   Filters are server-side GET; search, folding and the saved view are the page
+   JS. Groups start collapsed; cs-acc-fin marks finance-only figures (test hook). #}
+{% set by_client = group == 'client' %}
+{% set fmt = '{:,.0f}' %}
+{% set filtered = client_id or lead_id or month %}
+<div class="module-page cs-page">
+    <div class="module-shell">
+        {% with active_nav = 'accounts' %}
+        {% include "client_servicing/_sidebar.html" %}
+        {% endwith %}
+        <div class="module-main">
+            <div class="client-servicing-page cs-acc-page">
+                <div class="cs-page-head">
+                    <h1 class="cs-page-title">Accounts</h1>
+                    {{ help_button('cs.accounts') }}
+                </div>
+
+                <div class="cs-inv-kpis cs-acc-kpis{{ '' if finance else ' cs-acc-kpis--two' }}">
+                    <div class="cs-inv-kpi">
+                        <div class="cs-inv-kpi-label">Jobs</div>
+                        <div class="cs-inv-kpi-value">{{ kpis.jobs }}</div>
+                    </div>
+                    <div class="cs-inv-kpi">
+                        <div class="cs-inv-kpi-label">Project value (AED)</div>
+                        <div class="cs-inv-kpi-value">{{ fmt.format(kpis.value) }}</div>
+                    </div>
+                    {% if finance %}
+                    <div class="cs-inv-kpi cs-acc-fin">
+                        <div class="cs-inv-kpi-label">Invoiced (AED)</div>
+                        <div class="cs-inv-kpi-value">{{ fmt.format(kpis.invoiced) }}</div>
+                    </div>
+                    <div class="cs-inv-kpi cs-acc-fin">
+                        <div class="cs-inv-kpi-label">Not yet invoiced (AED)</div>
+                        <div class="cs-inv-kpi-value">{{ fmt.format(kpis.not_invoiced) }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="cs-acc-toolbar">
+                    <div class="cs-acc-seg" role="group" aria-label="Group by">
+                        <a class="cs-acc-seg-opt{{ ' is-on' if by_client else '' }}"{% if by_client %} aria-current="true"{% endif %}
+                           href="{{ url_for('client_servicing.accounts', group='client', client=client_id, lead=lead_id, month=month or None) }}">Client</a>
+                        <a class="cs-acc-seg-opt{{ '' if by_client else ' is-on' }}"{% if not by_client %} aria-current="true"{% endif %}
+                           href="{{ url_for('client_servicing.accounts', group='lead', client=client_id, lead=lead_id, month=month or None) }}">CS lead</a>
+                    </div>
+                    <form class="cs-inv-selectors" method="get" action="{{ url_for('client_servicing.accounts') }}">
+                        <input type="hidden" name="group" value="{{ group }}">
+                        <select name="client" aria-label="Client" onchange="this.form.submit()">
+                            <option value="">All clients</option>
+                            {% for c in options.clients %}<option value="{{ c.id }}"{% if c.id == client_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                        </select>
+                        <select name="lead" aria-label="CS lead" onchange="this.form.submit()">
+                            <option value="">All CS leads</option>
+                            {% for l in options.leads %}<option value="{{ l.id }}"{% if l.id == lead_id %} selected{% endif %}>{{ l.name }}</option>{% endfor %}
+                        </select>
+                        <select name="month" aria-label="Billing month" onchange="this.form.submit()">
+                            <option value="">All time</option>
+                            {% for m in options.months %}<option value="{{ m.value }}"{% if m.value == month %} selected{% endif %}>{{ m.label }}</option>{% endfor %}
+                        </select>
+                        <noscript><button type="submit" class="cs-inv-ghost">Go</button></noscript>
+                    </form>
+                    <input type="search" id="cs-acc-search" class="cs-search-input cs-closed-search"
+                           placeholder="Search project, client or job no…" aria-label="Search jobs" autocomplete="off">
+                    <button type="button" class="cs-inv-ghost" id="cs-acc-expand-all">Expand all</button>
+                    <button type="button" class="cs-inv-ghost" id="cs-acc-collapse-all">Collapse all</button>
+                    <span class="cs-closed-count" id="cs-acc-count">{{ kpis.jobs }} job{{ '' if kpis.jobs == 1 else 's' }}</span>
+                </div>
+
+                <div class="cs-acc-body" id="cs-acc-body">
+                    <div class="cs-acc-listpanel">
+                        <div class="cs-acc-scroll cs-acc-scrollbox">
+                            <table class="cs-inv-table cs-acc-table{{ '' if finance else ' cs-acc-table--nofin' }}" id="cs-acc-list"
+                                   data-group="{{ group }}" data-state='{{ state|tojson }}'
+                                   data-save-url="{{ url_for('client_servicing.save_accounts_state') }}">
+                                <colgroup>
+                                    <col>
+                                    <col class="cs-acc-col-other">
+                                    <col class="cs-acc-col-status">
+                                    <col class="cs-acc-col-date">
+                                    <col class="cs-acc-col-num">
+                                    {% if finance %}<col class="cs-acc-col-num">{% endif %}
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th>Project</th>
+                                        <th>{{ 'CS lead' if by_client else 'Client' }}</th>
+                                        <th>Status</th>
+                                        <th>Install</th>
+                                        <th class="cs-acc-r">Value</th>
+                                        {% if finance %}<th class="cs-acc-r cs-acc-fin">Invoiced</th>{% endif %}
+                                    </tr>
+                                </thead>
+                                {% for g in groups %}
+                                {% set is_open = g.key in open_keys %}
+                                <tbody class="cs-acc-group{{ '' if is_open else ' is-collapsed' }}" data-key="{{ g.key }}">
+                                    <tr class="cs-acc-grouprow">
+                                        <th scope="rowgroup">
+                                            <button type="button" class="cs-acc-toggle" aria-expanded="{{ 'true' if is_open else 'false' }}">
+                                                <svg class="cs-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                                                <span class="cs-acc-gname">{{ g.name }}</span>
+                                                <span class="cs-acc-gcount">{{ g.count }} job{{ '' if g.count == 1 else 's' }}</span>
+                                            </button>
+                                        </th>
+                                        <td class="cs-acc-others" title="{{ g.others|join(', ') }}">{{ g.others|join(', ') }}</td>
+                                        <td></td>
+                                        <td></td>
+                                        <td class="cs-inv-num cs-acc-r">{{ fmt.format(g.value) }}</td>
+                                        {% if finance %}<td class="cs-inv-num cs-acc-r cs-acc-fin">{{ fmt.format(g.invoiced) if g.invoiced else '—' }}</td>{% endif %}
+                                    </tr>
+                                    {% for row in g.rows %}
+                                    <tr class="cs-acc-row" data-search="{{ [row.project, row.client, row.job_number or '']|join(' ')|lower }}">
+                                        <td class="cs-acc-wrap">
+                                            <a class="cs-acc-proj" href="{{ url_for('project_list.index', project=row.id) }}">{{ row.project }}</a>
+                                            {% if row.secondary %}<span class="cs-acc-tag" title="Also on it: {{ row.secondary|join(', ') }}">+{{ row.secondary|length }}</span>{% endif %}
+                                            {% if row.job_number or row.scope %}<div class="cs-acc-sub">{{ [row.job_number, row.scope]|select|join(' · ') }}</div>{% endif %}
+                                        </td>
+                                        <td class="cs-inv-muted cs-acc-wrap">{{ row.lead if by_client else row.client }}</td>
+                                        <td>{% if row.status_label %}<span class="status-pill cs-inv-badge status-pill--{{ row.status_class }}">{{ row.status_label }}</span>{% else %}<span class="cs-inv-none">—</span>{% endif %}</td>
+                                        <td class="cs-inv-muted">{{ row.install.strftime('%d %b %Y') if row.install else '—' }}</td>
+                                        <td class="cs-inv-num cs-acc-r">{{ fmt.format(row.value) if row.value else '—' }}</td>
+                                        {% if finance %}<td class="cs-inv-num cs-acc-r cs-acc-fin">{{ fmt.format(row.invoiced) if row.invoiced is not none else '—' }}</td>{% endif %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                {% else %}
+                                <tbody>
+                                    <tr><td colspan="{{ 6 if finance else 5 }}" class="cs-inv-empty">
+                                        {% if filtered %}No jobs match these filters.{% else %}No jobs yet — they appear as CS leads fill the Table.{% endif %}
+                                    </td></tr>
+                                </tbody>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </div>
+
+                    <aside class="cs-acc-load" aria-labelledby="cs-acc-load-title">
+                        <div class="cs-acc-load-head">
+                            <h2 class="cs-dash-panel-title" id="cs-acc-load-title">CS load</h2>
+                            <span class="cs-dash-panel-note">{{ month_label }}</span>
+                        </div>
+                        <div class="cs-acc-load-scroll cs-acc-scrollbox">
+                            <table class="cs-acc-loadtable{{ '' if finance else ' cs-acc-loadtable--nofin' }}">
+                                <colgroup>
+                                    <col class="cs-acc-col-lead">
+                                    <col><col>{% if finance %}<col>{% endif %}<col>
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th>Lead</th>
+                                        <th>Jobs</th>
+                                        <th>Active</th>
+                                        {% if finance %}<th class="cs-acc-fin">Invoiced</th>{% endif %}
+                                        <th>No LPO</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in load %}
+                                    <tr>
+                                        <td>
+                                            <div class="cs-acc-lname">{{ r.lead }}</div>
+                                            <div class="cs-acc-sub">AED {{ fmt.format(r.value) }}</div>
+                                            {% if finance %}<div class="cs-acc-sub cs-acc-fin">{{ fmt.format(r.invoiced_amount) }} invoiced</div>{% endif %}
+                                        </td>
+                                        <td class="cs-inv-num">{{ r.jobs }}</td>
+                                        <td class="cs-inv-num">{{ r.active }}</td>
+                                        {% if finance %}<td class="cs-inv-num cs-acc-fin">{{ r.invoiced }}</td>{% endif %}
+                                        <td class="cs-inv-num{% if r.no_lpo %} cs-inv-kpi-value--alert{% endif %}">{{ r.no_lpo }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="{{ 5 if finance else 4 }}" class="cs-inv-empty">No jobs in this period.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                                {% if load %}
+                                <tfoot>
+                                    <tr>
+                                        <td>
+                                            <div class="cs-acc-lname">Total</div>
+                                            <div class="cs-acc-sub">AED {{ fmt.format(load_total.value) }}</div>
+                                            {% if finance %}<div class="cs-acc-sub cs-acc-fin">{{ fmt.format(load_total.invoiced_amount) }} invoiced</div>{% endif %}
+                                        </td>
+                                        <td class="cs-inv-num">{{ load_total.jobs }}</td>
+                                        <td class="cs-inv-num">{{ load_total.active }}</td>
+                                        {% if finance %}<td class="cs-inv-num cs-acc-fin">{{ load_total.invoiced }}</td>{% endif %}
+                                        <td class="cs-inv-num">{{ load_total.no_lpo }}</td>
+                                    </tr>
+                                </tfoot>
+                                {% endif %}
+                            </table>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{# Page JS stays in the content block. Never nest a <main> above it:
+   spa_strip_response() cuts at the first </main> and would drop this. #}
+<script src="{{ url_for('client_servicing_assets.static', filename='js/client_servicing_accounts.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

@@ -96,6 +96,8 @@
 /client-servicing/	GET	client_servicing.index
 /client-servicing/<int:project_id>	PATCH	client_servicing.update_field
 /client-servicing/<int:project_id>/close	POST	client_servicing.close_project
+/client-servicing/accounts	GET	client_servicing.accounts
+/client-servicing/accounts/state	POST	client_servicing.save_accounts_state
 /client-servicing/calendar	GET	client_servicing.calendar
 /client-servicing/calendar/day/<datestr>	GET	client_servicing.calendar_day
 /client-servicing/closed	GET	client_servicing.closed

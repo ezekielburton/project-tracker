@@ -1,5 +1,5 @@
 {# Client Servicing's rail, shared by every CS screen. `active_nav` picks the
-   section ('dashboard' | 'table' | 'invoicing' | 'calendar' | 'closed');
+   section ('dashboard' | 'table' | 'invoicing' | 'accounts' | 'calendar' | 'closed');
    `active_sub` picks the Invoicing page ('by_project' | 'summary'). #}
 {% from '_shared_macros.html' import module_rail %}
 {{ module_rail([
@@ -10,6 +10,7 @@
         {'key': 'by_project', 'label': 'By Project', 'url': url_for('client_servicing.invoicing')},
         {'key': 'summary', 'label': 'Monthly Summary', 'url': url_for('client_servicing.invoicing_summary')},
      ]},
+    {'key': 'accounts', 'label': 'Accounts', 'url': url_for('client_servicing.accounts')},
     {'key': 'calendar', 'label': 'Calendar', 'url': url_for('client_servicing.calendar')},
     {'key': 'closed', 'label': 'Closed', 'url': url_for('client_servicing.closed')},
 ], active_nav, active_sub=active_sub, module='Client Servicing') }}
