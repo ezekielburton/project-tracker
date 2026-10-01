@@ -106,7 +106,7 @@ def _urls(app):
     with app.test_request_context():
         return {
             'csv': url_for('hse.performance_csv', view='month', month='2026-09'),
-            'page': url_for('hse.performance'),
+            'page': url_for('hse.performance', view='month', month='2026-09'),
             'share': url_for('hse.performance_share', view='month', month='2026-09'),
             'report_share': url_for('hse.statistics_report_share', kind='week', at='2026-09-14'),
             'bad_share': url_for('hse.statistics_report_share', kind='year'),

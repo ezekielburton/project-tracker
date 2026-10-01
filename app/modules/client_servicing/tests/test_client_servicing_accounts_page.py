@@ -124,8 +124,8 @@ def test_grouped_by_lead_the_lead_heads_the_group(app, client, db_session):
 
 
 def test_bad_parameters_fall_back_to_the_defaults(app, client, db_session):
-    user = _user(db_session, 'bad')
-    resp = _page(app, client, user, group='nope', client='abc', lead='-3', month='2026-13')
+    login_as(client, app, _user(db_session, 'bad'), 'password123')
+    resp = client.get(_url(app, group='nope', client='abc', lead='-3', month='2026-13'))
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert '<th>CS lead</th>' in body
