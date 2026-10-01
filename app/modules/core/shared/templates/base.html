@@ -53,6 +53,7 @@
     <link rel="stylesheet" href="{{ url_for('project_assets.static', filename='css/chat_tray.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('digital_innovation_assets.static', filename='css/digital_innovation.css') }}?v={{ config.STATIC_VERSION }}">
     <link rel="stylesheet" href="{{ url_for('hse_assets.static', filename='css/hse.css') }}?v={{ config.STATIC_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('roadmap_assets.static', filename='css/roadmap.css') }}?v={{ config.STATIC_VERSION }}">
     {% block extra_css %}{% endblock %}
     <script src="{{ url_for('core.static', filename='js/fill_height.js') }}?v={{ config.STATIC_VERSION }}"></script>
 
@@ -442,6 +443,15 @@
     
         <div class="app-header-actions">
     
+            {# Roadmap — every signed-in user. An <a> so SPA nav picks it up. #}
+            <a href="{{ url_for('roadmap.index') }}" class="topbar-btn roadmap-topbar-link sidebar-item--nav" title="Roadmap" aria-label="Roadmap">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
+                    <path d="M9 3v15M15 6v15" />
+                </svg>
+            </a>
+
             {% if can('admin_panel', current_user) %}
             <button type="button" id="admin-panel-trigger" class="topbar-btn" title="Admin Panel">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"

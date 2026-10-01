@@ -12,6 +12,7 @@ HELP_KEY_GROUPS = [
         ('core.navigation', 'Finding your way around'),
         ('core.roles', 'Who does what'),
         ('core.profile', 'Your profile and settings'),
+        ('core.roadmap', "What's coming to OVP"),
     ]),
     ('Dashboard', [
         ('dashboard.overview', 'Reading your dashboard'),

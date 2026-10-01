@@ -324,6 +324,7 @@
 /projects/submission/file/<int:file_id>/download	GET	project_overlay.download_submission_file
 /projects/submission/file/<int:file_id>/preview	GET	project_overlay.preview_submission_file
 /register	GET,POST	auth.register
+/roadmap	GET	roadmap.index
 /sidebar/track	POST	main.sidebar_track
 /signal/bugs	GET	signal_tray.bug_board
 /signal/features	GET	signal_tray.feature_board

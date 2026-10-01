@@ -90,24 +90,22 @@ python migrate.py                   # run all pending scripts
 
 ## Roles
 
-| Role | Access |
-|------|--------|
-| Admin | Everything — users, settings, emulation, final approval, project lock |
-| CS | Create/manage briefs, review submissions, flag revisions, CS-approve |
-| Designer | View assigned deliverables, submit work, raise flags |
-| Team Lead | Assign designers, manage team deliverables, update status |
-| Management | Read-only dashboard |
+Access is by capability, not by role name: see [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for who can do what.
 
 ---
 
 ## Deployment
 
-Production runs on-prem (Ubuntu Server) under gunicorn, exposed at **https://app.vitamin-e.work** through a Cloudflare Tunnel. A typical deploy is: merge to `main`, `git pull` on the server, restart the service, and purge the Cloudflare cache if static files changed.
-
-The full deploy, backup, and infrastructure runbook is kept in an internal document outside this repo, so no infrastructure details or secrets live in version control.
+Production runs on-prem (Ubuntu Server) under gunicorn behind nginx, exposed through a Cloudflare Tunnel. Releases are tagged and deployed one-way (fetch + reset, never `git pull` on the server): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Rebuilding the server from zero: [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md). No secrets live in version control.
 
 ---
 
 ## Versioning
 
-`X.YY` is a patch (bug fix / quality-of-life), `X.Y` is a feature update, and `X.0` marks a new major era. The **1.x** era delivered core project management — briefs, deliverables, POSM, approvals, and feedback. The **2.x** era, currently in progress, adds the infrastructure, NAS integration, dashboard, and the wider platform features listed above.
+`MAJOR.MINOR.PATCH`, numbered in ship order: PATCH is a fix or small addition, MINOR a new page, capability or module, MAJOR a new era (3.0 is the OVP app). Each release is an annotated tag `v<version>`.
+
+---
+
+## Developer docs
+
+Start with [docs/README.md](docs/README.md): architecture, conventions, capabilities, deployment and server setup.

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+
+{# The company roadmap. Content comes from roadmap/lib/items.py; roadmap.js only
+   filters by month and opens an item's one-line note. #}
+
+{% block title %}Roadmap{% endblock %}
+
+{% block content %}
+<div class="roadmap" id="roadmap">
+    <header class="card roadmap-head">
+        <div>
+            <h1 class="roadmap-title">OVP Roadmap</h1>
+            <p class="roadmap-lede">What's live in OVP, and when the next pieces arrive.</p>
+            <p class="roadmap-updated">Updated {{ updated.day }} {{ updated.strftime('%b %Y') }}</p>
+        </div>
+        {{ help_button('core.roadmap') }}
+    </header>
+
+    {% if current %}
+    <section class="card roadmap-now" aria-label="In progress">
+        <div>
+            <div class="roadmap-kicker"><span class="roadmap-pulse" aria-hidden="true"></span>In progress</div>
+            <div class="roadmap-now-name">{{ current.name }}</div>
+        </div>
+        {% if deadline %}
+        <div class="roadmap-countdown" data-deadline="{{ deadline }}" aria-label="Time left until {{ current.label }}">
+            <div class="roadmap-countdown-row">
+                {% for unit, label in [('days', 'days'), ('hours', 'hrs'), ('minutes', 'min'), ('seconds', 'sec')] %}
+                {% if not loop.first %}<span class="roadmap-colon" aria-hidden="true">:</span>{% endif %}
+                <div class="roadmap-flip" data-unit="{{ unit }}">
+                    <span class="roadmap-flip-card" aria-hidden="true">
+                        <span class="roadmap-flip-half roadmap-flip-top"><span>--</span></span>
+                        <span class="roadmap-flip-half roadmap-flip-bottom"><span>--</span></span>
+                        <span class="roadmap-flip-half roadmap-flip-leaf-top"><span>--</span></span>
+                        <span class="roadmap-flip-half roadmap-flip-leaf-bottom"><span>--</span></span>
+                    </span>
+                    <span class="roadmap-flip-label">{{ label }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="roadmap-countdown-due">Due {{ current.label }}</p>
+            <p class="roadmap-countdown-done" hidden>Arriving shortly</p>
+        </div>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="card roadmap-live-card" aria-labelledby="roadmap-live-heading">
+        <p class="roadmap-label" id="roadmap-live-heading">Live now</p>
+        <div class="roadmap-live">
+            {% for name in live %}
+            <div class="roadmap-live-item">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                <span>{{ name }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section aria-labelledby="roadmap-next-heading">
+        <div class="roadmap-bar">
+            <p class="roadmap-label" id="roadmap-next-heading">Coming up</p>
+            <div class="roadmap-seg" role="group" aria-label="Show month">
+                <button type="button" data-month="all" aria-pressed="true">All</button>
+                {% for group in groups %}
+                <button type="button" data-month="{{ group.key }}" aria-pressed="false">{{ group.short }}</button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="roadmap-timeline">
+            {% for group in groups %}
+            <div class="roadmap-group" data-month="{{ group.key }}">
+                <div class="roadmap-month">{{ group.title }}</div>
+                {% for item in group.entries %}
+                <div class="roadmap-item roadmap-item--{{ item.status }}">
+                    <button type="button" class="roadmap-row" aria-expanded="false">
+                        <span class="roadmap-date">{{ item.label or '' }}</span>
+                        <span class="roadmap-rail"><i></i></span>
+                        <span class="roadmap-name">{{ item.name }}</span>
+                        {% if item.status == 'in_progress' %}<span class="roadmap-pill">In progress</span>{% else %}<span></span>{% endif %}
+                    </button>
+                    <div class="roadmap-more"><div><p>{{ item.note }}</p></div></div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <p class="roadmap-foot">Dates are delivery targets and can move.</p>
+</div>
+
+<script src="{{ url_for('roadmap_assets.static', filename='js/roadmap.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

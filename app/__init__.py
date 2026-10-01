@@ -29,19 +29,46 @@ def _compute_static_version():
 
 
 def _compute_app_version():
-    """APP_VERSION for the footer: the git tag of the running code.
-    Production sits on the tag (e.g. v2.6); dev shows commits past it
-    (e.g. v2.6-3-gabc1234). Falls back to 'dev' if git isn't available."""
+    """Footer version = the latest release tag (e.g. v2.6).
+    Commits after a tag are ignored. Tries git first; if git can't run
+    (not on PATH, ownership check), reads the tags straight from .git."""
+    import re
     import subprocess
-    app_dir = os.path.dirname(os.path.abspath(__file__))
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # 1. Ask git for the nearest tag behind the current commit.
     try:
         out = subprocess.run(
-            ['git', 'describe', '--tags'],
-            cwd=app_dir, capture_output=True, text=True, timeout=5,
+            ['git', 'describe', '--tags', '--abbrev=0'],
+            cwd=repo, capture_output=True, text=True, timeout=5,
         )
-        return out.stdout.strip() or 'dev'
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
     except Exception:
-        return 'dev'
+        pass
+
+    # 2. No git: pick the highest v<number> tag from the .git folder.
+    git_dir = os.path.join(repo, '.git')
+    names = set()
+    tags_dir = os.path.join(git_dir, 'refs', 'tags')
+    if os.path.isdir(tags_dir):
+        names.update(os.listdir(tags_dir))
+    try:
+        with open(os.path.join(git_dir, 'packed-refs')) as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) == 2 and parts[1].startswith('refs/tags/'):
+                    names.add(parts[1][len('refs/tags/'):])
+    except OSError:
+        pass
+    versions = []
+    for name in names:
+        m = re.fullmatch(r'v(\d+(?:\.\d+)*)', name)
+        if m:
+            versions.append((tuple(int(n) for n in m.group(1).split('.')), name))
+
+    # 3. Nothing found.
+    return max(versions)[1] if versions else 'dev'
 
 
 def create_app(config=Config):
@@ -88,6 +115,7 @@ def create_app(config=Config):
     from app.modules.file_templates.routes.file_templates import file_templates_bp
     from app.modules.core.shared.routes.sse import sse_bp  # SSE live push routes
     from app.modules.client_directory.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
+    from app.modules.roadmap.routes.roadmap import roadmap_bp  # Roadmap — what's live and coming
     from app.modules.dashboard.routes.dashboard import dashboard_bp  # role-based dashboard
     from app.modules.time_tracking.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
     from app.modules.projects.routes.project_list import project_list_bp # Projects page list
@@ -104,6 +132,7 @@ def create_app(config=Config):
     from app.modules.wiki.blueprint import wiki_assets
     from app.modules.file_templates.blueprint import file_templates_assets
     from app.modules.client_directory.blueprint import client_directory_assets
+    from app.modules.roadmap.blueprint import roadmap_assets
     from app.modules.dashboard.blueprint import dashboard_assets
     from app.modules.time_tracking.blueprint import time_tracking_assets
     from app.modules.client_servicing.blueprint import client_servicing_assets
@@ -159,6 +188,7 @@ def create_app(config=Config):
     app.register_blueprint(file_templates_bp)
     app.register_blueprint(sse_bp)
     app.register_blueprint(client_directory_bp)
+    app.register_blueprint(roadmap_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(time_tracking_bp)
     app.register_blueprint(project_list_bp)
@@ -175,6 +205,7 @@ def create_app(config=Config):
     app.register_blueprint(wiki_assets)
     app.register_blueprint(file_templates_assets)
     app.register_blueprint(client_directory_assets)
+    app.register_blueprint(roadmap_assets)
     app.register_blueprint(dashboard_assets)
     app.register_blueprint(time_tracking_assets)
     app.register_blueprint(client_servicing_assets)

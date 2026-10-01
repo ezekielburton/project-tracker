@@ -9,7 +9,7 @@ SWEPT_FILES = [
     "dashboard.css", "client_directory.css", "achievements.css",
     "time_tracking.css", "blog.css", "feedback.css", "wiki.css",
     "profile.css", "preview.css", "wizard.css", "drag-drop.css",
-    "file-templates.css", "hse.css",
+    "file-templates.css", "hse.css", "roadmap.css",
 ]
 
 HEX_RE = re.compile(r'#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\b')
