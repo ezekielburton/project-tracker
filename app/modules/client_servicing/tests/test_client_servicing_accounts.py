@@ -109,7 +109,7 @@ def test_a_job_with_no_billing_month_shows_only_under_all_time(db_session):
     assert parse_month('2026-09') == SEP
 
 
-def test_invoicing_figures_are_left_out_without_finance(db_session):
+def test_invoicing_figures_are_left_out_without_finance(db_session, owner_without_finance):
     owner, lead = _user(db_session, 'po', role='project_owner'), _user(db_session, 'l6')
     _job(db_session, 'po1', lead, value=80, invoice_date=date(2026, 9, 1), invoice_amount=Decimal('80'))
 

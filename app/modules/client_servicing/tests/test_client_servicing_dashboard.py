@@ -51,8 +51,7 @@ def _snap(today=TODAY):
 def test_can_view_finance_by_role(db_session):
     def sees(r):
         return can_view_finance(_user(db_session, 'fv-' + r, role=r))
-    assert all(sees(r) for r in ('admin', 'management', 'cs', 'finance'))
-    assert not sees('project_owner')
+    assert all(sees(r) for r in ('admin', 'management', 'cs', 'finance', 'project_owner'))
     assert not sees('designer')
     assert not can_view_finance(None)
 
@@ -192,7 +191,7 @@ def test_feed_for_empty_for_no_access(db_session):
     assert feed_for(_user(db_session, 'fd', role='designer')) == []
 
 
-def test_feed_for_hides_finance_from_non_finance(app, db_session):
+def test_feed_for_hides_finance_from_non_finance(app, db_session, owner_without_finance):
     today = date.today()
     lead = _user(db_session, 'ff', role='cs')
     owner = _user(db_session, 'ffo', role='project_owner')
@@ -248,7 +247,7 @@ def test_landing_is_dashboard_and_table_moved(app, client, db_session):
     assert 'Dash lt1' in client.get(table_url).get_data(as_text=True)    # table still renders rows
 
 
-def test_dashboard_renders_and_gates_finance_in_page(app, client, db_session):
+def test_dashboard_renders_and_gates_finance_in_page(app, client, db_session, owner_without_finance):
     today = date.today()
     lead = _user(db_session, 'pr', role='cs')
     owner = _user(db_session, 'pro', role='project_owner')

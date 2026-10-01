@@ -97,7 +97,7 @@ def test_the_review_lock_applies(app, client, db_session):
 
 # ------ Finance ------
 
-def test_a_project_owner_sees_values_but_no_invoicing(app, client, db_session):
+def test_a_project_owner_sees_values_but_no_invoicing(app, client, db_session, owner_without_finance):
     lead = _user(db_session, 'fin-lead')
     _job(db_session, lead, 'Accounts Invoiced Job', value=500,
          invoice_date=date(2026, 3, 4), invoice_amount=500)
@@ -111,6 +111,14 @@ def test_a_project_owner_sees_values_but_no_invoicing(app, client, db_session):
     cs_body = _page(app, client, _user(db_session, 'fin-cs', role='cs')).get_data(as_text=True)
     assert 'cs-acc-fin' in cs_body
     assert 'Not yet invoiced' in cs_body
+
+
+def test_a_project_owner_sees_invoicing_by_default(app, client, db_session):
+    lead = _user(db_session, 'fin-lead2')
+    _job(db_session, lead, 'Accounts Owner Sees', value=300,
+         invoice_date=date(2026, 3, 4), invoice_amount=300)
+    body = _page(app, client, _user(db_session, 'fin-po2', role='project_owner')).get_data(as_text=True)
+    assert 'cs-acc-fin' in body and 'Not yet invoiced' in body
 
 
 # ------ Grouping, filters, empty state ------

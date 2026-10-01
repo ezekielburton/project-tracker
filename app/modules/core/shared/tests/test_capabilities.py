@@ -95,7 +95,7 @@ _TABLE = [
     ('finance', 'view_all_projects', False),
 
     ('project_owner', 'view_cs', True),
-    ('project_owner', 'view_finance', False),
+    ('project_owner', 'view_finance', True),
     ('project_owner', 'create_projects', True),
     ('project_owner', 'close_projects', False),
 

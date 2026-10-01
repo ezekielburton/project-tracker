@@ -125,7 +125,7 @@ ROLE_CAPABILITIES = {
 
     'project_owner': {
         'view_workspace',
-        'view_cs', 'view_all_projects', 'create_projects', 'log_site_visits',
+        'view_cs', 'view_finance', 'view_all_projects', 'create_projects', 'log_site_visits',
         'claim_ownership',
     },
 

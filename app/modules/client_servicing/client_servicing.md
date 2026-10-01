@@ -92,10 +92,11 @@ Page-access roles: admin, management, cs, project_owner, finance. Editing the
 **finance fields** is further restricted to **admin / cs / finance**
 (`_FINANCE_EDIT_ROLES` in `edit.py`) — narrower than page access, so
 management/project_owner can view them but not edit. Editing the **day
-thresholds** is admin/management only. Viewing **finance on the Dashboard**
-(money KPIs, Invoicing Health, feed finance items) is gated by
-`can_view_finance` — admin / management / cs / finance; project_owner can open
-CS but doesn't see finance there. `_effective_user()` is emulation-aware,
+thresholds** is admin/management only. Viewing **finance** (Dashboard money
+KPIs, Invoicing Health, feed finance items, Accounts' invoicing figures) is
+gated by `can_view_finance`. Every role with CS access holds it today,
+project_owner included; the gate stays for any future CS role without it (tests
+strip it via the `owner_without_finance` fixture). `_effective_user()` is emulation-aware,
 so an admin previewing as someone else is gated, has their layout saved, and
 has edits attributed as that person; the admin-only Scope CRUD stays on
 `current_user` so real admin tools survive a preview.
@@ -247,8 +248,8 @@ The GM's CS Client and CS Contact sheets as one read-only page: every job from
   under its lead.
 - The CS load panel follows the billing month only, not the client/lead filters.
 - Invoicing figures (Invoiced column, two tiles, load-panel invoiced) need
-  `can_view_finance`. They carry `cs-acc-fin` so a test can prove a project
-  owner gets none of them.
+  `can_view_finance` and are left out of the data without it. They carry
+  `cs-acc-fin` so a test can prove they are absent.
 - Groups start collapsed. Each user's last Group by and open groups per view
   are saved server-side (`lib/accounts_state.py`, reusing `UserTableLayout`),
   rendered on load, and posted back debounced. No `?group=` reopens the last view.
