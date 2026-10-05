@@ -7,15 +7,7 @@
     <div class="modal-box overlay-submit-summary-box">
         <h3 class="modal-title">Resume a draft?</h3>
 
-        <p class="overlay-submit-summary-intro">
-            {% if can('manage_projects', actor) %}
-            There are open drafts below — yours and others'. Pick one to
-            continue, delete it, or start a new project instead.
-            {% else %}
-            You have an unfinished project below. Pick it up where you left
-            off, delete it, or start a new one instead.
-            {% endif %}
-        </p>
+        <p class="overlay-submit-summary-intro"></p>
 
         <ul class="overlay-submit-summary-deliverables overlay-create-drafts-list">
             {% for d in drafts %}

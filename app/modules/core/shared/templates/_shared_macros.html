@@ -264,7 +264,8 @@ link: it often sits inside rows that are links, and links can't nest.
        children (sub-pages: key, label, url, optional count). The item whose
        key equals `active` renders active and shows its children; the child
        whose key equals `active_sub` renders active. `title` heads the rail.
-       Anything a module needs below the nav goes in a {% call %} block.
+       Anything a module needs below the nav goes in a {% call %} block;
+       `caller_after` names an item to place it directly under instead.
        The page frame around it is .module-page / .module-shell / .module-main.
 
        Sub-pages go in the rail; views of the same page (Month/Agenda,
@@ -272,8 +273,8 @@ link: it often sits inside rows that are links, and links can't nest.
 
        On a phone the rail is a drawer (mobile.css). Its top row names the
        module (`module`) and switches to the app menu, plus a close button. #}
-    {% macro module_rail(items, active, title=None, active_sub=None, module=None) %}
-    <aside class="module-rail">
+    {% macro module_rail(items, active, title=None, active_sub=None, module=None, multi_open=False, caller_after=None) %}
+    <aside class="module-rail"{% if multi_open %} data-rail-multi-open{% endif %}>
         <div class="module-rail-mobile">
             <button type="button" class="module-rail-switch" data-mobile-menu="app">
                 <span class="module-rail-switch-text">
@@ -304,13 +305,15 @@ link: it often sits inside rows that are links, and links can't nest.
             {%- endif %}
             {#- Every section's sub-pages are in the page; only the open
                 section's show. On a phone, tapping a section opens its list
-                here instead of loading a page (module_rail.js). #}
+                here instead of loading a page (module_rail.js). An item's
+                `open` overrides the default of opening only the active one. #}
             {%- if item.get('children') %}
-            {{ module_rail_children(item.get('children'), active_sub, open=item.get('key') == active) }}
+            {{ module_rail_children(item.get('children'), active_sub, open=item.get('open', item.get('key') == active)) }}
             {%- endif %}
+            {%- if caller and caller_after and item.get('key') == caller_after %}{{ caller() }}{% endif %}
             {%- endfor %}
         </nav>
-        {%- if caller %}{{ caller() }}{% endif %}
+        {%- if caller and not caller_after %}{{ caller() }}{% endif %}
     </aside>
     {% endmacro %}
 

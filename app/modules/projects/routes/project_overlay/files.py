@@ -56,15 +56,17 @@ def upload_project_file(project_id):
     # The stream can only be read once.
     file_bytes = file.read()
 
-    # Synchronous: the user waits for the NAS to confirm.
-    from app.modules.core.shared.services.nas import upload_app_file, build_file_path
+    # NAS first; if it's down the file is kept on the server and
+    # nas_outbox_flush.py pushes it later.
+    from app.modules.core.shared.services.nas import build_file_path
+    from app.modules.core.shared.services.nas_outbox import upload_or_queue
     nas_file_path = build_file_path(project, 'Reference Files', original_filename)
     nas_folder = nas_file_path.rsplit('/',1)[0]
     try:
-        upload_app_file(file_bytes, nas_folder, original_filename)
-    except RuntimeError as e:
-        current_app.logger.error(f'Reference file upload failed for project {project_id}: {e}')
-        return jsonify({'success': False, 'error': 'File could not be saved to storage. Please try again.'}), 502
+        upload_or_queue(file_bytes, nas_folder, original_filename)
+    except OSError as e:
+        current_app.logger.error(f'Reference file upload failed for project {project_id} (NAS down, server copy failed): {e}')
+        return jsonify({'success': False, 'error': 'File could not be saved. Please try again.'}), 502
 
     # filename is the NAS filename, which is the original name.
     project_file = ProjectFile(

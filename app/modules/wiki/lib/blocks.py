@@ -24,12 +24,15 @@ EMBED_HOSTS = ('youtube.com', 'youtu.be', 'vimeo.com')
 
 _SAFE_BLOCK_ID = re.compile(r'^[A-Za-z0-9_-]{1,32}$')
 _VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]+$')
+VIDEO_LENGTH_MAX = 3600
 
 _BLOCK_TAGS = {'p', 'div', 'blockquote', 'pre'}
 _HEADER_TAGS = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}
 _LIST_TAGS = {'ul', 'ol'}
 
 _TEXT_BLOCK_TYPES = {'paragraph', 'header', 'helixCallout', 'list'}
+
+_CONTROL_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 
 
 def clean_html(value):
@@ -282,6 +285,7 @@ def load_blocks(sections_json):
         elif kind == 'helixVideo':
             data['url'] = _safe_link(data.get('url'))
             data['embed_src'] = '' if data.get('source') == 'upload' else embed_src(data.get('url'))
+            data['length'] = _video_length(data.get('length'))
         blocks.append({'type': kind, 'data': data})
     return blocks
 
@@ -344,6 +348,17 @@ def _safe_link(value):
     return ''
 
 
+def _video_length(value):
+    """A video's length in whole seconds, 1 to an hour, or None."""
+    if isinstance(value, bool):
+        return None
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return None
+    return seconds if 0 < seconds <= VIDEO_LENGTH_MAX else None
+
+
 def _clean_block(kind, data):
     """Clean one block's data. Returns None for empty or unrecognised blocks."""
     if kind == 'paragraph':
@@ -380,7 +395,13 @@ def _clean_block(kind, data):
     if kind == 'helixVideo':
         source = 'upload' if data.get('source') == 'upload' else 'embed'
         url = _safe_url(data.get('url'), allow_remote=(source == 'embed'))
-        return {'source': source, 'url': url} if url else None
+        if not url:
+            return None
+        cleaned = {'source': source, 'url': url}
+        length = _video_length(data.get('length'))
+        if length:
+            cleaned['length'] = length
+        return cleaned
 
     return None
 
@@ -402,3 +423,62 @@ def sanitize_document(value):
             blocks.append({'id': block_id, 'type': kind, 'data': data})
 
     return {'time': value.get('time') or 0, 'blocks': blocks, 'version': EDITORJS_VERSION}
+
+
+# ------ Plain text for search ------
+
+def _plain(value):
+    """Editor text as plain words: tags dropped, entities decoded, control characters removed."""
+    stripped = nh3.clean(re.sub(r'<br\s*/?>', ' ', value or ''), tags=set())
+    return _CONTROL_CHARS.sub('', html.unescape(stripped))
+
+
+def document_text(document):
+    """Every word a reader sees in an Editor.js document, as one plain string.
+    Video blocks add nothing: a URL is not something people search for."""
+    parts = []
+    for block in (document or {}).get('blocks') or []:
+        if not isinstance(block, dict):
+            continue
+        kind = block.get('type')
+        data = block.get('data') or {}
+        if kind in ('paragraph', 'header', 'helixCallout'):
+            parts.append(data.get('text'))
+        elif kind == 'list':
+            parts.extend(_normalise_list_items(data.get('items')))
+        elif kind == 'image':
+            parts.append(data.get('caption'))
+    text = ' '.join(_plain(part) for part in parts if part)
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+# ------ Video first ------
+
+def lead_with_video(blocks):
+    """The renderer's blocks with the first video moved to the top; the rest keep their order."""
+    for index, block in enumerate(blocks):
+        if block.get('type') == 'helixVideo':
+            return [block] + blocks[:index] + blocks[index + 1:]
+    return blocks
+
+
+def first_video_length(sections_json):
+    """Seconds of the document's first video, or None. Reads the stored JSON without rendering it."""
+    try:
+        parsed = json.loads(sections_json or '{}')
+    except ValueError:
+        return None
+    for block in (parsed.get('blocks') or []) if isinstance(parsed, dict) else []:
+        if isinstance(block, dict) and block.get('type') == 'helixVideo':
+            return _video_length((block.get('data') or {}).get('length'))
+    return None
+
+
+def format_length(seconds):
+    """'40s', '1m 20s' or '2m'."""
+    if not seconds:
+        return ''
+    minutes, rest = divmod(int(seconds), 60)
+    if not minutes:
+        return f'{rest}s'
+    return f'{minutes}m {rest}s' if rest else f'{minutes}m'

@@ -7,9 +7,6 @@
     <div class="modal-box overlay-submit-summary-box">
         <h3 class="modal-title">Create Project</h3>
 
-        <p class="overlay-submit-summary-intro">
-            Review before creating — you can still edit everything afterward.
-        </p>
 
         <div class="overlay-submit-summary-section">
             <span class="overlay-field-label">Project</span>
@@ -48,7 +45,7 @@
         </div>
         {% if project.is_production_only %}
         <p class="overlay-submit-summary-note">
-            Production Only — every deliverable above will skip straight to Pre-Production.
+            Production only: skips to Pre-Production
         </p>
         {% endif %}
         {% else %}

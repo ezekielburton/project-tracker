@@ -1,55 +1,9 @@
+/**
+ * Editor buttons shared by the dashboard and the article editor:
+ * section publish and delete, and article delete.
+ */
 (function () {
     'use strict';
-
-    function loadArticle(articleId) {
-        // Looked up per call: the document click handler is bound once and outlives SPA swaps.
-        var contentPanel = document.getElementById('wiki-content-panel');
-        if (!contentPanel) return;
-
-        document.querySelectorAll('.wiki-nav-article').forEach(function (a) {
-            a.classList.toggle('active', a.dataset.articleId === String(articleId));
-        });
-
-        contentPanel.innerHTML = '<p style="padding:2rem;color:var(--text-muted);">Loading…</p>';
-
-        fetch('/wiki/article/' + articleId)
-            .then(function (r) {
-                // An error page must not land in the panel; the catch shows a short message instead.
-                if (!r.ok) { throw new Error('article fetch failed'); }
-                return r.text();
-            })
-            .then(function (html) { contentPanel.innerHTML = html; })
-            .catch(function () {
-                contentPanel.innerHTML = '<p style="padding:2rem;color:var(--rose);">Failed to load article.</p>';
-            });
-
-        history.replaceState(null, '', '#article-' + articleId);
-    }
-
-    // Bound once per page load: the SPA router re-runs this file on every visit.
-    if (!window.__wikiNavClickBound) {
-        window.__wikiNavClickBound = true;
-        document.addEventListener('click', function (e) {
-            var a = e.target.closest('.wiki-nav-article');
-            if (!a) return;
-            e.preventDefault();
-            loadArticle(a.dataset.articleId);
-        });
-    }
-
-    function autoLoadWiki() {
-        if (!document.getElementById('wiki-content-panel')) return;
-        var match = window.location.hash.match(/^#article-(\d+)$/);
-        if (match) {
-            loadArticle(match[1]);
-        } else {
-            var first = document.querySelector('.wiki-nav-article');
-            if (first) loadArticle(first.dataset.articleId);
-        }
-    }
-
-    // Runs on full loads and on every SPA visit, since the router re-runs this file.
-    autoLoadWiki();
 
     document.querySelectorAll('.wiki-section-publish-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {

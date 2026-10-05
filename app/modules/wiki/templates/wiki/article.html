@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+
+{% block title %}{{ article.title }}{% endblock %}
+
+{% block content %}
+<div class="module-page wiki-page">
+    <div class="module-shell">
+        {% include 'wiki/_rail.html' %}
+        <div class="module-main">
+            <div class="wiki-reader" id="wiki-reader">
+                <article class="wiki-reader__article">
+                    {% set for_roles = article.section | wiki_section_roles %}
+                    {% set is_draft = not article.is_published or not article.section.is_published %}
+                    {% if for_roles or is_draft %}
+                    <p class="wiki-reader__tags">
+                        {% if for_roles %}<span>For {{ for_roles }}</span>{% endif %}
+                        {% if is_draft %}<span class="wiki-draft-badge">Draft</span>{% endif %}
+                    </p>
+                    {% endif %}
+                    {% set anchors = true %}
+                    {% include 'wiki/_article_content.html' %}
+                    {% if can_vote %}
+                    <section class="wiki-useful" id="wiki-useful">
+                        <form class="wiki-useful__vote" method="post"
+                              action="{{ url_for('wiki.vote_article', article_id=article.id) }}">
+                            <span class="wiki-useful__label">Useful?</span>
+                            {% for value, label in (('yes', 'Yes'), ('no', 'No')) %}
+                            {% set chosen = vote and vote.helpful == (value == 'yes') %}
+                            <button type="submit" name="helpful" value="{{ value }}"
+                                    class="wiki-useful__choice{{ ' is-active' if chosen else '' }}"
+                                    aria-pressed="{{ 'true' if chosen else 'false' }}">{{ label }}</button>
+                            {% endfor %}
+                        </form>
+                        {% if vote and not vote.helpful %}
+                        {% if vote.note %}
+                        <p class="wiki-useful__done">Sent.</p>
+                        {% else %}
+                        <form class="wiki-useful__note" method="post"
+                              action="{{ url_for('wiki.vote_article', article_id=article.id) }}">
+                            <input type="hidden" name="helpful" value="no">
+                            <input class="form-input" type="text" name="note" maxlength="500" required
+                                   placeholder="What was missing?" aria-label="What was missing?">
+                            <button type="submit" class="btn-secondary btn-sm">Send</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </section>
+                    {% endif %}
+                </article>
+
+                <aside class="wiki-reader__aside">
+                    <div class="wiki-reader__aside-head">
+                        {{ help_button('wiki.reading') }}
+                        {% if can('manage_wiki') %}
+                        <a class="btn-secondary btn-sm" href="{{ url_for('wiki.edit_article', article_id=article.id) }}">Edit</a>
+                        {% endif %}
+                    </div>
+
+                    {% if blocks | selectattr('type', 'equalto', 'header') | list %}
+                    <nav>
+                        <p class="wiki-reader__panel-title">On this page</p>
+                        <ul class="wiki-reader__links">
+                            {% for block in blocks %}
+                            {% if block.type == 'header' %}
+                            <li><a href="#wiki-h-{{ loop.index }}">{{ block.data.text | striptags }}</a></li>
+                            {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+
+                    {% if related %}
+                    <nav>
+                        <p class="wiki-reader__panel-title">Related</p>
+                        <ul class="wiki-reader__links">
+                            {% for other in related %}
+                            <li><a href="{{ url_for('wiki.get_article', article_id=other.id, scope=scope_param) }}">{{ other.title }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </aside>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="{{ url_for('wiki_assets.static', filename='js/wiki_reader.js') }}"></script>
+{% endblock %}

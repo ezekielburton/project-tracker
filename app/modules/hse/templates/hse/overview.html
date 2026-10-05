@@ -82,7 +82,7 @@
                                 </span>
                             </a>
                             {% else %}
-                            <p class="hse-ov-empty">Nothing outstanding. Everything open is either new or with someone else.</p>
+                            <p class="hse-ov-empty">Nothing outstanding</p>
                             {% endfor %}
                             {% if needs.more %}
                             <p class="hse-ov-more">and {{ needs.more }} more</p>
@@ -146,7 +146,7 @@
                                 </span>
                             </a>
                             {% else %}
-                            <p class="hse-ov-empty">No services due and no stock running low.</p>
+                            <p class="hse-ov-empty">Nothing due</p>
                             {% endfor %}
                             {% if flags.more %}
                             <p class="hse-ov-more">and {{ flags.more }} more</p>
@@ -164,7 +164,7 @@
                             <h3 class="hse-spend-subhead">By area · {{ spend.year }}</h3>
                             {{ spend_areas(spend.areas) }}
                             <p class="hse-ov-foot">
-                                {{ spend.total }} in {{ spend.year }}. Machine cost and machine maintenance can record the same work, so both are shown.
+                                {{ spend.total }} in {{ spend.year }}
                             </p>
                         </section>
 
@@ -185,9 +185,6 @@
                             <div class="hse-ov-line"><span>Trainings</span><span class="hse-ov-fig">{{ week.trainings }}</span></div>
                             <div class="hse-ov-line"><span>Actions opened</span><span class="hse-ov-fig">{{ week.opened }}</span></div>
                             <div class="hse-ov-line hse-ov-line--last"><span>Actions closed</span><span class="hse-ov-fig">{{ week.closed }}</span></div>
-                            <p class="hse-ov-foot">
-                                Feeds the weekly HSC report. Due counts come from the calendar schedule.
-                            </p>
                         </section>
 
                         <section class="hse-ov-panel hse-ov-panel--grow">

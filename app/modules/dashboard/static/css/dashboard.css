@@ -1339,8 +1339,8 @@
    .rag-green) rather than just a border accent, so the active tab reads
    unmistakably against the others. */
 .dash-content-tab.active {
-    background: var(--tangerine);
-    border-color: var(--tangerine);
+    background: var(--brand);
+    border-color: var(--brand);
     color: var(--white);
 }
 
@@ -2431,8 +2431,8 @@ a.dash-row:hover {
 }
 
 .dash-tab-btn.active {
-    background: var(--tangerine);
-    border-color: var(--tangerine);
+    background: var(--brand);
+    border-color: var(--brand);
     color: var(--white);
 }
 

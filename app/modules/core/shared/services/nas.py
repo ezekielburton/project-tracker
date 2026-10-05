@@ -275,6 +275,18 @@ def build_chat_file_path(project, filename):
     client_name = project.client_brand.name if project.client_brand else 'Unknown Client'
     return f'{root}/{year}/{client_name}/{project.name}/{filename}'
 
+def is_reachable():
+    """True if a File Station login works right now (LAN or tunnel)."""
+    try:
+        sid, host, port = _get_session()
+    except Exception:
+        return False
+    try:
+        _logout(host, port, sid)
+    except requests.exceptions.RequestException:
+        pass
+    return True
+
 def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
     """
     Upload bytes to a NAS folder. Retries with exponential back-off, then
@@ -339,6 +351,12 @@ def download_app_file(nas_file_path):
                        /Projects/2026/P&G/Summer 2026/Reference Files/brief.pdf
     Raises RuntimeError if the NAS returns an error.
     """
+    # Queued on the server while the NAS was down? Serve that copy.
+    from app.modules.core.shared.services.nas_outbox import pending_bytes
+    queued = pending_bytes(nas_file_path)
+    if queued is not None:
+        return queued
+
     sid, host, port = _get_session()
     try:
         resp = _NAS_SESSION.get(
@@ -398,6 +416,11 @@ def delete_app_file(nas_file_path):
     Args:
         nas_file_path: full path including filename
     """
+    # Drop any queued copy so the flush never uploads a deleted file. Still
+    # delete on the NAS below, in case an older version is already there.
+    from app.modules.core.shared.services.nas_outbox import discard
+    discard(nas_file_path)
+
     try:
         sid, host, port = _get_session()
         try:

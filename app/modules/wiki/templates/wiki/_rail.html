@@ -1,0 +1,7 @@
+{# The wiki rail: Home, Search, then each section with its articles (lib/reader.py).
+   Sections open independently; the role toggle sits under Search. #}
+{% from '_shared_macros.html' import module_rail %}
+{% from 'wiki/_macros.html' import scope_toggle %}
+{% call module_rail(rail, rail_active, active_sub=rail_active_sub, module='Wiki', multi_open=True, caller_after='search') %}
+<div class="wiki-rail-scope">{{ scope_toggle(scope_endpoint, role, scope, scope_args) }}</div>
+{% endcall %}

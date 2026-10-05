@@ -20,7 +20,7 @@ Read this before writing any front-end CSS for Helix. It explains how the app sw
 
 Colours are defined as tokens (CSS variables) in `main.css`, in three layers:
 
-1. **Raw palette** — the actual brand colours by name: `--tangerine`, `--sandstone`, `--sky`, `--coral`, `--clover`, `--white`, `--black`, `--grey-light/mid/dark`, etc.
+1. **Raw palette** — the actual brand colours by name: `--brand`, `--tangerine`, `--sandstone`, `--sky`, `--coral`, `--clover`, `--white`, `--black`, `--grey-light/mid/dark`, etc.
 2. **Semantic aliases** — older helpers already used around the app: `--text-muted`, `--border`, `--border-subtle`, `--surface-hover`.
 3. **Role tokens** — the ones you should reach for in new work:
    - `--surface-sunken` — the page background
@@ -33,6 +33,23 @@ Colours are defined as tokens (CSS variables) in `main.css`, in three layers:
 In light mode these point at the light palette. The `:root[data-theme="dark"]` block in `main.css` then redefines the palette *and* the role tokens with dark values, so anything built on role tokens flips automatically.
 
 **Rule of thumb:** build with role tokens (`--surface`, `--text`, `--border`), not raw colour names, and never a raw hex. If you do that, your feature is dark-ready for free — except for coloured fills, which need rule 2.
+
+## Readable text
+
+Text must reach **4.5:1** contrast against what it sits on (WCAG AA) in both themes. The light-theme values were tuned to that:
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--tangerine` | `#B04A1C` | `#F27F55` | orange text, links, buttons, highlights |
+| `--brand` | `#F27F55` | `#F27F55` | the logo V, sidebar and navigation only |
+| `--pine` | `#4F6247` | `#63775B` | green text |
+| `--text-muted` | `#5C5C5C` | `#b3a89a` | secondary text |
+| `--text-faint` / `--grey-mid` | `#696969` | `#9a8f7e` | the quietest text that is still read |
+| `--border-strong` | `#AAAAAA` | `#4a4033` | lines that must be seen, such as input edges |
+
+**Brand vs text orange.** `--brand` is the main brand colour and stays the bright tangerine everywhere: the logo V, the sidebar, and navigation (active nav items, tabs, the bell badge). Everything else orange uses `--tangerine`. Brand orange used as text or under white text is under 4.5:1 (about 2.5:1) — a deliberate exception for the brand, not a pattern to copy.
+
+**Still below 4.5:1, left for later:** rose, salmon, coral, clover, poppy, oak, ashen, canary and lavender when used as text (they are mainly fills, so changing the token would change the fills too); the single text uses of `#777777` and `#BBBBBB`; pine as text in dark (about 3.5:1); DI canary on sandstone (about 4.3:1). Chart series colours were not part of this pass.
 
 ## Exact values to reuse (don't invent new ones)
 
@@ -60,5 +77,6 @@ In light mode these point at the light palette. The `:root[data-theme="dark"]` b
 - Build with role tokens (`--surface`, `--text`, `--border`, …); no hard-coded hex.
 - Any coloured fill (button, pill, active state) gets a `:root[data-theme="dark"]` tinted override — reuse the values above.
 - Don't restyle inputs with fixed colours; let the global fallback handle them.
+- Text reaches 4.5:1 in both modes; orange text is `--tangerine`, never `--brand`.
 - Open your new UI in **both** modes before calling it done — especially modals, overlays, and anything with a coloured highlight.
 - If the hex test fails, or a fix won't apply, check the Traps above.

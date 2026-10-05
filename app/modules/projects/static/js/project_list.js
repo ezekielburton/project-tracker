@@ -528,7 +528,7 @@
                                 const list = modal.querySelector('.overlay-create-drafts-list');
                                 if (list) list.remove();
                                 const intro = modal.querySelector('.overlay-submit-summary-intro');
-                                if (intro) intro.textContent = 'No drafts left. Start a new project, or cancel below.';
+                                if (intro) intro.textContent = 'No drafts left';
                             }
                         })
                         .catch(() => {

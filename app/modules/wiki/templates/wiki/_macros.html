@@ -1,0 +1,12 @@
+{# The "[your role] | Everything" switch. Both chips are plain links, so it works without JS.
+   args are the page's own URL arguments, e.g. the article id or the search words. #}
+{% macro scope_toggle(endpoint, role, scope, args=None) %}
+<div class="wiki-scope" role="group" aria-label="Show sections for">
+    <a class="wiki-scope__chip{{ ' is-active' if scope == 'mine' else '' }}"
+       {% if scope == 'mine' %}aria-current="true"{% endif %}
+       href="{{ url_for(endpoint, scope='mine', **(args or {})) }}">{{ role_label(role) }}</a>
+    <a class="wiki-scope__chip{{ ' is-active' if scope == 'all' else '' }}"
+       {% if scope == 'all' %}aria-current="true"{% endif %}
+       href="{{ url_for(endpoint, scope='all', **(args or {})) }}">Everything</a>
+</div>
+{% endmacro %}

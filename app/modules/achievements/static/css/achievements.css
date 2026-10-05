@@ -38,8 +38,8 @@
 }
 
 .achievement-tab-btn.active {
-    background: var(--tangerine);
-    border-color: var(--tangerine);
+    background: var(--brand);
+    border-color: var(--brand);
     color: var(--white);
 }
 
@@ -252,7 +252,7 @@
 }
 
 .ach-tab-btn.active {
-    background: var(--tangerine);
+    background: var(--brand);
     color: var(--sandstone);
 }
 

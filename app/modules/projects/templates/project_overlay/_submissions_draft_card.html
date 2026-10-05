@@ -90,8 +90,7 @@ Read-only client record. Files are served from the NAS zip
         <div class="overlay-mark-approved-columns">
             <div class="overlay-mark-approved-col overlay-mark-approved-col--picker">
                 {% if is_ckv_toggle_scope %}
-                <p class="overlay-field-empty">Approves Concept &amp; KV together — this scope has no deliverable
-                    list to split.</p>
+                <p class="overlay-field-empty">Applies to Concept &amp; KV together</p>
                 {% else %}
                 {% set approvable_options = approvable_deliverables | map(attribute='deliverable') | list %}
                 {{ deliverable_picker('overlay-mark-approved-picker', approvable_options, []) }}
@@ -103,8 +102,7 @@ Read-only client record. Files are served from the NAS zip
             </div>
         </div>
         {% else %}
-        <p class="overlay-field-empty">Nothing left to approve — every deliverable in this deck is already Client
-            Approved.</p>
+        <p class="overlay-field-empty">All approved</p>
         {% endif %}
         <span class="overlay-flag-revision-error hidden" id="overlay-mark-approved-error"></span>
         <div class="overlay-flag-revision-form-actions">
@@ -122,8 +120,7 @@ Read-only client record. Files are served from the NAS zip
         <div class="overlay-mark-approved-columns">
             <div class="overlay-mark-approved-col overlay-mark-approved-col--picker">
                 {% if is_ckv_toggle_scope %}
-                <p class="overlay-field-empty">Revision applies to Concept &amp; KV together — this scope has no deliverable
-                    list to split.</p>
+                <p class="overlay-field-empty">Applies to Concept &amp; KV together</p>
                 {% else %}
                 {% set revisable_options = revisable_deliverables | map(attribute='deliverable') | list %}
                 {{ deliverable_picker('overlay-client-revision-picker', revisable_options, []) }}
@@ -175,8 +172,7 @@ Read-only client record. Files are served from the NAS zip
 {% call card(('Next Draft' if sent_submission else 'Draft'), draft_header_extra) %}
 {% if not submissions_open %}
 <p class="overlay-field-empty" id="overlay-draft-not-started">
-    This project hasn't been started yet — a designer, management or an admin
-    needs to press Start Project on the Details tab first.
+    Not started — press Start Project on Details
 </p>
 {% endif %}
 {% if workflow_status != 'draft' %}

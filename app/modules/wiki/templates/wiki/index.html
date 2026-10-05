@@ -1,54 +1,93 @@
 {% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+
+{% block title %}Wiki{% endblock %}
 
 {% block content %}
-<div class="wiki-wrapper">
+<div class="module-page wiki-page">
+    <div class="module-shell">
+        {% include 'wiki/_rail.html' %}
+        <div class="module-main">
+            {# data-article-url lets old /wiki#article-N links find the article's page. #}
+            <div class="wiki-reader wiki-reader--single" id="wiki-reader"
+                 data-article-url="{{ url_for('wiki.get_article', article_id=0)[:-1] }}">
+                <div class="wiki-search">
+                    <header class="wiki-search__head">
+                        <h1 class="wiki-search__heading">Wiki</h1>
+                        {{ help_button('wiki.reading') }}
+                        {% if can('manage_wiki') %}
+                        <a class="btn-secondary btn-sm" href="{{ url_for('wiki.editor_dashboard') }}">Edit</a>
+                        {% endif %}
+                    </header>
 
-    <!-- ── Left nav panel ─────────────────────────────── -->
-    <aside class="wiki-nav-panel" id="wiki-nav-panel">
-        <div class="wiki-nav-header">
-            <span class="wiki-nav-title">Knowledge Base</span>
-            {% if can('manage_wiki') %}
-            <a href="{{ url_for('wiki.editor_dashboard') }}" class="btn-secondary btn-sm">Edit</a>
-            {% endif %}
-        </div>
+                    <form class="wiki-search__form" action="{{ url_for('wiki.search') }}" method="get" role="search">
+                        <input class="form-input wiki-search__input" type="search" name="q"
+                               placeholder="What are you trying to do?" aria-label="Search the wiki"
+                               autocomplete="off" maxlength="200">
+                        {% if scope_param %}<input type="hidden" name="scope" value="{{ scope_param }}">{% endif %}
+                        <button type="submit" class="btn-primary">Search</button>
+                    </form>
 
-        {% for section in sections %}
-        <div class="wiki-nav-section">
-            <div class="wiki-nav-section-header">
-                <span>{{ section.title }}</span>
-                <div style="display:flex;gap:0.25rem;flex-wrap:wrap;margin-top:0.25rem;">
-                    {% if section.relevant_roles %}
-                    {% for role in section.relevant_roles.split(',') %}
-                    <span class="wiki-role-badge">{{ role_label(role) }}</span>
-                    {% endfor %}
+                    {% if start %}
+                    <section class="wiki-home__panel">
+                        <h2 class="wiki-reader__panel-title">Start here · {{ role_label(role) }}</h2>
+                        <ol class="wiki-start">
+                            {% for article, section in start %}
+                            <li>
+                                <a class="wiki-start__card"
+                                   href="{{ url_for('wiki.get_article', article_id=article.id, scope=scope_param) }}">
+                                    <span class="wiki-start__step">{{ loop.index }}</span>
+                                    <span class="wiki-start__text">
+                                        <span class="wiki-start__title">{{ article.title }}</span>
+                                        <span class="wiki-start__section">{{ section.title }}</span>
+                                        {% set length = article | wiki_video_length %}
+                                        {% if length %}<span class="wiki-start__length">{{ length | wiki_duration }} video</span>{% endif %}
+                                    </span>
+                                    {% if not article.is_published or not section.is_published %}
+                                    <span class="wiki-draft-badge">Draft</span>
+                                    {% endif %}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ol>
+                    </section>
                     {% endif %}
-                    {% if not section.is_published %}
-                    <span class="wiki-draft-badge">Draft</span>
+
+                    {% if recent or popular %}
+                    <div class="wiki-home__pair">
+                        {% if recent %}
+                        <section class="wiki-home__panel">
+                            <h2 class="wiki-reader__panel-title">Recently updated</h2>
+                            <ul class="wiki-recent">
+                                {% for article, section in recent %}
+                                <li class="wiki-recent__row">
+                                    <a href="{{ url_for('wiki.get_article', article_id=article.id, scope=scope_param) }}">{{ article.title }}</a>
+                                    <span class="wiki-recent__meta">{{ section.title }} · {{ article.updated_at.strftime('%d %b') }}</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </section>
+                        {% endif %}
+
+                        {% if popular %}
+                        <section class="wiki-home__panel">
+                            <h2 class="wiki-reader__panel-title">Most read this month</h2>
+                            <ul class="wiki-recent wiki-popular">
+                                {% for article, section, reads in popular %}
+                                <li class="wiki-recent__row">
+                                    <a href="{{ url_for('wiki.get_article', article_id=article.id, scope=scope_param) }}">{{ article.title }}</a>
+                                    <span class="wiki-recent__meta">{{ section.title }} · {{ reads }} read{{ '' if reads == 1 else 's' }}</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </section>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </div>
             </div>
-
-            {% for article in section.articles %}
-            {% if article.is_published or can('manage_wiki') %}
-            <a class="wiki-nav-article" data-article-id="{{ article.id }}" href="#article-{{ article.id }}">
-                {{ article.title }}
-                {% if not article.is_published %}
-                <span class="wiki-draft-badge">Draft</span>
-                {% endif %}
-            </a>
-            {% endif %}
-            {% endfor %}
-        </div>
-        {% endfor %}
-    </aside>
-
-    <!-- ── Right content panel ────────────────────────── -->
-    <div class="wiki-content-panel" id="wiki-content-panel">
-        <div class="wiki-placeholder">
-            <p>Select an article from the left to get started.</p>
         </div>
     </div>
-
 </div>
-<script src="{{ url_for('wiki_assets.static', filename='js/wiki.js') }}"></script>
+<script src="{{ url_for('wiki_assets.static', filename='js/wiki_reader.js') }}"></script>
 {% endblock %}

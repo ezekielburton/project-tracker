@@ -56,7 +56,7 @@ def test_upload_video_enforces_size_cap(app, client, db_session, monkeypatch):
 
 
 def _saved_videos(app):
-    folder = os.path.join(app.root_path, 'static', 'wiki-uploads', 'videos')
+    folder = os.path.join(app.config['WIKI_UPLOAD_ROOT'], 'videos')
     return set(os.listdir(folder)) if os.path.isdir(folder) else set()
 
 
@@ -90,7 +90,7 @@ def test_upload_video_at_the_cap_is_accepted(app, client, db_session, monkeypatc
     resp = client.post('/wiki/upload-video', data={'file': (io.BytesIO(b'0123456789ABCDEF'), 'clip.mp4')})
 
     assert resp.status_code == 200
-    saved_path = os.path.join(app.root_path, 'static', 'wiki-uploads', 'videos', resp.get_json()['filename'])
+    saved_path = os.path.join(app.config['WIKI_UPLOAD_ROOT'], 'videos', resp.get_json()['filename'])
     with open(saved_path, 'rb') as saved:
         assert saved.read() == b'0123456789ABCDEF'
     os.remove(saved_path)
@@ -111,7 +111,7 @@ def test_upload_video_accepts_mp4_and_backs_up_to_nas(app, client, db_session, m
     assert data['url'].endswith('.mp4')
     assert calls and calls[0][0] == '/Admin/OVP/Wiki'
 
-    saved_path = os.path.join(app.root_path, 'static', 'wiki-uploads', 'videos', data['filename'])
+    saved_path = os.path.join(app.config['WIKI_UPLOAD_ROOT'], 'videos', data['filename'])
     assert os.path.exists(saved_path)
     os.remove(saved_path)
 
@@ -130,6 +130,6 @@ def test_upload_video_nas_failure_does_not_fail_upload(app, client, db_session, 
     data = resp.get_json()
     assert data['success'] is True
 
-    saved_path = os.path.join(app.root_path, 'static', 'wiki-uploads', 'videos', data['filename'])
+    saved_path = os.path.join(app.config['WIKI_UPLOAD_ROOT'], 'videos', data['filename'])
     assert os.path.exists(saved_path)
     os.remove(saved_path)

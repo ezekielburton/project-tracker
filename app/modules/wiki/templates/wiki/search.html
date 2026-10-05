@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+
+{% block title %}Search the wiki{% endblock %}
+
+{% block content %}
+<div class="module-page wiki-page">
+    <div class="module-shell">
+        {% include 'wiki/_rail.html' %}
+        <div class="module-main">
+            <div class="wiki-reader wiki-reader--single" id="wiki-reader">
+                <div class="wiki-search">
+                    <header class="wiki-search__head">
+                        <h1 class="wiki-search__heading">Search the wiki</h1>
+                        {{ help_button('wiki.search') }}
+                    </header>
+
+                    <form class="wiki-search__form" action="{{ url_for('wiki.search') }}" method="get" role="search">
+                        <input class="form-input wiki-search__input" type="search" name="q" value="{{ query }}"
+                               placeholder="What are you trying to do?" aria-label="Search the wiki"
+                               autocomplete="off" maxlength="200">
+                        {% if scope_param %}<input type="hidden" name="scope" value="{{ scope_param }}">{% endif %}
+                        <button type="submit" class="btn-primary">Search</button>
+                    </form>
+
+                    {% if not query %}
+                    <p class="wiki-search__note">Type a few words, for example "submit a deck".</p>
+                    {% elif hits %}
+                    <p class="wiki-search__note">{{ hits | length }} result{{ '' if hits | length == 1 else 's' }} for “{{ query }}”</p>
+                    <ol class="wiki-search__results">
+                        {% for hit in hits %}
+                        {% set other_role = hit.section.id in dimmed %}
+                        <li class="wiki-search__hit{{ ' wiki-other-role' if other_role else '' }}">
+                            <div class="wiki-search__hit-head">
+                                <a class="wiki-search__title"
+                                   href="{{ url_for('wiki.get_article', article_id=hit.article.id, scope=scope_param) }}">{{ hit.article.title }}</a>
+                                <span class="wiki-search__section">{{ hit.section.title }}</span>
+                                {% if other_role %}<span class="wiki-search__for">for {{ hit.section | wiki_section_roles }}</span>{% endif %}
+                                {% if not hit.article.is_published or not hit.section.is_published %}
+                                <span class="wiki-draft-badge">Draft</span>
+                                {% endif %}
+                            </div>
+                            {% if hit.snippet %}<p class="wiki-search__snippet">{{ hit.snippet }}</p>{% endif %}
+                            <p class="wiki-search__meta">Updated {{ hit.article.updated_at.strftime('%d %b %Y') }}</p>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <div class="wiki-search__miss">
+                        <p class="wiki-search__note">Nothing found for “{{ query }}”. Searched {{ searched }} article{{ '' if searched == 1 else 's' }}.</p>
+                        {% if miss and miss.note %}
+                        <p class="wiki-search__note">Sent.</p>
+                        {% elif miss %}
+                        <form class="wiki-search__form" method="post"
+                              action="{{ url_for('wiki.note_search_miss', miss_id=miss.id) }}">
+                            <input class="form-input wiki-search__input" type="text" name="note" maxlength="500" required
+                                   placeholder="What were you trying to do?" aria-label="What were you trying to do?">
+                            <button type="submit" class="btn-secondary">Send</button>
+                        </form>
+                        {% endif %}
+                        {% if asked and asked.times > 1 %}
+                        <p class="wiki-search__note">Asked {{ asked.times }} times this month by {{ asked.people }} {{ 'person' if asked.people == 1 else 'people' }}.</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="{{ url_for('wiki_assets.static', filename='js/wiki_reader.js') }}"></script>
+{% endblock %}

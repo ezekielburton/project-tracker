@@ -131,3 +131,41 @@ def test_a_soon_item_is_greyed_and_tagged(app):
     assert 'module-rail-item--disabled' in html
     assert '<span class="module-rail-soon">Soon</span>' in html
     assert '<a ' not in html
+
+
+def _parents(open_a=None, open_b=None):
+    items = [{'key': 'a', 'label': 'A', 'url': '/a', 'children': [{'key': 'a1', 'label': 'A1', 'url': '/a1'}]},
+             {'key': 'b', 'label': 'B', 'url': '/b', 'children': [{'key': 'b1', 'label': 'B1', 'url': '/b1'}]}]
+    for item, flag in zip(items, (open_a, open_b)):
+        if flag is not None:
+            item['open'] = flag
+    return items
+
+
+def test_only_the_active_section_opens_by_default(app):
+    assert _render(app, _parents(), active='a').count('module-rail-children--closed') == 1
+
+
+def test_an_items_open_flag_overrides_the_default(app):
+    assert _render(app, _parents(open_b=True), active='a').count('module-rail-children--closed') == 0
+    assert _render(app, _parents(open_a=False), active='a').count('module-rail-children--closed') == 2
+
+
+def test_only_an_opted_in_rail_keeps_several_sections_open(app):
+    source = "{% from '_shared_macros.html' import module_rail %}{{ module_rail(items, '', multi_open=flag) }}"
+    with app.app_context():
+        for flag in (False, True):
+            html = app.jinja_env.from_string(source).render(items=_parents(), flag=flag)
+            assert ('data-rail-multi-open' in html) == flag
+
+
+def test_the_call_body_can_sit_under_a_named_item(app):
+    source = ("{% from '_shared_macros.html' import module_rail %}"
+              "{% call module_rail(items, '', caller_after='b') %}<div class=\"slot\"></div>{% endcall %}")
+    items = [{'key': 'a', 'label': 'A', 'url': '/a'},
+             {'key': 'b', 'label': 'B', 'url': '/b'},
+             {'key': 'c', 'label': 'C', 'url': '/c'}]
+    with app.app_context():
+        html = app.jinja_env.from_string(source).render(items=items)
+    assert html.index('>B</a>') < html.index('class="slot"') < html.index('>C</a>')
+    assert html.count('class="slot"') == 1

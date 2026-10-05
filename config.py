@@ -1,4 +1,5 @@
 import os
+import tempfile
 from datetime import timedelta
 from dotenv import load_dotenv
 
@@ -83,4 +84,6 @@ class TestingConfig(Config):
     # The review lock is temporary and operational, so the suite runs with it
     # off and keeps covering every role the Client Servicing module is for.
     CLIENT_SERVICING_REVIEW_ONLY = False
+    # Tests never write to, or clean up, the real wiki upload folders.
+    WIKI_UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), 'ovp-test-wiki-uploads')
 

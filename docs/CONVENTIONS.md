@@ -133,3 +133,5 @@ Some couplings break silently — e.g. JS binding to a template's ids and classe
 ## 11. Design for non-technical users
 
 Most OVP users aren't technical. Prefer obvious controls — visible buttons, chips, a "⋯" that is always visible — over hover-only actions or shortcut keys.
+
+**Keep page text short.** Empty states are two to four words ("Nothing outstanding", "No matches"). No explanatory paragraphs, subtitles or how-it-works footnotes on pages — that belongs in the wiki, behind the "?" button. Keep only text that stops a mistake or says what to do next, and keep it to one short line.

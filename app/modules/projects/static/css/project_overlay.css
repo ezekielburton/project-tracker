@@ -231,7 +231,7 @@ body:has(.sidebar.sidebar--pinned) .project-overlay-backdrop {
 .project-overlay-sidebar-item.active,
 .project-overlay-sidebar-subitem.active {
     color: var(--section-color);
-    border-left-color: var(--tangerine);
+    border-left-color: var(--brand);
     font-weight: 700;
 }
 

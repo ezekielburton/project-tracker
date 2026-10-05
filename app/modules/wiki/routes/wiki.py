@@ -1,37 +1,167 @@
 import json, uuid, os
 from datetime import datetime
 from flask import (Blueprint, render_template, request, jsonify, abort, redirect, url_for, current_app, flash)
-from flask_login import login_required
+from flask_login import current_user, login_required
 from app.modules.core.shared.extensions import db
-from app.modules.core.shared.models import WikiSection, WikiArticle
-from app.modules.core.shared.lib.capabilities import can, require
+from app.modules.core.shared.models import WikiSection, WikiArticle, WikiSearchMiss
+from app.modules.core.shared.lib.capabilities import can, effective_user, require
 from app.modules.core.shared.lib.utils import slugify
 from sqlalchemy import update
-from app.modules.wiki.lib.blocks import load_blocks, sanitize_document
+from app.modules.wiki.lib.blocks import (
+    document_text, first_video_length, format_length, lead_with_video, load_blocks, sanitize_document,
+)
+from app.modules.wiki.lib.search import search_articles, searchable_count
+from app.modules.wiki.lib.search_misses import (
+    NOTE_MAX, asked_counts, dismiss, phrase_key, record_miss, write_next,
+)
+from app.modules.wiki.lib.freshness import review_label, reviewed_this_quarter
+from app.modules.wiki.lib.relevance import dimmed_sections, order_hits, reader_scope, roles_text, scope_param
+from app.modules.wiki.lib.reader import (
+    most_read_articles, readable_sections, rail_items, recently_updated, related_articles, start_here,
+)
+from app.modules.wiki.lib.views import read_count, record_view
+from app.modules.wiki.lib.votes import cast_vote, current_vote, not_useful
+from app.modules.wiki.lib.uploads import delete_unused, unused_uploads, upload_root
 from app.modules.wiki.lib.article_templates import picker_options, template_document
 from app.modules.wiki.lib.help_keys import HELP_KEY_GROUPS, coverage, is_registered, label_for
 
 wiki_bp = Blueprint('wiki', __name__, template_folder='../templates')
 
+
+@wiki_bp.app_template_filter('wiki_review_label')
+def _review_label_filter(reviewed_at):
+    return review_label(reviewed_at)
+
+
+@wiki_bp.app_template_filter('wiki_review_due')
+def _review_due_filter(reviewed_at):
+    return not reviewed_this_quarter(reviewed_at)
+
+
+@wiki_bp.app_template_filter('wiki_section_roles')
+def _section_roles_filter(section):
+    return roles_text(section)
+
+
+@wiki_bp.app_template_filter('wiki_duration')
+def _duration_filter(seconds):
+    return format_length(seconds)
+
+
+@wiki_bp.app_template_filter('wiki_video_length')
+def _video_length_filter(article):
+    return first_video_length(article.sections_json)
+
 # ------ Viewer ------
+
+def _count_read(article, source):
+    """Readers' visits count. People who manage the wiki don't, even while emulating."""
+    if not can('manage_wiki', current_user):
+        record_view(article.id, current_user.id, source)
+
+
+def _reader_context(active, active_sub=None, current_section_id=None,
+                    scope_endpoint='wiki.index', scope_args=None):
+    """What every reader page needs: the reader's role and scope, and the rail."""
+    role = effective_user().role
+    scope = reader_scope(request.args.get('scope'))
+    sections = readable_sections(include_drafts=can('manage_wiki'))
+    context = {
+        'role': role,
+        'scope': scope,
+        'scope_param': scope_param(scope),
+        'rail': rail_items(sections, role, scope, current_section_id, link_scope=scope_param(scope)),
+        'rail_active': active,
+        'rail_active_sub': active_sub,
+        'scope_endpoint': scope_endpoint,
+        'scope_args': scope_args or {},
+    }
+    return context, sections
+
 
 @wiki_bp.route('/wiki')
 @login_required
 def index():
-    if can('manage_wiki'):
-        sections = WikiSection.query.order_by(WikiSection.sort_order).all()
-    else:
-        sections = (WikiSection.query.filter_by(is_published=True).order_by(WikiSection.sort_order).all())
-    return render_template('wiki/index.html', sections=sections)
+    """The reader's home, on the rail: search, Start here, and what changed lately."""
+    context, sections = _reader_context('home')
+    return render_template('wiki/index.html', start=start_here(sections, context['role']),
+                           recent=recently_updated(sections),
+                           popular=most_read_articles(sections), **context)
+
 
 @wiki_bp.route('/wiki/article/<int:article_id>')
 @login_required
 def get_article(article_id):
+    """One article as its own page, on the rail."""
     article = WikiArticle.query.get_or_404(article_id)
     if not article.is_published and not can('manage_wiki'):
         abort(403)
-    blocks = load_blocks(article.sections_json)
-    return render_template('wiki/_article_content.html', article=article, blocks=blocks)
+    _count_read(article, 'page')
+    context, sections = _reader_context(f'section-{article.section_id}', f'article-{article.id}',
+                                        current_section_id=article.section_id,
+                                        scope_endpoint='wiki.get_article',
+                                        scope_args={'article_id': article.id})
+    return render_template('wiki/article.html', article=article,
+                           blocks=lead_with_video(load_blocks(article.sections_json)),
+                           related=related_articles(sections, article),
+                           reads=read_count(article.id),
+                           can_vote=not can('manage_wiki', current_user),
+                           vote=current_vote(article.id, current_user.id), **context)
+
+
+@wiki_bp.route('/wiki/article/<int:article_id>/vote', methods=['POST'])
+@login_required
+def vote_article(article_id):
+    """A reader's "Useful?" answer, always their own. Wiki managers don't vote."""
+    article = WikiArticle.query.get_or_404(article_id)
+    if not article.is_published or can('manage_wiki', current_user):
+        abort(403)
+    answer = request.form.get('helpful')
+    if answer in ('yes', 'no'):
+        cast_vote(article.id, current_user.id, answer == 'yes', request.form.get('note', ''))
+    return redirect(url_for('wiki.get_article', article_id=article.id, _anchor='wiki-useful'))
+
+
+@wiki_bp.route('/wiki/search')
+@login_required
+def search():
+    """Search results for ?q=. A search that finds nothing is recorded for Write next."""
+    query = request.args.get('q', '').strip()[:200]
+    include_drafts = can('manage_wiki')
+    context, _ = _reader_context('search', scope_endpoint='wiki.search',
+                                 scope_args={'q': query} if query else {})
+    role, scope = context['role'], context['scope']
+    hits = order_hits(search_articles(query, include_drafts=include_drafts) if query else [],
+                      role, scope)
+
+    miss = asked = searched = None
+    if query and not hits:
+        searched = searchable_count(include_drafts=include_drafts)
+        key = phrase_key(query)
+        if key:
+            # Authors' own misses are not reader demand. The real user decides, so emulating is skipped too.
+            if not can('manage_wiki', current_user):
+                miss = record_miss(query, key, current_user.id)
+            asked = asked_counts(key)
+
+    return render_template('wiki/search.html', query=query, hits=hits,
+                           miss=miss, asked=asked, searched=searched,
+                           dimmed=dimmed_sections([hit.section for hit in hits], role, scope),
+                           **context)
+
+
+@wiki_bp.route('/wiki/search/miss/<int:miss_id>/note', methods=['POST'])
+@login_required
+def note_search_miss(miss_id):
+    """Attach what the person was trying to do to their own unanswered search."""
+    miss = WikiSearchMiss.query.get_or_404(miss_id)
+    if miss.user_id != current_user.id:
+        abort(404)
+    note = request.form.get('note', '').strip()[:NOTE_MAX]
+    if note:
+        miss.note = note
+        db.session.commit()
+    return redirect(url_for('wiki.search', q=miss.phrase))
 
 # ------ Contextual help (the "?" tray) ------
 
@@ -59,8 +189,10 @@ def help_article(key):
         return render_template('wiki/_help_empty.html', key=key, label=label_for(key),
                                can_write=can('manage_wiki'))
 
+    _count_read(article, 'tray')
     return render_template('wiki/_help_article.html', article=article,
-                           blocks=load_blocks(article.sections_json))
+                           blocks=lead_with_video(load_blocks(article.sections_json)),
+                           reads=read_count(article.id))
 
 
 @wiki_bp.route('/wiki/help/article/<int:article_id>')
@@ -70,8 +202,10 @@ def help_article_by_id(article_id):
     article = WikiArticle.query.get_or_404(article_id)
     if not article.is_published and not can('manage_wiki'):
         abort(403)
+    _count_read(article, 'tray')
     return render_template('wiki/_help_article.html', article=article,
-                           blocks=load_blocks(article.sections_json))
+                           blocks=lead_with_video(load_blocks(article.sections_json)),
+                           reads=read_count(article.id))
 
 
 # ------ Image upload ------
@@ -90,7 +224,7 @@ def upload_image():
         return jsonify({'success': False, 'error': 'File type not allowed'}), 400
     
     filename = f"{uuid.uuid4().hex}.{ext}"
-    upload_dir = os.path.join(current_app.root_path, 'static', 'wiki-uploads')
+    upload_dir = upload_root()
     os.makedirs(upload_dir, exist_ok=True)
     file.save(os.path.join(upload_dir, filename))
 
@@ -127,7 +261,7 @@ def upload_video():
         return jsonify({'success': False, 'error': 'File type not allowed'}), 400
 
     filename = f"{uuid.uuid4().hex}.{ext}"
-    upload_dir = os.path.join(current_app.root_path, 'static', 'wiki-uploads', 'videos')
+    upload_dir = os.path.join(upload_root(), 'videos')
     os.makedirs(upload_dir, exist_ok=True)
     path = os.path.join(upload_dir, filename)
 
@@ -254,7 +388,10 @@ def editor_dashboard():
     return render_template('wiki/editor_dashboard.html', sections=sections,
                            templates=picker_options(),
                            help_key_groups=HELP_KEY_GROUPS,
-                           coverage=coverage(claimed))
+                           coverage=coverage(claimed),
+                           write_next=write_next(),
+                           not_useful=not_useful(),
+                           unused=unused_uploads())
 
 @wiki_bp.route('/wiki/editor/sections/reorder', methods=['POST'])
 @login_required
@@ -277,6 +414,26 @@ def reorder_articles():
     return jsonify({'success': True})
 
 
+@wiki_bp.route('/wiki/editor/misses/dismiss', methods=['POST'])
+@login_required
+@require('manage_wiki', real_user=True)
+def dismiss_search_miss():
+    key = request.form.get('phrase_key', '').strip()
+    if key:
+        dismiss(key)
+    return redirect(url_for('wiki.editor_dashboard'))
+
+
+@wiki_bp.route('/wiki/editor/uploads/clean', methods=['POST'])
+@login_required
+@require('manage_wiki', real_user=True)
+def clean_uploads():
+    removed = delete_unused()
+    if removed:
+        flash(f"Deleted {removed} unused file{'' if removed == 1 else 's'}", 'info')
+    return redirect(url_for('wiki.editor_dashboard'))
+
+
 @wiki_bp.route('/wiki/editor/article/create', methods=['POST'])
 @login_required
 @require('manage_wiki', real_user=True)
@@ -291,11 +448,15 @@ def create_article():
         return redirect(url_for('wiki.editor_dashboard'))
 
     section = WikiSection.query.get_or_404(section_id)
+    document = template_document(template)
     article = WikiArticle(
         section_id=section.id,
         title=title,
         slug=slugify(title),
-        sections_json=json.dumps(template_document(template)),
+        sections_json=json.dumps(document),
+        search_text=document_text(document),
+        created_by_id=current_user.id,
+        updated_by_id=current_user.id,
         sort_order=_next_sort_order(WikiArticle, section_id=section.id),
         is_published=False
     )
@@ -344,8 +505,11 @@ def save_article():
     article.title         = title
     article.slug          = article.slug or slugify(title)
     article.sections_json = json.dumps(document)
+    article.search_text   = document_text(document)
     article.is_published  = is_published
     article.updated_at    = datetime.utcnow()
+    article.updated_by_id = current_user.id
+    article.reviewed_at   = article.updated_at
 
     # The draft is now live, so clear it.
     article.draft_sections_json = None
@@ -403,6 +567,22 @@ def toggle_article_publish(article_id):
     article.is_published = not article.is_published
     db.session.commit()
     return jsonify({'success': True, 'is_published': article.is_published})
+
+
+@wiki_bp.route('/wiki/editor/article/<int:article_id>/reviewed', methods=['POST'])
+@login_required
+@require('manage_wiki', real_user=True)
+def mark_reviewed(article_id):
+    """Confirm an unchanged article is still right, leaving its Last updated date alone."""
+    article = WikiArticle.query.get_or_404(article_id)
+    db.session.execute(
+        update(WikiArticle)
+        .where(WikiArticle.id == article.id)
+        # Assigning updated_at to itself stops onupdate firing.
+        .values(reviewed_at=datetime.utcnow(), updated_at=WikiArticle.updated_at)
+    )
+    db.session.commit()
+    return redirect(url_for('wiki.editor_dashboard'))
 
 
 @wiki_bp.route('/wiki/editor/article/<int:article_id>/delete', methods=['POST'])

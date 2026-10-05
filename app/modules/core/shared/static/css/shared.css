@@ -301,8 +301,8 @@
 }
 
 .tab-strip-item.active {
-    color: var(--tangerine);
-    border-bottom-color: var(--tangerine);
+    color: var(--brand);
+    border-bottom-color: var(--brand);
 }
 
 .tab-strip-item:hover:not(.active) {
@@ -576,7 +576,7 @@ status pill. */
 /* Tangerine wash marks the active item; it reads on both themes, so no dark override. */
 .module-rail-item--active {
     background: rgba(242, 127, 85, 0.14);
-    color: var(--tangerine);
+    color: var(--brand);
     font-weight: 600;
 }
 
@@ -602,7 +602,7 @@ status pill. */
 
 .module-rail-item--active .module-rail-count {
     background: rgba(242, 127, 85, 0.18);
-    color: var(--tangerine);
+    color: var(--brand);
 }
 
 /* Sub-pages of the open section, indented under it on a guide line. */
@@ -663,7 +663,7 @@ status pill. */
 
 .module-rail-subitem--active {
     background: var(--surface-hover);
-    color: var(--tangerine);
+    color: var(--brand);
     font-weight: 600;
 }
 
