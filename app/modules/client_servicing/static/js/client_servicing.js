@@ -782,7 +782,7 @@
             tr.className = 'cs-no-matches';
             var td = document.createElement('td');
             td.colSpan = table.querySelectorAll('thead th').length || 1;
-            td.textContent = 'No projects match your search or filters.';
+            td.textContent = 'No matches';
             tr.appendChild(td);
             tb.appendChild(tr);
         } else if (!on && existing) {

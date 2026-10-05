@@ -370,7 +370,7 @@
                             {% if risk_overdue.no_deadline %}
                                 {% for item in risk_overdue.no_deadline %}{{ dash_leadership_risk_row(item) }}{% endfor %}
                             {% else %}
-                                <p class="dash-empty-state">Every active project has a deadline set.</p>
+                                <p class="dash-empty-state">None</p>
                             {% endif %}
                             </div>
                         </div>
@@ -404,7 +404,7 @@
                 {% if waiting_on_others %}
                     {% for item in waiting_on_others %}{{ dash_leadership_waiting_row(item) }}{% endfor %}
                 {% else %}
-                    <p class="dash-empty-state">Nothing waiting on a client or a designer right now.</p>
+                    <p class="dash-empty-state">Nothing waiting</p>
                 {% endif %}
                 </div>
             </div>

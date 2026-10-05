@@ -5,7 +5,8 @@
 // never binds twice. A disabled item is a <span> with no href and stays inert.
 //
 // A section with sub-pages opens its list instead of loading a page, and
-// closes any other open list, so one section is open at a time.
+// closes any other open list, so one section is open at a time. A rail
+// marked data-rail-multi-open lets each list open and close on its own.
 // mobile_menu.js keeps the phone menu open for it.
 (function () {
     if (window._moduleRailNavWired) return;
@@ -25,7 +26,7 @@
             if (!list || !list.classList.contains('module-rail-children')) return;
             var opening = list.classList.contains(CLOSED);
             var nav = item.closest('.module-rail-nav');
-            if (opening && nav) {
+            if (opening && nav && !item.closest('[data-rail-multi-open]')) {
                 nav.querySelectorAll('.module-rail-children').forEach(function (other) {
                     other.classList.add(CLOSED);
                 });

@@ -34,12 +34,15 @@
 ===================== */
 
 :root {
-    --tangerine: #F27F55;
+    --tangerine: #B04A1C;
+    /* The brand orange: logo, sidebar and navigation. Same in both themes.
+       --tangerine is the readable orange for text, buttons and everything else. */
+    --brand: #F27F55;
     --sandstone: #F5F0E8;
     --canary: #E5D259;
     --ashen: #94B4BB;
     --oak: #A07C5A;
-    --pine: #63775B;
+    --pine: #4F6247;
     --rose: #D9A2A8;
     --background: #f5f1ed;
     --page-background: #F5F0E8;
@@ -60,7 +63,7 @@
     --white: #fafafa;
     --black: #1A1A1A;
     --grey-light: #E8E8E8;
-    --grey-mid: #AAAAAA;
+    --grey-mid: #696969;
     --grey-dark: #555555;
 
     --font-headline: 'Barlow Condensed', sans-serif;
@@ -101,7 +104,7 @@
     /* Semantic aliases */
     --color-text:   #1A1A1A;
     --text-primary: #1A1A1A;
-    --text-muted:   #888888;
+    --text-muted:   #5C5C5C;
     --border:        #D4CCBE;
     --border-subtle: #EDE8E0;
     --surface-hover: #EDEAE4;
@@ -112,7 +115,7 @@
     --surface-raised: var(--plain-white);
     --text: var(--black);
     --text-faint: var(--grey-mid);
-    --border-strong: var(--grey-mid);
+    --border-strong: #AAAAAA;
     --scrim: rgba(245, 240, 232, 0.85); /* .modal-overlay backdrop */
 
     /* Global trays — the unread bubble and the ink on the active launcher */
@@ -207,6 +210,8 @@
    --sandstone get dark ones. */
 :root[data-theme="dark"] {
     --danger-text: #FF7A7A;
+    --tangerine: #F27F55;
+    --pine: #63775B;
     --background: #14110D;
     --page-background: #14110D;
     --surface-sunken: #14110D;
@@ -218,13 +223,13 @@
     --black: #F2EDE4;
 
     --text: #F2EDE4;
-    --text-faint: #7d7466;
+    --text-faint: #9a8f7e;
     --text-muted: #b3a89a;
     --text-primary: #F2EDE4;
     --color-text: #F2EDE4;
 
     --grey-light: #372F26;
-    --grey-mid: #7d7466;
+    --grey-mid: #9a8f7e;
     --grey-dark: #b3a89a;
 
     --border: #372F26;
@@ -428,7 +433,7 @@ textarea {
     height: 100vh;
     width: var(--sidebar-min);
     background-color: var(--white);
-    border-right: 2px solid var(--tangerine);
+    border-right: 2px solid var(--brand);
     z-index: 300;
     overflow: hidden;
     transition: width var(--sidebar-transition);
@@ -477,7 +482,7 @@ textarea {
 .sidebar-logo-min {
     font-family: var(--font-logo);
     font-size: 2.2rem;
-    color: var(--tangerine);
+    color: var(--brand);
     line-height: 1;
     flex-shrink: 0;
     transition: opacity var(--sidebar-transition);
@@ -493,7 +498,7 @@ textarea {
 .sidebar-logo-max {
     font-family: var(--font-logo);
     font-size: var(--text-med);
-    color: var(--tangerine);
+    color: var(--brand);
     line-height: 1;
     opacity: 0;
     max-width: 0;
@@ -528,12 +533,12 @@ textarea {
 
 .sidebar.sidebar--pinned .sidebar-pin-btn {
     display: flex;
-    color: var(--tangerine);
+    color: var(--brand);
     /* Tangerine = active/pinned state */
 }
 
 .sidebar-pin-btn:hover {
-    color: var(--tangerine);
+    color: var(--brand);
 }
 
 /* ── Scrollable nav area ── */
@@ -579,7 +584,7 @@ textarea {
 /* Tangerine divider line between sections */
 .sidebar-divider {
     height: 2px;
-    background-color: var(--tangerine);
+    background-color: var(--brand);
     margin: 0.2rem 0.75rem;
     opacity: 0.25;
 }
@@ -671,11 +676,11 @@ textarea {
 /* Active state — highlights the current page's item */
 .sidebar-item--active {
     background-color: var(--sandstone);
-    color: var(--tangerine);
+    color: var(--brand);
 }
 
 .sidebar-item--active svg {
-    color: var(--tangerine);
+    color: var(--brand);
 }
 
 /* Bell badge — unread count on the topbar bell button */
@@ -683,7 +688,7 @@ textarea {
     position: absolute;
     top: -4px;
     right: -4px;
-    background-color: var(--tangerine);
+    background-color: var(--brand);
     color: var(--white);
     font-family: var(--font-mono);
     font-size: 0.65rem;
@@ -780,7 +785,7 @@ body:has(.sidebar.sidebar--pinned) .app-header {
 .theme-toggle--light .theme-toggle-icon--sun,
 .theme-toggle--dark .theme-toggle-icon--moon {
     background-color: var(--white);
-    color: var(--tangerine);
+    color: var(--brand);
     box-shadow: var(--shadow);
 }
 
@@ -800,7 +805,7 @@ body:has(.sidebar.sidebar--pinned) .app-header {
     left: 0;
     width: 0%;
     height: 3px;
-    background-color: var(--tangerine);
+    background-color: var(--brand);
     opacity: 0;
     transition: width 0.2s ease, opacity 0.2s ease;
 }
@@ -968,7 +973,7 @@ button.account-dropdown-item {
 
 .settings-nav-item.active {
     background-color: rgba(242, 127, 85, 0.14);
-    color: var(--tangerine);
+    color: var(--brand);
     font-weight: 600;
 }
 
@@ -1058,8 +1063,7 @@ body.has-sidebar .main-content {
 
 /* Shared page-root wrappers get the same 2rem top clearance as .project-list-page. */
 .page-container,
-.page-header,
-.wiki-wrapper {
+.page-header {
     padding-top: 2rem;
 }
 
@@ -2380,7 +2384,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 }
 
 .admin-nav-btn.active {
-    border-color: var(--tangerine);
+    border-color: var(--brand);
     color: var(--black);
 }
 
@@ -2957,7 +2961,7 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 }
 
 .pt-tab-btn.active {
-    background: var(--tangerine);
+    background: var(--brand);
     color: var(--sandstone);
 }
 

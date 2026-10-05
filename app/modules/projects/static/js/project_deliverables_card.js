@@ -64,7 +64,7 @@ window.ProjectDeliverablesCard = (function () {
             if (btn) {
                 btn.addEventListener('click', function () {
                     if (btn.dataset.skippableCount === '0') {
-                        showToast('Add at least one deliverable before skipping to Pre-Production.', 'error');
+                        showToast('Add a deliverable first', 'error');
                         return;
                     }
                     if (!form) return;
@@ -515,7 +515,7 @@ window.ProjectDeliverablesCard = (function () {
                     function (row) { return row.dataset.deleted !== 'true'; }
                 ) : [];
                 if (!visibleRows.length) {
-                    showToast('This customer has no saved deliverables to duplicate.', 'error');
+                    showToast('Nothing to duplicate', 'error');
                     return;
                 }
                 var scopeSelectEl = rootEl.querySelector('#overlay-deliverables-edit-scope-select');

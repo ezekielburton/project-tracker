@@ -65,6 +65,8 @@ HELP_KEY_GROUPS = [
     ('Wiki', [
         ('wiki.editor', 'Writing a wiki article'),
         ('wiki.help-keys', 'Help keys and coverage'),
+        ('wiki.search', 'Searching the wiki'),
+        ('wiki.reading', 'Reading the wiki'),
     ]),
 ]
 

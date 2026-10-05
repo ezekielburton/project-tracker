@@ -1296,7 +1296,7 @@
 
                 if (!items.length) {
                     container.innerHTML = '<p class="dash-empty-state">' +
-                        (filterType === 'mine' ? 'Nothing needs your action right now.' : 'Nothing is currently waiting on anyone else.') +
+                        (filterType === 'mine' ? 'Nothing needs you' : 'Nothing waiting') +
                         '</p>';
                 } else {
                     // showWaiting=true for BOTH tabs (widened 16 Jul 2026,
@@ -1820,7 +1820,7 @@
             .then(function (r) { return r.json(); })
             .then(function (items) {
                 var list = document.getElementById('dash-leadership-waiting-list');
-                if (list) list.innerHTML = renderRowsOrEmpty(items, leadershipWaitingRow, 'Nothing waiting on a client or a designer right now.');
+                if (list) list.innerHTML = renderRowsOrEmpty(items, leadershipWaitingRow, 'Nothing waiting');
                 setFocusPill('dash-focus-pill-waiting', items.length, 'amber', 'waiting on others');
             })
             .catch(function () { });

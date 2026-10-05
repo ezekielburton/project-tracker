@@ -132,6 +132,15 @@
             });
         });
 
+        // Write next panel: start an article for a question people searched for.
+        document.querySelectorAll('.wiki-write-next__write').forEach(function (button) {
+            button.addEventListener('click', function () {
+                titleField.value = button.dataset.phrase || '';
+                keySelect.value = '';
+                open(modal);
+            });
+        });
+
         // Arriving from the Help tray's "Write this article".
         var requested = new URLSearchParams(window.location.search).get('help_key');
         if (requested) {
@@ -166,6 +175,16 @@
         });
     }
 
+    // Clean up asks first: deleted files can't be brought back.
+    function wireCleanUp() {
+        var form = document.querySelector('.wiki-uploads-clean');
+        if (!form) { return; }
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            showConfirm(form.dataset.confirm, function () { form.submit(); }, 'Clean up');
+        });
+    }
+
     function init() {
         // The section list is absent when there are no sections; the modals are not.
         if (!document.getElementById(TEMPLATE_CONTRACT[1])) { return; }
@@ -173,6 +192,7 @@
         wireSectionModal();
         wireArticleModal();
         wireClosing();
+        wireCleanUp();
     }
 
     init();

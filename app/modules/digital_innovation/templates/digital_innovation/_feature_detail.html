@@ -73,7 +73,7 @@
 
 {% if steps_total_count > 0 and steps_done_count == steps_total_count and is_last_stage %}
 <div class="di-advance-banner">
-    <p>All Implementation steps are done — add another step above, or close this feature.</p>
+    <p>All steps done</p>
     <button type="button" class="btn-primary di-close-feature-btn">Close this feature</button>
 </div>
 {% endif %}
@@ -94,6 +94,3 @@
 {% endif %}
 
 <hr class="di-detail-divider">
-{% if can_view_costs %}
-<p class="di-feature-footer-note">Costs, client charge and profit are tracked once, at the project level.</p>
-{% endif %}

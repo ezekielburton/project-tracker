@@ -110,6 +110,7 @@ points `<video>`/`<audio src>` straight at the route so the browser drives its
 own range requests. The NAS stays the source of truth — the cache is disposable.
 `preview_cache_cleanup.py` (repo root) empties the cache; installing its daily
 systemd timer / cron job on the server is a manual step.
+Reference files and Submit to Client use `upload_or_queue`: if the NAS is down the file is kept on the server and sent later by `nas-outbox-flush.timer`.
 
 ## Details edit mode
 The Details tab's Edit button (project_overlay_edit.js) swaps every

@@ -15,7 +15,7 @@
         }
 
         static get sanitize() {
-            return { source: false, url: false };
+            return { source: false, url: false, length: false };
         }
 
         constructor(options) {
@@ -25,7 +25,8 @@
             this.readOnly = !!options.readOnly;
             this.data = {
                 source: data.source === 'upload' ? 'upload' : 'embed',
-                url: data.url || ''
+                url: data.url || '',
+                length: data.length || ''
             };
         }
 
@@ -36,6 +37,7 @@
             this.wrapper.appendChild(this.renderModes());
             this.wrapper.appendChild(this.renderEmbedField());
             this.wrapper.appendChild(this.renderUploadField());
+            this.wrapper.appendChild(this.renderLengthField());
 
             this.status = document.createElement('p');
             this.status.className = 'wiki-editor-video__status';
@@ -97,9 +99,44 @@
             return holder;
         }
 
+        renderLengthField() {
+            var self = this;
+            this.lengthInput = document.createElement('input');
+            this.lengthInput.type = 'number';
+            this.lengthInput.min = '1';
+            this.lengthInput.max = '3600';
+            this.lengthInput.className = 'wiki-editor-video__input wiki-editor-video__length';
+            this.lengthInput.placeholder = 'Length in seconds';
+            this.lengthInput.disabled = this.readOnly;
+            this.lengthInput.value = this.data.length;
+            this.lengthInput.addEventListener('input', function () {
+                self.data.length = self.lengthInput.value;
+            });
+            return this.lengthInput;
+        }
+
+        // An uploaded file knows its own length, so the field fills itself.
+        readLength(file) {
+            var self = this;
+            var probe = document.createElement('video');
+            var url = URL.createObjectURL(file);
+            probe.preload = 'metadata';
+            probe.onloadedmetadata = function () {
+                var seconds = Math.round(probe.duration);
+                URL.revokeObjectURL(url);
+                if (isFinite(seconds) && seconds > 0) {
+                    self.data.length = seconds;
+                    self.lengthInput.value = seconds;
+                }
+            };
+            probe.src = url;
+        }
+
         setMode(mode) {
             this.data.source = mode;
             this.data.url = '';
+            this.data.length = '';
+            this.lengthInput.value = '';
             this.embedInput.value = '';
             this.fileInput.value = '';
             this.showStatus('');
@@ -120,6 +157,7 @@
             var form = new FormData();
             form.append('file', file);
             this.showStatus('Uploading…');
+            this.readLength(file);
 
             fetch(this.uploadUrl, { method: 'POST', body: form, credentials: 'same-origin' })
                 .then(function (response) { return response.json(); })
@@ -139,7 +177,9 @@
         }
 
         save() {
-            return { source: this.data.source, url: this.data.url };
+            var saved = { source: this.data.source, url: this.data.url };
+            if (this.data.length) { saved.length = Number(this.data.length); }
+            return saved;
         }
 
         validate(data) {

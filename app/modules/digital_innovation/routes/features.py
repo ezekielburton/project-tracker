@@ -13,19 +13,17 @@ from app.modules.digital_innovation.routes.blueprint import digital_innovation_b
 from app.modules.digital_innovation.models import DiFeature, DiFeatureStep, DiProject, DI_STAGES
 from app.modules.digital_innovation.lib import step_engine
 from app.modules.digital_innovation.lib.feature_detail import build_feature_detail_context
-from app.modules.digital_innovation.lib.access import can_view_di_performance, can_edit_di_board, can_view_di_project
+from app.modules.digital_innovation.lib.access import can_edit_di_board, can_view_di_project
 
 
 def _render_feature_detail(feature):
     """The feature-detail modal fragment. Every route here returns this.
-    can_view_costs shows the cost note; can_edit_board decides whether the
-    interactive controls are rendered at all."""
+    can_edit_board decides whether the interactive controls are rendered at all."""
     context = build_feature_detail_context(feature)
     return render_template(
         'digital_innovation/_feature_detail.html',
         feature=feature,
         project=feature.project,
-        can_view_costs=can_view_di_performance(current_user),
         can_edit_board=can_edit_di_board(current_user),
         **context,
     )

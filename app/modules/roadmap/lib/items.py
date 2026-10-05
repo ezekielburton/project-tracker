@@ -10,7 +10,7 @@ LIVE = 'live'
 IN_PROGRESS = 'in_progress'
 COMING = 'coming'
 
-UPDATED = date(2026, 10, 1)
+UPDATED = date(2026, 10, 2)
 
 # Deliveries count down to the end of the due day, Dubai time.
 DEADLINE_TIME = time(23, 59, 59)
@@ -40,25 +40,25 @@ ITEMS = [
     {'name': 'Production', 'month': 'oct', 'label': '31 Oct', 'due': date(2026, 10, 31), 'status': COMING,
      'note': 'Production picks up jobs when design is done, with materials, stock and quality checks.'},
 
-    {'name': 'Optimisation pass', 'month': 'nov', 'label': 'Early Nov', 'status': COMING,
+    {'name': 'Logistics', 'month': 'nov', 'label': 'Mid Nov', 'status': COMING,
+     'note': 'Deliveries, installs and removals, planned with the team.'},
+    {'name': 'Optimisation pass', 'month': 'nov', 'label': 'Late Nov', 'status': COMING,
      'note': 'Time set aside to make OVP faster and more reliable before new features start.'},
-    {'name': 'UI cleanup pass', 'month': 'nov', 'label': 'Early Nov', 'status': COMING,
+    {'name': 'UI cleanup pass', 'month': 'nov', 'label': 'Late Nov', 'status': COMING,
      'note': 'Every page tidied to one consistent style. Same colours, nothing to relearn.'},
-    {'name': 'Colour directory', 'month': 'nov', 'status': COMING,
-     'note': 'Client colours and Pantones in one place.'},
-    {'name': 'Design file templates', 'month': 'nov', 'status': COMING,
-     'note': 'The template library, brought up to date.'},
-    {'name': 'Notifications', 'month': 'nov', 'status': COMING,
-     'note': 'Clearer notifications, and you choose what you get.'},
-    {'name': 'Designer work calendar', 'month': 'nov', 'status': COMING,
-     'note': 'Hours and time booked against projects.'},
-    {'name': 'Client feedback forms', 'month': 'nov', 'status': COMING,
-     'note': 'Send feedback forms to clients and see the results.'},
 
+    {'name': 'Colour directory', 'month': 'dec', 'status': COMING,
+     'note': 'Client colours and Pantones in one place.'},
+    {'name': 'Design file templates', 'month': 'dec', 'status': COMING,
+     'note': 'The template library, brought up to date.'},
+    {'name': 'Notifications', 'month': 'dec', 'status': COMING,
+     'note': 'Clearer notifications, and you choose what you get.'},
+    {'name': 'Designer work calendar', 'month': 'dec', 'status': COMING,
+     'note': 'Hours and time booked against projects.'},
+    {'name': 'Client feedback forms', 'month': 'dec', 'status': COMING,
+     'note': 'Send feedback forms to clients and see the results.'},
     {'name': 'Beauty event tool', 'month': 'dec', 'status': COMING,
      'note': 'Planning and running beauty events.'},
-    {'name': 'Logistics', 'month': 'dec', 'status': COMING,
-     'note': 'Deliveries, installs and removals, planned with the team.'},
     {'name': 'Financial planning', 'month': 'jan', 'status': COMING,
      'note': 'Forecasts built from live jobs, planned with finance.'},
     {'name': 'OVP app for phone and desktop', 'month': 'feb', 'status': COMING,

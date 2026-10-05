@@ -1,0 +1,63 @@
+{# Searches that found nothing and still find nothing, most asked first. #}
+<aside class="wiki-write-next">
+    <p class="wiki-coverage__subtitle">
+        Write next
+        <span class="wiki-coverage__subcount">{{ write_next | length }}</span>
+    </p>
+
+    {% if write_next %}
+    <ul class="wiki-write-next__list">
+        {% for item in write_next %}
+        <li class="wiki-write-next__row">
+            <div class="wiki-write-next__text">
+                <span class="wiki-write-next__phrase">“{{ item.phrase }}”</span>
+                <span class="wiki-write-next__count">
+                    {{ item.times }}× · {{ item.people }} {{ 'person' if item.people == 1 else 'people' }} · {{ item.last_at.strftime('%d %b') }}
+                </span>
+                {% for note in item.notes %}
+                <span class="wiki-write-next__note">{{ note }}</span>
+                {% endfor %}
+            </div>
+            <div class="wiki-write-next__actions">
+                <button type="button" class="btn-secondary btn-sm wiki-write-next__write"
+                    data-phrase="{{ item.phrase }}">Write</button>
+                <form method="post" action="{{ url_for('wiki.dismiss_search_miss') }}">
+                    <input type="hidden" name="phrase_key" value="{{ item.key }}">
+                    <button type="submit" class="btn-secondary btn-sm">Dismiss</button>
+                </form>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="wiki-editor-empty">Nothing waiting.</p>
+    {% endif %}
+
+    <p class="wiki-coverage__subtitle wiki-write-next__group">
+        Not useful
+        <span class="wiki-coverage__subcount">{{ not_useful | length }}</span>
+    </p>
+
+    {% if not_useful %}
+    <ul class="wiki-write-next__list">
+        {% for item in not_useful %}
+        <li class="wiki-write-next__row">
+            <div class="wiki-write-next__text">
+                <span class="wiki-write-next__phrase">{{ item.article.title }}</span>
+                <span class="wiki-write-next__count">
+                    {{ item.noes }} × no · {{ item.last_at.strftime('%d %b') }}
+                </span>
+                {% for note in item.notes %}
+                <span class="wiki-write-next__note">{{ note }}</span>
+                {% endfor %}
+            </div>
+            <div class="wiki-write-next__actions">
+                <a class="btn-secondary btn-sm" href="{{ url_for('wiki.edit_article', article_id=item.article.id) }}">Edit</a>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="wiki-editor-empty">Nothing waiting.</p>
+    {% endif %}
+</aside>

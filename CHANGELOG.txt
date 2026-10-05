@@ -1,16 +1,30 @@
 ================================================================================
-VITAMIN HELIX — CHANGELOG
+ONE VITAMIN PLATFORM — CHANGELOG
 ===============================================================================
 
 =======================================================================================
-v2.5.4 - Optimizations & Wiki Reader
+v2.6.2 - Revamped Wiki - 05.10.2026
 =======================================================================================
 
 New Features:
 
 - Wiki reader revamped!  Find the ? on relevant pages to immediately open the relevant help article
-- OVP is now mobile friendly! Use it on the go
+- Videos will be added over the course of this week.
 
+Adjustments:
+
+- Uploads no longer fail when the NAS is down. Files are kept on the server and sent automatically once it's back.
+
+Bug Fixes:
+
+
+=======================================================================================
+v2.6 - Client Servicing Module
+=======================================================================================
+
+New Features:
+
+- Client Servicing module is live! The old excel has been retired.
 Adjustments:
 
 - HSE module given a polish pass to be more relevant to the work done

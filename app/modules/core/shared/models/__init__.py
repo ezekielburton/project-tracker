@@ -16,8 +16,9 @@ from .chat_tray import ChatTrayProject
 from .friction import FrictionLogEntry
 from .blog import BlogPost, BlogComment
 from .feedback import FeatureRequest, FeatureRequestUpvote, FeatureRequestComment, BugReport, BugReportComment
-from .wiki import WikiSection, WikiArticle
+from .wiki import WikiSection, WikiArticle, WikiSearchMiss, WikiArticleView, WikiArticleVote
 from .achievements import AchievementCategory, AchievementBorder, Achievement, UserAchievement, UserDisplaySettings, UserPinnedAchievement
+from .nas_outbox import PendingNasUpload
 
 __all__ = [
     'load_user',
@@ -84,10 +85,14 @@ __all__ = [
     'BugReportComment',
     'WikiSection',
     'WikiArticle',
+    'WikiSearchMiss',
+    'WikiArticleView',
+    'WikiArticleVote',
     'AchievementCategory',
     'AchievementBorder',
     'Achievement',
     'UserAchievement',
     'UserDisplaySettings',
     'UserPinnedAchievement',
+    'PendingNasUpload',
 ]

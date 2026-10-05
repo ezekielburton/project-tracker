@@ -48,7 +48,7 @@ def test_settings_screen_is_open_to_admin_and_shows_current_values(app, client, 
     assert 'id="di-settings-form"' in body
     assert 'value="75.50"' in body
     assert 'value="USD"' in body
-    assert 'existing entries keep the rate they were saved with' in body
+    assert 'Applies to new entries only' in body
 
 
 @pytest.mark.parametrize('role', ['management', 'designer'])

@@ -24,11 +24,6 @@
                     </div>
                 </div>
 
-                <p class="hse-lists-intro">
-                    What the site is <em>supposed</em> to do, and how often. Every row here
-                    puts items on the calendar — and gives inspection coverage its
-                    denominator.
-                </p>
 
                 <div class="hse-sched-layout">
                     <div class="hse-sched-table-wrap">
@@ -76,9 +71,7 @@
                                 {% else %}
                                 <tr class="hse-sched-empty">
                                     <td colspan="6">
-                                        Nothing scheduled yet. Add his recurring week here —
-                                        vehicle checks, tool box talks, forklift inspections —
-                                        and the calendar fills itself.
+                                        Nothing scheduled
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -166,10 +159,6 @@
                             <span class="hse-sched-preview-dates" id="hse-sched-preview-dates">—</span>
                         </div>
 
-                        <p class="hse-sched-panel-note">
-                            A schedule only says what <em>should</em> happen. Coverage on the
-                            performance page is what was done divided by what was due.
-                        </p>
 
                         <div class="hse-sched-panel-actions">
                             {# Retire lives in the panel, not on each table row, to avoid misclicks. #}

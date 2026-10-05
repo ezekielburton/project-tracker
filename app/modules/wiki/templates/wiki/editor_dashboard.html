@@ -61,10 +61,20 @@
                         <span class="wiki-article-key{{ ' is-unset' if not article.help_key else '' }}">
                             {{ article.help_key or 'no help key' }}
                         </span>
+                        {% if article.reviewed_at | wiki_review_due %}
+                        <span class="wiki-review-badge">Review due</span>
+                        {% endif %}
                     </span>
                 </span>
-                <a href="{{ url_for('wiki.edit_article', article_id=article.id) }}"
-                    class="btn-secondary btn-sm">Edit</a>
+                <span class="wiki-editor-row-actions">
+                    {% if article.reviewed_at | wiki_review_due %}
+                    <form method="post" action="{{ url_for('wiki.mark_reviewed', article_id=article.id) }}">
+                        <button type="submit" class="btn-secondary btn-sm">Reviewed</button>
+                    </form>
+                    {% endif %}
+                    <a href="{{ url_for('wiki.edit_article', article_id=article.id) }}"
+                        class="btn-secondary btn-sm">Edit</a>
+                </span>
             </div>
             {% endfor %}
             <p class="wiki-editor-empty">No articles yet. Drag one here, or use New article.</p>
@@ -79,7 +89,19 @@
 {% endif %}
 </div>
 
-{% include 'wiki/_coverage_panel.html' %}
+<div class="wiki-editor-side">
+    {% include 'wiki/_coverage_panel.html' %}
+    {% include 'wiki/_write_next_panel.html' %}
+    {% if unused %}
+    <form class="wiki-uploads-clean" method="post" action="{{ url_for('wiki.clean_uploads') }}"
+          data-confirm="Delete {{ unused | length }} unused file{{ '' if unused | length == 1 else 's' }}? This can't be undone.">
+        <span class="wiki-uploads-clean__text">
+            Unused uploads: {{ unused | length }} file{{ '' if unused | length == 1 else 's' }} · {{ ((unused | sum(attribute='size')) / 1048576) | round(1) }} MB
+        </span>
+        <button type="submit" class="btn-secondary btn-sm">Clean up</button>
+    </form>
+    {% endif %}
+</div>
 </div>
 
 {% include 'wiki/_section_modal.html' %}

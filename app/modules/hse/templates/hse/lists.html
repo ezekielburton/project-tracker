@@ -177,7 +177,7 @@
                                         {% if not view.rows %}
                                         <tr class="hse-lists-none">
                                             <td colspan="{{ columns }}">
-                                                Nothing here yet.{{ ' Add the first person.' if view.kind == 'people' else ' Add the first one above.' }}
+                                                Nothing here yet
                                             </td>
                                         </tr>
                                         {% endif %}
@@ -198,7 +198,6 @@
                                 </button>
                                 {% endif %}
                                 <p class="hse-lists-note" role="status" aria-live="polite"></p>
-                                <span class="hse-lists-rule">Nothing is deleted. A retired value leaves the dropdowns but stays on the entries that use it.</span>
                             </div>
                         </div>
 
@@ -228,7 +227,6 @@
                                 <label class="hse-lists-check">
                                     <input type="checkbox" name="can_hold_actions" id="hse-person-holds">
                                     <span>Actions can wait on them
-                                        <small>Puts them in Waiting on. Time an action spends with them is not counted against your time to close.</small>
                                     </span>
                                 </label>
                                 <label class="hse-lists-field">Email

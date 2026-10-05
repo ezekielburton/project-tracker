@@ -63,7 +63,7 @@
                     {% for row in c.rows | rejectattr('is_flagged') | rejectattr('is_complete') %}
                     {% include "project_overlay/_preproduction_row.html" %}
                     {% else %}
-                    <p class="overlay-field-empty">Nothing in Pre-Production yet for this customer.</p>
+                    <p class="overlay-field-empty">Nothing in Pre-Production yet</p>
                     {% endfor %}
                 </div>
 

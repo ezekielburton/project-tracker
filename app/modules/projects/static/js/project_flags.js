@@ -178,7 +178,7 @@ window.ProjectFlags = (function () {
                         return;
                     }
                     if (scope === 'deliverable' && !targetDeliverableId) {
-                        if (composeError) { composeError.textContent = 'Click the ⚑ on a deliverable to flag it first.'; composeError.classList.remove('hidden'); }
+                        if (composeError) { composeError.textContent = 'Flag a deliverable first (⚑)'; composeError.classList.remove('hidden'); }
                         return;
                     }
                     composeConfirm.disabled = true;

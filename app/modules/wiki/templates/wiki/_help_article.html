@@ -7,7 +7,7 @@
     {% include 'wiki/_article_content.html' %}
 
     <div class="wiki-help__foot">
-        <a class="btn-secondary btn-sm" href="{{ url_for('wiki.index') }}#article-{{ article.id }}">
+        <a class="btn-secondary btn-sm" href="{{ url_for('wiki.get_article', article_id=article.id) }}">
             Open full article
         </a>
     </div>

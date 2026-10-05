@@ -2,7 +2,12 @@
 
 <div class="wiki-article-header">
     <h1>{{ article.title }}</h1>
-    <p class="wiki-article-meta">Last updated {{ article.updated_at.strftime('%d %b %Y') }}</p>
+    <p class="wiki-article-meta">
+        Updated {{ article.updated_at.strftime('%d %b %Y') }}{% if article.updated_by %} by {{ article.updated_by.name.split()[0] }}{% endif %}
+        {%- set reviewed = article.reviewed_at | wiki_review_label %}
+        {%- if reviewed %} · {{ reviewed }}{% endif %}
+        {%- if reads %} · {{ reads }} read{{ '' if reads == 1 else 's' }}{% endif %}
+    </p>
 </div>
 
 {% for block in blocks %}
@@ -12,7 +17,7 @@
 <p class="wiki-block-body">{{ d.text | safe }}</p>
 
 {% elif block.type == 'header' %}
-<h3 class="wiki-block-h3">{{ d.text | safe }}</h3>
+<h3 class="wiki-block-h3"{% if anchors %} id="wiki-h-{{ loop.index }}"{% endif %}>{{ d.text | safe }}</h3>
 
 {% elif block.type == 'helixCallout' %}
 <div class="wiki-block-callout{% if d.variant == 'pine' %} wiki-block-callout--pine{% endif %}">{{ d.text | safe }}</div>
@@ -47,6 +52,9 @@
 <p class="wiki-block-body">
     <a href="{{ d.url }}" target="_blank" rel="noopener noreferrer">{{ d.url }}</a>
 </p>
+{% endif %}
+{% if d.length and (d.source == 'upload' or d.embed_src) %}
+<p class="wiki-block-video__length">{{ d.length | wiki_duration }}</p>
 {% endif %}
 {% endif %}
 

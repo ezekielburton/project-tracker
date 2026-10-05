@@ -93,7 +93,8 @@ def test_coverage_lists_every_unwritten_key():
 def test_coverage_group_scores_add_up():
     result = coverage(['core.overview', 'core.roles'])
     started = next(g for g in result['groups'] if g['name'] == 'Getting started')
-    assert (started['written'], started['total']) == (2, 4)
+    registered = dict(HELP_KEY_GROUPS)['Getting started']
+    assert (started['written'], started['total']) == (2, len(registered))
 
 
 # ------ Claiming a key ------

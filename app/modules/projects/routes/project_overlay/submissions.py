@@ -882,7 +882,8 @@ def overlay_submissions_submit_to_client(project_id):
     from app.modules.core.shared.services.achievements import check_achievements
     from app.modules.core.shared.lib.utils import log_activity
     from app.modules.projects.lib.submission_cache import build_zip_bytes, clear_submission_cache
-    from app.modules.core.shared.services.nas import build_file_path, upload_app_file
+    from app.modules.core.shared.services.nas import build_file_path
+    from app.modules.core.shared.services.nas_outbox import upload_or_queue
     from app.modules.core.shared.extensions import db
     from datetime import datetime as dt
     from flask import jsonify, current_app
@@ -947,20 +948,20 @@ def overlay_submissions_submit_to_client(project_id):
     main_deck.original_filename = f'{base_name}.{main_ext}'
     zip_name = f'{base_name}.zip'
 
-    # Cache and DB change only after the NAS write succeeds, so a failed
-    # upload leaves the draft intact and re-sendable.
+    # Cache and DB change only after the zip is stored (NAS, or the server
+    # outbox if the NAS is down), so a failed write leaves the draft re-sendable.
     entries = [{'local_cache_path': f.local_cache_path, 'arcname': f.original_filename}
                for f in cached_files]
     zip_bytes = build_zip_bytes(entries)
 
     nas_folder = build_file_path(project, 'Submissions', zip_name).rsplit('/', 1)[0]
     try:
-        upload_app_file(zip_bytes, nas_folder, zip_name)
-    except RuntimeError as e:
+        upload_or_queue(zip_bytes, nas_folder, zip_name)
+    except OSError as e:
         current_app.logger.error(
-            f'Submit-to-client zip upload failed (project={project_id}, draft={draft.id}): {e}')
+            f'Submit-to-client zip could not be stored (project={project_id}, draft={draft.id}): {e}')
         return jsonify({'success': False,
-                        'error': 'Could not save the deck to storage. Nothing was sent — please try again.'}), 502
+                        'error': 'Could not save the deck. Nothing was sent — please try again.'}), 502
 
     # From here, file rows resolve to members of the zip (see
     # _load_submission_file_bytes in files.py).

@@ -64,7 +64,7 @@ def test_upload_rejects_disallowed_extension(app, client, db_session):
 
 
 def test_upload_accepts_audio_extension(app, client, db_session, monkeypatch):
-    monkeypatch.setattr(nas_module, 'upload_app_file', lambda data, folder, name: None)
+    monkeypatch.setattr(nas_module, 'upload_app_file', lambda *a, **kw: None)
     user = _make_cs_user(db_session, 'files-test-c@example.com')
     login_as(client, app, user, 'password123')
     project = _make_project(db_session, user)
