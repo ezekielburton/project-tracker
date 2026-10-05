@@ -34,9 +34,9 @@
 ===================== */
 
 :root {
-    --tangerine: #B04A1C;
+    --tangerine: #f27f55;
     /* The brand orange: logo, sidebar and navigation. Same in both themes.
-       --tangerine is the readable orange for text, buttons and everything else. */
+       --tangerine is the same orange; kept separate so nav can change on its own. */
     --brand: #F27F55;
     --sandstone: #F5F0E8;
     --canary: #E5D259;
