@@ -174,8 +174,8 @@ def test_performance_and_templates_rails_hide_boards_the_user_cannot_view(app, c
     # No role today has these screens without view_all_di, so grant a
     # designer both screen capabilities to prove the rail is still filtered.
     from app.modules.core.shared.lib import capabilities
-    granted = set(capabilities.ROLE_CAPABILITIES['designer']) | {'view_di_performance', 'manage_di_templates'}
-    monkeypatch.setitem(capabilities.ROLE_CAPABILITIES, 'designer', granted)
+    granted = set(capabilities.DEPARTMENT_CAPABILITIES['design']) | {'view_di_performance', 'manage_di_templates'}
+    monkeypatch.setitem(capabilities.DEPARTMENT_CAPABILITIES, 'design', granted)
 
     _project(db_session, 'rail-ovp', is_permanent=True)
     _project(db_session, 'rail-hidden')

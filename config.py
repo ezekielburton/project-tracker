@@ -57,12 +57,10 @@ class Config:
     CF_ACCESS_CLIENT_ID = os.environ.get('CF_ACCESS_CLIENT_ID')
     CF_ACCESS_CLIENT_SECRET = os.environ.get('CF_ACCESS_CLIENT_SECRET')
 
-    # Client Servicing review lock — while on, the module is limited to admin
-    # and management for the management review. This is an operational switch,
-    # not the module's role model: that lives in the module's own access.py and
-    # is untouched. Set CLIENT_SERVICING_REVIEW_ONLY=false in .env to re-open
-    # the module to its full role set — no code change needed.
-    CLIENT_SERVICING_REVIEW_ONLY = os.environ.get('CLIENT_SERVICING_REVIEW_ONLY', 'true').lower() == 'true'
+    # Client Servicing review lock. While on, only admin and management can open
+    # the module. Off by default now that CS is live; set
+    # CLIENT_SERVICING_REVIEW_ONLY=true in .env to lock it again.
+    CLIENT_SERVICING_REVIEW_ONLY = os.environ.get('CLIENT_SERVICING_REVIEW_ONLY', 'false').lower() == 'true'
 
     # Client Servicing close-out strip — cancelled jobs waiting to be closed
     # out, listed above the Table. Off for now; set

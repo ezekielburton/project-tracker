@@ -46,10 +46,11 @@ def test_no_module_hand_rolls_its_own_admin_check():
     assert not hits, 'hand-rolled admin gate:\n' + '\n'.join(hits)
 
 
-# Role-set constants that are allowed because neither is a permission gate:
+# Role-set constants that are allowed because none is a permission gate:
 #   _REVIEW_ROLES        who gets in while the CS review lock is on
 #   _ROLE_SNAPSHOT_ROLES which people get a tile on the team snapshot
-_ALLOWED_ROLE_SETS = ('_REVIEW_ROLES', '_ROLE_SNAPSHOT_ROLES')
+#   LEGACY_ROLES         the role-key bridge onto the org fields (lib/org.py)
+_ALLOWED_ROLE_SETS = ('_REVIEW_ROLES', '_ROLE_SNAPSHOT_ROLES', 'LEGACY_ROLES')
 
 
 def test_no_route_module_declares_its_own_permission_role_set():

@@ -4,6 +4,7 @@ from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import Project, ProjectNote, User
 from app.modules.core.shared.lib.utils import log_activity, mark_project_activity_seen
 from app.modules.core.shared.lib.users import active_users_query
+from app.modules.core.shared.lib import org
 from app.modules.core.shared.lib.capabilities import can, effective_user
 
 project_notes_bp = Blueprint('project_notes', __name__, template_folder='../templates')
@@ -95,8 +96,8 @@ def _get_mentionable_users(project):
 
 
 def _is_designer(user):
-    # Role literal: can('claim_work') would also match admin via the wildcard.
-    return user.role in ('designer', 'team_lead')
+    # Not can('claim_work'): admin holds it through the wildcard.
+    return org.is_designer(user)
 
 def _overlapping_site_visit(visit_user, start_at, end_at, exclude_id=None):
     from app.modules.core.shared.models import SiteVisit
@@ -374,7 +375,7 @@ def _can_log_site_visit(actor):
     if can('log_site_visits', actor):
         return True
     # Team rule, not a gate: Technical designers get it, other designers do not.
-    return actor.role in ('designer', 'team_lead') and actor.team == 'Technical'
+    return org.is_designer(actor) and actor.team == 'Technical'
 
 
 @project_notes_bp.route('/projects/<int:project_id>/overlay/site-visits/<int:visit_id>/delete', methods=['POST'])

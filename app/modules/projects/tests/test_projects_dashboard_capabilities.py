@@ -7,7 +7,8 @@ from flask_login import login_user
 
 from app.modules.core.shared.models import User
 from app.modules.core.shared.testing import login_as
-from app.modules.core.shared.lib.capabilities import ROLE_CAPABILITIES, can, effective_user
+from app.modules.core.shared.lib.capabilities import can, effective_user
+from app.modules.core.shared.lib.org import LEGACY_ROLES
 from app.modules.core.shared.lib.utils import get_actor
 from app.modules.projects.routes.project_notes import _can_log_site_visit
 from app.modules.digital_innovation.lib.access import (
@@ -15,7 +16,7 @@ from app.modules.digital_innovation.lib.access import (
     can_view_di_performance,
 )
 
-ALL_ROLES = sorted(ROLE_CAPABILITIES)
+ALL_ROLES = sorted(LEGACY_ROLES)
 
 
 def _user(db_session, tag, role, team=None):
@@ -36,7 +37,7 @@ def test_complete_preproduction_matches_the_old_role_set(db_session, role):
 
 @pytest.mark.parametrize('role', ALL_ROLES)
 def test_manage_project_files_matches_the_old_role_set(db_session, role):
-    expected = role in ('admin', 'cs', 'management')
+    expected = role in ('admin', 'cs', 'project_owner', 'management')
     assert can('manage_project_files', _user(db_session, f'files-{role}', role)) is expected
 
 

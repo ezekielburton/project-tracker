@@ -8,7 +8,8 @@ from flask import url_for
 
 from app.modules.core.shared.models import User
 from app.modules.core.shared.testing import login_as
-from app.modules.core.shared.lib.capabilities import ROLE_CAPABILITIES, can
+from app.modules.core.shared.lib.capabilities import can
+from app.modules.core.shared.lib.org import LEGACY_ROLES
 from app.modules.projects.routes.project_overlay._common import (
     _can_manage_deliverables,
     _can_manage_flags,
@@ -19,7 +20,7 @@ from app.modules.projects.routes.project_overlay.details import (
     _is_assigned_designer,
 )
 
-ALL_ROLES = sorted(ROLE_CAPABILITIES)
+ALL_ROLES = sorted(LEGACY_ROLES)
 
 
 def _user(db_session, tag, role):
@@ -43,9 +44,9 @@ class _StubProject:
 
 
 class _StubUser:
-    """A role is all can() reads."""
+    """The org fields are all can() reads; filled from a role key."""
     def __init__(self, role):
-        self.role = role
+        self.department, self.seniority, self.is_admin = LEGACY_ROLES[role]
 
 
 class _StubFlag:
@@ -57,7 +58,7 @@ class _StubFlag:
 
 @pytest.mark.parametrize('role', ALL_ROLES)
 def test_can_manage_flags_matches_the_old_role_set(db_session, role):
-    expected = role in ('admin', 'cs', 'designer', 'team_lead', 'management')
+    expected = role in ('admin', 'cs', 'project_owner', 'designer', 'team_lead', 'management')
     assert _can_manage_flags(_user(db_session, f'flags-{role}', role)) is expected
 
 

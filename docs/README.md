@@ -9,6 +9,7 @@ Start here if you're new to the codebase.
 | [CAPABILITIES.md](CAPABILITIES.md) | Who can do what: roles, capabilities, `can()` and the decorators |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | The production server and how a release goes out |
 | [SERVER_SETUP.md](SERVER_SETUP.md) | Rebuilding the server from zero |
+| [wiki_articles/](wiki_articles/README.md) | Source text of every in-app wiki article, one file per wiki section |
 
 Also in the repo:
 - Each module's own `app/modules/<name>/<name>.md` — how that module works now.

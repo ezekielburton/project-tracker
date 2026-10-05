@@ -1,20 +1,19 @@
 # auth
 
-Authentication and account settings: logging in and out, registration,
-account preferences, and admin-side user management.
+Authentication and account settings: logging in and out, account preferences,
+and admin-side user management. New accounts are created in Admin → Accounts.
 
 ## Structure
 ```
 app/modules/auth/
   routes/auth.py         # the `auth` blueprint
-  templates/auth/        # login.html, register.html, account.html, users.html
+  templates/auth/        # login.html, account.html, users.html
   tests/test_auth_smoke.py
   auth.md
 ```
 
 ## Routes (the `auth` blueprint)
 - `GET/POST /login` — sign in (the app's `login_manager.login_view`)
-- `GET/POST /register` — create an account
 - `GET /logout` — sign out
 - `GET/POST /account` — the current user's account settings page
 - `POST /account/notification-prefs` — save per-type email notification opt-outs
@@ -34,7 +33,7 @@ None of its own. Auth pages render through the shared `base.html` layout.
   the first module to drop the compatibility shims.
 - **Cross-module (explicit, temporary):**
   - `check_achievements` (achievements) — the gamification hook fired on
-    login/register.
+    login.
   - `_build_account_achievement_context` (profile) — supplies the account
     page's rewards data.
   Both are imported from their current `app.*` paths and will repoint when those

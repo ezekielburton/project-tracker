@@ -68,13 +68,24 @@ def test_a_logged_out_visitor_holds_nothing(app):
         assert can_access_client_servicing(None) is False
 
 
-def test_the_read_only_roles_see_the_page_and_the_money_but_cannot_close(app, db_session):
-    for role in ('hr', 'production', 'logistics'):
+def test_hr_sees_the_page_and_the_money_but_cannot_close(app, db_session):
+    user = _user(db_session, 'ro-hr', 'hr')
+    with app.test_request_context():
+        assert can_access_client_servicing(user) is True
+        assert can_view_finance(user) is True
+        assert can_close_projects(user) is False
+
+
+def test_production_and_logistics_are_kept_out_of_cs(app, client, db_session):
+    for role in ('production', 'logistics'):
         user = _user(db_session, f'ro-{role}', role)
         with app.test_request_context():
-            assert can_access_client_servicing(user) is True
-            assert can_view_finance(user) is True
-            assert can_close_projects(user) is False
+            assert can_access_client_servicing(user) is False
+
+    login_as(client, app, _user(db_session, 'route-production', 'production'), 'password123')
+    with app.test_request_context():
+        url = url_for('client_servicing.index')
+    assert client.get(url).status_code == 403
 
 
 def test_an_hr_user_can_open_the_cs_page(app, client, db_session):

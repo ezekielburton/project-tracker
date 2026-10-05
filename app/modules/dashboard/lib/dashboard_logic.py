@@ -5,6 +5,7 @@ Shared computation helpers for the role-based dashboard. Kept separate from
 app/routes/dashboard.py (same convention as status_tracking.py / achievements.py)
 so this logic is reusable anywhere a project's status needs summarizing.
 """
+from app.modules.core.shared.lib import org
 
 # Project-level statuses where the underlying deliverables/channels can
 # genuinely be at different real-world stages from one another — 'briefed'
@@ -122,11 +123,9 @@ def get_next_action_owner(project):
         # is never actually empty in practice — flag.created_by is a defensive
         # fallback only, in case a flag is ever created some other way.
         last_author = flag.messages[-1].author if flag.messages else flag.created_by
-        # About the last author's role, not the viewer's — whose turn it is,
-        # not what anyone may do.
-        cs_roles = ('cs', 'admin', 'management')
-
-        if last_author.role in cs_roles:
+        # About the last author, not the viewer: whose turn it is, not what
+        # anyone may do.
+        if org.is_cs(last_author) or org.is_leadership(last_author):
             # CS spoke last — designer's turn. Distinguish "CS just raised
             # this" (exactly one message, the initial one) from "CS replied
             # after the designer responded" (more than one).
@@ -259,9 +258,9 @@ def guidance_for_viewer(owner_info, viewer):
     this correctly reflects what a previewed CS/designer tab would show
     too, not just the real logged-in user.
     """
-    # Role literals on purpose: this picks the wording a designer sees when a
-    # CS owns the next action. Neither side is a permission check.
-    if viewer.role in ('designer', 'team_lead') and owner_info['role'] == 'cs':
+    # Picks the wording a designer sees when CS owns the next action; neither
+    # side is a permission check.
+    if org.is_designer(viewer) and owner_info['role'] == 'cs':
         return 'No action required'
     return owner_info['guidance']
 

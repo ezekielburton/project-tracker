@@ -159,8 +159,8 @@ def test_invalid_validation_value_rejected(app, client, db_session):
     assert resp.status_code == 400
 
 
-def test_management_and_owner_cannot_edit_finance_fields(app, client, db_session):
-    for role in ('management', 'project_owner'):
+def test_management_and_hr_cannot_edit_finance_fields(app, client, db_session):
+    for role in ('management', 'hr'):
         user = _user(db_session, 'finx-' + role, role=role)
         project = _project(db_session, 'finx-' + role, user)
         login_as(client, app, user, 'password123')

@@ -319,6 +319,14 @@ def create_app(config=Config):
     app.jinja_env.globals['role_labels'] = ROLE_LABELS
     app.jinja_env.globals['role_label'] = role_label
 
+    # Per-role sidebar trimming (core/shared/lib/sidebar.py).
+    from app.modules.core.shared.lib.sidebar import show_link
+    app.jinja_env.globals['show_link'] = show_link
+
+    # Org checks for templates that pick rows by department or seniority.
+    from app.modules.core.shared.lib import org
+    app.jinja_env.globals['org'] = org
+
     @app.context_processor
     def inject_effective_user():
         from flask import session

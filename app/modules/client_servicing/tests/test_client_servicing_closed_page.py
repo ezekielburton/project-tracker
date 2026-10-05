@@ -127,8 +127,8 @@ def test_mark_invoiced_is_offered_to_finance_editors_only(app, client, db_sessio
     login_as(client, app, user, 'password123')
     assert 'cs-closed-mark' in _page(app, client, year=year).get_data(as_text=True)
 
-    owner = _user(db_session, 'h', role='project_owner')
-    login_as(client, app, owner, 'password123')
+    viewer = _user(db_session, 'h', role='hr')
+    login_as(client, app, viewer, 'password123')
     assert 'cs-closed-mark' not in _page(app, client, year=year).get_data(as_text=True)
 
 

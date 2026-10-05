@@ -7,13 +7,13 @@ Stack: Flask 3.1 · SQLAlchemy 2.0 · PostgreSQL · Jinja2 server-rendered pages
 ## Structure
 ```
 app/modules/
-  core/shared/   # extensions, blueprint, models/, lib/ (capabilities, users, utils, paths…),
+  core/shared/   # extensions, blueprint, models/, lib/ (capabilities, org, users, utils, paths…),
                  # services/ (notifications, nas, live_events, sse_relay, achievements…),
                  # routes/ (shell, sse, api), templates/ (base, partials, _shared_macros),
                  # static/ (css, js, fonts), testing.py, tests/
   auth/ profile/ notifications/ wiki/ blog/ feedback/ file_templates/ client_directory/
   achievements/ time_tracking/ projects/ dashboard/ admin/
-  client_servicing/ digital_innovation/ hse/ roadmap/
+  client_servicing/ digital_innovation/ hse/ roadmap/ hr/
 ```
 Each module has `routes/` and, as needed, `lib/` (rules and helpers), `services/` (what other modules may call), `templates/`, `static/`, `tests/`, and a short `<module>.md` saying how it works now.
 
@@ -24,6 +24,9 @@ Each module has `routes/` and, as needed, `lib/` (rules and helpers), `services/
 - **Business rules live in `lib/` and `services/`, never in routes or templates.** This keeps a future JSON API (for the OVP app) a thin second set of routes over the same services.
 - Blueprint name quirks are kept on purpose: the dashboard blueprint is named `projects` (url `/dashboard`); the projects module has `project_list` (`/projects-new`), `project_overlay`, `project_preproduction`, `project_notes`, `transfer`.
 - One temporary seam remains: the dashboard imports `build_time_tracking_rows` and `compute_project_hours` from `time_tracking.logic`. It moves to shared with the designer work calendar.
+
+## The org model
+Access comes from where a person sits: **department + seniority** on the shared user record, with admin as a separate switch (`core/shared/lib/capabilities.py`, `lib/org.py`; detail in CAPABILITIES.md). **Reports to** drives approvals through the HR module's `services/approvers.py::approvers_for(user)`. Admins edit the fields in Admin → Accounts until the HR pages arrive.
 
 ## The module feed (dashboards)
 A module with enough to summarise has its own dashboard as the first entry of its rail. The global Dashboard is the app-wide, role-based home: it rolls up and links into module dashboards, never contains them.
@@ -43,7 +46,7 @@ Each module exposes `modules/<name>/services/dashboard_feed.py::feed_for(user) -
 ## Checks that guard the structure
 `python -m pytest` runs, among others:
 - the **route contract** against `refactor/route_baseline.txt` (regenerate after an intentional route change);
-- the **role-literal baseline** (no new hard-coded role checks);
+- the **role-literal baseline** (no new hard-coded role, department or seniority checks);
 - **boot and per-module smoke tests**;
 - **dark-mode CSS** (no hard-coded colours outside token blocks).
 

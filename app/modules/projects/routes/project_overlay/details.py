@@ -13,6 +13,7 @@ from flask_login import login_required, current_user
 from app.modules.core.shared.models import Project
 from app.modules.core.shared.lib.users import active_users_query
 from app.modules.projects.lib.teams import assignable_teams_for
+from app.modules.core.shared.lib import org
 from app.modules.core.shared.lib.capabilities import can
 
 from ._common import (
@@ -35,9 +36,8 @@ from ._common import (
 def _is_assigned_designer(project, actor):
     """True if actor is assigned work on this project: a deliverable
     assignment, a team lead slot (ProjectDesigner), or Concept/KV designer.
-    Uses a role literal: can('claim_work') would pass every admin via the
-    wildcard."""
-    if actor.role not in ('designer', 'team_lead'):
+    Not can('claim_work'): admin holds it through the wildcard."""
+    if not org.is_designer(actor):
         return False
     if any(pd.user_id == actor.id for pd in project.assigned_designers):
         return True
@@ -280,8 +280,8 @@ def _build_details_context(project, actor):
     # Request Editing Access button: status is None/pending/approved/denied.
     # Shown to an assigned designer on an eligible project until approved.
     edit_access_request = None
-    # Role literal: can('claim_work') would let admin in via the wildcard.
-    if actor.role in ('designer', 'team_lead'):
+    # Not can('claim_work'): admin holds it through the wildcard.
+    if org.is_designer(actor):
         from app.modules.core.shared.models import ProjectEditAccessRequest
         edit_access_request = ProjectEditAccessRequest.query.filter_by(
             project_id=project.id, user_id=actor.id

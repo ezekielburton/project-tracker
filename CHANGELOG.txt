@@ -1,7 +1,17 @@
 ================================================================================
 ONE VITAMIN PLATFORM — CHANGELOG
 ===============================================================================
+=======================================================================================
+v2.6.4 - Org Model Update
+=======================================================================================
 
+New Features:
+
+- rg model added: everyone now has a department, seniority, job title and a manager they report to, used for leave approvals. Access stays the same, except Project Owners now have full Client Servicing access and Production and Logistics no longer see Client Servicing.
+
+======================================================================================
+v2.6.3 - Bug Fix: Brand tangerine restored in light mode - 05.10.2026
+=======================================================================================
 =======================================================================================
 v2.6.2 - Revamped Wiki - 05.10.2026
 =======================================================================================

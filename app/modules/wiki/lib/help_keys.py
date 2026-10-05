@@ -68,6 +68,9 @@ HELP_KEY_GROUPS = [
         ('wiki.search', 'Searching the wiki'),
         ('wiki.reading', 'Reading the wiki'),
     ]),
+    ('Admin', [
+        ('admin.accounts', 'Accounts, departments and approvals'),
+    ]),
 ]
 
 HELP_KEY_LABELS = {key: label for _, pairs in HELP_KEY_GROUPS for key, label in pairs}
