@@ -13,3 +13,8 @@ def active_users(*roles):
     if roles:
         q = q.filter(User.role.in_(roles))
     return q.order_by(User.name).all()
+
+
+def active_users_in(department):
+    """Active users in one department (key from lib/org.py), ordered by name."""
+    return active_users_query().filter_by(department=department).order_by(User.name).all()

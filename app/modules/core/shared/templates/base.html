@@ -1,4 +1,5 @@
 {% from '_macros.html' import user_avatar_visual %}
+{% from '_shared_macros.html' import help_button %}
 <!DOCTYPE html>
 <html lang="en"{% if current_user.is_authenticated and current_user.theme_preference %} data-theme="{{ current_user.theme_preference }}"{% endif %}>
 
@@ -141,8 +142,7 @@
                                 <span class="sidebar-item-label">Projects</span>
                             </a>
 
-                            {# Client Servicing — SPA nav link. Without access it dims to an unlinked
-                               span; the routes 403 regardless. #}
+                            {# Client Servicing — SPA nav link. Hidden without access; the routes 403 regardless. #}
                             {% if can_access_client_servicing(effective_user) %}
                             <a href="{{ url_for('client_servicing.index') }}" class="sidebar-item sidebar-item--nav" data-link="client-servicing"
                                 title="Client Servicing">
@@ -155,23 +155,10 @@
                                 </svg>
                                 <span class="sidebar-item-label">Client Servicing</span>
                             </a>
-                            {% else %}
-                            <span class="sidebar-item sidebar-item--unlinked" data-link="client-servicing"
-                                title="Client Servicing — not available for your role">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                                    <line x1="3" y1="9" x2="21" y2="9" />
-                                    <line x1="3" y1="15" x2="21" y2="15" />
-                                    <line x1="9" y1="3" x2="9" y2="21" />
-                                </svg>
-                                <span class="sidebar-item-label">Client Servicing</span>
-                            </span>
                             {% endif %}
                             {% endif %}{# /view_workspace #}
 
-                            {# HSE & Compliance — SPA nav link. Without view_hse it dims to an
-                               unlinked span; the routes 403 regardless. #}
+                            {# HSE & Compliance — SPA nav link. Hidden without view_hse; the routes 403 regardless. #}
                             {% if can('view_hse', effective_user) %}
                             <a href="{{ url_for('hse.index') }}" class="sidebar-item sidebar-item--nav" data-link="hse"
                                 title="HSE &amp; Compliance">
@@ -182,16 +169,6 @@
                                 </svg>
                                 <span class="sidebar-item-label">HSE &amp; Compliance</span>
                             </a>
-                            {% else %}
-                            <span class="sidebar-item sidebar-item--unlinked" data-link="hse"
-                                title="HSE &amp; Compliance — not available for your role">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" />
-                                    <path d="M9 12l2 2 4-4" />
-                                </svg>
-                                <span class="sidebar-item-label">HSE &amp; Compliance</span>
-                            </span>
                             {% endif %}
 
                             {# File Storage — the NAS, in a new tab #}
@@ -209,7 +186,7 @@
                                 <span class="sidebar-item-label">File Storage</span>
                             </a>
 
-                            {% if can('view_workspace', effective_user) %}
+                            {% if can('view_workspace', effective_user) and show_link('digital-innovation', effective_user) %}
                             {# Digital Innovation — SPA nav link #}
                             <a href="{{ url_for('digital_innovation.index') }}" class="sidebar-item sidebar-item--nav"
                                 data-link="digital-innovation" title="Digital Innovation">
@@ -259,6 +236,7 @@
                 <span class="sidebar-section-label">External Tools</span>
                 <div class="sidebar-grid">
 
+                    {% if show_link('google-slides', effective_user) %}
                     <a href="https://slides.google.com" target="_blank" class="sidebar-item sidebar-item--external"
                         data-link="google-slides" title="Google Slides">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -269,6 +247,7 @@
                         </svg>
                         <span class="sidebar-item-label">Google Slides</span>
                     </a>
+                    {% endif %}
 
                     <a href="https://www.office.com" target="_blank" class="sidebar-item sidebar-item--external"
                         data-link="microsoft-365" title="Microsoft 365">
@@ -291,6 +270,7 @@
                         <span class="sidebar-item-label">OneDrive</span>
                     </a>
 
+                    {% if show_link('magnific', effective_user) %}
                     <a href="https://magnific.ai" target="_blank" class="sidebar-item sidebar-item--external"
                         data-link="magnific" title="Magnific">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -302,7 +282,9 @@
                         </svg>
                         <span class="sidebar-item-label">Magnific</span>
                     </a>
+                    {% endif %}
 
+                    {% if show_link('shutterstock', effective_user) %}
                     <a href="https://www.shutterstock.com" target="_blank" class="sidebar-item sidebar-item--external"
                         data-link="shutterstock" title="Shutterstock">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -313,6 +295,7 @@
                         </svg>
                         <span class="sidebar-item-label">Shutterstock</span>
                     </a>
+                    {% endif %}
 
                 </div>
             </div>
@@ -324,6 +307,7 @@
                 <span class="sidebar-section-label">Directories</span>
                 <div class="sidebar-grid">
 
+                    {% if show_link('color-directory', effective_user) %}
                     <span class="sidebar-item sidebar-item--unlinked" data-link="color-directory"
                         title="Color Directory">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -337,6 +321,7 @@
                         </svg>
                         <span class="sidebar-item-label">Color Directory</span>
                     </span>
+                    {% endif %}
 
                     {# Client Directory — SPA nav link #}
                     <a href="{{ url_for('client_directory.index') }}" class="sidebar-item sidebar-item--nav"
@@ -351,6 +336,7 @@
                         <span class="sidebar-item-label">Client Directory</span>
                     </a>
 
+                    {% if show_link('production-directory', effective_user) %}
                     <span class="sidebar-item sidebar-item--unlinked" data-link="production-directory"
                         title="Production Directory">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -367,6 +353,7 @@
                         </svg>
                         <span class="sidebar-item-label">Production Directory</span>
                     </span>
+                    {% endif %}
 
                     <a href="{{ url_for('file_templates.index') }}" class="sidebar-item sidebar-item--nav" data-link="file-templates"
                         title="File Templates">
@@ -402,6 +389,7 @@
                         <span class="sidebar-item-label">App Update Blog</span>
                     </a>
 
+                    {% if show_link('birthday-calendar', effective_user) %}
                     <span class="sidebar-item sidebar-item--unlinked" data-link="birthday-calendar"
                         title="Birthday Calendar">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -414,6 +402,7 @@
                         </svg>
                         <span class="sidebar-item-label">Birthday Calendar</span>
                     </span>
+                    {% endif %}
 
                 </div>
             </div>
@@ -845,6 +834,8 @@
                     <div id="ovp-champion-rows"></div>
                 </div>
                 <button type="button" id="add-user-toggle" class="accounts-add-btn">+ Add User</button>
+                <button type="button" id="job-titles-toggle" class="accounts-add-btn">Job titles</button>
+                {{ help_button('admin.accounts') }}
                 {% if dev_tools_enabled %}
                 <button type="button" class="accounts-add-btn"
                     style="background: var(--rose); color: #fff; border-color: var(--rose);" onclick="openWipeModal()">⚠
@@ -854,25 +845,16 @@
                     <input type="text" id="new-user-name" class="form-input" placeholder="Full name">
                     <input type="email" id="new-user-email" class="form-input" placeholder="Email">
                     <input type="password" id="new-user-password" class="form-input" placeholder="Password">
-                    <select id="new-user-role" class="form-input">
-                        <option value="">Select role...</option>
-                        {# Options come from ROLE_LABELS (capabilities.py); add a role there
-                           to list it here. #}
-                        {% for value, label in role_labels.items() %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                    <select id="new-user-team" class="form-input hidden">
-                        <option value="">Select team...</option>
-                        <option value="2D">2D</option>
-                        <option value="3D">3D</option>
-                        <option value="Technical">Technical</option>
-                    </select>
+                    {# Department, title, seniority, Reports to, team and Admin; built by admin.js from /admin/api/org-options. #}
+                    <div id="new-user-org-fields" class="account-org-fields"></div>
                     <div class="add-user-actions">
                         <button type="submit" class="btn-primary">Create User</button>
                         <button type="button" id="add-user-cancel">Cancel</button>
                     </div>
                 </form>
+                <div id="job-titles-block" class="add-user-form hidden">
+                    <div id="job-titles-list"></div>
+                </div>
                 <div id="accounts-user-list" class="accounts-user-list"></div>
             </div>
             <div class="admin-section hidden" id="admin-section-activity">
@@ -1251,7 +1233,6 @@
     <script src="{{ url_for('core.static', filename='js/popover_position.js') }}?v={{ config.STATIC_VERSION }}"></script>
     {% if current_user.is_authenticated and can('admin_panel', current_user) %}
     {# Role picker options for the account-edit form admin.js builds. #}
-    <script>var ROLE_LABELS = {{ role_labels | tojson }};</script>
     <script src="{{ url_for('admin_assets.static', filename='js/admin.js') }}?v={{ config.STATIC_VERSION }}"></script>     
     {% endif %}
     <!-- SPA:EXTRA_JS:START -->

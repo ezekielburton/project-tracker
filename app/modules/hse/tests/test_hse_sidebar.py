@@ -6,7 +6,7 @@ capability, `view_workspace`.
 """
 from flask import url_for
 
-from app.modules.core.shared.lib.capabilities import ROLE_CAPABILITIES
+from app.modules.core.shared.lib.capabilities import DEPARTMENT_CAPABILITIES
 from app.modules.core.shared.models import User
 from app.modules.core.shared.testing import login_as
 
@@ -29,11 +29,10 @@ def _user(db_session, tag, role):
 
 
 def test_only_the_single_module_role_lacks_the_workspace():
-    """Only the hse role lacks view_workspace; a new role without it gets a near-empty sidebar."""
-    without = sorted(r for r, caps in ROLE_CAPABILITIES.items()
-                     if '*' not in caps and 'view_workspace' not in caps)
+    """Only HSE lacks view_workspace; a new department without it gets a near-empty sidebar."""
+    without = sorted(d for d, caps in DEPARTMENT_CAPABILITIES.items() if 'view_workspace' not in caps)
     assert without == ['hse'], (
-        f'Roles with no view_workspace: {without}. Only the HSE officer is '
+        f'Departments with no view_workspace: {without}. Only the HSE officer is '
         'meant to see a single-module sidebar.'
     )
 

@@ -45,6 +45,9 @@
 /admin/api/drafts/<int:draft_id>	DELETE	admin.delete_draft_admin
 /admin/api/job-numbers	GET	admin.list_job_numbers
 /admin/api/job-numbers/<int:project_id>	DELETE	admin.clear_job_number
+/admin/api/job-titles	GET	admin.list_job_titles
+/admin/api/job-titles/<int:title_id>	PATCH	admin.update_job_title
+/admin/api/org-options	GET	admin.org_options
 /admin/api/ovp-champion	GET	admin.get_ovp_champion
 /admin/api/ovp-champion	POST	admin.set_ovp_champion
 /admin/api/projects	GET	admin.list_projects
@@ -323,7 +326,6 @@
 /projects/submission/<int:submission_id>/preview	GET	project_overlay.preview_submission
 /projects/submission/file/<int:file_id>/download	GET	project_overlay.download_submission_file
 /projects/submission/file/<int:file_id>/preview	GET	project_overlay.preview_submission_file
-/register	GET,POST	auth.register
 /roadmap	GET	roadmap.index
 /sidebar/track	POST	main.sidebar_track
 /signal/bugs	GET	signal_tray.bug_board

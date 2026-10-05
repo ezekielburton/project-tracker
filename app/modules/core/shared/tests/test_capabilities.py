@@ -10,13 +10,15 @@ from app.modules.core.shared.models import User, Project
 from app.modules.core.shared.lib.capabilities import (
     ADMIN_ONLY,
     ALL_CAPABILITIES,
-    ROLE_CAPABILITIES,
+    DEPARTMENT_CAPABILITIES,
     ROLE_LABELS,
+    SENIORITY_CAPABILITIES,
     can,
     effective_user,
     require,
     require_api,
 )
+from app.modules.core.shared.lib.org import LEGACY_ROLES
 from app.modules.dashboard.lib.project_loader import scope_query
 
 
@@ -42,29 +44,29 @@ def _project(db_session, tag, cs_lead, status='in_progress'):
 
 # ── Map integrity ──────────────────────────────────────────────────────────
 
+_GRANT_TABLES = {**{f'department {k}': v for k, v in DEPARTMENT_CAPABILITIES.items()},
+                 **{f'seniority {k}': v for k, v in SENIORITY_CAPABILITIES.items()}}
+
+
 def test_every_granted_capability_is_recognised():
-    for role, granted in ROLE_CAPABILITIES.items():
-        unknown = {c for c in granted if c != '*'} - ALL_CAPABILITIES
-        assert not unknown, f'{role} grants unrecognised capability {unknown}'
+    for source, granted in _GRANT_TABLES.items():
+        unknown = set(granted) - ALL_CAPABILITIES
+        assert not unknown, f'{source} grants unrecognised capability {unknown}'
 
 
-def test_every_capability_reaches_a_role():
-    """Every capability is granted to some non-admin role or listed in ADMIN_ONLY."""
-    granted = set()
-    for caps in ROLE_CAPABILITIES.values():
-        granted |= {c for c in caps if c != '*'}
+def test_every_capability_reaches_someone():
+    """Every capability is granted by a department or seniority, or listed in ADMIN_ONLY."""
+    granted = set().union(*_GRANT_TABLES.values())
     assert ALL_CAPABILITIES - granted - ADMIN_ONLY == set()
 
 
 def test_admin_only_capabilities_are_granted_to_nobody_else():
-    for role, caps in ROLE_CAPABILITIES.items():
-        if role == 'admin':
-            continue
-        assert not (caps & ADMIN_ONLY), f'{role} holds an admin-only capability'
+    for source, caps in _GRANT_TABLES.items():
+        assert not (set(caps) & ADMIN_ONLY), f'{source} holds an admin-only capability'
 
 
-def test_role_picker_matches_the_map():
-    assert set(ROLE_LABELS) == set(ROLE_CAPABILITIES)
+def test_role_picker_matches_the_role_keys():
+    assert set(ROLE_LABELS) == set(LEGACY_ROLES)
 
 
 # ── The role x capability table ────────────────────────────────────────────
@@ -97,7 +99,7 @@ _TABLE = [
     ('project_owner', 'view_cs', True),
     ('project_owner', 'view_finance', True),
     ('project_owner', 'create_projects', True),
-    ('project_owner', 'close_projects', False),
+    ('project_owner', 'close_projects', True),
 
     ('designer', 'manage_drafts', True),
     ('designer', 'claim_work', True),
@@ -125,7 +127,8 @@ _TABLE = [
     ('hr', 'admin_panel', False),
     ('production', 'view_all_projects', True),
     ('production', 'create_projects', False),
-    ('logistics', 'view_cs', True),
+    ('production', 'view_cs', False),
+    ('logistics', 'view_cs', False),
     ('logistics', 'edit_finance', False),
 ]
 
@@ -136,14 +139,17 @@ def test_capability_table(db_session, role, capability, expected):
     assert can(capability, user) is expected
 
 
-def test_the_three_read_only_roles_hold_the_same_capabilities():
-    """HR also reads HSE; otherwise the three match."""
-    assert (ROLE_CAPABILITIES['hr'] - {'view_hse'}
-            == ROLE_CAPABILITIES['production'] == ROLE_CAPABILITIES['logistics'])
+def test_production_and_logistics_match_and_sit_inside_hr():
+    """Production and Logistics match. HR holds the same plus CS and HSE."""
+    assert DEPARTMENT_CAPABILITIES['production'] == DEPARTMENT_CAPABILITIES['logistics']
+    assert DEPARTMENT_CAPABILITIES['hr'] - {'view_hse', 'view_cs'} == DEPARTMENT_CAPABILITIES['production']
 
 
-def test_an_unknown_role_holds_nothing(db_session):
-    user = _user(db_session, 'unknown', 'not_a_real_role')
+def test_no_department_and_no_seniority_holds_nothing(db_session):
+    user = User(name='Capability Test none', email='cap-test-none@example.com')
+    user.set_password('password123')
+    db_session.add(user)
+    db_session.flush()
     assert can('view_cs', user) is False
     assert can('admin_panel', user) is False
 

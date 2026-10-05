@@ -1,7 +1,7 @@
 """Domain-split SQLAlchemy models. Every model shares the one db registry
 from core/shared/extensions, so cross-file relationships resolve normally.
 This package re-exports every model as the single import surface."""
-from .users import load_user, User, RoleTitle, UserTableLayout, DEFAULT_ROLE_TITLES, ProjectTableView
+from .users import load_user, User, JobRole, RoleTitle, UserTableLayout, DEFAULT_ROLE_TITLES, ProjectTableView
 from .clients import Client, Customer, Contact
 from .projects import DesignType, DesignDirection, Scope, Project, ProjectDesigner, ProjectReviewer, ProjectApproval, ProjectRegion, ProjectCustomer, ProjectFile, SiteVisit, ProjectOverlaySeen, ProjectSecondaryCS, ProjectSecondaryCsRegion, ProjectPosmChannel, ProjectEditAccessRequest, ProjectActivitySeen
 from .deliverables import DeliverableType, DeliverableTypeDiscipline, Deliverable, DeliverableAssignment, DeliverablePreproductionEvent
@@ -23,6 +23,7 @@ from .nas_outbox import PendingNasUpload
 __all__ = [
     'load_user',
     'User',
+    'JobRole',
     'RoleTitle',
     'UserTableLayout',
     'DEFAULT_ROLE_TITLES',

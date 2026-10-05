@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.modules.core.shared.extensions import db
+from app.modules.core.shared.lib import org
 from app.modules.core.shared.lib.capabilities import can
 from app.modules.core.shared.models import (
     BriefFlag, BriefFlagMessage, DecisionFlag, Deliverable, DeliverableAssignment,
@@ -19,16 +20,16 @@ def scope_query(user, active_only=True):
     if active_only:
         base = base.filter(Project.project_status.notin_(INACTIVE_STATUSES))
 
-    # Role literals pick which slice a role sees, not whether it may see the
+    # These pick which slice a person sees, not whether they may see the
     # dashboard. The branches are exclusive; admin's wildcard would match several.
-    if user.role in ('admin', 'management'):
+    if org.is_leadership(user):
         return base
-    if user.role == 'cs':
+    if org.is_cs(user):
         secondary_ids = select(ProjectSecondaryCS.project_id).where(ProjectSecondaryCS.user_id == user.id)
         return base.filter(db.or_(Project.cs_lead_id == user.id, Project.id.in_(secondary_ids)))
-    if user.role == 'project_owner':
+    if org.is_project_owner(user):
         return base.filter(Project.project_owner_id == user.id)
-    if user.role in ('designer', 'team_lead'):
+    if org.is_designer(user):
         assigned_ids = select(ProjectDesigner.project_id).where(ProjectDesigner.user_id == user.id)
         return base.filter(Project.id.in_(assigned_ids))
     # Any other role sees everything with view_all_projects, otherwise nothing.

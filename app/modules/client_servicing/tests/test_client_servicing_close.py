@@ -49,14 +49,14 @@ def _table_url(app):
         return url_for('client_servicing.table')
 
 
-def test_project_owner_cannot_close(app, client, db_session):
-    """A project owner can open the module but cannot close a project."""
+def test_project_owner_closes_like_cs(app, client, db_session):
+    """Project owners stand in for CS, so they can close a project."""
     owner = _user(db_session, 'a', role='project_owner')
     project = _project(db_session, owner)
     login_as(client, app, owner, 'password123')
 
     resp = client.post(_close_url(app, project), json={})
-    assert resp.status_code == 403
+    assert resp.status_code == 200
 
 
 def test_finance_cannot_close(app, client, db_session):
@@ -170,7 +170,7 @@ def test_cancelled_project_waits_in_the_close_out_strip(app, client, db_session,
 
 
 def test_close_out_strip_hidden_from_a_role_that_cannot_close(app, client, db_session, close_out_on):
-    owner = _user(db_session, 'k', role='project_owner')
+    owner = _user(db_session, 'k', role='hr')
     _project(db_session, owner, name='Cancelled Window Vinyl', cancelled=True)
     login_as(client, app, owner, 'password123')
 

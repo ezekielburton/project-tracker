@@ -19,7 +19,7 @@
    every open.
 
    Resolve section visibility is driven by the GET response's can_resolve
-   flag (current_user.role in ('admin','management') — see get_decision_
+   flag (admin or management — see get_decision_
    flag() in projects_detail.py), NOT a server-side Jinja gate, since this
    same shell renders on both dashboards regardless of viewer role —
    dashboard.js shows/hides #decision-flag-resolve-section after fetching.

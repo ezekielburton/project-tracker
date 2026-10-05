@@ -4,7 +4,7 @@ import string
 from urllib.parse import urlparse
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import User, NotificationSound
 from app.modules.core.shared.lib.capabilities import require
@@ -38,62 +38,6 @@ def generate_temp_password():
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(12))
 
-
-@auth.route('/register', methods=['GET', 'POST'])
-@login_required
-@require('manage_users', real_user=True)
-def register():
-    if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password')
-        role = request.form.get('role')
-        team = request.form.get('team')
-
-        errors = []
-
-        if not name:
-            errors.append('Full name is required.')
-        if not email:
-            errors.append('Email is required.')
-        if not password:
-            errors.append('Password is required.')
-        if not role:
-            errors.append('Role is required.')
-
-        if role in ['designer', 'team_lead'] and not team:
-            errors.append('Team must be selected for Designer and Team Lead roles.')
-
-        if role not in ['designer', 'team_lead']:
-            team = None
-
-        if email:
-            existing_user = User.query.filter_by(email=email).first()
-            if existing_user:
-                errors.append('An account with that email already exists.')
-
-        if errors:
-            for error in errors:
-                flash(error, 'error')
-            return redirect(url_for('auth.register'))
-
-        hashed_password = generate_password_hash(password)
-
-        new_user = User(
-            name=name,
-            email=email,
-            password_hash=hashed_password,
-            role=role,
-            team=team
-        )
-
-        db.session.add(new_user)
-        db.session.commit()
-
-        flash(f'Account created successfully for {name}.', 'success')
-        return redirect(url_for('auth.register'))
-
-    return render_template('auth/register.html')
 
 @auth.route('/login', methods=['GET', 'POST'])
 def login():

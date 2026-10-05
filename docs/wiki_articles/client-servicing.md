@@ -2,7 +2,7 @@
 
 ### 16. `cs.table` — The CS table, column by column
 
-_Status: revised 2026-09-30 for the CS polish pass (meeting column order, Project link + ⋯ menu, quick filters)._
+_Status: revised 2026-10-05: project owners can close projects too._
 
 ```
 Section: Client Servicing
@@ -28,7 +28,7 @@ Cost to Client (AED), Inward Cost (AED), Margin %, Priority
 
 Always first, and stays in view when you scroll right
 Click the project name to open it on the Projects page
-The ⋯ beside the name opens Close project… (CS, management and admins)
+The ⋯ beside the name opens Close project… (CS, project owners, management and admins)
 
 [Heading] Quick filters
 
@@ -259,7 +259,7 @@ A job's billing month is its invoice date, else its invoice month, else its remo
 
 ### 20. `cs.closed` — Closed projects
 
-_Status: revised 2026-09-30 for the CS polish pass (closing from the ⋯ menu, close-out for cancelled jobs)._
+_Status: revised 2026-10-05: project owners can close projects too._
 
 ```
 Section: Client Servicing
@@ -305,7 +305,7 @@ Each row shows Client, Project, Value AED, Closed date, Closed by and Invoice st
 [Heading] Who can close
 
 [Paragraph]
-CS, management and admins.
+CS, project owners, management and admins.
 
 [Callout]
 Closing is not deleting. The project keeps its history, its files and its value, and it still counts in the month it closed in. Closing is final, so a closed project cannot be reopened.

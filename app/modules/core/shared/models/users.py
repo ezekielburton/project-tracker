@@ -1,6 +1,9 @@
 from app.modules.core.shared.extensions import db, login_manager
+from app.modules.core.shared.lib.org import LEAD_SENIORITY, LEGACY_ROLES, legacy_role_for
 from flask_login import UserMixin
 from datetime import datetime
+from sqlalchemy import and_, case
+from sqlalchemy.ext.hybrid import hybrid_property
 
 
 class User(db.Model, UserMixin):
@@ -10,7 +13,16 @@ class User(db.Model, UserMixin):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(50), nullable=False, default='designer')
+    # Org model: capabilities come from department + seniority; is_admin grants
+    # everything. Keys are listed in core/shared/lib/org.py.
+    department = db.Column(db.String(40), nullable=True)
+    job_role_id = db.Column(db.Integer, db.ForeignKey('job_roles.id', ondelete='SET NULL'), nullable=True)
+    seniority = db.Column(db.String(20), nullable=False, default='none')
+    reports_to_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False)
+
+    job_role = db.relationship('JobRole')
+    reports_to = db.relationship('User', remote_side=[id], foreign_keys=[reports_to_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_conditional_reviewer = db.Column(db.Boolean, default=False)
     team = db.Column(db.String(20), nullable=True)
@@ -40,6 +52,30 @@ class User(db.Model, UserMixin):
     # Last Signal tray open; the launcher badge counts newer bug, feature and
     # friction items.
     signal_seen_at = db.Column(db.DateTime, nullable=True)
+
+    @hybrid_property
+    def role(self):
+        """The role key the org fields amount to, for code not yet on the org
+        model. Setting it fills department, seniority and is_admin from the key."""
+        return legacy_role_for(self.department, self.seniority, self.is_admin)
+
+    @role.inplace.setter
+    def _role_setter(self, value):
+        if value not in LEGACY_ROLES:
+            raise ValueError(f'Unknown role: {value!r}')
+        self.department, self.seniority, self.is_admin = LEGACY_ROLES[value]
+
+    @role.inplace.expression
+    @classmethod
+    def _role_expression(cls):
+        return case(
+            (cls.is_admin.is_(True), 'admin'),
+            (cls.seniority == 'management', 'management'),
+            (and_(cls.department == 'design', cls.seniority.in_(LEAD_SENIORITY)), 'team_lead'),
+            (cls.department == 'design', 'designer'),
+            (cls.department == 'client_servicing', 'cs'),
+            else_=cls.department,
+        )
 
     def set_password(self, password):
         from werkzeug.security import generate_password_hash
@@ -89,6 +125,25 @@ def load_user(token):
     if len(parts) == 2 and parts[1] != user.password_hash[-12:]:
         return None
     return user
+
+
+class JobRole(db.Model):
+    """A job title someone in a department can hold; admin edits the list.
+    A NULL department is for titles outside any department, e.g. General Manager."""
+    __tablename__ = 'job_roles'
+    __table_args__ = (
+        db.UniqueConstraint('department', 'title', name='uq_job_roles_department_title'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    department = db.Column(db.String(40), nullable=True)
+    title = db.Column(db.String(100), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    # Hidden titles stay on the people who hold them but leave the picker.
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+
+    def __repr__(self):
+        return f'<JobRole {self.department}: {self.title}>'
 
 
 class RoleTitle(db.Model):

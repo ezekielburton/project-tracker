@@ -2930,6 +2930,19 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     margin-top: 0;
 }
 
+/* The add form's org fields join the form's own column and gap. */
+.account-org-fields {
+    display: contents;
+}
+
+.org-admin-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
 /* ── Project Tools Section ───────────────────────────── */
 
 .pt-tabs {

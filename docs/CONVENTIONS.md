@@ -9,6 +9,7 @@ Related docs: [ARCHITECTURE.md](ARCHITECTURE.md) (module structure) · [CAPABILI
 ## 1. Before you build
 
 - **Prior art first.** Before writing anything custom, check: has this been solved already (a library, a Flask/SQLAlchemy/Postgres built-in, a standard pattern)? Does it fit our stack? Only go custom if nothing fits, and say why. This applies to *how* we implement, not to the module design itself.
+- **Talk short and plain.** Every message to Ezekiel is concise, easy-to-read English. Proposals go in this order: **why** (the problem, in a line or two) → **how** (the approach, in plain words) → **then the architecture** (files, data, seams). Technical detail only when he asks.
 - **Propose before code.** Describe what changes, where and why, in plain words, and get it agreed before writing it.
 - **A wireframe is a visual contract, not a data contract.** Check its fields and status names against the models before building; raise every mismatch as a decision first.
 - **Wireframes come in both themes**, light and dark, with the palette in CSS variables (the same way the app does it).
@@ -36,7 +37,7 @@ Every page declares a **help key** (`help_button('cs.invoicing')`), registered i
 
 ## 4. Gating and emulation
 
-- Use `can('capability')`, `@require(...)` or `@require_api(...)`. **Never a role literal** — a test fails new ones. `ROLE_LABELS` is the only role list; never retype role names in a template.
+- Use `can('capability')`, `@require(...)` or `@require_api(...)`. **Never a role, department or seniority literal** — a test fails new ones. To pick a branch by where someone sits, use the checks in `core/shared/lib/org.py` (`is_designer()`, `is_cs()`…); departments and seniority levels are listed there too — never retype them in a template.
 - **Gate every endpoint, not just the page.** A hidden sidebar link doesn't stop a typed URL. The JSON, fragment and save endpoints behind a gated page need the same check. When you add a gate, sweep the module for routes without one.
 - Prefer the broad capability the page already uses (`view_workspace`) over inventing narrow ones per endpoint.
 - A global feature that happens to live in a module folder (e.g. the Chat tray under `projects/`) is not module-scoped — don't gate it as if it were.

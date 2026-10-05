@@ -126,12 +126,11 @@
                         </div>
                         {% endmacro %}
 
-                        {# Role literals on purpose: these show only the toggles a role
-                           can receive. can() would be wrong, since admin's wildcard
+                        {# Show only the toggles a person can receive. Not can(): admin's wildcard
                            would show every designer-only row. #}
 
                         {# Designer / Team Lead #}
-                        {% if current_user.role in ['designer', 'team_lead'] %}
+                        {% if org.is_designer(current_user) %}
                             {{ pref_row('Assigned to Concept / KV', 'concept_kv_assigned') }}
                             {# notify_designer_of_stream_approved (approve_stream): the designer
                                sends the approved files to Production by hand. #}
@@ -139,21 +138,21 @@
                         {% endif %}
 
                         {# CS / Management / Admin #}
-                        {% if current_user.role in ['cs', 'admin', 'management'] %}
+                        {% if org.is_cs(current_user) or org.is_leadership(current_user) %}
                             {{ pref_row('Designer raised a flag', 'brief_flag') }}
                         {% endif %}
 
                         {# notify_project_owner_of_stream_uploaded (mark_stream_done). A
-                           project's owner may hold any of these roles. #}
-                        {% if current_user.role in ['project_owner', 'cs', 'admin', 'management'] %}
+                           project's owner may be any of these. #}
+                        {% if org.is_project_owner(current_user) or org.is_cs(current_user) or org.is_leadership(current_user) %}
                             {{ pref_row('Pre-Production stream ready for review', 'preprod_stream_uploaded') }}
                         {% endif %}
 
                         {# Client Servicing table writeback notifications #}
-                        {% if current_user.role in ['designer', 'team_lead', 'cs', 'admin', 'management', 'project_owner'] %}
+                        {% if org.is_designer(current_user) or org.is_cs(current_user) or org.is_project_owner(current_user) or org.is_leadership(current_user) %}
                             {{ pref_row('Due date changed', 'due_date_changed') }}
                         {% endif %}
-                        {% if current_user.role in ['cs', 'admin', 'management', 'project_owner'] %}
+                        {% if org.is_project_owner(current_user) or org.is_cs(current_user) or org.is_leadership(current_user) %}
                             {{ pref_row('Job number changed', 'job_number_changed') }}
                             {{ pref_row('Client SPOC changed', 'client_spoc_changed') }}
                         {% endif %}
@@ -162,11 +161,11 @@
                         {{ pref_row('Someone replied to my flag', 'flag_reply') }}
                         {{ pref_row('My flag was resolved', 'flag_resolved') }}
 
-                        {% if current_user.role in ['cs', 'admin', 'designer', 'team_lead'] %}
+                        {% if org.is_cs(current_user) or org.is_admin(current_user) or org.is_designer(current_user) %}
                             {{ pref_row('Lead designer changed', 'lead_changed') }}
                         {% endif %}
 
-                        {% if current_user.role in ['admin', 'management', 'designer', 'team_lead'] %}
+                        {% if org.is_leadership(current_user) or org.is_designer(current_user) %}
                             {{ pref_row('Project submitted to client', 'project_submitted_client') }}
                         {% endif %}
 

@@ -12,6 +12,7 @@ The master copy of every help article in the in-app wiki, one file per wiki sect
 | [hse.md](hse.md) | HSE & Compliance | 25–30 |
 | [tools.md](tools.md) | Tools and directories | 31–34 |
 | [wiki.md](wiki.md) | Using the wiki | `wiki.editor`, `wiki.help-keys` |
+| [admin.md](admin.md) | Admin | 41 `admin.accounts` |
 
 ## How to use these files
 - When a module changes, update its article here **and** in the wiki editor in the same release. A wrong article is worse than a missing one.
@@ -32,6 +33,7 @@ The master copy of every help article in the in-app wiki, one file per wiki sect
 | HSE & Compliance | HSE Officer, Management |
 | Tools and directories | (empty) |
 | Using the wiki | Admin |
+| Admin | Admin |
 
 Relevant roles is a relevance hint, never a lock: empty means everyone. It sorts the wiki: other roles' sections start folded in the rail and their search results sit last, dimmed. It never hides anything. In the wiki, 35 sits in Projects and 36–37 in Getting started.
 

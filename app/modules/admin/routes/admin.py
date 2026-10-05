@@ -3,13 +3,15 @@ import uuid
 from datetime import timezone, timedelta
 from flask import Blueprint, jsonify, session, url_for, request
 from flask_login import login_required, current_user
+from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import (
-    User, Client, Customer, Project,
+    User, JobRole, Client, Customer, Project,
     DeliverableType, DeliverableTypeDiscipline,
     DesignType, DesignDirection, ActivityLog, NotificationSound, OvpChampion
 )
+from app.modules.admin.lib import accounts as account_rules
 from app.modules.core.shared.lib.utils import log_activity
 from app.modules.core.shared.lib.profilepic import save_profile_pic, delete_profile_pic, AVATAR_FOLDER
 from app.modules.core.shared.lib.capabilities import can, require, require_api
@@ -30,10 +32,17 @@ admin_required = require_api('admin_panel', real_user=True)
 @login_required
 @admin_required
 def list_users():
-    users = User.query.order_by(User.name).all()
-    return jsonify([{'id': u.id, 'name': u.name, 'email': u.email, 'role': u.role,
-                     'team': u.team, 'is_active': u.is_active,
-                     'avatar_filename': u.avatar_filename} for u in users])
+    users = (User.query.options(joinedload(User.job_role), joinedload(User.reports_to))
+             .order_by(User.name).all())
+    return jsonify([account_rules.user_json(u) for u in users])
+
+
+@admin_bp.route('/admin/api/org-options', methods=['GET'])
+@login_required
+@admin_required
+def org_options():
+    """Departments, seniority levels, job titles and teams for the account forms."""
+    return jsonify(account_rules.org_options())
 
 @admin_bp.route ('/admin/emulate/<int:user_id>', methods=['POST'])
 @login_required
@@ -42,8 +51,8 @@ def start_emulation(user_id):
     user = User.query.get_or_404(user_id)
     # About the target account, not the caller: an admin account is never a
     # valid emulation target.
-    if user.role == 'admin':
-     return jsonify({'success': False, 'error': 'Cannot emulate an admin account'}), 400
+    if user.is_admin:
+        return jsonify({'success': False, 'error': 'Cannot emulate an admin account'}), 400
     if not user.is_active:
         return jsonify({'success': False, 'error': 'Cannot emulate a deactivated account'}), 400
     session['emulating_user_id'] = user.id
@@ -59,33 +68,26 @@ def exit_emulation():
 @login_required
 @admin_required
 def create_user():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
     email = (data.get('email') or '').strip()
     password = (data.get('password') or '').strip()
-    role = (data.get('role') or '').strip()
-    team = (data.get('team') or '').strip() or None
 
-    if not all([name, email, password, role]):
-        return jsonify({'success': False, 'error': 'All fields are required'}), 400
-
+    if not all([name, email, password]):
+        return jsonify({'success': False, 'error': 'Name, email and password are required'}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({'success': False, 'error': 'Email already exists'}), 400
 
-    if role not in ['designer', 'team_lead']:
-        team = None
-
-    user = User(
-        name=name,
-        email=email,
-        password_hash=generate_password_hash(password),
-        role=role,
-        team=team
-    )
+    user = User(name=name, email=email, password_hash=generate_password_hash(password))
+    try:
+        changes = account_rules.apply_org_fields(user, data, current_user)
+    except account_rules.AccountError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     db.session.add(user)
     db.session.commit()
-    log_activity('user_created', f'User "{user.name}" created with role {role}', user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
-    return jsonify({'success': True, 'user': {'id': user.id, 'name': user.name, 'role': user.role, 'team': user.team}})
+    log_activity('user_created', f'User "{user.name}" created ({"; ".join(changes) or "no org fields"})',
+                 user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
+    return jsonify({'success': True, 'user': account_rules.user_json(user)})
 
 # ── OVP champion ──────────────────────────────────────────────────────────
 # One champion per department, set weekly by an admin. The Friction Log write
@@ -219,36 +221,52 @@ def delete_sound(sound_id):
 @admin_required
 def update_user(user_id):
     user = User.query.get_or_404(user_id)
-    data = request.get_json()
-
+    data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
     email = (data.get('email') or '').strip()
-    role = (data.get('role') or '').strip()
-    team = (data.get('team') or '').strip() or None
     password = (data.get('password') or '').strip()
 
-    if not name or not email or not role:
-        return jsonify({'success': False, 'error': 'Name, email and role are required'}), 400
-
+    if not name or not email:
+        return jsonify({'success': False, 'error': 'Name and email are required'}), 400
     existing = User.query.filter_by(email=email).first()
     if existing and existing.id != user_id:
         return jsonify({'success': False, 'error': 'That email is already in use'}), 400
 
-    if role not in ['designer', 'team_lead']:
-        team = None
-
+    try:
+        changes = account_rules.apply_org_fields(user, data, current_user)
+    except account_rules.AccountError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     user.name = name
     user.email = email
-    user.role = role
-    user.team = team
-
     if password:
         user.set_password(password)
-
     db.session.commit()
-    return jsonify({'success': True, 'user': {'id': user.id, 'name': user.name, 'email': user.email,
-                    'role': user.role, 'team': user.team, 'is_active': user.is_active,
-                    'avatar_filename': user.avatar_filename}})
+    if changes:
+        log_activity('user_org_changed', f'{current_user.name} changed "{user.name}": {"; ".join(changes)}',
+                     user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
+    return jsonify({'success': True, 'user': account_rules.user_json(user)})
+
+
+@admin_bp.route('/admin/api/job-titles', methods=['GET'])
+@login_required
+@admin_required
+def list_job_titles():
+    return jsonify(account_rules.job_titles_json())
+
+
+@admin_bp.route('/admin/api/job-titles/<int:title_id>', methods=['PATCH'])
+@login_required
+@admin_required
+def update_job_title(title_id):
+    """Rename a job title, or hide or show it in the pickers."""
+    row = JobRole.query.get_or_404(title_id)
+    try:
+        account_rules.update_job_title(row, request.get_json(silent=True) or {})
+    except account_rules.AccountError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    db.session.commit()
+    log_activity('job_title_updated', f'{current_user.name} updated job title "{row.title}"', user=current_user)
+    return jsonify({'success': True})
 
 
 @admin_bp.route('/admin/api/users/<int:user_id>/reset-password', methods=['POST'])

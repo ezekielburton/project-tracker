@@ -41,7 +41,12 @@ is purely organizational.
 - `utils` — `file_type_label`, `strip_html`, `get_actor`, `log_activity`,
   `slugify` (title → URL-safe slug, shared by wiki + blog)
 - `users` — `active_users_query` / `active_users`: the base query for user
-  pickers, filtered to active (non-deactivated) accounts
+  pickers, filtered to active (non-deactivated) accounts; `active_users_in(department)`
+- `capabilities` — `can()`, the decorators, the department and seniority maps
+  (CAPABILITIES.md)
+- `org` — the org model: `DEPARTMENTS`, `SENIORITY_LEVELS`, the role-key bridge
+  (`LEGACY_ROLES`) and the branch checks (`is_designer()`, `is_cs()`…)
+- `sidebar` — `show_link()`: which sidebar links each department sees
 - `zip_utils` — build and serve one-shot zip downloads
 - `status_vocabulary` — pure `derive_*` functions turning raw status values
   into the (label, css_modifier) pairs templates render as status pills

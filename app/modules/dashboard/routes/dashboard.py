@@ -12,7 +12,9 @@ from app.modules.dashboard.lib.project_loader import (
 from app.modules.dashboard.lib.dashboard_logic import get_next_action_owner, get_project_rag, nearest_deadline, compute_clashes, guidance_for_viewer, needs_client_approval
 from app.modules.core.shared.lib.status_vocabulary import derive_project_status
 from app.modules.core.shared.lib.users import active_users_query
+from app.modules.core.shared.lib import org
 from app.modules.core.shared.lib.capabilities import can, require
+from app.modules.core.shared.lib.org import LEGACY_ROLES
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for call for this blueprint's routes uses that, e.g.
@@ -88,15 +90,15 @@ CARD_ORDER = {
 # mistake — don't reach for session['emulating_user_id'] here.
 class _ScopeUser:
     """
-    Duck-types a real User for scope_query()'s .id/.role checks (and
-    _is_owner()'s .id check) ONLY — nothing else on this page ever looks at
-    it. Lets _resolve_dashboard_scope() hand back "pretend you're CS lead
-    X" without constructing (or worse, actually querying-as) a real
-    Flask-Login session for that user.
+    Stands in for a real User in scope_query() and _is_owner() ONLY, so
+    _resolve_dashboard_scope() can hand back "pretend you're CS lead X"
+    without logging in as them. Built from a role key; carries the org fields
+    the scope checks read.
     """
     def __init__(self, id, role):
         self.id = id
         self.role = role
+        self.department, self.seniority, self.is_admin = LEGACY_ROLES.get(role, (None, 'none', False))
 
 
 def _resolve_dashboard_scope(user):
@@ -480,10 +482,10 @@ def index():
         # from "Flag a Project" — see decisions.html)
         # (Management has no reason to flag something to itself), so skip
         # the extra query entirely for roles that can't open the modal.
-        # Deliberately keyed on the REAL user.role, not layout_role/scope —
+        # Deliberately keyed on the REAL user, not layout_role/scope —
         # previewing a CS lead's tab must never grant management the
         # ability to submit a flag as that person.
-        flaggable_projects=_compute_flaggable_projects(user) if user.role in ('cs', 'designer', 'team_lead') else [],
+        flaggable_projects=_compute_flaggable_projects(user) if org.is_cs(user) or org.is_designer(user) else [],
     )
 
 
@@ -2352,7 +2354,7 @@ def _compute_role_snapshot():
             #  — the flat check silently never matched a
             # CS's C&CM projects; see its docstring in dashboard_logic.py.
             # About the user this tile describes, not the viewer.
-            elif u.role == 'cs' and any(needs_client_approval(p) for p in scoped):
+            elif org.is_cs(u) and any(needs_client_approval(p) for p in scoped):
                 stat_key, stat_count = 'pending', sum(1 for p in scoped if needs_client_approval(p))
             else:
                 waiting = sum(1 for p in scoped if not _is_owner(get_next_action_owner(p)['user'], u))
@@ -2393,7 +2395,7 @@ def _compute_role_snapshot():
         }
 
         # Which column this person's tile goes in — about them, not the viewer.
-        if u.role == 'cs':
+        if org.is_cs(u):
             tiles_cs.append(tile)
         elif u.team in tiles_by_team:
             tiles_by_team[u.team].append(tile)

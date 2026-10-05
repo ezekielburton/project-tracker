@@ -82,7 +82,7 @@ function adminEsc(value) {
             row.innerHTML =
                 '<div class="emulate-user-info">' +
                 '<span class="emulate-user-name">' + adminEsc(user.name) + '</span>' +
-                '<span class="emulate-user-role">' + adminEsc(user.role) + '</span>' +
+                '<span class="emulate-user-role">' + adminEsc(user.job_title || user.department_label) + '</span>' +
                 '</div>' +
                 '<button type="button" class="emulate-user-btn" data-id="' + user.id + '">Emulate</button>';
             emulateUserList.appendChild(row);
@@ -111,7 +111,7 @@ function adminEsc(value) {
         emulateSearch.addEventListener('input', function () {
             var query = this.value.toLowerCase();
             var filtered = allUsers.filter(function (u) {
-                return u.name.toLowerCase().includes(query) || u.role.toLowerCase().includes(query);
+                return u.name.toLowerCase().includes(query) || (u.job_title + ' ' + u.department_label).toLowerCase().includes(query);
             });
             renderUserList(filtered);
         });
@@ -149,7 +149,7 @@ function adminEsc(value) {
             row.innerHTML =
                 '<div class="badge-user-info">' +
                 '<span class="badge-user-name">' + adminEsc(user.name) + '</span>' +
-                '<span class="badge-user-role">' + adminEsc(user.role) + '</span>' +
+                '<span class="badge-user-role">' + adminEsc(user.job_title || user.department_label) + '</span>' +
                 '</div>';
             row.addEventListener('click', function () {
                 fetch('/admin/emulate/' + user.id, {
@@ -191,7 +191,7 @@ function adminEsc(value) {
         badgeUserSearch.addEventListener('input', function () {
             var query = this.value.toLowerCase();
             var filtered = badgeUsers.filter(function (u) {
-                return u.name.toLowerCase().includes(query) || u.role.toLowerCase().includes(query);
+                return u.name.toLowerCase().includes(query) || (u.job_title + ' ' + u.department_label).toLowerCase().includes(query);
             });
             renderBadgeUserList(filtered);
         });
@@ -294,39 +294,106 @@ function adminEsc(value) {
     var addUserToggle = document.getElementById('add-user-toggle');
     var addUserForm = document.getElementById('add-user-form');
     var addUserCancel = document.getElementById('add-user-cancel');
-    var newUserRole = document.getElementById('new-user-role');
-    var newUserTeam = document.getElementById('new-user-team');
+    var newUserOrgFields = document.getElementById('new-user-org-fields');
+
+    // The account forms' pick lists and the people for Reports to, refreshed
+    // each time the Accounts section loads.
+    var orgOptions = { departments: [], seniority: [], titles: {}, teams: [] };
+    var accountUsers = [];
+
+    function optionsHtml(items, selected, blankLabel) {
+        var html = blankLabel === null ? '' : '<option value="">' + adminEsc(blankLabel) + '</option>';
+        return html + items.map(function (item) {
+            return '<option value="' + adminEsc(item.key) + '"' +
+                (String(item.key) === String(selected) ? ' selected' : '') + '>' + adminEsc(item.label) + '</option>';
+        }).join('');
+    }
+
+    function titleOptionsHtml(department) {
+        return (orgOptions.titles[department || ''] || []).map(function (t) {
+            return '<option value="' + adminEsc(t) + '"></option>';
+        }).join('');
+    }
+
+    // The org fields shared by the add form and the edit row; `key` keeps the
+    // title suggestion list's id unique per form.
+    function orgFieldsHtml(user, key) {
+        var listId = 'job-title-options-' + key;
+        var people = accountUsers.filter(function (u) { return u.is_active && u.id !== user.id; })
+            .map(function (u) { return { key: u.id, label: u.name }; });
+        if (user.reports_to_id && !people.some(function (p) { return p.key === user.reports_to_id; })) {
+            people.push({ key: user.reports_to_id, label: user.reports_to_name + ' (deactivated)' });
+        }
+        var teams = orgOptions.teams.map(function (t) { return { key: t, label: t }; });
+        return '<select class="form-input org-department" aria-label="Department">' +
+                optionsHtml(orgOptions.departments, user.department || '', 'No department') + '</select>' +
+            '<input type="text" class="form-input org-title" list="' + listId + '" maxlength="100"' +
+                ' placeholder="Job title" value="' + adminEsc(user.job_title || '') + '">' +
+            '<datalist id="' + listId + '">' + titleOptionsHtml(user.department) + '</datalist>' +
+            '<select class="form-input org-seniority" aria-label="Seniority">' +
+                optionsHtml(orgOptions.seniority, user.seniority || 'none', null) + '</select>' +
+            '<select class="form-input org-reports-to" aria-label="Reports to">' +
+                optionsHtml(people, user.reports_to_id || '', 'Reports to nobody') + '</select>' +
+            '<select class="form-input org-team' + (user.department === 'design' ? '' : ' hidden') + '" aria-label="Team">' +
+                optionsHtml(teams, user.team || '', 'No team') + '</select>' +
+            '<label class="org-admin-toggle"><input type="checkbox" class="org-is-admin"' +
+                (user.is_admin ? ' checked' : '') + '> Admin</label>';
+    }
+
+    // Department picks the title suggestions and whether Team shows.
+    function wireOrgFields(container) {
+        var dept = container.querySelector('.org-department');
+        dept.addEventListener('change', function () {
+            container.querySelector('datalist').innerHTML = titleOptionsHtml(dept.value);
+            container.querySelector('.org-team').classList.toggle('hidden', dept.value !== 'design');
+        });
+    }
+
+    function readOrgFields(container) {
+        return {
+            department: container.querySelector('.org-department').value,
+            job_title: container.querySelector('.org-title').value.trim(),
+            seniority: container.querySelector('.org-seniority').value,
+            reports_to_id: container.querySelector('.org-reports-to').value || null,
+            team: container.querySelector('.org-team').value,
+            is_admin: container.querySelector('.org-is-admin').checked
+        };
+    }
+
+    function renderNewUserOrgFields() {
+        if (!newUserOrgFields) return;
+        newUserOrgFields.innerHTML = orgFieldsHtml({}, 'new');
+        wireOrgFields(newUserOrgFields);
+    }
 
     function loadAccountsSection() {
         if (!accountsUserList) return;
-        fetch('/admin/api/users')
-            .then(function (r) { return r.json(); })
-            .then(function (users) {
+        Promise.all([
+            fetch('/admin/api/users').then(function (r) { return r.json(); }),
+            fetch('/admin/api/org-options').then(function (r) { return r.json(); })
+        ])
+            .then(function (results) {
+                var users = results[0];
+                orgOptions = results[1];
+                accountUsers = users;
+                renderNewUserOrgFields();
                 accountsUserList.innerHTML = '';
 
                 var activeUsers = users.filter(function (u) { return u.is_active; });
                 var deactivatedUsers = users.filter(function (u) { return !u.is_active; });
 
-                // Fixed groups first (designers split by team), then one group per
-                // other role in ROLE_LABELS, so a new role shows up here automatically.
-                var TEAM_GROUPED_ROLES = ['cs', 'admin', 'management', 'project_owner', 'designer', 'team_lead'];
-                var roleLabels = window.ROLE_LABELS || {};
-
-                var groups = [
-                    { label: 'CS & Admin', filter: function (u) { return u.role === 'cs' || u.role === 'admin'; } },
-                    { label: 'Management', filter: function (u) { return u.role === 'management'; } },
-                    { label: 'Project Owners', filter: function (u) { return u.role === 'project_owner'; } },
-                    { label: '2D Team', filter: function (u) { return u.team === '2D'; } },
-                    { label: '3D Team', filter: function (u) { return u.team === '3D'; } },
-                    { label: 'Technical', filter: function (u) { return u.team === 'Technical'; } }
-                ];
-
-                Object.keys(roleLabels).forEach(function (role) {
-                    if (TEAM_GROUPED_ROLES.indexOf(role) !== -1) return;
-                    groups.push({
-                        label: roleLabels[role],
-                        filter: function (u) { return u.role === role; }
-                    });
+                // Management first, then each department in order with Design split
+                // by team. Built from the department list, so a new one shows up here.
+                var groups = [{ label: 'Management', filter: function (u) { return u.seniority === 'management'; } }];
+                orgOptions.departments.forEach(function (dept) {
+                    if (dept.key === 'design') {
+                        orgOptions.teams.forEach(function (team) {
+                            groups.push({ label: 'Design · ' + team, filter: function (u) {
+                                return u.department === 'design' && u.team === team;
+                            } });
+                        });
+                    }
+                    groups.push({ label: dept.label, filter: function (u) { return u.department === dept.key; } });
                 });
 
                 function renderGroup(label, members, rowClass) {
@@ -352,8 +419,8 @@ function adminEsc(value) {
                     renderGroup(group.label, members, 'account-user-row');
                 });
 
-                // Catch-all (e.g. a designer with no team), so no account goes missing.
-                renderGroup('Other', activeUsers.filter(function (u) {
+                // Catch-all (no department), so no account goes missing.
+                renderGroup('No department', activeUsers.filter(function (u) {
                     return !rendered[u.id];
                 }), 'account-user-row');
 
@@ -363,7 +430,8 @@ function adminEsc(value) {
                 if (accountsUserList.children.length === 0) {
                     accountsUserList.innerHTML = '<p class="no-notifications">No users found</p>';
                 }
-            });
+            })
+            .catch(function () { showToast('Could not load accounts.', 'error'); });
     }
 
     // Admin avatar picker: one hidden file input + the shared crop modal,
@@ -414,7 +482,9 @@ function adminEsc(value) {
     }
 
     function renderAccountDisplay(user) {
-        var teamTag = user.team ? '<span class="account-user-team">' + adminEsc(user.team) + '</span>' : '';
+        var tags = [user.department_label, user.seniority !== 'none' ? user.seniority_label : '',
+                    user.team, user.is_admin ? 'Admin' : ''].filter(Boolean);
+        var tagHtml = tags.map(function (t) { return '<span class="account-user-team">' + adminEsc(t) + '</span>'; }).join('');
         var activeToggle = user.is_active
             ? '<button type="button" class="account-deactivate-btn" role="menuitem">Deactivate</button>'
             : '<button type="button" class="account-reactivate-btn" role="menuitem">Reactivate</button>';
@@ -422,13 +492,13 @@ function adminEsc(value) {
             renderAvatarCell(user) +
             '<div class="account-user-info">' +
             '<span class="account-user-name">' + adminEsc(user.name) + '</span>' +
-            '<span class="account-user-role">' + adminEsc(user.role) + '</span>' +
-            teamTag +
+            '<span class="account-user-role">' + adminEsc(user.job_title) + '</span>' +
+            tagHtml +
             '</div>' +
             '<div class="account-user-actions">' +
             '<button type="button" class="account-menu-btn" aria-haspopup="menu" aria-expanded="false" title="Actions">&#8943;</button>' +
             '<div class="account-row-menu" role="menu" hidden>' +
-            '<button type="button" class="account-edit-btn" role="menuitem" data-name="' + adminEsc(user.name) + '" data-role="' + adminEsc(user.role) + '" data-team="' + adminEsc(user.team) + '">Edit</button>' +
+            '<button type="button" class="account-edit-btn" role="menuitem" data-name="' + adminEsc(user.name) + '">Edit</button>' +
             activeToggle +
             '<button type="button" class="account-reset-btn" role="menuitem" data-name="' + adminEsc(user.name) + '">Reset password</button>' +
             '<button type="button" class="account-delete-btn" role="menuitem" data-name="' + adminEsc(user.name) + '">Delete</button>' +
@@ -438,24 +508,10 @@ function adminEsc(value) {
     }
 
     function renderAccountEdit(user) {
-        // ROLE_LABELS is set by base.html from capabilities.py; the literal is a fallback.
-        var roles = window.ROLE_LABELS || {
-            cs: 'Client Servicing', designer: 'Designer', team_lead: 'Team Lead',
-            management: 'Management', project_owner: 'Project Owner',
-            finance: 'Finance', admin: 'Admin'
-        };
-        var roleOptions = Object.keys(roles).map(function (r) {
-            return '<option value="' + r + '"' + (user.role === r ? ' selected' : '') + '>' + roles[r] + '</option>';
-        }).join('');
-        var teamOptions = ['2D', '3D', 'Technical'].map(function (t) {
-            return '<option value="' + t + '"' + (user.team === t ? ' selected' : '') + '>' + t + '</option>';
-        }).join('');
-        var teamHidden = (user.role === 'designer' || user.role === 'team_lead') ? '' : ' hidden';
         return '<div class="account-user-edit-form">' +
             '<input type="text" class="form-input edit-name" value="' + adminEsc(user.name) + '" placeholder="Full name">' +
             '<input type="email" class="form-input edit-email" value="' + adminEsc(user.email) + '" placeholder="Email">' +
-            '<select class="form-input edit-role">' + roleOptions + '</select>' +
-            '<select class="form-input edit-team' + teamHidden + '"><option value="">Select team...</option>' + teamOptions + '</select>' +
+            orgFieldsHtml(user, user.id) +
             '<input type="password" class="form-input edit-password" placeholder="New password (leave blank to keep)">' +
             '<div class="account-edit-actions">' +
             '<button type="button" class="account-save-btn btn-primary">Save</button>' +
@@ -470,7 +526,8 @@ function adminEsc(value) {
         var deleteBtn = row.querySelector('.account-delete-btn');
         var saveBtn = row.querySelector('.account-save-btn');
         var cancelBtn = row.querySelector('.account-cancel-edit-btn');
-        var editRole = row.querySelector('.edit-role');
+        var editForm = row.querySelector('.account-user-edit-form');
+        if (editForm) wireOrgFields(editForm);
 
         var avatarBtn = row.querySelector('.account-avatar-btn');
         if (avatarBtn) {
@@ -484,35 +541,23 @@ function adminEsc(value) {
             });
         }
 
-        if (editRole) {
-            editRole.addEventListener('change', function () {
-                var teamField = row.querySelector('.edit-team');
-                if (this.value === 'designer' || this.value === 'team_lead') {
-                    teamField.classList.remove('hidden');
-                } else {
-                    teamField.classList.add('hidden');
-                }
-            });
-        }
-
         if (saveBtn) {
             saveBtn.addEventListener('click', function () {
-                var name = row.querySelector('.edit-name').value.trim();
-                var email = row.querySelector('.edit-email').value.trim();
-                var role = row.querySelector('.edit-role').value;
-                var team = row.querySelector('.edit-team').value;
-                var password = row.querySelector('.edit-password').value.trim();
+                var payload = readOrgFields(editForm);
+                payload.name = editForm.querySelector('.edit-name').value.trim();
+                payload.email = editForm.querySelector('.edit-email').value.trim();
+                payload.password = editForm.querySelector('.edit-password').value.trim();
                 btnLoading(saveBtn);
                 fetch('/admin/api/users/' + user.id, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, email: email, role: role, team: team, password: password })
+                    body: JSON.stringify(payload)
                 })
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
                         if (data.success) {
-                            row.innerHTML = renderAccountDisplay(data.user);
-                            attachRowActions(row, data.user);
+                            // A new department or seniority can move the person to another group.
+                            loadAccountsSection();
                         } else {
                             showToast(data.error, 'error');
                             btnDone(saveBtn);
@@ -651,41 +696,30 @@ function adminEsc(value) {
         addUserCancel.addEventListener('click', function () {
             addUserForm.classList.add('hidden');
             addUserForm.reset();
-            newUserTeam.classList.add('hidden');
-        });
-    }
-
-    if (newUserRole) {
-        newUserRole.addEventListener('change', function () {
-            if (this.value === 'designer' || this.value === 'team_lead') {
-                newUserTeam.classList.remove('hidden');
-            } else {
-                newUserTeam.classList.add('hidden');
-            }
+            renderNewUserOrgFields();
         });
     }
 
     if (addUserForm) {
         addUserForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            var name = document.getElementById('new-user-name').value.trim();
-            var email = document.getElementById('new-user-email').value.trim();
-            var password = document.getElementById('new-user-password').value.trim();
-            var role = newUserRole.value;
-            var team = newUserTeam.value;
+            var payload = readOrgFields(newUserOrgFields);
+            payload.name = document.getElementById('new-user-name').value.trim();
+            payload.email = document.getElementById('new-user-email').value.trim();
+            payload.password = document.getElementById('new-user-password').value.trim();
             var submitBtn = addUserForm.querySelector('button[type="submit"]');
             btnLoading(submitBtn);
             fetch('/admin/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name, email: email, password: password, role: role, team: team })
+                body: JSON.stringify(payload)
             })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     if (data.success) {
                         btnDone(submitBtn);
                         addUserForm.reset();
-                        newUserTeam.classList.add('hidden');
+                        renderNewUserOrgFields();
                         addUserForm.classList.add('hidden');
                         loadAccountsSection();
                     } else {
@@ -694,6 +728,78 @@ function adminEsc(value) {
                     }
                 })
                 .catch(function () { btnDone(submitBtn); });
+        });
+    }
+
+    // ── Job titles ─────────────────────────────────────────
+    // Titles are added by typing one on a person; here they are renamed,
+    // hidden from the pickers, or shown again.
+    var jobTitlesToggle = document.getElementById('job-titles-toggle');
+    var jobTitlesBlock = document.getElementById('job-titles-block');
+
+    function patchJobTitle(id, body) {
+        return fetch('/admin/api/job-titles/' + id, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.success) { showToast(d.error || 'Could not update the title.', 'error'); return; }
+                loadJobTitles();
+                loadAccountsSection();
+            })
+            .catch(function () { showToast('Server error updating the title.', 'error'); });
+    }
+
+    function loadJobTitles() {
+        var list = document.getElementById('job-titles-list');
+        fetch('/admin/api/job-titles')
+            .then(function (r) { return r.json(); })
+            .then(function (rows) {
+                if (!rows.length) { list.innerHTML = '<p class="empty-state">No titles yet</p>'; return; }
+                var byId = {};
+                var lastGroup = null;
+                list.innerHTML = rows.map(function (row) {
+                    byId[row.id] = row;
+                    var heading = row.department_label !== lastGroup
+                        ? '<p class="accounts-group-label">' + adminEsc(row.department_label) + '</p>' : '';
+                    lastGroup = row.department_label;
+                    return heading +
+                        '<div class="account-user-row' + (row.is_active ? '' : ' account-user-row--deactivated') + '" data-id="' + row.id + '">' +
+                        '<div class="account-user-info"><span class="account-user-name">' + adminEsc(row.title) + '</span>' +
+                        '<span class="account-user-team">' + row.people + (row.people === 1 ? ' person' : ' people') + '</span></div>' +
+                        '<div class="account-user-actions">' +
+                        '<button type="button" class="account-edit-btn job-title-rename">Rename</button>' +
+                        '<button type="button" class="' + (row.is_active ? 'account-deactivate-btn' : 'account-reactivate-btn') +
+                            ' job-title-toggle">' + (row.is_active ? 'Hide' : 'Show') + '</button>' +
+                        '</div></div>';
+                }).join('');
+
+                list.querySelectorAll('.account-user-row').forEach(function (rowEl) {
+                    var row = byId[rowEl.dataset.id];
+                    rowEl.querySelector('.job-title-toggle').addEventListener('click', function () {
+                        patchJobTitle(row.id, { is_active: !row.is_active });
+                    });
+                    rowEl.querySelector('.job-title-rename').addEventListener('click', function () {
+                        rowEl.innerHTML = '<div class="pt-inline-edit">' +
+                            '<input type="text" class="form-input job-title-name" maxlength="100" value="' + adminEsc(row.title) + '">' +
+                            '<button type="button" class="btn-primary job-title-save">Save</button>' +
+                            '<button type="button" class="account-delete-btn job-title-cancel">Cancel</button>' +
+                            '</div>';
+                        rowEl.querySelector('.job-title-save').addEventListener('click', function () {
+                            var title = rowEl.querySelector('.job-title-name').value.trim();
+                            if (title) patchJobTitle(row.id, { title: title });
+                        });
+                        rowEl.querySelector('.job-title-cancel').addEventListener('click', loadJobTitles);
+                    });
+                });
+            })
+            .catch(function () { showToast('Could not load job titles.', 'error'); });
+    }
+
+    if (jobTitlesToggle) {
+        jobTitlesToggle.addEventListener('click', function () {
+            var opening = !jobTitlesBlock.classList.toggle('hidden');
+            if (opening) loadJobTitles();
         });
     }
 

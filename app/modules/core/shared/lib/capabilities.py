@@ -1,7 +1,6 @@
-"""Role to capability map, and the only helpers permission checks go through.
-
-One dict decides what each role may do; routes call can() or the decorators,
-templates call the can() Jinja global. Adding a role means adding one key here.
+"""Department and seniority to capability map, and the only helpers permission
+checks go through. Routes call can() or the decorators, templates call the can()
+Jinja global; neither knows how a capability is granted.
 """
 from functools import wraps
 
@@ -82,8 +81,8 @@ ADMIN_ONLY = frozenset({
 })
 
 
-# Read-only access across Projects and Client Servicing, shared by the roles
-# that have no module of their own.
+# Read-only access across Projects and Client Servicing, shared by the
+# departments that have no module of their own.
 _READ_ONLY_STAFF = {
     'view_workspace',
     'view_cs',
@@ -92,10 +91,63 @@ _READ_ONLY_STAFF = {
     'edit_client_directory',
 }
 
+_CLIENT_SERVICING = {
+    'view_workspace',
+    'view_cs', 'view_finance', 'edit_finance', 'close_projects',
+    'view_all_projects', 'create_projects', 'review_submissions',
+    'edit_client_directory', 'raise_flags',
+    'manage_reference_data', 'manage_project_files',
+}
 
-ROLE_CAPABILITIES = {
-    'admin': {'*'},
 
+# What each department may do (keys in core/shared/lib/org.py). Seniority adds
+# to it; admin holds everything through User.is_admin.
+DEPARTMENT_CAPABILITIES = {
+    'client_servicing': set(_CLIENT_SERVICING),
+
+    # Project owners stand in for CS when CS is stretched, so they hold all of
+    # CS's capabilities plus their own.
+    'project_owner': _CLIENT_SERVICING | {'log_site_visits', 'claim_ownership'},
+
+    # Designers and leads share this set; what separates them is seniority and a
+    # per-record rule (the deliverable's team), not a capability.
+    'design': {
+        'view_workspace',
+        'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
+        'start_projects',
+    },
+
+    'finance': {
+        'view_workspace',
+        'view_cs', 'view_finance', 'edit_finance',
+    },
+
+    'digital_innovation': {
+        'view_workspace',
+        'view_all_di',
+    },
+
+    # No view_workspace: the officer sees only HSE, File Storage and the Wiki.
+    # test_hse_sidebar.py fails if any other department lacks view_workspace.
+    'hse': {
+        'view_hse', 'manage_hse',
+    },
+
+    # HR also reads HSE (injuries and lost time are theirs too), so it can be
+    # sent the HSE reports.
+    'hr': set(_READ_ONLY_STAFF) | {'view_hse'},
+    # Production and Logistics don't use Client Servicing.
+    'production': set(_READ_ONLY_STAFF) - {'view_cs'},
+    'logistics': set(_READ_ONLY_STAFF) - {'view_cs'},
+}
+
+
+# What each seniority level adds to the department's set.
+SENIORITY_CAPABILITIES = {
+    'none': set(),
+    # Manager and Head of Department add nothing yet.
+    'manager': set(),
+    'head': set(),
     'management': {
         'view_workspace',
         'view_cs', 'view_finance', 'edit_invoicing_thresholds', 'close_projects',
@@ -109,59 +161,11 @@ ROLE_CAPABILITIES = {
         'write_friction_log',
         'view_time_reports',
     },
-
-    'cs': {
-        'view_workspace',
-        'view_cs', 'view_finance', 'edit_finance', 'close_projects',
-        'view_all_projects', 'create_projects', 'review_submissions',
-        'edit_client_directory', 'raise_flags',
-        'manage_reference_data', 'manage_project_files',
-    },
-
-    'finance': {
-        'view_workspace',
-        'view_cs', 'view_finance', 'edit_finance',
-    },
-
-    'project_owner': {
-        'view_workspace',
-        'view_cs', 'view_finance', 'view_all_projects', 'create_projects', 'log_site_visits',
-        'claim_ownership',
-    },
-
-    # Designer and team_lead hold the same capabilities; what separates them is
-    # a per-record rule (the deliverable's team), not a capability.
-    'designer': {
-        'view_workspace',
-        'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
-        'start_projects',
-    },
-    'team_lead': {
-        'view_workspace',
-        'manage_drafts', 'claim_work', 'raise_flags', 'complete_preproduction',
-        'start_projects',
-    },
-
-    'digital_innovation': {
-        'view_workspace',
-        'view_all_di',
-    },
-
-    # No view_workspace: the officer sees only HSE, File Storage and the Wiki.
-    # test_hse_sidebar.py fails if any other role lacks view_workspace.
-    'hse': {
-        'view_hse', 'manage_hse',
-    },
-
-    # HR also reads HSE (injuries and lost time are theirs too), so it can be
-    # sent the HSE reports.
-    'hr': set(_READ_ONLY_STAFF) | {'view_hse'},
-    'production': set(_READ_ONLY_STAFF),
-    'logistics': set(_READ_ONLY_STAFF),
 }
 
 
-# Role picker options, in display order. The value is what lands in User.role.
+# Labels for the role keys in org.LEGACY_ROLES, in picker order. Read by pages
+# not yet on the org model; the key picked is written through User.role.
 ROLE_LABELS = {
     'cs': 'Client Servicing',
     'designer': 'Designer',
@@ -191,7 +195,7 @@ def effective_user():
     from app.modules.core.shared.models import User
 
     emulating_id = session.get('emulating_user_id')
-    if emulating_id and getattr(current_user, 'role', None) == 'admin':
+    if emulating_id and getattr(current_user, 'is_admin', False):
         return User.query.get(emulating_id) or current_user
     return current_user
 
@@ -201,12 +205,21 @@ def effective_user():
 _UNSET = object()
 
 
+def capabilities_for(user):
+    """Every capability `user` holds: '*' for admin, otherwise their department's
+    set plus their seniority's. Empty for None or anything without org fields."""
+    if getattr(user, 'is_admin', False):
+        return frozenset({'*'})
+    department = DEPARTMENT_CAPABILITIES.get(getattr(user, 'department', None), ())
+    seniority = SENIORITY_CAPABILITIES.get(getattr(user, 'seniority', None), ())
+    return frozenset(department) | frozenset(seniority)
+
+
 def can(capability, user=_UNSET):
     """True if `user` holds `capability`. Omit `user` for the effective user;
-    None (or anything without a role) gets False. Admin's '*' grants everything.
+    None (or anything without org fields) gets False. Admin holds everything.
     """
-    actor = effective_user() if user is _UNSET else user
-    granted = ROLE_CAPABILITIES.get(getattr(actor, 'role', None), frozenset())
+    granted = capabilities_for(effective_user() if user is _UNSET else user)
     return '*' in granted or capability in granted
 
 

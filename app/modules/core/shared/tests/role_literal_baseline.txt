@@ -1,33 +1,5 @@
-modules/admin/routes/admin.py :: if user.role == 'admin':
-modules/auth/templates/auth/account.html :: {% if current_user.role in ['admin', 'management', 'designer', 'team_lead'] %}
-modules/auth/templates/auth/account.html :: {% if current_user.role in ['cs', 'admin', 'designer', 'team_lead'] %}
-modules/auth/templates/auth/account.html :: {% if current_user.role in ['cs', 'admin', 'management', 'project_owner'] %}
-modules/auth/templates/auth/account.html :: {% if current_user.role in ['cs', 'admin', 'management'] %}
-modules/auth/templates/auth/account.html :: {% if current_user.role in ['designer', 'team_lead', 'cs', 'admin', 'management', 'project_owner'] %}
-modules/auth/templates/auth/account.html :: {% if current_user.role in ['designer', 'team_lead'] %}
-modules/auth/templates/auth/account.html :: {% if current_user.role in ['project_owner', 'cs', 'admin', 'management'] %}
-modules/dashboard/lib/dashboard_logic.py :: if last_author.role in cs_roles:
-modules/dashboard/lib/dashboard_logic.py :: if viewer.role in ('designer', 'team_lead') and owner_info['role'] == 'cs':
-modules/dashboard/lib/project_loader.py :: if user.role == 'cs':
-modules/dashboard/lib/project_loader.py :: if user.role == 'project_owner':
-modules/dashboard/lib/project_loader.py :: if user.role in ('admin', 'management'):
-modules/dashboard/lib/project_loader.py :: if user.role in ('designer', 'team_lead'):
-modules/dashboard/routes/dashboard.py :: elif u.role == 'cs' and any(needs_client_approval(p) for p in scoped):
-modules/dashboard/routes/dashboard.py :: flaggable_projects=_compute_flaggable_projects(user) if user.role in ('cs', 'designer', 'team_lead') else [],
-modules/dashboard/routes/dashboard.py :: if u.role == 'cs':
-modules/dashboard/templates/dashboard/_decision_flag_modal.html :: flag (current_user.role in ('admin','management') — see get_decision_
-modules/projects/routes/project_notes.py :: return actor.role in ('designer', 'team_lead') and actor.team == 'Technical'
-modules/projects/routes/project_notes.py :: return user.role in ('designer', 'team_lead')
-modules/projects/routes/project_overlay/deliverables.py :: 'default_focus': actor.role in ('designer', 'team_lead'),
-modules/projects/routes/project_overlay/deliverables.py :: elif actor.role == 'designer' and actor.team in assignable_teams_for(team):
-modules/projects/routes/project_overlay/deliverables.py :: if actor.role != 'designer' or actor.team not in assignable_teams_for(team):
-modules/projects/routes/project_overlay/deliverables.py :: if actor.role == 'team_lead' and actor.team in assignable_teams_for(team):
-modules/projects/routes/project_overlay/deliverables.py :: if actor.role in ('designer', 'team_lead') and actor.team not in assignable_teams_for(team):
-modules/projects/routes/project_overlay/deliverables.py :: if can_manage_project or (actor.role == 'team_lead' and actor.team in assignable_teams_for(team)):
-modules/projects/routes/project_overlay/deliverables.py :: if not new_cs_lead or new_cs_lead.role != 'cs':
-modules/projects/routes/project_overlay/deliverables.py :: if not new_owner or new_owner.role != 'project_owner':
-modules/projects/routes/project_overlay/deliverables.py :: if not target or target.role not in ('designer', 'team_lead') or target.team not in assignable_teams_for(team):
-modules/projects/routes/project_overlay/deliverables.py :: if not user or user.role not in ('cs', 'admin', 'management'):
-modules/projects/routes/project_overlay/deliverables.py :: self_claim_only = actor.role in ('designer', 'team_lead')
-modules/projects/routes/project_overlay/details.py :: if actor.role in ('designer', 'team_lead'):
-modules/projects/routes/project_overlay/details.py :: if actor.role not in ('designer', 'team_lead'):
+modules/core/shared/lib/champions.py :: if row.department in DEPARTMENT_LABELS and row.department not in found:
+modules/core/shared/models/users.py :: (and_(cls.department == 'design', cls.seniority.in_(LEAD_SENIORITY)), 'team_lead'),
+modules/core/shared/models/users.py :: (cls.department == 'client_servicing', 'cs'),
+modules/core/shared/models/users.py :: (cls.department == 'design', 'designer'),
+modules/core/shared/models/users.py :: (cls.seniority == 'management', 'management'),
