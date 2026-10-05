@@ -16,7 +16,8 @@ class ApprovalStep:
 @dataclass
 class ApprovalChain:
     """The steps in order, HR last. complete is False when the walk stopped at
-    a missing Reports to or a loop before reaching Management."""
+    a missing Reports to or a loop before reaching Management, or when no HR
+    person is left to approve."""
     steps: list = field(default_factory=list)
     complete: bool = True
 
@@ -38,7 +39,7 @@ def approvers_for(user):
             reached_management = is_management(current)
         current = current.reports_to
 
-    chain.complete = reached_management
     hr = tuple(person for person in active_users_in('hr') if person.id != user.id)
     chain.steps.append(ApprovalStep(approvers=hr, is_hr=True))
+    chain.complete = reached_management and bool(hr)
     return chain

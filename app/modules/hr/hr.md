@@ -8,8 +8,9 @@ reimbursements) arrive in 2.8; today the module is one service.
   Reports-to chain up to and including the first Management person, then one HR
   step any active HR person can approve. Management people go straight to HR.
   Deactivated people are skipped and the requester is never their own approver.
-  `complete` is False when the walk hit a missing Reports to or a loop; HR is
-  still added, so a request never sticks.
+  `complete` is False when the walk hit a missing Reports to or a loop, or when
+  no HR person is left to approve (none active, or the requester is the only
+  one); HR is still added, so the HR pages can flag it.
 
 ## Data it reads
 The org fields on the shared user record (`core/shared`): department, seniority,

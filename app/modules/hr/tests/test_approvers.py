@@ -1,5 +1,8 @@
 """The approval chain: Reports to up to the first Management person, then HR."""
+import pytest
+
 from app.modules.core.shared.models import User
+from app.modules.hr.services import approvers as approvers_module
 from app.modules.hr.services.approvers import approvers_for
 
 
@@ -40,6 +43,7 @@ def test_head_of_department_goes_to_the_gm_then_hr(db_session):
 
 
 def test_an_admin_head_goes_to_the_gm_then_hr(db_session):
+    _person(db_session, 'hr-2', department='hr', seniority='none', is_admin=False)
     gm = _person(db_session, 'gm-2', role='management')
     ezekiel = _person(db_session, 'ezekiel', reports_to=gm, department='digital_innovation',
                       seniority='head', is_admin=True)
@@ -57,6 +61,7 @@ def test_the_walk_stops_at_the_first_management_person(db_session):
 
 
 def test_management_go_straight_to_hr_even_with_a_manager(db_session):
+    _person(db_session, 'hr-8', department='hr', seniority='none', is_admin=False)
     gm = _person(db_session, 'gm-8', role='management')
     petar = _person(db_session, 'petar-8', reports_to=gm, department='design',
                     seniority='management', is_admin=False)
@@ -105,7 +110,22 @@ def test_a_deactivated_manager_is_skipped(db_session):
 
 
 def test_the_gm_goes_straight_to_hr(db_session):
+    _person(db_session, 'hr-7', department='hr', seniority='none', is_admin=False)
     gm = _person(db_session, 'gm-7', role='management')
     chain = approvers_for(gm)
     assert _managers(chain) == []
     assert chain.complete
+
+
+@pytest.mark.parametrize('hr_people', ['nobody', 'only-the-requester'])
+def test_an_empty_hr_step_marks_the_chain_incomplete(db_session, monkeypatch, hr_people):
+    requester = _person(db_session, f'empty-hr-{hr_people}', department='hr', seniority='none', is_admin=False)
+    gm = _person(db_session, f'empty-hr-gm-{hr_people}', role='management')
+    requester.reports_to = gm
+    db_session.flush()
+    found = [] if hr_people == 'nobody' else [requester]
+    monkeypatch.setattr(approvers_module, 'active_users_in', lambda department: found)
+
+    chain = approvers_for(requester)
+    assert _hr_step(chain) == set()
+    assert not chain.complete
