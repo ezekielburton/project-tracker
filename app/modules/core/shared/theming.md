@@ -40,14 +40,14 @@ Text must reach **4.5:1** contrast against what it sits on (WCAG AA) in both the
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--tangerine` | `#B04A1C` | `#F27F55` | orange text, links, buttons, highlights |
+| `--tangerine` | `#F27F55` | `#F27F55` | orange text, links, buttons, highlights (the brand colour; below 4.5:1 on cream, so keep it off small body text) |
 | `--brand` | `#F27F55` | `#F27F55` | the logo V, sidebar and navigation only |
 | `--pine` | `#4F6247` | `#63775B` | green text |
 | `--text-muted` | `#5C5C5C` | `#b3a89a` | secondary text |
 | `--text-faint` / `--grey-mid` | `#696969` | `#9a8f7e` | the quietest text that is still read |
 | `--border-strong` | `#AAAAAA` | `#4a4033` | lines that must be seen, such as input edges |
 
-**Brand vs text orange.** `--brand` is the main brand colour and stays the bright tangerine everywhere: the logo V, the sidebar, and navigation (active nav items, tabs, the bell badge). Everything else orange uses `--tangerine`. Brand orange used as text or under white text is under 4.5:1 (about 2.5:1) — a deliberate exception for the brand, not a pattern to copy.
+**Brand vs text orange.** `--brand` is the main brand colour and stays the bright tangerine everywhere: the logo V, the sidebar, and navigation (active nav items, tabs, the bell badge). Everything else orange uses `--tangerine`, which is the same brand tangerine in both themes. On the light background it is about 2.5:1, so use it for headings, buttons and highlights, not small body text.
 
 **Still below 4.5:1, left for later:** rose, salmon, coral, clover, poppy, oak, ashen, canary and lavender when used as text (they are mainly fills, so changing the token would change the fills too); the single text uses of `#777777` and `#BBBBBB`; pine as text in dark (about 3.5:1); DI canary on sandstone (about 4.3:1). Chart series colours were not part of this pass.
 
