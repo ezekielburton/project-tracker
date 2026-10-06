@@ -2,6 +2,7 @@
 numbers. Commands are tuples written here; the only values from outside are
 the LAN cert path and the journal bookmark file, both from .env."""
 import json
+import os
 import socket
 import ssl
 import subprocess
@@ -27,16 +28,49 @@ def journal_command(cursor_file):
             '--since', JOURNAL_SINCE, '--cursor-file', cursor_file)
 
 
-def run(command, cwd=None, timeout=120):
-    """stdout of one fixed command, or None when it fails. Takes a tuple, never
-    a string, and never uses a shell."""
+def timers_command(units):
+    return ('systemctl', 'show', *(f'{unit}.timer' for unit in units),
+            '-p', 'Id,LastTriggerUSec,NextElapseUSecRealtime')
+
+
+def _execute(command, cwd, timeout, utc):
     if not isinstance(command, tuple):
         raise TypeError('commands are fixed tuples')
+    # TZ=UTC makes tools like systemctl print times we can read without guessing a zone.
+    env = dict(os.environ, TZ='UTC') if utc else None
+    return subprocess.run(list(command), cwd=cwd, capture_output=True, text=True,
+                          timeout=timeout, env=env)
+
+
+def run(command, cwd=None, timeout=120, utc=False):
+    """stdout of one fixed command, or None when it fails. Takes a tuple, never
+    a string, and never uses a shell."""
     try:
-        result = subprocess.run(list(command), cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        result = _execute(command, cwd, timeout, utc)
     except (OSError, subprocess.SubprocessError):
         return None
     return result.stdout if result.returncode == 0 else None
+
+
+def run_status(command, timeout=120):
+    """(return code, end of stderr) for a command whose warnings aren't failures
+    (pg_restore exits non-zero on harmless notices). Raises if it can't start."""
+    try:
+        result = _execute(command, None, timeout, False)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(f'{command[0]} could not run: {e}')
+    return result.returncode, result.stderr.strip()[-2000:]
+
+
+def run_or_raise(command, cwd=None, timeout=120):
+    """Like run(), but a failure raises RuntimeError carrying the end of stderr."""
+    try:
+        result = _execute(command, cwd, timeout, False)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(f'{command[0]} could not run: {e}')
+    if result.returncode != 0:
+        raise RuntimeError(f'{command[0]} failed: {result.stderr.strip()[-500:]}')
+    return result.stdout
 
 
 def parse_apt(output):
@@ -114,3 +148,30 @@ def app_version(repo_dir):
     head = first_line(run(GIT_HEAD, cwd=repo_dir, timeout=10))
     return {'version': first_line(run(GIT_TAG, cwd=repo_dir, timeout=10)),
             'commit': head[:7] if head else None, 'head': head}
+
+
+def _systemd_time(value):
+    try:
+        return datetime.strptime(value, '%a %Y-%m-%d %H:%M:%S UTC').isoformat(timespec='seconds')
+    except ValueError:
+        return None
+
+
+def parse_timers(output):
+    """{unit: {'last', 'next'}} from `systemctl show` of .timer units run with
+    TZ=UTC; a time systemd doesn't know is None."""
+    timers = {}
+    for block in (output or '').strip().split('\n\n'):
+        fields = dict(line.split('=', 1) for line in block.splitlines() if '=' in line)
+        unit = fields.get('Id', '')
+        if unit.endswith('.timer'):
+            timers[unit[:-len('.timer')]] = {
+                'last': _systemd_time(fields.get('LastTriggerUSec', '')),
+                'next': _systemd_time(fields.get('NextElapseUSecRealtime', '')),
+            }
+    return timers
+
+
+def timer_states(units):
+    """When each job's timer last fired and fires next, straight from systemd."""
+    return parse_timers(run(timers_command(tuple(units)), timeout=15, utc=True))

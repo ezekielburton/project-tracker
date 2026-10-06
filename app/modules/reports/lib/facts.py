@@ -51,6 +51,7 @@ def load(period, user_ids, today=None):
     workdays = set(period.working_days())
     f.working_days = len(workdays)
     if not f.user_ids:
+        f.cs = {key: [] for key in ('closed', 'invoiced', 'installs', 'jobs', 'waiting_invoice')}
         return f
     start, end = period.utc_bounds()
     _activity(f, start, end, workdays)

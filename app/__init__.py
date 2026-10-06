@@ -176,6 +176,10 @@ def create_app(config=Config):
     from app.modules.hse.routes import performance as hse_performance  # registers My performance and its report on hse_bp
     from app.modules.hse.routes import statistics as hse_statistics  # registers the Statistics page on hse_bp
     from app.modules.hse.routes.blueprint import hse_bp
+    from app.modules.reports.routes import pages as reports_pages  # registers the Generate, History and Recipients pages on reports_bp
+    from app.modules.reports.routes import actions as reports_actions  # registers preview, generate, send, download and settings on reports_bp
+    from app.modules.reports.routes.blueprint import reports_bp
+    from app.modules.reports.blueprint import reports_assets
 
 
     app.register_blueprint(core_bp)  # shared templates + static
@@ -220,6 +224,8 @@ def create_app(config=Config):
     app.register_blueprint(client_servicing_bp)
     app.register_blueprint(hse_assets)
     app.register_blueprint(hse_bp)
+    app.register_blueprint(reports_bp)
+    app.register_blueprint(reports_assets)
     app.register_blueprint(system_bp)
 
     @app.context_processor

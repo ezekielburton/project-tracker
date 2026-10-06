@@ -50,6 +50,8 @@ class JobRun(db.Model):
     message         = db.Column(db.Text, nullable=True)
     bytes_reclaimed = db.Column(db.BigInteger, nullable=True)
     run_by_id       = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    # What the job wants kept with the run: sizes, paths, counts, a report list.
+    details         = db.Column(db.JSON, nullable=True)
 
 
 class WorkerStat(db.Model):

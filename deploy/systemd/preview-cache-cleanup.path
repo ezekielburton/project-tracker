@@ -1,0 +1,8 @@
+[Unit]
+Description=OVP Preview-cache cleanup (Run now)
+
+[Path]
+PathExists=/var/lib/ovp/run-now/preview-cache-cleanup
+
+[Install]
+WantedBy=paths.target

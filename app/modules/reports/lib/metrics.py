@@ -90,3 +90,22 @@ def department(f, report, people):
             incomplete_list=incomplete[:LIST_SIZE],
         )
     return data
+
+
+def company(f, by_report):
+    """Company totals for the consolidated report, each project or
+    deliverable counted once across departments."""
+    cs_ids = {u.id for key in ('client_servicing', 'project_owner') for u in by_report[key]}
+    all_ids = cs_ids | {u.id for u in by_report['design']}
+    installs = list(_unique(f.cs['installs'], cs_ids))
+    invoiced = list(_unique(f.cs['invoiced'], cs_ids))
+    due = [d for d in f.design_deadlines if all_ids & d['designers']]
+    hit = sum(1 for r in installs if r['done']) + sum(1 for d in due if d['hit'])
+    return {
+        'worked': len(set().union(*(f.worked.get(uid, set()) for uid in all_ids))),
+        'closed': len(list(_unique(f.cs['closed'], cs_ids))),
+        'invoiced': len(invoiced), 'aed': sum(r['amount'] for r in invoiced),
+        'hit': hit, 'missed': len(installs) + len(due) - hit,
+        'approvals': sum(f.approvals[uid] for uid in cs_ids),
+        'incomplete': sum(1 for r in _unique(f.cs['jobs'], cs_ids) if r['missing']),
+    }

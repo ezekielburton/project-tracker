@@ -1,0 +1,10 @@
+[Unit]
+Description=OVP NAS outbox flush
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=helixadmin
+WorkingDirectory=/home/helixadmin/project-tracker
+ExecStart=/home/helixadmin/project-tracker/venv/bin/python nas_outbox_flush.py
+SyslogIdentifier=ovp-nas-outbox-flush

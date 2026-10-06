@@ -1,0 +1,8 @@
+[Unit]
+Description=OVP VACUUM ANALYZE (Run now)
+
+[Path]
+PathExists=/var/lib/ovp/run-now/vacuum-analyze
+
+[Install]
+WantedBy=paths.target

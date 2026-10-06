@@ -1,0 +1,23 @@
+{# One report PDF. The consolidated report adds the three department reports
+   after its summary page. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OVP {{ label }} report · {{ period.short_label }}</title>
+{% include 'reports/pdf/_style.html' %}
+</head>
+<body>
+{% if report == 'consolidated' %}
+  {% include 'reports/pdf/_consolidated.html' %}
+  {% for key, label in department_labels.items() %}
+    {% set data = built[key] %}
+    {% include 'reports/pdf/_design.html' if key == 'design' else 'reports/pdf/_department.html' %}
+  {% endfor %}
+{% elif report == 'design' %}
+  {% include 'reports/pdf/_design.html' %}
+{% else %}
+  {% include 'reports/pdf/_department.html' %}
+{% endif %}
+</body>
+</html>

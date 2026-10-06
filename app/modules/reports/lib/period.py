@@ -86,6 +86,11 @@ class Period:
         return f'{self.start:%B %Y}'
 
     @property
+    def tick_label(self):
+        """'Wk 40' or 'Sep', for chart axes."""
+        return f'Wk {self.week_number}' if self.kind == WEEKLY else f'{self.start:%b}'
+
+    @property
     def file_stem(self):
         """'Wk40' or '2026-09', for PDF file names."""
         return f'Wk{self.week_number}' if self.kind == WEEKLY else f'{self.start:%Y-%m}'

@@ -35,6 +35,29 @@ def test_remote_head_from_ls_remote():
     assert checks.parse_remote_head(None) is None
 
 
+TIMERS_OUTPUT = """NextElapseUSecRealtime=Tue 2026-10-06 19:00:00 UTC
+LastTriggerUSec=Mon 2026-10-05 19:00:00 UTC
+Id=ovp-backup.timer
+
+NextElapseUSecRealtime=
+LastTriggerUSec=
+Id=ovp-restore-test.timer
+"""
+
+
+def test_timer_times_from_systemctl():
+    assert checks.parse_timers(TIMERS_OUTPUT) == {
+        'ovp-backup': {'last': '2026-10-05T19:00:00', 'next': '2026-10-06T19:00:00'},
+        'ovp-restore-test': {'last': None, 'next': None},
+    }
+    assert checks.parse_timers(None) == {}
+
+
+def test_run_or_raise_carries_the_error():
+    with pytest.raises(RuntimeError, match='git failed'):
+        checks.run_or_raise(('git', 'no-such-git-command'))
+
+
 def test_run_refuses_anything_but_a_fixed_tuple():
     with pytest.raises(TypeError):
         checks.run('apt list --upgradable')

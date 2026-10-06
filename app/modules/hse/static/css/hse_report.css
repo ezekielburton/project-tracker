@@ -5,15 +5,15 @@
    Fonts are bundled with the module so it renders the same offline. */
 
 @font-face { font-family: 'Barlow Condensed'; font-weight: 700; font-style: normal;
-    font-display: block; src: url('../fonts/barlow-condensed-700.woff2') format('woff2'); }
+    font-display: block; src: url('/core/static/fonts/print/barlow-condensed-700.woff2') format('woff2'); }
 @font-face { font-family: 'Public Sans'; font-weight: 400; font-style: normal;
-    font-display: block; src: url('../fonts/public-sans-400.woff2') format('woff2'); }
+    font-display: block; src: url('/core/static/fonts/print/public-sans-400.woff2') format('woff2'); }
 @font-face { font-family: 'Public Sans'; font-weight: 600; font-style: normal;
-    font-display: block; src: url('../fonts/public-sans-600.woff2') format('woff2'); }
+    font-display: block; src: url('/core/static/fonts/print/public-sans-600.woff2') format('woff2'); }
 @font-face { font-family: 'Public Sans'; font-weight: 700; font-style: normal;
-    font-display: block; src: url('../fonts/public-sans-700.woff2') format('woff2'); }
+    font-display: block; src: url('/core/static/fonts/print/public-sans-700.woff2') format('woff2'); }
 @font-face { font-family: 'DM Mono'; font-weight: 400; font-style: normal;
-    font-display: block; src: url('../fonts/dm-mono-400.woff2') format('woff2'); }
+    font-display: block; src: url('/core/static/fonts/print/dm-mono-400.woff2') format('woff2'); }
 
 :root {
     --paper: #F5F0E8;

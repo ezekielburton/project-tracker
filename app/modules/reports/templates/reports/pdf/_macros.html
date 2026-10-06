@@ -1,0 +1,68 @@
+{# Building blocks shared by every report PDF. #}
+
+{% macro delta(value, invert=False) -%}
+  {%- if value is not defined or value is none -%}
+  {%- elif value == 0 -%}<span class="d flat">–</span>
+  {%- else -%}
+    {%- set good = (value > 0) != invert -%}
+    <span class="d {{ 'good' if good else 'bad' }}">{{ '▲' if value > 0 else '▼' }}{{ money(value|abs) }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro money(value) -%}{{ '{:,.0f}'.format(value or 0) }}{%- endmacro %}
+
+{% macro band(score) -%}{{ 'hi' if score >= 75 else ('mid' if score >= 50 else 'lo') }}{%- endmacro %}
+
+{% macro header(kicker, title, period, generated, people_line) %}
+<div class="hd">
+  <span class="logo">V</span>
+  <div class="t">
+    <div class="lab">{{ kicker }}</div>
+    <div class="n">{{ title }}</div>
+    <div class="p">{{ period.label }}</div>
+  </div>
+  <div class="rt"><span class="kind">{{ 'Weekly' if period.kind == 'weekly' else 'Monthly' }}</span><br>Generated {{ generated }}<br>{{ people_line }}</div>
+</div>
+{% endmacro %}
+
+{% macro vs(period) %}▲▼ vs last {{ 'week' if period.kind == 'weekly' else 'month' }}{% endmacro %}
+
+{% macro score_block(data, period, title='Adoption score') %}
+<div class="top">
+  <div class="score">
+    <div class="lab">{{ title }}</div>
+    <div class="big"><span class="v">{{ data.score }}<small>%</small></span>{{ delta(data.delta.score) }}</div>
+    <div class="vs">{{ vs(period) }}</div>
+  </div>
+  <div class="comp">
+    <div class="lab">Made up of</div>
+    {% for c in data.components %}
+    <div class="cb"><span class="l">{{ c.label }}</span><span class="tr"><i style="width: {{ c.percent }}%"></i></span><span class="v">{{ c.percent }}%</span></div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro tile(label, value, sub, change=None, invert=False) %}
+<div class="tile"><div class="lab">{{ label }}</div><div class="v">{{ value }}</div><div class="s">{{ delta(change, invert) }} {{ sub }}</div></div>
+{% endmacro %}
+
+{% macro section_head(title, note='') %}
+<div class="sh">{{ title }}<span class="line"></span>{% if note %}<span class="c">{{ note }}</span>{% endif %}</div>
+{% endmacro %}
+
+{% macro hit_rate(hit, missed) -%}
+  {%- set total = hit + missed -%}
+  {{ hit }}/{{ total }}{% if total %} <span class="pc">{{ (100 * hit / total)|round|int }}%</span>{% endif %}
+{%- endmacro %}
+
+{% macro no_activity(users) %}
+<div class="section">
+  {{ section_head('No activity') }}
+  {% if users %}
+  <div class="na">{% for u in users %}<span><i>●</i>{{ u.name }}</span>{% endfor %}</div>
+  {% else %}<div class="empty">Everyone was active</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro day(d) %}{{ d.day }} {{ d.strftime('%b') }}{% endmacro %}

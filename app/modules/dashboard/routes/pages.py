@@ -2,15 +2,18 @@
 is not built yet. Each is gated by its capability and by being on the rail."""
 from datetime import date
 
-from flask import redirect, render_template, request, url_for
-from flask_login import login_required
+from flask import current_app, jsonify, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
-from app.modules.core.shared.lib.capabilities import effective_user, require
+from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
+from app.modules.core.shared.lib.utils import log_activity
 from app.modules.core.shared.lib.month_grid import month_span, month_weeks
 from app.modules.dashboard.lib.calendar import EVENT_KINDS, calendar_events_for, parse_day, parse_month
 from app.modules.dashboard.lib.rails import PAGES, rail_for
 from app.modules.dashboard.lib.shell import on_rail, page_context
 from app.modules.dashboard.routes.dashboard import dashboard_bp
+from app.modules.system.lib.job_list import BY_KEY as JOBS_BY_KEY
+from app.modules.system.services.run_now import NotRunnable, request_run
 
 
 def _placeholder(key):
@@ -221,3 +224,20 @@ def admin_uptime():
 @require('admin_panel', real_user=True)
 def admin_jobs():
     return _placeholder('jobs')
+
+
+@dashboard_bp.route('/api/admin/jobs/<job_key>/run', methods=['POST'])
+@require_api('admin_panel', real_user=True)
+def admin_job_run_now(job_key):
+    """Start one listed job now; the run is recorded against the real admin."""
+    if job_key not in JOBS_BY_KEY:
+        return jsonify({'success': False, 'error': 'Unknown job'}), 404
+    try:
+        request_run(job_key, current_user.id, folder=current_app.config['RUN_NOW_DIR'])
+    except NotRunnable:
+        return jsonify({'success': False, 'error': 'This job can’t be started by hand'}), 400
+    except OSError:
+        return jsonify({'success': False, 'error': 'Could not reach the job runner'}), 503
+    log_activity('job_run_now', f'Started {JOBS_BY_KEY[job_key].label} by hand',
+                 user=current_user, entity_type='job', entity_name=job_key)
+    return jsonify({'success': True, 'job': job_key})

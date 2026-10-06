@@ -1,0 +1,8 @@
+[Unit]
+Description=OVP Nightly backup (Run now)
+
+[Path]
+PathExists=/var/lib/ovp/run-now/backup
+
+[Install]
+WantedBy=paths.target

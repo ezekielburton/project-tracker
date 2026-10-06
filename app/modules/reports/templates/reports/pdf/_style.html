@@ -1,0 +1,117 @@
+{# Print sheet for every report PDF. Light only: a printed document is not
+   themed. Fonts load from core/shared/static/fonts/print (pdf.py sets base_url). #}
+<style>
+@font-face { font-family: 'Barlow Condensed'; font-weight: 700; src: url('fonts/print/barlow-condensed-700.woff2'); }
+@font-face { font-family: 'Public Sans'; font-weight: 400; src: url('fonts/print/public-sans-400.woff2'); }
+@font-face { font-family: 'Public Sans'; font-weight: 600; src: url('fonts/print/public-sans-600.woff2'); }
+@font-face { font-family: 'Public Sans'; font-weight: 700; src: url('fonts/print/public-sans-700.woff2'); }
+@font-face { font-family: 'DM Mono'; font-weight: 400; src: url('fonts/print/dm-mono-400.woff2'); }
+
+:root {
+  --paper: #FFFFFF; --card: #FBF8F3; --track: #EFE8DC; --rule: #E3DBCD; --rule-faint: #EFE9DE;
+  --ink: #1F1B16; --body: #3C362E; --soft: #5C5245; --muted: #6B6157; --faint: #857A6C;
+  --tangerine: #F27F55; --tangerine-bg: #FDEBE3; --tangerine-soft: #F7C3AE;
+  --good: #2E7D45; --good-bg: #E5F2E8; --bad: #B3392F; --bad-bg: #F8E3E0; --chip: #F0E9DE;
+  --head: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --text: 'Public Sans', Arial, sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+
+@page {
+  size: A4;
+  margin: 14mm 14mm 16mm;
+  @bottom-left { content: "Only work recorded in OVP is counted."; font: 8pt 'Public Sans', Arial, sans-serif; color: #857A6C; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt 'DM Mono', monospace; color: #857A6C; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--body); font-family: var(--text); font-size: 8pt; }
+.page + .page { break-before: page; }
+.lab { font-family: var(--mono); font-size: 6.5pt; letter-spacing: .4pt; text-transform: uppercase; color: var(--faint); }
+
+.hd { display: flex; align-items: flex-end; gap: 10pt; padding-bottom: 10pt; border-bottom: 2.5pt solid var(--tangerine); margin-bottom: 13pt; }
+.hd .logo { font-family: var(--head); font-weight: 700; font-size: 30pt; line-height: .8; color: var(--tangerine); }
+.hd .t { flex: 1; }
+.hd .n { font-family: var(--head); font-weight: 700; font-size: 22pt; line-height: 1; text-transform: uppercase; letter-spacing: .4pt; color: var(--ink); margin-top: 2pt; }
+.hd .p { font-size: 8.5pt; color: var(--soft); margin-top: 3pt; }
+.hd .rt { text-align: right; font-family: var(--mono); font-size: 7pt; color: var(--faint); line-height: 1.6; }
+.hd .kind { display: inline-block; color: var(--tangerine); background: var(--tangerine-bg); border-radius: 3pt; padding: 0 5pt; text-transform: uppercase; letter-spacing: .3pt; }
+
+.top { display: flex; gap: 12pt; margin-bottom: 12pt; }
+.score { width: 150pt; border: 0.75pt solid var(--rule); border-radius: 7pt; padding: 10pt 12pt; background: var(--card); }
+.score .big { display: flex; align-items: baseline; gap: 6pt; margin-top: 4pt; }
+.score .v { font-family: var(--head); font-weight: 700; font-size: 42pt; line-height: .9; color: var(--ink); }
+.score .v small { font-size: 17pt; color: var(--muted); }
+.score .vs { font-size: 7.5pt; color: var(--faint); margin-top: 5pt; }
+.comp { flex: 1; border: 0.75pt solid var(--rule); border-radius: 7pt; padding: 10pt 12pt; }
+.cb { display: flex; align-items: center; gap: 8pt; font-size: 8pt; color: var(--soft); margin-top: 7pt; }
+.cb .l { width: 140pt; }
+.cb .tr { flex: 1; height: 5pt; border-radius: 3pt; background: var(--track); }
+.cb .tr i { display: block; height: 5pt; border-radius: 3pt; background: var(--tangerine); }
+.cb .v { width: 26pt; text-align: right; font-family: var(--mono); color: var(--ink); }
+
+.tiles { display: flex; gap: 6pt; margin-bottom: 14pt; }
+.tile { flex: 1; border: 0.75pt solid var(--rule); border-radius: 6pt; padding: 7pt 8pt; }
+.tile .v { font-family: var(--head); font-weight: 700; font-size: 18pt; line-height: 1; color: var(--ink); margin-top: 4pt; }
+.tile .s { font-size: 7pt; color: var(--muted); margin-top: 3pt; }
+
+.d { font-family: var(--mono); font-size: 6.5pt; padding: 0 3pt; border-radius: 2pt; white-space: nowrap; }
+.d.good { color: var(--good); background: var(--good-bg); }
+.d.bad { color: var(--bad); background: var(--bad-bg); }
+.d.flat { color: var(--faint); }
+
+.sh { display: flex; align-items: center; gap: 8pt; font-family: var(--head); font-weight: 700; font-size: 10.5pt; text-transform: uppercase; letter-spacing: .4pt; color: var(--ink); margin: 0 0 5pt; }
+.sh .line { flex: 1; height: 0.75pt; background: var(--rule); }
+.sh .c { font-family: var(--mono); font-weight: 400; font-size: 6.5pt; letter-spacing: .3pt; color: var(--faint); }
+.section { margin-bottom: 14pt; break-inside: avoid; }
+
+table.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { text-align: right; font-family: var(--mono); font-weight: 400; font-size: 6.5pt; letter-spacing: .2pt; text-transform: uppercase; color: var(--faint); padding: 0 0 4pt 5pt; border-bottom: 0.75pt solid var(--rule); }
+.tbl td { text-align: right; padding: 5pt 0 5pt 5pt; border-bottom: 0.5pt solid var(--rule-faint); font-family: var(--mono); font-size: 8pt; color: var(--ink); white-space: nowrap; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; padding-left: 0; }
+.tbl td:first-child { font-family: var(--text); font-weight: 600; font-size: 8.5pt; }
+.tbl tr { break-inside: avoid; }
+.tbl tr.none td { color: var(--faint); }
+.tbl tr.tot td { border-top: 0.75pt solid var(--rule); border-bottom: none; font-weight: 600; }
+.tbl .pc { color: var(--faint); font-size: 7pt; }
+.tag { font-family: var(--mono); font-size: 6.5pt; padding: 0 4pt; border-radius: 2pt; margin-left: 4pt; font-weight: 400; }
+.tag.none { background: var(--bad-bg); color: var(--bad); }
+.tag.lead { background: var(--tangerine-bg); color: var(--tangerine); }
+.sc { display: inline-block; min-width: 22pt; text-align: center; border-radius: 3pt; font-weight: 600; }
+.sc.hi { background: var(--good-bg); color: var(--good); }
+.sc.mid { background: var(--chip); color: var(--ink); }
+.sc.lo { background: var(--bad-bg); color: var(--bad); }
+
+.two { display: flex; gap: 14pt; }
+.two > div { flex: 1; min-width: 0; }
+.li { display: flex; gap: 6pt; align-items: baseline; padding: 4pt 0; border-bottom: 0.5pt solid var(--rule-faint); font-size: 8pt; }
+.li .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 600; }
+.li .m { font-family: var(--mono); font-size: 7pt; color: var(--muted); white-space: nowrap; }
+.li .w { font-family: var(--mono); font-size: 7pt; color: var(--bad); white-space: nowrap; }
+.li .n { font-family: var(--mono); font-size: 7pt; color: var(--ink); white-space: nowrap; }
+.empty { font-size: 8pt; color: var(--faint); padding: 4pt 0; }
+
+.na { display: flex; flex-wrap: wrap; gap: 6pt; }
+.na span { display: inline-flex; align-items: center; gap: 5pt; border: 0.75pt solid var(--rule); border-radius: 5pt; padding: 4pt 8pt; background: var(--card); font-size: 8pt; color: var(--ink); font-weight: 600; }
+.na i { font-style: normal; color: var(--bad); font-size: 7pt; }
+
+table.trend { width: 100%; border-collapse: separate; border-spacing: 8pt 0; margin-top: 6pt; }
+.trend td { vertical-align: bottom; text-align: center; height: 70pt; }
+.trend td.bl { height: auto; padding-top: 3pt; font-family: var(--mono); font-size: 6.5pt; color: var(--faint); }
+.trend .bv { font-family: var(--mono); font-size: 7pt; color: var(--soft); margin-bottom: 3pt; }
+.trend .col { border-radius: 3pt 3pt 0 0; background: var(--tangerine-soft); }
+.trend .now .col { background: var(--tangerine); }
+.trend .now .bv { color: var(--ink); }
+.hr { display: flex; align-items: center; gap: 10pt; font-size: 8.5pt; margin-top: 8pt; }
+.hr .l { width: 95pt; font-weight: 600; color: var(--ink); }
+.hr .tr { flex: 1; height: 9pt; border-radius: 5pt; background: var(--track); position: relative; }
+.hr .tr i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5pt; background: var(--tangerine); }
+.hr .tr u { position: absolute; top: -2pt; bottom: -2pt; width: 1.5pt; background: var(--ink); opacity: .55; }
+.hr .v { width: 50pt; text-align: right; font-family: var(--mono); color: var(--ink); }
+.key { display: flex; gap: 12pt; font-size: 7pt; color: var(--faint); margin-top: 6pt; }
+.key .sw { display: inline-block; width: 10pt; height: 5pt; border-radius: 2pt; background: var(--tangerine); margin-right: 4pt; }
+.key .tk { display: inline-block; width: 1.5pt; height: 8pt; background: var(--ink); opacity: .55; margin-right: 4pt; vertical-align: middle; }
+.att { display: flex; flex-wrap: wrap; gap: 8pt; }
+.ac { width: calc(50% - 4pt); border: 0.75pt solid var(--rule); border-radius: 6pt; padding: 8pt 10pt; }
+.ac .li { border-bottom: none; padding: 2pt 0; }
+.ac .w { margin-left: auto; }
+</style>

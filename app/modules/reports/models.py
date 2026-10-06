@@ -3,6 +3,7 @@ who receives each report."""
 from datetime import datetime
 
 from app.modules.core.shared.extensions import db
+from app.modules.reports.lib.period import Period
 
 
 # Report key -> label, in page and email order.
@@ -37,8 +38,13 @@ class ReportRun(db.Model):
     sent_at = db.Column(db.DateTime, nullable=True)
     sent_to = db.Column(db.JSON, nullable=True)  # user ids at send time
     error = db.Column(db.Text, nullable=True)
+    summary = db.Column(db.JSON, nullable=True)  # the email's headline numbers
 
     made_by = db.relationship('User', foreign_keys=[made_by_id])
+
+    @property
+    def period(self):
+        return Period(self.period_kind, self.period_start, self.period_end)
 
     __table_args__ = (db.Index('ix_report_runs_period', 'period_kind', 'period_start'),)
 

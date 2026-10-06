@@ -71,6 +71,9 @@ HELP_KEY_GROUPS = [
     ]),
     ('Admin', [
         ('admin.accounts', 'Accounts, departments and approvals'),
+        ('reports.generate', 'Making and sending reports'),
+        ('reports.history', 'Past reports'),
+        ('reports.recipients', 'Who gets each report'),
     ]),
 ]
 

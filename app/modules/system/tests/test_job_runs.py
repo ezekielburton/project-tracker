@@ -19,9 +19,9 @@ def test_a_finished_job_is_recorded_ok_with_its_message(recorded):
     with jobs.job_run('preview-cache-cleanup') as run:
         run.message = 'Removed 4 files'
         run.bytes_reclaimed = 2048
-    job, started, finished, result, message, reclaimed, run_by_id = recorded[0]
-    assert (job, result, message, reclaimed, run_by_id) == (
-        'preview-cache-cleanup', 'ok', 'Removed 4 files', 2048, None)
+    job, started, finished, result, message, reclaimed, run_by_id, details = recorded[0]
+    assert (job, result, message, reclaimed, run_by_id, details) == (
+        'preview-cache-cleanup', 'ok', 'Removed 4 files', 2048, None, None)
     assert finished >= started
 
 
@@ -39,6 +39,14 @@ def test_sys_exit_is_recorded_by_its_code(recorded, code, result):
         with jobs.job_run('nightly-backup'):
             raise SystemExit(code)
     assert recorded[0][3] == result
+
+
+def test_details_are_kept_on_failure_too(recorded):
+    with pytest.raises(RuntimeError):
+        with jobs.job_run('nightly-backup') as run:
+            run.details = {'local_path': '/home/helixadmin/backups/nightly/2026-10-06.dump'}
+            raise RuntimeError('NAS unreachable')
+    assert recorded[0][7] == {'local_path': '/home/helixadmin/backups/nightly/2026-10-06.dump'}
 
 
 def test_run_now_records_who_pressed_it(recorded):
@@ -59,7 +67,9 @@ def test_a_recording_failure_does_not_fail_the_job(monkeypatch, capsys):
 def test_insert_run_writes_the_row_and_caps_the_message(db_session):
     cur = db_session.connection().connection.cursor()
     now = datetime.utcnow()
-    jobs.insert_run(cur, 'x-job-test', now, now, jobs.RESULT_FAILED, 'e' * 5000)
+    jobs.insert_run(cur, 'x-job-test', now, now, jobs.RESULT_FAILED, 'e' * 5000,
+                    details={'files': ['a.pdf']})
     row = JobRun.query.filter_by(job='x-job-test').one()
     assert row.result == 'failed'
     assert len(row.message) == jobs.MESSAGE_LIMIT
+    assert row.details == {'files': ['a.pdf']}

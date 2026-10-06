@@ -12,6 +12,8 @@ from psycopg2.extras import execute_values
 
 from config import Config
 from app.modules.system.lib import app_log, checks, host
+from app.modules.system.lib.job_list import JOBS
+from app.modules.system.lib.nas_access import nas_app
 from app.modules.system.services.jobs import job_run
 from app.modules.system.services.snapshot import parse_time, read_snapshot
 
@@ -55,11 +57,8 @@ def carried(previous, key, every, now, refresh):
 
 def nas_space():
     """Free and total bytes on the NAS project share, through the NAS API."""
-    from flask import Flask
     from app.modules.core.shared.services import nas
-    app = Flask('ovp-snapshot')
-    app.config.from_object(Config)
-    with app.app_context():
+    with nas_app():
         space = nas.share_space(Config.NAS_PROJECT_ROOT)
     if space is None:
         raise RuntimeError('share not found')
@@ -168,6 +167,7 @@ def collect(now, previous, conn):
         'workers': host.gunicorn_workers(),
         'app': checks.app_version(REPO_DIR),
         'db': database_reading(conn),
+        'timers': checks.timer_states(job.unit for job in JOBS),
         'nas': carried(previous, 'nas', NAS_EVERY, now, nas_space),
         'slow': carried(previous, 'slow', SLOW_EVERY, now, lambda: checks.slow_checks(
             REPO_DIR, Config.LAN_CERT_PATH, Config.PUBLIC_HOSTNAME)),

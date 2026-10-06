@@ -124,6 +124,7 @@
 /dashboard/admin/usage	GET	projects.admin_usage
 /dashboard/adoption	GET	projects.adoption
 /dashboard/api/active-projects	GET	projects.api_active_projects
+/dashboard/api/admin/jobs/<job_key>/run	POST	projects.admin_job_run_now
 /dashboard/api/clashes	GET	projects.api_clashes
 /dashboard/api/decisions	GET	projects.api_decisions
 /dashboard/api/due	GET	projects.api_due
@@ -347,6 +348,15 @@
 /projects/submission/<int:submission_id>/preview	GET	project_overlay.preview_submission
 /projects/submission/file/<int:file_id>/download	GET	project_overlay.download_submission_file
 /projects/submission/file/<int:file_id>/preview	GET	project_overlay.preview_submission_file
+/reports	GET	reports.generate_page
+/reports/api/auto-send	POST	reports.api_auto_send
+/reports/api/generate	POST	reports.api_generate
+/reports/api/recipients	POST	reports.api_recipients
+/reports/api/runs/<int:run_id>/send	POST	reports.api_send_run
+/reports/history	GET	reports.history_page
+/reports/preview	GET	reports.preview
+/reports/recipients	GET	reports.recipients_page
+/reports/runs/<int:run_id>/download	GET	reports.download
 /roadmap	GET	roadmap.index
 /sidebar/track	POST	main.sidebar_track
 /signal/bugs	GET	signal_tray.bug_board

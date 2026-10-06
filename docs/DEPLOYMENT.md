@@ -66,6 +66,9 @@ One-off files in `migrations/`, run by `migrate.py` (not Alembic). `migrate.py` 
 - `preview-cache-cleanup.timer` + `.service` — daily 03:30, `Persistent=true`, runs `venv/bin/python preview_cache_cleanup.py` as `helixadmin`. Empties `uploads/preview-cache/` (disposable; the NAS is the source of truth).
 - The Dashboard update adds more (heartbeat, snapshot, nightly backup, weekly restore test, clean-ups), each a systemd timer recorded in `job_runs`.
 - `nas-outbox-flush.timer` + `.service` — every 2 minutes, runs `venv/bin/python nas_outbox_flush.py` as `helixadmin`. Sends files queued in `uploads/nas-outbox/` while the NAS was down. Check the queue: `sudo -u postgres psql -d project_tracker -c "select nas_path, attempts, last_error, created_at from pending_nas_uploads;"` (empty = all sent).
+- `reports-weekly.timer` + `.service` — `OnCalendar=Mon *-*-* 08:00:00 Asia/Dubai`, `Persistent=true`, runs `venv/bin/python send_reports.py weekly` as `helixadmin`. Sends last week's report PDFs to their recipients (Admin → Reports). Safe to rerun: a report already sent for that week is skipped.
+- `reports-monthly.timer` + `.service` — `OnCalendar=*-*-01 08:00:00 Asia/Dubai`, same, with `monthly`.
+- Report PDFs need WeasyPrint's system libraries once: `sudo apt install libpango-1.0-0 libpangoft2-1.0-0`. PDFs are kept in `uploads/reports/` with a copy on the NAS under `NAS_REPORTS_ROOT` (default `/Admin/Reports`). Set `APP_BASE_URL` in `.env` so the email's "Open in OVP" link works.
 
 ## config.py
 Reads `.env` from the repo root with `load_dotenv()`. Every setting is `os.environ.get(...)` with a default, so importing `config` never crashes. `SESSION_COOKIE_SECURE` / `REMEMBER_COOKIE_SECURE` are env-gated; the LAN is HTTPS now, so they can be turned on (with plain HTTP redirected to HTTPS). `CLIENT_SERVICING_REVIEW_ONLY` is the Client Servicing lock (off since 2.6). **Never print or commit `.env`.**

@@ -1,0 +1,8 @@
+[Unit]
+Description=OVP Data retention (Run now)
+
+[Path]
+PathExists=/var/lib/ovp/run-now/retention
+
+[Install]
+WantedBy=paths.target

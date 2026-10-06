@@ -1,0 +1,74 @@
+{# Consolidated report: page one, the company view. #}
+{% from 'reports/pdf/_macros.html' import header, section_head, delta, money, band, hit_rate, vs %}
+{% set data = built.consolidated %}
+<div class="page">
+  {{ header('OVP · Consolidated report', 'All departments', period, generated, data.people ~ ' people · ' ~ department_labels|length ~ ' departments') }}
+
+  <div class="top">
+    <div class="score">
+      <div class="lab">Company adoption score</div>
+      <div class="big"><span class="v">{{ data.score }}<small>%</small></span>{{ delta(data.delta.score) }}</div>
+      <div class="vs">{{ vs(period) }}</div>
+    </div>
+    <div class="comp">
+      <div class="lab">Company score · last {{ data.trend|length }} {{ 'weeks' if period.kind == 'weekly' else 'months' }}</div>
+      <table class="trend">
+        <tr>{% for t in data.trend %}<td class="{{ 'now' if loop.last }}"><div class="bv">{{ t.score }}</div><div class="col" style="height: {{ (t.score * 0.55)|round|int }}pt"></div></td>{% endfor %}</tr>
+        <tr>{% for t in data.trend %}<td class="bl">{{ t.label }}</td>{% endfor %}</tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ section_head('By department', vs(period)) }}
+    <table class="tbl">
+      <thead><tr><th>Department</th><th>People</th><th>Worked on</th><th>Closed</th><th>Invoiced AED</th><th>Deadlines hit</th><th>Approvals</th><th>Incomplete</th><th>No activity</th><th>Score</th></tr></thead>
+      <tbody>
+      {% for key, label in department_labels.items() %}{% set d = built[key] %}
+        <tr>
+          <td>{{ label }}</td><td>{{ d.people }}</td><td>{{ d.worked }}</td>
+          <td>{{ d.closed if d.closed is defined else '—' }}</td>
+          <td>{{ money(d.aed) if d.aed is defined else '—' }}</td>
+          <td>{{ hit_rate(d.hit, d.missed) }}</td>
+          <td>{{ d.approvals if d.approvals is defined else '—' }}</td>
+          <td>{{ d.incomplete if d.incomplete is defined else '—' }}</td>
+          <td>{{ d.no_activity|length }}</td>
+          <td><span class="sc {{ band(d.score) }}">{{ d.score }}</span> {{ delta(d.delta.score) }}</td>
+        </tr>
+      {% endfor %}
+        {% set c = data.company %}
+        <tr class="tot"><td>Company</td><td>{{ data.people }}</td><td>{{ c.worked }}</td><td>{{ c.closed }}</td><td>{{ money(c.aed) }}</td><td>{{ hit_rate(c.hit, c.missed) }}</td><td>{{ c.approvals }}</td><td>{{ c.incomplete }}</td><td>{{ data.no_activity|length }}</td><td><span class="sc {{ band(data.score) }}">{{ data.score }}</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    {{ section_head('Adoption score by department') }}
+    {% for key, label in department_labels.items() %}{% set d = built[key] %}
+    <div class="hr"><span class="l">{{ label }}</span><span class="tr"><i style="width: {{ d.score }}%"></i><u style="left: {{ d.score - (d.delta.score or 0) }}%"></u></span><span class="v">{{ d.score }}%</span></div>
+    {% endfor %}
+    <div class="key"><span><span class="sw"></span>This {{ 'week' if period.kind == 'weekly' else 'month' }}</span><span><span class="tk"></span>Last {{ 'week' if period.kind == 'weekly' else 'month' }}</span></div>
+  </div>
+
+  <div class="section">
+    {{ section_head('Needs attention') }}
+    <div class="att">
+      <div class="ac"><div class="lab">No activity</div>
+        {% for u, key in data.no_activity %}<div class="li"><span class="p">{{ u.name }}</span><span class="m">{{ department_labels[key] }}</span></div>
+        {% else %}<div class="empty">Everyone was active</div>{% endfor %}
+      </div>
+      <div class="ac"><div class="lab">Lowest scores</div>
+        {% for r in data.lowest %}<div class="li"><span class="p">{{ r.user.name }}</span><span class="m">{{ department_labels[r.report] }}</span><span class="w">{{ r.score }}%</span></div>
+        {% else %}<div class="empty">—</div>{% endfor %}
+      </div>
+      <div class="ac"><div class="lab">Most missed deadlines</div>
+        {% for r in data.most_missed %}<div class="li"><span class="p">{{ r.user.name }}</span><span class="m">{{ department_labels[r.report] }}</span><span class="w">{{ r.missed }} missed</span></div>
+        {% else %}<div class="empty">None missed</div>{% endfor %}
+      </div>
+      <div class="ac"><div class="lab">Longest waiting to invoice</div>
+        {% for r in data.waiting_invoice %}<div class="li"><span class="p">{{ r.name }}</span><span class="m">{{ names.get(r.people[0], '') }}</span><span class="w">{{ r.days }} days</span></div>
+        {% else %}<div class="empty">Nothing waiting</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>

@@ -87,6 +87,7 @@ def test_collect_reads_quick_parts_and_carries_slow_ones(monkeypatch):
     monkeypatch.setattr(collector.host, 'mounts', lambda: [])
     monkeypatch.setattr(collector.host, 'gunicorn_workers', lambda: None)
     monkeypatch.setattr(collector.checks, 'app_version', lambda repo: {'version': 'v2.7'})
+    monkeypatch.setattr(collector.checks, 'timer_states', lambda units: {'ovp-backup': {'last': None, 'next': None}})
 
     def not_now():
         raise AssertionError('should be carried')
@@ -98,6 +99,7 @@ def test_collect_reads_quick_parts_and_carries_slow_ones(monkeypatch):
     snap = collector.collect(NOW, previous, None)
     assert snap['taken_at'] == NOW.isoformat()
     assert snap['db'] == {'ok': False}
+    assert snap['timers'] == {'ovp-backup': {'last': None, 'next': None}}
     assert snap['nas'] is previous['nas'] and snap['slow'] is previous['slow']
     json.dumps(snap)
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=OVP Weekly restore test
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=helixadmin
+WorkingDirectory=/home/helixadmin/project-tracker
+ExecStart=/home/helixadmin/project-tracker/venv/bin/python -m app.modules.system.jobs.restore_test
+SyslogIdentifier=ovp-restore-test
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

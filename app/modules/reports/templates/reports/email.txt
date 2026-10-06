@@ -1,0 +1,6 @@
+{% set kind = 'Weekly' if period.kind == 'weekly' else 'Monthly' %}OVP {{ kind|lower }} {{ 'report' if runs|length == 1 else 'reports' }}
+{{ period.label }}: attached.
+{% for run in runs %}{% set d = run.summary or {} %}
+{{ 'Company adoption score' if run.report == 'consolidated' else reports[run.report] }}: {{ d.score }}%{% if d.change %} ({{ '+' if d.change > 0 }}{{ d.change }}){% endif %}{% endfor %}
+{% if link %}
+Open in OVP: {{ link }}{% endif %}
