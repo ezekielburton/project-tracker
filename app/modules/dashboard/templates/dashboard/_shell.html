@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{#- The dashboard frame: the person's rail beside the page. Pages fill
+    dash_main; New briefs follows on the landing page only (lib/shell.py). #}
+{% from '_shared_macros.html' import module_rail %}
+{% from 'dashboard/_new_briefs.html' import new_briefs_panel %}
+
+{% block title %}Dashboard — {{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="module-page dash-page">
+    <div class="module-shell">
+        {{ module_rail(rail_items, rail_active, module='Dashboard') }}
+        <div class="module-main dash-main">
+            {% block dash_main %}{% endblock %}
+            {% if new_briefs is not none %}{{ new_briefs_panel(new_briefs) }}{% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

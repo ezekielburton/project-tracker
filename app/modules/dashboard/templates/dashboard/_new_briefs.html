@@ -1,0 +1,25 @@
+{#- New briefs: projects with no deliverables yet, newest first. Rows come from
+    lib/shell.py::brief_rows; with none it is one quiet line. #}
+{% macro new_briefs_panel(briefs) %}
+<section class="dash-new-briefs{{ '' if briefs else ' dash-new-briefs--empty' }}" aria-label="New briefs">
+    <div class="dash-new-briefs-head">
+        <span class="dash-new-briefs-title">New briefs</span>
+        {%- if briefs %}<span class="dash-new-briefs-count">{{ briefs | length }}</span>
+        {%- else %}<span class="dash-quiet">No new briefs</span>{% endif %}
+    </div>
+    {%- if briefs %}
+    <ul class="dash-new-briefs-list">
+        {%- for brief in briefs %}
+        <li>
+            <a class="dash-new-briefs-row" href="{{ brief.url }}">
+                <span class="dash-new-briefs-name">{{ brief.name }}</span>
+                <span class="dash-new-briefs-client">{{ brief.client }}</span>
+                <span class="dash-new-briefs-lead">{{ brief.cs_lead }}</span>
+                <span class="dash-new-briefs-age">{{ brief.age }}</span>
+            </a>
+        </li>
+        {%- endfor %}
+    </ul>
+    {%- endif %}
+</section>
+{% endmacro %}

@@ -11,7 +11,6 @@ from .flags import BriefFlag, DecisionFlag, DecisionFlagMessage, BriefFlagMessag
 from .notes import ProjectNote, ProjectNoteReaction
 from .notifications import Notification, NotificationSound
 from .activity import ActivityLog, SidebarClick
-from .champions import OvpChampion
 from .chat_tray import ChatTrayProject
 from .friction import FrictionLogEntry
 from .blog import BlogPost, BlogComment
@@ -74,7 +73,6 @@ __all__ = [
     'NotificationSound',
     'ActivityLog',
     'SidebarClick',
-    'OvpChampion',
     'ChatTrayProject',
     'FrictionLogEntry',
     'BlogPost',

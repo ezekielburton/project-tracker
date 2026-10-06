@@ -82,3 +82,21 @@ def test_management_in_design_takes_the_leadership_branch():
 
 def test_a_head_of_design_is_a_lead():
     assert org.is_design_lead(User(department='design', seniority='head', is_admin=False))
+
+@pytest.mark.parametrize('department, seniority, is_admin, expected', [
+    ('design', 'head', False, True),
+    ('client_servicing', 'head', False, True),
+    ('finance', 'head', False, True),
+    ('design', 'manager', False, False),
+    ('design', 'none', False, False),
+    ('design', 'management', False, False),
+    ('design', 'head', True, False),
+])
+
+def test_department_head_is_head_seniority_outside_leadership(department, seniority, is_admin, expected):
+    user = User(department=department, seniority=seniority, is_admin=is_admin)
+    assert org.is_department_head(user) is expected
+
+
+def test_department_head_tolerates_a_user_without_org_fields():
+    assert org.is_department_head(None) is False

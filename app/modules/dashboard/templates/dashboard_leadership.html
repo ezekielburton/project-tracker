@@ -74,11 +74,11 @@
    would risk breaking dashboard.html/dashboard_cs.html, which still
    render the switcher.
 #}
-{% extends "base.html" %}
+{% extends "dashboard/_shell.html" %}
 
 {% block title %}Dashboard{% endblock %}
 
-{% block content %}
+{% block dash_main %}
 {% from 'dashboard/_dashboard_macros.html' import dash_leadership_risk_row, dash_leadership_waiting_row, dash_role_tile, dash_person_chip, dash_escalation_history_row %}
 {% from '_shared_macros.html' import help_button %}
 

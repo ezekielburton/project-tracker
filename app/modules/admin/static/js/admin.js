@@ -1,5 +1,5 @@
 // admin.js — the admin panel and emulation badge in the shell header: emulation,
-// accounts, OVP champions, sounds, project tools, activity log, achievements.
+// accounts, sounds, project tools, activity log, achievements.
 // Loaded once by base.html (admins only), after main.js; uses showToast,
 // showConfirm and btnLoading/btnDone from there.
 
@@ -40,7 +40,7 @@ function adminEsc(value) {
             var sectionName = this.dataset.section;
             var section = document.getElementById('admin-section-' + sectionName);
             if (section) section.classList.remove('hidden');
-            if (sectionName === 'accounts') { loadAccountsSection(); loadOvpChampion(); }
+            if (sectionName === 'accounts') loadAccountsSection();
             if (sectionName === 'projects') loadProjectToolsSection();
             if (sectionName === 'activity') loadActivitySection();
             if (sectionName === 'sounds') loadSoundsSection();
@@ -204,89 +204,6 @@ function adminEsc(value) {
             }
         }
     });
-
-    // ── OVP champions ────────────────────────────────────
-
-    var champRows = document.getElementById('ovp-champion-rows');
-    var champWeek = document.getElementById('ovp-champion-week');
-
-    function loadOvpChampion() {
-        if (!champRows) return;
-        Promise.all([
-            fetch('/admin/api/ovp-champion').then(function (r) { return r.json(); }),
-            fetch('/admin/api/users').then(function (r) { return r.json(); })
-        ])
-            .then(function (results) {
-                var data = results[0] || {};
-                var users = (results[1] || []).filter(function (u) { return u.is_active; });
-                if (champWeek) champWeek.textContent = data.week_start || '—';
-                champRows.innerHTML = '';
-                (data.departments || []).forEach(function (dept) {
-                    champRows.appendChild(renderChampionRow(dept, users));
-                });
-            })
-            .catch(function () { showToast('Could not load the OVP champions.', 'error'); });
-    }
-
-    function renderChampionRow(dept, users) {
-        var wrap = document.createElement('div');
-        wrap.className = 'ovp-champion-row';
-
-        // "carried over": nobody was set this week, so the last champion still holds it.
-        var held = dept.current ? dept.current.name : 'not set';
-        var carried = dept.current && !dept.set_this_week ? ' (carried over)' : '';
-        var label = document.createElement('p');
-        label.className = 'accounts-group-label';
-        label.textContent = dept.label + ' — ' + held + carried;
-        wrap.appendChild(label);
-
-        var select = document.createElement('select');
-        select.className = 'form-input';
-        var blank = document.createElement('option');
-        blank.value = '';
-        blank.textContent = 'Select user...';
-        select.appendChild(blank);
-        users.forEach(function (u) {
-            var opt = document.createElement('option');
-            opt.value = u.id;
-            opt.textContent = u.name;
-            if (dept.current && dept.current.id === u.id) opt.selected = true;
-            select.appendChild(opt);
-        });
-        wrap.appendChild(select);
-
-        var actions = document.createElement('div');
-        actions.className = 'add-user-actions';
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn-primary';
-        btn.textContent = 'Set champion';
-        btn.addEventListener('click', function () {
-            if (!select.value) return;
-            fetch('/admin/api/ovp-champion', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    department: dept.key,
-                    user_id: parseInt(select.value, 10)
-                })
-            })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data.success) {
-                        showToast(dept.label + ' champion set.', 'success');
-                        loadOvpChampion();
-                    } else {
-                        showToast(data.error || 'Could not set the champion.', 'error');
-                    }
-                })
-                .catch(function () { showToast('Server error setting the champion.', 'error'); });
-        });
-        actions.appendChild(btn);
-        wrap.appendChild(actions);
-
-        return wrap;
-    }
 
     // ── Accounts ─────────────────────────────────────────
 
@@ -484,7 +401,9 @@ function adminEsc(value) {
     function renderAccountDisplay(user) {
         var tags = [user.department_label, user.seniority !== 'none' ? user.seniority_label : '',
                     user.team, user.is_admin ? 'Admin' : ''].filter(Boolean);
-        var tagHtml = tags.map(function (t) { return '<span class="account-user-team">' + adminEsc(t) + '</span>'; }).join('');
+        var tagHtml = tags.length ? '<span class="account-user-tags">' + tags.map(function (t) {
+            return '<span class="account-user-team">' + adminEsc(t) + '</span>';
+        }).join('') + '</span>' : '';
         var activeToggle = user.is_active
             ? '<button type="button" class="account-deactivate-btn" role="menuitem">Deactivate</button>'
             : '<button type="button" class="account-reactivate-btn" role="menuitem">Reactivate</button>';
@@ -492,7 +411,7 @@ function adminEsc(value) {
             renderAvatarCell(user) +
             '<div class="account-user-info">' +
             '<span class="account-user-name">' + adminEsc(user.name) + '</span>' +
-            '<span class="account-user-role">' + adminEsc(user.job_title) + '</span>' +
+            (user.job_title ? '<span class="account-user-role">' + adminEsc(user.job_title) + '</span>' : '') +
             tagHtml +
             '</div>' +
             '<div class="account-user-actions">' +

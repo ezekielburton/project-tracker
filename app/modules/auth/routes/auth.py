@@ -8,6 +8,7 @@ from werkzeug.security import check_password_hash
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import User, NotificationSound
 from app.modules.core.shared.lib.capabilities import require
+from app.modules.core.shared.lib.home import home_endpoint
 from app.modules.core.shared.services.achievements import check_achievements
 
 
@@ -63,9 +64,7 @@ def login():
         if next_page:
             return redirect(next_page)
 
-        # projects.index is the role-based dashboard (dashboard.py's blueprint
-        # is named 'projects'); it picks the layout by role.
-        return redirect(url_for('projects.index'))
+        return redirect(url_for(home_endpoint(user)))
 
     return render_template('auth/login.html', next=request.args.get('next', ''))
 

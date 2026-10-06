@@ -1,4 +1,4 @@
-/* Signal tray: the two compact boards and the Friction Log. Item detail
+/* Signal tray: the two compact boards and the Friction Log chat. Item detail
    styles come from feedback.css, which loads globally. */
 
 .signal-tray {
@@ -259,17 +259,34 @@
     color: var(--text-muted);
 }
 
-/* ── Friction Log ── */
+/* ── Friction Log ──
+   A chat: the list scrolls inside the body, the composer stays below it. */
+
+.signal-tray__body.is-chat {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 12px;
+}
 
 .signal-tray__intro {
-    margin: 0 0 12px;
-    padding: 9px 12px;
+    flex-shrink: 0;
+    margin: 0 0 10px;
+    padding: 8px 12px;
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--surface-hover);
     color: var(--text-muted);
     font-size: 12px;
     line-height: 1.5;
+}
+
+.signal-tray__log {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
 }
 
 .signal-tray__week {
@@ -282,6 +299,10 @@
     font-size: 10.5px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+}
+
+.signal-tray__week:first-child {
+    margin-top: 4px;
 }
 
 .signal-tray__week-line {
@@ -299,10 +320,48 @@
     border-bottom: 1px solid var(--border-subtle);
 }
 
+.signal-tray__entry:last-child {
+    border-bottom: 0;
+}
+
+.signal-tray__entry-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .signal-tray__entry-who {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 11.5px;
     font-weight: 700;
     color: var(--text-muted);
+}
+
+.signal-tray__entry-when {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.signal-tray__entry-delete {
+    flex-shrink: 0;
+    display: inline-flex;
+    padding: 4px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+}
+
+.signal-tray__entry-delete:hover,
+.signal-tray__entry-delete:focus-visible {
+    background: var(--surface-hover);
+    color: var(--danger-text);
 }
 
 .signal-tray__entry-body {
@@ -310,20 +369,24 @@
     font-size: 13px;
     line-height: 1.55;
     color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .signal-tray__composer {
+    flex-shrink: 0;
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    margin-top: 14px;
-    padding-top: 12px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid var(--border-subtle);
 }
 
 .signal-tray__composer textarea {
     flex-grow: 1;
     resize: none;
+    max-height: 120px;
 }
 
 /* ── Status pills ────────────────────────────────────────────
@@ -400,4 +463,24 @@
     background: rgba(242, 127, 85, 0.28);
     border-color: var(--tangerine);
     color: var(--tangerine);
+}
+
+/* ── Phone ── */
+@media (max-width: 48em) {
+    .signal-tray__tabs {
+        overflow-x: auto;
+    }
+
+    .signal-tray__tab {
+        flex-shrink: 0;
+    }
+
+    /* 16px stops iOS zooming into the field on focus. */
+    .signal-tray__composer textarea {
+        font-size: 16px;
+    }
+
+    .signal-tray__entry-delete {
+        padding: 8px;
+    }
 }

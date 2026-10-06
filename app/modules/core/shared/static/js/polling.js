@@ -24,8 +24,14 @@
 
     var _clientServicingDashboardStream = null;
 
+    // Friction Log in the Signal tray. Like the overlay stream, it sits outside
+    // init()/teardown(): signal_tray.js starts and stops it with the tab.
+    var _frictionStream = null;
+
     // Fallback poll cadence while SSE is unavailable.
     var _FALLBACK_INTERVAL_MS = 1000;
+    // The Friction Log reload is a whole list, so its fallback polls slower.
+    var _FRICTION_FALLBACK_MS = 5000;
     // Last /api/version check; module-level so the debounce spans navigations.
     var _lastVersionCheck = 0;
 
@@ -117,6 +123,18 @@
         _overlayStream = _connectLiveStream('/sse/projects/' + projectId, onChange, _FALLBACK_INTERVAL_MS);
     }
 
+    function stopFrictionStream() {
+        if (_frictionStream !== null) {
+            _frictionStream.close();
+            _frictionStream = null;
+        }
+    }
+
+    function startFrictionStream(onChange) {
+        stopFrictionStream();
+        _frictionStream = _connectLiveStream('/sse/friction', onChange, _FRICTION_FALLBACK_MS);
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // INIT — detect which page is showing and start its live stream.
@@ -191,7 +209,9 @@
         pause: teardown,
         resume: init,
         startOverlayStream: startOverlayStream,
-        stopOverlayStream: stopOverlayStream
+        stopOverlayStream: stopOverlayStream,
+        startFrictionStream: startFrictionStream,
+        stopFrictionStream: stopFrictionStream
     };
 
     init();

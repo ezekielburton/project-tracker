@@ -47,12 +47,12 @@ ALL_CAPABILITIES = frozenset({
     # Dashboard
     'switch_dashboard_scope',
     'view_team_snapshot',
+    'view_department_overview',
+    'view_management_dashboard',
     # Digital Innovation
     'view_di_performance',
     'view_all_di',
     'edit_di_board',
-    # Signal tray
-    'write_friction_log',
     # Time tracking
     'view_time_reports',
     # HSE & Compliance
@@ -145,9 +145,10 @@ DEPARTMENT_CAPABILITIES = {
 # What each seniority level adds to the department's set.
 SENIORITY_CAPABILITIES = {
     'none': set(),
-    # Manager and Head of Department add nothing yet.
+    # Manager adds nothing yet.
     'manager': set(),
-    'head': set(),
+    # A head sees their department's overview page on the dashboard.
+    'head': {'view_department_overview'},
     'management': {
         'view_workspace',
         'view_cs', 'view_finance', 'edit_invoicing_thresholds', 'close_projects',
@@ -156,9 +157,9 @@ SENIORITY_CAPABILITIES = {
         'raise_flags', 'manage_flags', 'log_site_visits', 'manage_reference_data',
         'complete_preproduction', 'manage_project_files',
         'switch_dashboard_scope', 'view_team_snapshot',
+        'view_department_overview', 'view_management_dashboard',
         'view_di_performance', 'view_all_di',
         'view_hse',
-        'write_friction_log',
         'view_time_reports',
     },
 }
@@ -210,8 +211,8 @@ def capabilities_for(user):
     set plus their seniority's. Empty for None or anything without org fields."""
     if getattr(user, 'is_admin', False):
         return frozenset({'*'})
-    department = DEPARTMENT_CAPABILITIES.get(getattr(user, 'department', None), ())
-    seniority = SENIORITY_CAPABILITIES.get(getattr(user, 'seniority', None), ())
+    department = DEPARTMENT_CAPABILITIES.get(getattr(user, 'department', '') or '', ())
+    seniority = SENIORITY_CAPABILITIES.get(getattr(user, 'seniority', '') or '', ())
     return frozenset(department) | frozenset(seniority)
 
 

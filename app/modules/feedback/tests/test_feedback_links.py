@@ -41,8 +41,11 @@ def test_new_feedback_notifies_admin_with_a_tray_link(app, client, db_session):
     links = {n.link for n in Notification.query.filter_by(triggered_by_id=author.id)}
     assert f'/dashboard?signal=feature:{feature_id}' in links
     assert f'/dashboard?signal=bug:{bug_id}' in links
+    # /dashboard forwards to the person's landing page; the signal must survive the hop.
     for link in links:
-        assert client.get(link).status_code == 200
+        resp = client.get(link, follow_redirects=True)
+        assert resp.status_code == 200
+        assert resp.request.args.get('signal') == link.split('signal=', 1)[1]
 
 
 def test_bug_comment_delete_follows_the_real_user_like_the_server(app, client, db_session):

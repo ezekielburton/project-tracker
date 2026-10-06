@@ -15,6 +15,8 @@ from app.modules.core.shared.lib.users import active_users_query
 from app.modules.core.shared.lib import org
 from app.modules.core.shared.lib.capabilities import can, require
 from app.modules.core.shared.lib.org import LEGACY_ROLES
+from app.modules.dashboard.lib.rails import rail_for
+from app.modules.dashboard.lib.shell import on_rail, page_context
 
 # NOTE: registered blueprint name is 'projects' (not 'dashboard') — every
 # url_for call for this blueprint's routes uses that, e.g.
@@ -203,11 +205,17 @@ def _resolve_dashboard_scope(user):
     return 'my', _ScopeUser(user.id, 'cs'), cs_leads, designers
 
 
-@dashboard_bp.route('')
+@dashboard_bp.route('/overview')
 @login_required
 @require('view_workspace')
-def index():
+@on_rail('overview')
+def overview():
     user = get_actor()
+    shell = page_context('overview')
+    # The basic rail's Overview is New briefs only; every other rail's
+    # Overview is the role view below.
+    if rail_for(user).key == 'basic':
+        return render_template('dashboard/overview_basic.html', **shell)
     initial_view = request.args.get('view', '')
     scope_mode, scope_user, cs_leads, designers = _resolve_dashboard_scope(user)
 
@@ -285,6 +293,7 @@ def index():
     if layout_role == 'cs':
         return render_template(
             'dashboard_cs.html',
+            **shell,
             effective_role=user.role,
             scope_mode=scope_mode,
             cs_leads=cs_leads,
@@ -335,6 +344,7 @@ def index():
         waiting_on_others = _compute_leadership_waiting_on_others(scope_user)
         return render_template(
             'dashboard_leadership.html',
+            **shell,
             effective_role=user.role,
             scope_mode=scope_mode,
             cs_leads=cs_leads,
@@ -411,6 +421,7 @@ def index():
         metrics = _compute_designer_metrics(scope_user)
         return render_template(
             'dashboard_designer.html',
+            **shell,
             effective_role=user.role,
             scope_mode=scope_mode,
             cs_leads=cs_leads,
@@ -424,6 +435,7 @@ def index():
 
     return render_template(
         'dashboard.html',
+        **shell,
         effective_role=user.role,
         scope_mode=scope_mode,
         cs_leads=cs_leads,

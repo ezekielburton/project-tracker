@@ -55,11 +55,11 @@
    No "Brief Readiness" card — explicitly excluded per Ezekiel: "No need
    for brief readiness as it's already there in the blocked toggle."
 #}
-{% extends "base.html" %}
+{% extends "dashboard/_shell.html" %}
 
 {% block title %}Dashboard{% endblock %}
 
-{% block content %}
+{% block dash_main %}
 {% from 'dashboard/_dashboard_macros.html' import dash_designer_queue_row, dash_waiting_row, dash_stat_project_row %}
 {% from '_shared_macros.html' import help_button %}
 

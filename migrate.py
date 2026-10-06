@@ -11,6 +11,7 @@ Usage:
 import os
 import sys
 import subprocess
+import time
 import psycopg2
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -55,6 +56,53 @@ def record_applied(conn, filename):
     conn.commit()
 
 
+REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def git_output(*args):
+    """Output of one fixed git command in the repo, or None when git can't answer."""
+    try:
+        result = subprocess.run(['git', *args], cwd=REPO_DIR, capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = result.stdout.strip()
+    return out if result.returncode == 0 and out else None
+
+
+def ensure_deploy_log(conn):
+    """deploy_log is created here, not by a migration, so the first deploy is logged too."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS deploy_log (
+                id                 SERIAL PRIMARY KEY,
+                ran_at             TIMESTAMP NOT NULL,
+                tag                VARCHAR(60),
+                commit_sha         VARCHAR(40),
+                migrations_applied INTEGER   NOT NULL DEFAULT 0,
+                duration_ms        INTEGER   NOT NULL,
+                ok                 BOOLEAN   NOT NULL DEFAULT TRUE
+            );
+        """)
+    conn.commit()
+
+
+def insert_deploy(cur, ran_at, tag, commit_sha, applied, duration_ms, ok):
+    cur.execute(
+        "INSERT INTO deploy_log (ran_at, tag, commit_sha, migrations_applied, duration_ms, ok) "
+        "VALUES (%s, %s, %s, %s, %s, %s);",
+        (ran_at, tag, commit_sha, applied, duration_ms, ok),
+    )
+
+
+def record_deploy(conn, ran_at, started, applied, ok):
+    """One deploy_log row for this run: release tag, commit, migrations applied, duration."""
+    with conn.cursor() as cur:
+        insert_deploy(cur, ran_at, git_output('describe', '--tags', '--abbrev=0'),
+                      git_output('rev-parse', '--short', 'HEAD'), applied,
+                      int((time.monotonic() - started) * 1000), ok)
+    conn.commit()
+
+
 def get_all_scripts():
     return sorted([
         f for f in os.listdir(MIGRATIONS_DIR)
@@ -88,12 +136,15 @@ def cmd_seed(conn):
 
 
 def cmd_run(conn):
+    ran_at = datetime.utcnow()
+    started = time.monotonic()
     applied = get_applied(conn)
     scripts = get_all_scripts()
     pending = [s for s in scripts if s not in applied]
 
     if not pending:
         print("✓ All migrations applied. Nothing to run.")
+        record_deploy(conn, ran_at, started, 0, True)
         return
 
     print(f"Found {len(pending)} pending migration(s):\n")
@@ -101,6 +152,7 @@ def cmd_run(conn):
         print(f"  - {s}")
     print()
 
+    done = 0
     for filename in pending:
         path = os.path.join(MIGRATIONS_DIR, filename)
         print(f"Running {filename} ...", end=" ", flush=True)
@@ -115,12 +167,15 @@ def cmd_run(conn):
             print("FAILED\n")
             print(result.stderr)
             print(f"Migration '{filename}' failed. Stopping.")
+            record_deploy(conn, ran_at, started, done, False)
             sys.exit(1)
 
         record_applied(conn, filename)
+        done += 1
         print("done")
 
-    print(f"\n✓ Applied {len(pending)} migration(s) successfully.")
+    print(f"\n✓ Applied {done} migration(s) successfully.")
+    record_deploy(conn, ran_at, started, done, True)
 
 
 if __name__ == '__main__':
@@ -133,6 +188,7 @@ if __name__ == '__main__':
     elif arg == '--status':
         cmd_status(conn)
     elif arg is None:
+        ensure_deploy_log(conn)
         cmd_run(conn)
     else:
         print(f"Unknown argument: {arg}")

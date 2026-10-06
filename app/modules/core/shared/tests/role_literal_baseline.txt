@@ -1,4 +1,3 @@
-modules/core/shared/lib/champions.py :: if row.department in DEPARTMENT_LABELS and row.department not in found:
 modules/core/shared/models/users.py :: (and_(cls.department == 'design', cls.seniority.in_(LEAD_SENIORITY)), 'team_lead'),
 modules/core/shared/models/users.py :: (cls.department == 'client_servicing', 'cs'),
 modules/core/shared/models/users.py :: (cls.department == 'design', 'designer'),

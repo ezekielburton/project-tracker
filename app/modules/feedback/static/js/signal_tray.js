@@ -1,5 +1,5 @@
-// Signal tray: compact Bug Report and Feature Request boards, plus the weekly
-// Friction Log. Registers with HelixTrays and loads once, outside #main-content,
+// Signal tray: compact Bug Report and Feature Request boards, plus the Friction
+// Log chat. Registers with HelixTrays and loads once, outside #main-content,
 // so SPA nav never re-runs it.
 //
 // Opening a row injects the feedback module's detail fragment
@@ -14,7 +14,8 @@
         comment: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
         up: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>',
         plus: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
-        back: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>'
+        back: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>',
+        trash: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>'
     };
 
     var TABS = [
@@ -86,6 +87,14 @@
         if (window.showToast) window.showToast(message, kind || 'success');
     }
 
+    // The server sends naive UTC; marking it as UTC shows the reader's local time.
+    function timeLabel(iso) {
+        if (!iso) return '';
+        var when = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : iso + 'Z');
+        return when.toLocaleDateString([], { weekday: 'short' }) + ' '
+            + when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
     // ── Shell ────────────────────────────────────────────
 
     function buildPanes(body) {
@@ -131,8 +140,27 @@
         activeTab = key;
         activeStatus = 'all';
         renderTabs();
-        if (key === 'friction') loadFriction();
-        else loadBoard(key);
+        if (key === 'friction') {
+            openFriction();
+            startLive();
+        } else {
+            leaveFriction();
+            loadBoard(key);
+        }
+    }
+
+    // The Friction tab reloads when anyone posts or deletes, while it is showing.
+    function startLive() {
+        if (!window.helixPolling) return;
+        window.helixPolling.startFrictionStream(function () {
+            if (friction) loadFriction();
+        });
+    }
+
+    function leaveFriction() {
+        if (window.helixPolling) window.helixPolling.stopFrictionStream();
+        friction = null;
+        if (boardEl) boardEl.classList.remove('is-chat');
     }
 
     // ── The two boards ───────────────────────────────────
@@ -442,32 +470,66 @@
     }
 
     // ── Friction Log ─────────────────────────────────────
+    // A chat: the list scrolls, the composer stays pinned below it, and a live
+    // reload redraws only the list so a half-typed post survives.
 
-    function loadFriction() {
-        var target = boardEl;  // see loadBoard
-        target.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
-        fetchJson('/signal/friction').then(function (data) {
-            if (boardEl === target) renderFriction(data);
-        }).catch(function () {
-            if (boardEl === target) target.innerHTML = '<p class="signal-tray__empty">Could not load the Friction Log.</p>';
-        });
-    }
+    // { log, form, first } while the Friction tab is showing; null otherwise.
+    var friction = null;
 
-    function renderFriction(data) {
-        if (activeTab !== 'friction') return;
+    function openFriction() {
         boardEl.innerHTML = '';
+        boardEl.classList.add('is-chat');
 
         var intro = document.createElement('p');
         intro.className = 'signal-tray__intro';
-        intro.textContent = "What's not working for the team right now — reviewed every Friday. "
-            + "Only this week's OVP champions, management and admin can post.";
+        intro.textContent = 'Annoyances only — bugs and ideas have their own tabs.';
         boardEl.appendChild(intro);
 
         var log = document.createElement('div');
         log.className = 'signal-tray__log';
+        log.innerHTML = '<p class="signal-tray__empty">Loading…</p>';
+        boardEl.appendChild(log);
 
+        var form = document.createElement('form');
+        form.className = 'signal-tray__composer';
+        form.innerHTML =
+            '<textarea class="form-input" name="body" rows="2" placeholder="What\'s annoying you?"'
+            + ' aria-label="New friction post"></textarea>'
+            + '<button type="submit" class="btn-primary">Post</button>';
+        boardEl.appendChild(form);
+
+        friction = { log: log, form: form, first: true };
+        wireComposer(form);
+        loadFriction();
+    }
+
+    // opts.toBottom: jump to the newest post (after your own post).
+    function loadFriction(opts) {
+        var view = friction;
+        fetchJson('/signal/friction').then(function (data) {
+            if (friction === view) renderFrictionLog(data, opts || {});
+        }).catch(function () {
+            if (friction === view && view.first) {
+                view.log.innerHTML = '<p class="signal-tray__empty">Could not load the Friction Log.</p>';
+            }
+        });
+    }
+
+    function isNearBottom(el) {
+        return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    }
+
+    function renderFrictionLog(data, opts) {
+        var log = friction.log;
+        var stick = friction.first || opts.toBottom || isNearBottom(log);
+        var kept = log.scrollTop;
+        friction.first = false;
+        friction.form.body.maxLength = data.max_length;
+
+        log.innerHTML = '';
         if (!data.weeks.length) {
             log.innerHTML = '<p class="signal-tray__empty">Nothing logged yet.</p>';
+            return;
         }
 
         data.weeks.forEach(function (week) {
@@ -478,45 +540,94 @@
                 + (week.week_start === data.current_week
                     ? '<span class="signal-tray__week-tag">Review Fri</span>' : '');
             log.appendChild(head);
-
-            week.entries.forEach(function (entry) {
-                var el = document.createElement('div');
-                el.className = 'signal-tray__entry';
-                var who = document.createElement('div');
-                who.className = 'signal-tray__entry-who';
-                who.textContent = entry.author
-                    + (entry.department ? ' · ' + entry.department + ' champion' : '');
-                var body = document.createElement('p');
-                body.className = 'signal-tray__entry-body';
-                body.textContent = entry.body;
-                el.appendChild(who);
-                el.appendChild(body);
-                log.appendChild(el);
-            });
+            week.entries.forEach(function (entry) { log.appendChild(renderFrictionEntry(entry)); });
         });
-        boardEl.appendChild(log);
 
-        if (data.can_write) {
-            var form = document.createElement('form');
-            form.className = 'signal-tray__composer';
-            form.innerHTML =
-                '<textarea class="form-input" name="body" rows="2" placeholder="What is not working?"></textarea>' +
-                '<button type="submit" class="btn-primary">Post</button>';
-            form.addEventListener('submit', function (e) {
-                e.preventDefault();
-                var body = form.body.value.trim();
-                if (!body) return;
-                fetchJson('/signal/friction', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ body: body })
-                }).then(function (result) {
-                    if (result.success) { form.body.value = ''; loadFriction(); }
-                    else toast(result.error || 'Could not post that.', 'error');
-                });
-            });
-            boardEl.appendChild(form);
+        log.scrollTop = stick ? log.scrollHeight : kept;
+    }
+
+    function renderFrictionEntry(entry) {
+        var el = document.createElement('div');
+        el.className = 'signal-tray__entry';
+
+        var head = document.createElement('div');
+        head.className = 'signal-tray__entry-head';
+
+        var who = document.createElement('span');
+        who.className = 'signal-tray__entry-who';
+        who.textContent = entry.author + (entry.department ? ' · ' + entry.department : '');
+        head.appendChild(who);
+
+        var when = document.createElement('span');
+        when.className = 'signal-tray__entry-when';
+        when.textContent = timeLabel(entry.created_at);
+        head.appendChild(when);
+
+        if (entry.can_delete) {
+            var del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'signal-tray__entry-delete';
+            del.title = 'Delete post';
+            del.setAttribute('aria-label', 'Delete post');
+            del.innerHTML = ICONS.trash;
+            del.addEventListener('click', function () { deleteFriction(entry.id); });
+            head.appendChild(del);
         }
+        el.appendChild(head);
+
+        var body = document.createElement('p');
+        body.className = 'signal-tray__entry-body';
+        body.textContent = entry.body;
+        el.appendChild(body);
+        return el;
+    }
+
+    function wireComposer(form) {
+        var input = form.body;
+        var button = form.querySelector('button');
+
+        function send() {
+            var body = input.value.trim();
+            if (!body || button.disabled) return;
+            button.disabled = true;
+            fetchJson('/signal/friction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body: body })
+            }).then(function (result) {
+                button.disabled = false;
+                if (result.success) {
+                    input.value = '';
+                    if (friction) loadFriction({ toBottom: true });
+                } else {
+                    toast(result.error || 'Could not post that.', 'error');
+                }
+            }).catch(function () {
+                button.disabled = false;
+                toast('Could not post that.', 'error');
+            });
+        }
+
+        // Enter sends, Shift+Enter inserts a newline, as in project chat.
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+                e.preventDefault();
+                send();
+            }
+        });
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            send();
+        });
+    }
+
+    function deleteFriction(id) {
+        window.showConfirm('Delete this post?', function () {
+            fetchJson('/signal/friction/' + id, { method: 'DELETE' }).then(function (result) {
+                if (!result.success) toast(result.error || 'Could not delete that.', 'error');
+                else if (friction) loadFriction();
+            }).catch(function () { toast('Could not delete that.', 'error'); });
+        });
     }
 
     // ── Registration and the launcher bubble ─────────────
@@ -553,7 +664,7 @@
 
     window.HelixTrays.register('signal', {
         onOpen: buildPanes,
-        onClose: function () { boardEl = tabsEl = null; },
+        onClose: function () { leaveFriction(); boardEl = tabsEl = null; },
         onSignal: loadUnread
     });
 

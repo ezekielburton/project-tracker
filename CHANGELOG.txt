@@ -2,7 +2,27 @@
 ONE VITAMIN PLATFORM — CHANGELOG
 ===============================================================================
 =======================================================================================
-v2.6.4 - Org Model Update
+v2.7 - Dashboard Overhaul
+=======================================================================================
+
+New Features:
+
+- Dashboards have been overhauled to give you the information you need, everyday.
+- Dashboard types: Designer, Team Lead, Head of Department, Management, Admin, CS, Project Owner & Finance.
+- Weekly reports will now be sent out to all staff on OVP.
+
+Adjustments:
+
+- Removed OVP champions from the platform.
+- The friction log is now open to all, record your frustrations with OVP there.
+- Admin panel shows all user role tags clearly.
+
+Bug Fixes:
+
+
+
+=======================================================================================
+v2.6.4 - Org Model Update - 05.10.2026
 =======================================================================================
 
 New Features:

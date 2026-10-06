@@ -42,8 +42,9 @@ Admins edit all of these in Admin → Accounts until the HR pages arrive.
 
 | Seniority | Adds |
 |---|---|
-| none, manager, head | nothing yet |
-| management | view_workspace, view_cs, view_finance, edit_invoicing_thresholds, close_projects, view_all_projects, manage_projects, create_projects, start_projects, review_submissions, edit_client_directory, raise_flags, manage_flags, log_site_visits, manage_reference_data, complete_preproduction, manage_project_files, switch_dashboard_scope, view_team_snapshot, view_di_performance, view_all_di, view_hse, write_friction_log, view_time_reports |
+| none, manager | nothing yet |
+| head | view_department_overview |
+| management | view_workspace, view_cs, view_finance, edit_invoicing_thresholds, close_projects, view_all_projects, manage_projects, create_projects, start_projects, review_submissions, edit_client_directory, raise_flags, manage_flags, log_site_visits, manage_reference_data, complete_preproduction, manage_project_files, switch_dashboard_scope, view_team_snapshot, view_department_overview, view_management_dashboard, view_di_performance, view_all_di, view_hse, write_friction_log, view_time_reports |
 
 - A Management person inside a department holds both sets (e.g. Design + Management also has drafts and claim work).
 - **`view_workspace`** is the broad "can use the main app" capability held by every department but HSE. It is the gate to reach for on a data endpoint behind an already-gated page (CONVENTIONS.md → *Gate the endpoints*), rather than inventing a narrower one.
@@ -51,7 +52,8 @@ Admins edit all of these in Admin → Accounts until the HR pages arrive.
 - **`view_hse` doubles as the HSE email recipient list** (`hse/lib/share.py::recipients`). Anyone who should receive the reports must be able to open the link in them, so the two are one capability on purpose.
 - Designers and design leads hold the same capabilities. What separates them is seniority and the team a deliverable belongs to — a per-record rule, never a capability.
 - Admin-only capabilities are listed in `ADMIN_ONLY`: admin_panel, manage_users, manage_wiki, manage_blog, manage_feedback, manage_achievements, manage_scopes, manage_di_templates, override_status, edit_di_board, toggle_project_hold. Granting one to a department or seniority means editing two places on purpose.
-- **Coming with 2.7 (the Dashboard update):** `raise_escalation`, `decide_escalation`, `nudge`, `view_adoption`, and whatever the dashboard gates settle on in S2 (reuse existing capabilities where they fit).
+- **Dashboard gates:** `view_department_overview` (Head of Department and Management) opens the department pages (Design workload, Needs attention); which one is picked by department on the rail. `view_management_dashboard` (Management) opens the Management rail's own pages. Admin system pages reuse `admin_panel` with `real_user=True`.
+- **Coming with 2.7:** `raise_escalation`, `decide_escalation`, `nudge`, `view_adoption`.
 
 ### `start_projects` — who moves a project off Briefed
 Held by **Design, Management and admin** only. CS deliberately does not — the people who do the work decide when it starts. A pure capability with no relationship half: any designer can start any project. If that needs tightening, `_is_assigned_designer` in `details.py` is the helper to combine it with (mind the branch-selector trap).
@@ -77,7 +79,7 @@ Two more that look like gates and are not: checks about **another** person (vali
 What the record's own state allows, regardless of who is asking. Admin's wildcard does not open these. Reference: `submissions_blocked_reason(project)` in `project_overlay/_common.py` — a `briefed` project takes no submission work until Start Project; every Submissions write route returns **409**, not 403. The gate has one definition and the UI reads it too (`submissions_open`); the grandfather clause is self-sealing (only a project that already carries a submission is exempt, and creating one is what's blocked).
 
 ## The branch-selector trap
-Admin holds every capability. Where a check selects a branch that admin is *deliberately outside of* — the designer's self-claim path, the designer's default focus, the notification toggles a person can receive — `can()` would hand admin that branch. Those checks go through `lib/org.py` instead: `is_designer`, `is_design_lead`, `is_plain_designer`, `is_cs`, `is_project_owner`, `is_leadership`, `is_admin`. Admin and Management always take the company-wide branch, never a department's, so `is_designer()` is False for a Management person in Design. Each call site carries a short comment saying why it is not `can()`.
+Admin holds every capability. Where a check selects a branch that admin is *deliberately outside of* — the designer's self-claim path, the designer's default focus, the notification toggles a person can receive — `can()` would hand admin that branch. Those checks go through `lib/org.py` instead: `is_designer`, `is_design_lead`, `is_plain_designer`, `is_cs`, `is_project_owner`, `is_department_head`, `is_leadership`, `is_admin`. Admin and Management always take the company-wide branch, never a department's, so `is_designer()` is False for a Management person in Design. Each call site carries a short comment saying why it is not `can()`.
 
 ## Where the CS review lock lives
 `can_access_client_servicing()` in `client_servicing/lib/access.py` = `can('view_cs', user)` plus the `CLIENT_SERVICING_REVIEW_ONLY` narrowing (off by default). CS routes gate through `@require_cs`; `can()` stays a pure map lookup.

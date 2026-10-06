@@ -16,6 +16,7 @@ from app.modules.core.shared.services.sse_relay import (
     subscribe_user, unsubscribe_user,
     subscribe_di_project, unsubscribe_di_project,
     subscribe_di_dashboard, unsubscribe_di_dashboard,
+    subscribe_friction, unsubscribe_friction,
 )
 from app.modules.core.shared.lib.capabilities import effective_user
 
@@ -87,3 +88,11 @@ def notifications_stream():
     user_id = effective_user().id
     q = subscribe_user(user_id)
     return _sse_response(_event_stream(q, lambda: unsubscribe_user(user_id, q)))
+
+
+@sse_bp.route('/friction')
+@login_required
+def friction_stream():
+    # Everyone signed in reads the Friction Log, so the stream is open to all.
+    q = subscribe_friction()
+    return _sse_response(_event_stream(q, lambda: unsubscribe_friction(q)))

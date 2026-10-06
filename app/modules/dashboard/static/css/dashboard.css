@@ -2610,3 +2610,380 @@ a.dash-row:hover {
 .dash-week-load-day--green .dash-week-load-day-count { color: var(--tint-009900); }
 .dash-week-load-day--amber .dash-week-load-day-count { color: var(--tint-6b5d00); }
 .dash-week-load-day--red .dash-week-load-day-count { color: var(--tint-e60000); }
+
+/*  ---- Dashboard shell
+    The rail pages' frame (templates/dashboard/_shell.html): the page head,
+    the quiet line, and New briefs on landing pages. */
+
+.dash-main {
+    padding: 0 var(--space-6) var(--space-6);
+}
+
+/* The role views carry their own top padding; the shell already has it. */
+.dash-main > .page-container {
+    padding-top: 0;
+}
+
+.dash-page-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+}
+
+.dash-page-title {
+    margin: 0;
+    font-family: var(--font-headline);
+    font-size: var(--text-xl);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.dash-quiet {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.dash-new-briefs {
+    margin-top: var(--space-6);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.dash-new-briefs-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+}
+
+.dash-new-briefs:not(.dash-new-briefs--empty) .dash-new-briefs-head {
+    border-bottom: 1px solid var(--border);
+}
+
+.dash-new-briefs-title {
+    font-family: var(--font-headline);
+    font-size: var(--text-base);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.dash-new-briefs-count,
+.dash-new-briefs-age {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* Scrolls inside so the panel never pushes the page past one screen. */
+.dash-new-briefs-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 18rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.dash-new-briefs-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) 4rem;
+    gap: var(--space-3);
+    align-items: baseline;
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-size: var(--text-sm);
+    text-decoration: none;
+}
+
+.dash-new-briefs-list li:last-child .dash-new-briefs-row {
+    border-bottom: none;
+}
+
+.dash-new-briefs-row:hover {
+    background: var(--surface-hover);
+}
+
+.dash-new-briefs-name,
+.dash-new-briefs-client,
+.dash-new-briefs-lead {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dash-new-briefs-name {
+    font-weight: 600;
+}
+
+.dash-new-briefs-client,
+.dash-new-briefs-lead {
+    color: var(--text-muted);
+}
+
+.dash-new-briefs-age {
+    text-align: right;
+}
+
+@media (max-width: 48em) {
+    .dash-main {
+        padding: 0 var(--space-4) var(--space-4);
+    }
+
+    /* On phones nothing scrolls inside a card; the page scrolls. */
+    .dash-new-briefs-list {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .dash-new-briefs-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        row-gap: var(--space-1);
+    }
+
+    .dash-new-briefs-lead {
+        text-align: right;
+    }
+}
+
+/*  ---- Shared calendar (templates/dashboard/calendar.html)
+    Each event kind sets --kind: dots fill with it; chips and day rows carry
+    it as a stripe, so both themes stay readable. test_dashboard_calendar.py
+    checks every kind in lib/calendar.py::EVENT_KINDS has its rule here. */
+
+.dash-cal-kind--deadline { --kind: var(--tangerine); }
+.dash-cal-kind--install { --kind: var(--clover); }
+.dash-cal-kind--removal { --kind: var(--oak); }
+.dash-cal-kind--overdue { --kind: var(--poppy); }
+.dash-cal-kind--site_visit { --kind: var(--lavender); }
+
+.dash-cal-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.dash-cal-monthnav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.dash-cal-month {
+    min-width: 9rem;
+    text-align: center;
+    font-family: var(--font-headline);
+    font-size: var(--text-med);
+    color: var(--text);
+}
+
+.dash-cal-navbtn {
+    padding: var(--space-1) var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: var(--text-sm);
+    text-decoration: none;
+}
+
+.dash-cal-navbtn:hover {
+    background: var(--surface-hover);
+}
+
+.dash-cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-left: auto;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.dash-cal-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.dash-cal-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--kind);
+}
+
+.dash-cal-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: var(--space-4);
+    align-items: start;
+}
+
+.dash-cal-grid-wrap,
+.dash-cal-day {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.dash-cal-dow,
+.dash-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.dash-cal-dow {
+    border-bottom: 1px solid var(--border);
+}
+
+.dash-cal-dow div {
+    padding: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.dash-cal-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 5.5rem;
+    padding: var(--space-1) var(--space-2);
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    overflow: hidden;
+}
+
+.dash-cal-cell:nth-child(7n) {
+    border-right: none;
+}
+
+.dash-cal-cell:hover {
+    background: var(--surface-hover);
+}
+
+.dash-cal-cell--out {
+    color: var(--text-faint);
+}
+
+.dash-cal-cell--selected {
+    box-shadow: inset 0 0 0 2px var(--border-strong);
+}
+
+.dash-cal-num,
+.dash-cal-count,
+.dash-cal-more {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+.dash-cal-cell--today .dash-cal-num {
+    color: var(--tangerine);
+    font-weight: 600;
+}
+
+.dash-cal-more {
+    color: var(--text-muted);
+}
+
+/* Phones only: the number of events replaces the chips. */
+.dash-cal-count {
+    display: none;
+    color: var(--text-muted);
+}
+
+.dash-cal-chip {
+    display: block;
+    padding: 0 var(--space-1);
+    background: var(--surface-hover);
+    border-left: 3px solid var(--kind);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash-cal-day-head {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-headline);
+    font-size: var(--text-med);
+    color: var(--text);
+}
+
+.dash-cal-day .dash-quiet {
+    padding: var(--space-3) var(--space-4);
+}
+
+.dash-cal-day-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 28rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.dash-cal-day-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-2) var(--space-4);
+    border-left: 3px solid var(--kind);
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-size: var(--text-sm);
+    text-decoration: none;
+}
+
+.dash-cal-day-row:hover {
+    background: var(--surface-hover);
+}
+
+.dash-cal-day-kind {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+@media (max-width: 48em) {
+    .dash-cal-split {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dash-cal-legend {
+        margin-left: 0;
+    }
+
+    .dash-cal-cell {
+        min-height: 3rem;
+    }
+
+    .dash-cal-chip,
+    .dash-cal-more {
+        display: none;
+    }
+
+    .dash-cal-count {
+        display: block;
+    }
+
+    /* On phones nothing scrolls inside a card; the page scrolls. */
+    .dash-cal-day-list {
+        max-height: none;
+        overflow: visible;
+    }
+}

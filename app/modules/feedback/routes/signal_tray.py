@@ -12,13 +12,12 @@ from sqlalchemy.orm import joinedload
 
 from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import effective_user
-from app.modules.core.shared.lib.champions import (
-    DEPARTMENT_LABELS, can_write_friction, current_champions, week_start_for,
-)
+from app.modules.core.shared.lib.org import department_label
 from app.modules.core.shared.models import (
     BugReport, BugReportComment, FeatureRequest, FeatureRequestComment,
     FeatureRequestUpvote, FrictionLogEntry,
 )
+from app.modules.feedback.lib.friction import MAX_LENGTH, can_delete, week_start_for
 
 signal_tray_bp = Blueprint('signal_tray', __name__)
 
@@ -41,6 +40,9 @@ SEVERITIES = [('high', 'High'), ('medium', 'Med'), ('low', 'Low')]
 BUG_STATUS_LABELS = dict(BUG_STATUSES)
 FEATURE_STATUS_LABELS = dict(FEATURE_STATUSES)
 SEVERITY_LABELS = dict(SEVERITIES)
+
+# Posts the Friction Log loads; older ones drop off the top.
+FRICTION_HISTORY = 500
 
 
 def _counts(rows, statuses):
@@ -147,18 +149,16 @@ def feature_board():
 @signal_tray_bp.route('/signal/friction')
 @login_required
 def friction_log():
-    """Friction Log grouped by week, newest week first. Readable by everyone."""
+    """The latest Friction Log posts, oldest first, grouped by week."""
     actor = effective_user()
     entries = (FrictionLogEntry.query
                .options(joinedload(FrictionLogEntry.author))
-               .order_by(FrictionLogEntry.week_start.desc(), FrictionLogEntry.created_at.asc())
-               .limit(500)
+               .order_by(FrictionLogEntry.week_start.desc(),
+                         FrictionLogEntry.created_at.desc(),
+                         FrictionLogEntry.id.desc())
+               .limit(FRICTION_HISTORY)
                .all())
-
-    # Which department each author speaks for, when they hold a badge this week.
-    department_by_user = {}
-    for department, holder in current_champions().items():
-        department_by_user.setdefault(holder.id, DEPARTMENT_LABELS[department])
+    entries.reverse()
 
     weeks = []
     for entry in entries:
@@ -169,30 +169,48 @@ def friction_log():
             'id': entry.id,
             'body': entry.body,
             'author': entry.author.name if entry.author else '',
-            'department': department_by_user.get(entry.author_id),
+            'department': department_label(entry.author),
             'created_at': entry.created_at.isoformat() if entry.created_at else None,
+            'can_delete': can_delete(entry, actor),
         })
 
     return jsonify({
         'weeks': weeks,
         'current_week': week_start_for().isoformat(),
-        'can_write': can_write_friction(actor),
+        'max_length': MAX_LENGTH,
     })
 
 
 @signal_tray_bp.route('/signal/friction', methods=['POST'])
 @login_required
 def post_friction():
+    """Anyone signed in may post. While an admin emulates, the post is the
+    emulated person's, as in the chat tray."""
     actor = effective_user()
-    if not can_write_friction(actor):
-        return jsonify({'success': False,
-                        'error': "Only this week's OVP champions, management and admin can post."}), 403
-
     body = ((request.get_json() or {}).get('body') or '').strip()
     if not body:
         return jsonify({'success': False, 'error': 'Write something first'}), 400
+    if len(body) > MAX_LENGTH:
+        return jsonify({'success': False,
+                        'error': f'Keep it under {MAX_LENGTH} characters'}), 400
 
     db.session.add(FrictionLogEntry(author_id=actor.id, body=body, week_start=week_start_for()))
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@signal_tray_bp.route('/signal/friction/<int:entry_id>', methods=['DELETE'])
+@login_required
+def delete_friction(entry_id):
+    """Delete a post: the author's own, or any post for an admin."""
+    actor = effective_user()
+    entry = FrictionLogEntry.query.get(entry_id)
+    if entry is None:
+        return jsonify({'success': False, 'error': 'Post not found'}), 404
+    if not can_delete(entry, actor):
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+
+    db.session.delete(entry)
     db.session.commit()
     return jsonify({'success': True})
 
