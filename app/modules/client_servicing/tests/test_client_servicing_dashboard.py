@@ -29,7 +29,7 @@ def _project(db_session, tag, creator, install=None, cs_status=None,
              risk=None, status='briefed', value=None, due=None, cancelled=False, **cs):
     """A CS project (+ optional companion row). `due` is the project's
     first_output_deadline; **cs go on the ClientServicing row."""
-    p = Project(name=f'Dash {tag}', created_by_id=creator.id,
+    p = Project(name=f'Dash {tag}', created_by_id=creator.id, job_number=f'DASH-{tag}',
                 cs_lead_id=creator.id, project_status=status,
                 installation_date=install, first_output_deadline=due, value=value)
     if cancelled:
@@ -126,10 +126,10 @@ def test_urgent_actions_keep_risk_and_money_only(app, db_session):
     assert '/client-servicing/calendar' in items[0]['link']
 
 
-def test_missing_fields_names_install_date_and_value():
+def test_missing_fields_names_install_date_value_and_job_number():
     p = Project(name='Gap check')
-    assert missing_fields(p) == ['install date', 'value']
-    p.installation_date, p.value = TODAY, 10
+    assert missing_fields(p) == ['install date', 'value', 'job number']
+    p.installation_date, p.value, p.job_number = TODAY, 10, 'J-1'
     assert missing_fields(p) == []
 
 

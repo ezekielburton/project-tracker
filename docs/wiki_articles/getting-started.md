@@ -136,42 +136,40 @@ You are notified when your bug reaches Fix in progress or Resolved, and when you
 Check the board before you post. If it is already there, upvote it or comment instead. One idea with ten votes rises to the top. Ten copies with one vote each do not.
 ```
 
-### 37. `signal.friction` — The weekly friction log
+### 37. `signal.friction` — The friction log
 
-_Status: draft 2026-10-01, awaiting approval_
+_Status: draft 2026-10-06, awaiting approval_
 
 ```
 Section: Getting started
 
 [Paragraph]
-The Friction Log is the team's weekly list of what is slowing people down in OVP. It is the third tab in the Signal tray and is reviewed every Friday.
-
-[Heading] Who can post
-
-[List]
-
-This week's OVP champions - one per department: Client Servicing, Design, Production, Logistics, Finance
-Management and admins
-Everyone else can read it
-
-[Paragraph]
-Admins set the champions each week in the admin panel. A champion who is not replaced keeps the badge for up to two more weeks, so a department is never left without one.
+The friction log is a live chat for the small things that annoy you in OVP. It is the third tab in the Signal tray. Bugs and ideas have their own tabs.
 
 [Heading] Posting
 
 [List]
 
 Open Signal, then Friction Log
-Write what is not working in the box at the bottom
-Post. Posts cannot be edited or deleted, so read it over first
+Type in the box at the bottom and press Enter, or click Post
+Shift+Enter starts a new line. A post can be up to 500 characters
+Everyone signed in can post
 
 [Heading] Reading it
 
 [List]
 
-Grouped by week, newest week first
+Newest posts at the bottom, grouped by week
+New posts appear for everyone straight away, no refresh needed
+Each post shows who wrote it and their department
 The current week is tagged Review Fri
-Each post shows who wrote it and which department they are champion for
+
+[Heading] Deleting a post
+
+[List]
+
+Click the bin beside your own post to delete it
+Admins can delete any post
 
 [Callout]
 Write the friction, not the fix. "Finding last month's invoices takes five clicks" is more useful than "add an invoices button". The Friday review decides what changes.

@@ -7,7 +7,7 @@ Friction Log's routes live here.
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
-from flask_login import login_required
+from flask_login import current_user, login_required
 from sqlalchemy.orm import joinedload
 
 from app.modules.core.shared.extensions import db
@@ -231,15 +231,14 @@ def _unread_since(seen_at):
 @signal_tray_bp.route('/signal/unread')
 @login_required
 def unread():
-    actor = effective_user()
-    return jsonify({'unread': _unread_since(actor.signal_seen_at)})
+    # The bubble is personal: an admin viewing as someone keeps their own count.
+    return jsonify({'unread': _unread_since(current_user.signal_seen_at)})
 
 
 @signal_tray_bp.route('/signal/seen', methods=['POST'])
 @login_required
 def mark_seen():
-    """Opening the tray clears its bubble."""
-    actor = effective_user()
-    actor.signal_seen_at = datetime.utcnow()
+    """Opening the tray clears its bubble, for the real user."""
+    current_user.signal_seen_at = datetime.utcnow()
     db.session.commit()
     return jsonify({'success': True})

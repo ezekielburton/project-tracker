@@ -71,6 +71,12 @@ class Config:
     # NEVER set this on the production server — it exposes destructive data operations.
     DEV_TOOLS_ENABLED = os.environ.get('DEV_TOOLS_ENABLED', 'false').lower() == 'true'
 
+    # Admin dashboard collector: where it writes the snapshot (kept out of uploads/,
+    # which nginx serves), the LAN certificate file, and the public hostname to check.
+    SYSTEM_SNAPSHOT_PATH = os.environ.get('SYSTEM_SNAPSHOT_PATH', '/var/lib/ovp/snapshot.json')
+    LAN_CERT_PATH = os.environ.get('LAN_CERT_PATH', '')
+    PUBLIC_HOSTNAME = os.environ.get('PUBLIC_HOSTNAME', 'app.vitamin-e.work')
+
 
 class TestingConfig(Config):
     """Configuration for the pytest suite. Points at a dedicated test database
@@ -84,4 +90,5 @@ class TestingConfig(Config):
     CLIENT_SERVICING_REVIEW_ONLY = False
     # Tests never write to, or clean up, the real wiki upload folders.
     WIKI_UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), 'ovp-test-wiki-uploads')
+    SYSTEM_SNAPSHOT_PATH = os.path.join(tempfile.gettempdir(), 'ovp-test-system', 'snapshot.json')
 

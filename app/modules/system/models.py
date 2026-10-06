@@ -84,3 +84,29 @@ class DeployRun(db.Model):
     migrations_applied = db.Column(db.Integer, nullable=False, default=0)
     duration_ms        = db.Column(db.Integer, nullable=False)
     ok                 = db.Column(db.Boolean, nullable=False, default=True)
+
+
+class SystemSample(db.Model):
+    """One reading of one metric, saved every 5 minutes for the history charts."""
+    __tablename__ = 'system_samples'
+    __table_args__ = (db.Index('ix_system_samples_metric_ts', 'metric', 'ts'),)
+
+    id     = db.Column(db.BigInteger, primary_key=True)
+    ts     = db.Column(db.DateTime, nullable=False, index=True)
+    metric = db.Column(db.String(80), nullable=False)
+    value  = db.Column(db.Float, nullable=False)
+
+
+class AppLogEvent(db.Model):
+    """An error, warning or worker start read from the app log; the signature
+    groups repeats of one problem."""
+    __tablename__ = 'app_log_events'
+    __table_args__ = (db.Index('ix_app_log_events_signature_ts', 'signature', 'ts'),)
+
+    id        = db.Column(db.BigInteger, primary_key=True)
+    ts        = db.Column(db.DateTime, nullable=False, index=True)
+    level     = db.Column(db.String(10), nullable=False)
+    source    = db.Column(db.String(120), nullable=False)
+    signature = db.Column(db.String(200), nullable=False)
+    message   = db.Column(db.Text, nullable=False)
+    detail    = db.Column(db.Text, nullable=True)

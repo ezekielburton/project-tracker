@@ -61,7 +61,7 @@ HELP_KEY_GROUPS = [
     ('Chat and Signal', [
         ('chat.projects', 'Project chat'),
         ('signal.report', 'Reporting a bug or an idea'),
-        ('signal.friction', 'The weekly friction log'),
+        ('signal.friction', 'The friction log'),
     ]),
     ('Wiki', [
         ('wiki.editor', 'Writing a wiki article'),

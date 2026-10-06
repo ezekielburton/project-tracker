@@ -153,7 +153,7 @@ def _upcoming(snap, today):
 
 
 def _data_gaps(snap):
-    """Jobs missing an install date or value, counted once each. Shown as one
+    """Jobs missing data (see missing_fields), counted once each. Shown as one
     strip so they can't bury the risk and money rows."""
     count = sum(1 for r in snap if missing_fields(r['p']))
     return {'count': count, 'link': _missing_data_link()}

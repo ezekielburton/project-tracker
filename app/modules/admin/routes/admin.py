@@ -304,6 +304,8 @@ def delete_user(user_id):
         db.session.execute(t('DELETE FROM feature_request_comments WHERE user_id = :u'), {'u': uid})
         db.session.execute(t('DELETE FROM blog_comments WHERE user_id = :u'), {'u': uid})
         db.session.execute(t('DELETE FROM bug_report_comments WHERE user_id = :u'), {'u': uid})
+        # Friction posts are chat, not records; they go with their author.
+        db.session.execute(t('DELETE FROM friction_log_entries WHERE author_id = :u'), {'u': uid})
         db.session.execute(t('DELETE FROM sidebar_clicks WHERE user_id = :u'), {'u': uid})
 
         # ── Null out nullable FK references ───────────────────────────────────

@@ -227,6 +227,20 @@ def test_an_emulating_admin_deletes_only_as_the_emulated_person(app, client, db_
 
 # ── The launcher bubble ────────────────────────────────────────────────────
 
+def test_opening_the_tray_while_emulating_marks_the_real_admin_seen(app, client, db_session):
+    admin = _user(db_session, 'seen-admin', 'admin')
+    target = _user(db_session, 'seen-target')
+    login_as(client, app, admin, 'password123')
+    _emulate(client, target)
+
+    client.post(_url(app, 'signal_tray.mark_seen'))
+
+    db_session.refresh(admin)
+    db_session.refresh(target)
+    assert admin.signal_seen_at is not None
+    assert target.signal_seen_at is None
+
+
 def test_a_never_opened_tray_shows_no_bubble(app, client, db_session):
     """A user who never opened the tray gets 0, not the whole backlog."""
     author = _user(db_session, 'bubble-fresh')

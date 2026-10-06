@@ -1,70 +1,77 @@
 # feedback
 
-User-facing feedback: a **feature request** board (submit, upvote, comment,
-track status) and a **bug report** board (submit, comment, track status). Both
-are visible to all signed-in users; status changes and deletions are admin-only.
+The Signal tray: a **Bug Report** board, a **Feature Request** board and the
+**Friction Log**. Everyone signed in reads and posts to all three. Status
+changes and comment deletions are admin-only (`manage_feedback`).
 
 ## Structure
 ```
 app/modules/feedback/
-  routes/feedback.py     # the `feedback` blueprint (both boards)
-  templates/feedback/    # feature_requests.html, bug_reports.html,
-                         # _feature_content.html, _bug_content.html
-  tests/test_feedback_smoke.py
+  blueprint.py            # feedback_assets: serves this module's static files
+  routes/feedback.py      # `feedback` blueprint: detail fragments and writes for both boards
+  routes/signal_tray.py   # `signal_tray` blueprint: board lists, Friction Log, launcher bubble
+  lib/friction.py         # Friction Log rules: week start, length cap, who may delete
+  templates/feedback/     # _bug_content.html, _feature_content.html (detail fragments)
+  static/css/             # feedback.css (detail fragments), signal_tray.css
+  static/js/signal_tray.js
+  tests/
   feedback.md
 ```
 
-## Routes (the `feedback` blueprint)
-Feature requests:
-- `GET /feature-requests` — the board (list page)
-- `GET /feature-requests/<id>` — one request's detail (rendered fragment)
-- `POST /feature-requests` — submit a request
+## Routes
+`feedback` blueprint:
+- `GET /feature-requests`, `GET /bug-reports` — old notification links; redirect into the tray
+- `GET /feature-requests/<id>`, `GET /bug-reports/<id>` — one item's detail fragment
+- `POST /feature-requests`, `POST /bug-reports` — submit
 - `POST /feature-requests/<id>/upvote` — toggle an upvote
-- `POST /feature-requests/<id>/comments` — add a comment
-- `DELETE /feature-requests/comments/<id>` — delete a comment (admin)
-- `PATCH /feature-requests/<id>/status` — change status (admin)
-- `DELETE /feature-requests/<id>` — delete a request (admin or creator)
+- `POST /feature-requests/<id>/comments`, `POST /bug-reports/<id>/comments` — add a comment
+- `DELETE /feature-requests/comments/<id>`, `DELETE /bug-reports/comments/<id>` — delete a comment (admin)
+- `PATCH /feature-requests/<id>/status`, `PATCH /bug-reports/<id>/status` — change status (admin)
+- `DELETE /feature-requests/<id>`, `DELETE /bug-reports/<id>` — delete (admin or submitter)
 
-Bug reports:
-- `GET /bug-reports` — the board (list page)
-- `GET /bug-reports/<id>` — one bug's detail (rendered fragment)
-- `POST /bug-reports` — submit a bug
-- `PATCH /bug-reports/<id>/status` — change status (admin)
-- `POST /bug-reports/<id>/comments` — add a comment
-- `DELETE /bug-reports/comments/<id>` — delete a comment (admin)
-- `DELETE /bug-reports/<id>` — delete a bug (admin or creator)
+`signal_tray` blueprint:
+- `GET /signal/bugs`, `GET /signal/features` — board rows and chip counts
+- `GET /signal/friction` — the latest 500 posts, oldest first, grouped by week
+- `POST /signal/friction` — post; anyone signed in, 1–500 characters
+- `DELETE /signal/friction/<id>` — delete; the author, or `manage_feedback`
+- `GET /signal/unread`, `POST /signal/seen` — the launcher bubble
 
-Valid feature statuses: `requested`, `in_progress`, `testing`, `implemented`.
+## Friction Log
+- For annoyances only; bugs and ideas have their own tabs. Reviewed every
+  Friday; the current week carries a "Review Fri" tag.
+- Each post shows Name · Department (`org.department_label`).
+- **Emulation exception:** posts and deletes act as the emulated person, as in
+  the chat tray (CONVENTIONS.md §4).
+- **Live:** adding or deleting a post fires `friction_changes`
+  (`core/shared/services/live_events.py`), and `GET /sse/friction` rings every
+  open Friction tab, which reloads its list. The stream opens with the tab and
+  closes on a tab switch or tray close; the tray outlives page navigation, so
+  navigation does not close it.
+- A live reload redraws only the list: a half-typed post survives, and the
+  list only follows new posts when the reader is already at the bottom.
+- Writes go through `fetchJson` in `signal_tray.js` — the one place a CSRF
+  token is added.
+- The launcher bubble counts new bugs, ideas and friction posts since the tray
+  was last opened.
 
 ## Models
 None of its own. Uses `FeatureRequest`, `FeatureRequestUpvote`,
-`FeatureRequestComment`, `BugReport`, `BugReportComment` from
-`core/shared/models`.
-
-## Static
-Still served from the global `/static` loader (not yet module-owned):
-`css/feedback.css`, `js/feedback.js` (feature board), and `js/bug_reports.js`
-(bug board). The two boards ship separate scripts — noted here so the eventual
-shared-static pass moves all three, not just the one named after the module.
+`FeatureRequestComment`, `BugReport`, `BugReportComment` and
+`FrictionLogEntry` from `core/shared/models`.
 
 ## Dependencies
-- **core/shared**: `db` (extensions), the five feedback models,
-  `get_actor`/`log_activity` (lib/utils), and the notification service
-  (`notify_admin_of_new_feedback`, `create_notification` from
-  services/notifications). All imported directly from core/shared.
-- **Shared templates**: both detail fragments import `user_avatar` from the
-  shared `_macros.html` (on the `core` blueprint's Jinja path).
-- **Cross-module (explicit, temporary):** `check_achievements` (achievements) —
-  fired on submitting a feature, giving an upvote, and submitting a bug. The
-  upvote hook is deliberately guarded to fire only when an upvote is *added*
-  (not removed), so toggling can't inflate an "upvote N times" achievement.
-  Imported from its current `app.achievements` path; repoints when achievements
-  migrates.
-
-## Exports
-The `feedback` blueprint, registered in the app factory. The sidebar links to
-`feedback.feature_requests` and `feedback.bug_reports`.
+- **core/shared:** `db`, the models above, `can` / `effective_user`,
+  `org.department_label`, `get_actor` / `log_activity`, the notification
+  service, and the live-update stream (`live_events`, `sse_relay`, `polling.js`).
+- **Cross-module:** `check_achievements` (on submitting, and on adding an
+  upvote — never on removing one); Digital Innovation's
+  `services/intake.declined_feature_ids` for the feature board's DI state.
 
 ## Tests
-`tests/test_feedback_smoke.py` — both boards require authentication, and the
-board templates resolve. Uses the shared fixtures from `core/shared`.
+- `test_feedback_smoke.py` — logged-out refusals; the detail fragments resolve.
+- `test_signal_tray.py` — both boards, every Friction Log gate, emulation,
+  ordering, department label, the launcher bubble.
+- `test_signal_tray_contract.py` — the fragments still carry every selector
+  `signal_tray.js` binds.
+- `test_feedback_links.py` — notification links open with a GET; who sees
+  comment-delete.

@@ -19,6 +19,7 @@ from app.modules.core.shared.models import Project, User
 from app.modules.projects.services import mutations as project_mutations
 
 from app.modules.client_servicing.models import ClientServicing, ClientServicingScope
+from app.modules.core.shared.lib.utils import log_activity
 from app.modules.core.shared.lib.capabilities import can, effective_user
 from app.modules.client_servicing.lib.access import require_cs
 from app.modules.client_servicing.lib.status import (
@@ -266,6 +267,16 @@ def _save_cs_risk(project, raw_value):
     }), None
 
 
+def _log_cs_edit(project, actor, field):
+    """Activity line for a CS-only edit, so CS work shows in the reports.
+    Write-back fields already log through project_mutations."""
+    log_activity(
+        'client_servicing_edit',
+        f'{actor.name} updated {field.replace("_", " ")} in Client Servicing',
+        user=actor, entity_type='project', entity_name=project.name, entity_id=project.id,
+    )
+
+
 @client_servicing_bp.route('/<int:project_id>', methods=['PATCH'])
 @login_required
 @require_cs
@@ -286,18 +297,21 @@ def update_field(project_id):
         response, error = _save_cs_status(project, raw_value)
         if error:
             return jsonify({'error': error}), 400
+        _log_cs_edit(project, actor, field)
         return response
 
     if field == 'risk':
         response, error = _save_cs_risk(project, raw_value)
         if error:
             return jsonify({'error': error}), 400
+        _log_cs_edit(project, actor, field)
         return response
 
     if field in _EDITABLE_FIELDS:
         response, error = _save_cs_only_field(project, field, raw_value)
         if error:
             return jsonify({'error': error}), 400
+        _log_cs_edit(project, actor, field)
         return response
 
     try:

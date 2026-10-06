@@ -9,10 +9,12 @@ MISSING_DATA_CHIP = 'missing_data'
 
 def missing_fields(project):
     """Labels of the fields a job still needs; empty when complete. Every
-    project must have a CS lead, so only install date and value can be blank."""
+    project must have a CS lead, so only these can be blank."""
     missing = []
     if project.installation_date is None:
         missing.append('install date')
     if project.value is None:
         missing.append('value')
+    if not (project.job_number or '').strip():
+        missing.append('job number')
     return missing

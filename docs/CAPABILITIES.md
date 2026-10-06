@@ -21,6 +21,7 @@ Admins edit all of these in Admin → Accounts until the HR pages arrive.
 - `@require_api(capability, real_user=False)` — JSON routes. Returns `{'success': False, 'error': 'Forbidden'}, 403` for both cases.
 - **`real_user=True`** checks the logged-in user instead of the emulated one — for admin-only tooling an admin should keep while previewing as someone else: the admin panel, wiki editing, badge tools, user management, the client directory. Every such route needs a test that an emulating admin keeps it and a non-admin is refused.
 - `effective_user()` — the emulated user when an admin is viewing as someone else, otherwise the logged-in user. `_get_actor()` / `get_actor()` are local names for it. DI keeps a parameterised variant `_effective_role_user(user)` on purpose.
+- **Emulation exception — the Friction Log.** Posting and deleting there act as the emulated person, as in the chat tray. No capability gates posting (everyone signed in may); deleting is the author's own post, or any post with `manage_feedback`.
 - Jinja globals `can(cap)`, `org` (the branch checks, e.g. `org.is_designer(current_user)`), `role_labels` and `role_label`.
 
 ## The map
@@ -44,7 +45,7 @@ Admins edit all of these in Admin → Accounts until the HR pages arrive.
 |---|---|
 | none, manager | nothing yet |
 | head | view_department_overview |
-| management | view_workspace, view_cs, view_finance, edit_invoicing_thresholds, close_projects, view_all_projects, manage_projects, create_projects, start_projects, review_submissions, edit_client_directory, raise_flags, manage_flags, log_site_visits, manage_reference_data, complete_preproduction, manage_project_files, switch_dashboard_scope, view_team_snapshot, view_department_overview, view_management_dashboard, view_di_performance, view_all_di, view_hse, write_friction_log, view_time_reports |
+| management | view_workspace, view_cs, view_finance, edit_invoicing_thresholds, close_projects, view_all_projects, manage_projects, create_projects, start_projects, review_submissions, edit_client_directory, raise_flags, manage_flags, log_site_visits, manage_reference_data, complete_preproduction, manage_project_files, switch_dashboard_scope, view_team_snapshot, view_department_overview, view_management_dashboard, view_di_performance, view_all_di, view_hse, view_time_reports |
 
 - A Management person inside a department holds both sets (e.g. Design + Management also has drafts and claim work).
 - **`view_workspace`** is the broad "can use the main app" capability held by every department but HSE. It is the gate to reach for on a data endpoint behind an already-gated page (CONVENTIONS.md → *Gate the endpoints*), rather than inventing a narrower one.
@@ -85,7 +86,7 @@ Admin holds every capability. Where a check selects a branch that admin is *deli
 `can_access_client_servicing()` in `client_servicing/lib/access.py` = `can('view_cs', user)` plus the `CLIENT_SERVICING_REVIEW_ONLY` narrowing (off by default). CS routes gate through `@require_cs`; `can()` stays a pure map lookup.
 
 ## The contract test
-`core/shared/tests/test_capabilities_contract.py` fails if any module imports the retired `role_required` or hand-rolls `admin_required`; declares a local `_ROLES` set (three allowlisted by name, including `LEGACY_ROLES`); or introduces a **new `.role`, `.department` or `.seniority` comparison not in the baseline** `core/shared/tests/role_literal_baseline.txt`. The baseline holds the bridge's SQL expression in `models/users.py` and one champions line that goes with the champions feature. Branch checks belong in `lib/org.py`, which reads the fields through `getattr`. Generator and test share one definition in `core/shared/tests/role_literals.py`; after an intentional change run `python generate_role_literal_baseline.py` and commit the baseline with it.
+`core/shared/tests/test_capabilities_contract.py` fails if any module imports the retired `role_required` or hand-rolls `admin_required`; declares a local `_ROLES` set (three allowlisted by name, including `LEGACY_ROLES`); or introduces a **new `.role`, `.department` or `.seniority` comparison not in the baseline** `core/shared/tests/role_literal_baseline.txt`. The baseline holds the bridge's SQL expression in `models/users.py`. Branch checks belong in `lib/org.py`, which reads the fields through `getattr`. Generator and test share one definition in `core/shared/tests/role_literals.py`; after an intentional change run `python generate_role_literal_baseline.py` and commit the baseline with it.
 
 Other guards: `test_org_capabilities.py` writes out every role key's access in full and checks `can()` for every capability (the only allowed change is Project Owners gaining CS); `test_org_model.py` checks the bridge and that each branch check matches the old role keys; `test_capabilities.py` pins that HR matches Production and Logistics apart from `view_hse` and `view_cs`.
 

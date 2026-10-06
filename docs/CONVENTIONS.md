@@ -43,7 +43,7 @@ Every page declares a **help key** (`help_button('cs.invoicing')`), registered i
 - A global feature that happens to live in a module folder (e.g. the Chat tray under `projects/`) is not module-scoped — don't gate it as if it were.
 - Routes and the sidebar read the same access function, so what people see and what they can open never disagree.
 - A temporary lock (e.g. `CLIENT_SERVICING_REVIEW_ONLY`) is a config flag on top of the roles, not a change to them.
-- **Emulation ("view as"):** reads show the emulated user (`effective_user()`); writes and personal settings belong to the real user. Don't show edit controls whose save would land on someone else. Admin-only tools use `real_user=True` so an emulating admin keeps them, and each one needs a test that an emulating admin is refused.
+- **Emulation ("view as"):** reads show the emulated user (`effective_user()`); writes and personal settings belong to the real user. Don't show edit controls whose save would land on someone else. Admin-only tools use `real_user=True` so an emulating admin keeps them, and each one needs a test that an emulating admin is refused. Exception: the Friction Log posts and deletes as the emulated person, as the chat tray does (CAPABILITIES.md).
 
 ## 5. SPA navigation (page scripts and links)
 

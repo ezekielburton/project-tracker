@@ -145,7 +145,7 @@ def create_app(config=Config):
     from app.modules.digital_innovation.models import DiProject, DiFeature, DiFeatureStep, DiStepTemplate, DiCostEntry, DiSetting, DiPeriodSnapshot, DiIntakeItem  # registers the tables with SQLAlchemy
     from app.modules.hse.models import HseEntry, HseSchedule, HseAsset, HseReference, HsePerson, HseRefCounter, HseAttachment  # registers the tables with SQLAlchemy
     from app.modules.reports.models import ReportRun, ReportRecipient, ReportAutoSend  # registers the tables with SQLAlchemy
-    from app.modules.system.models import RequestMetric, Heartbeat, JobRun, WorkerStat, SystemIncident, DeployRun  # registers the tables with SQLAlchemy
+    from app.modules.system.models import RequestMetric, Heartbeat, JobRun, WorkerStat, SystemIncident, DeployRun, SystemSample, AppLogEvent  # registers the tables with SQLAlchemy
     from app.modules.digital_innovation.routes import board as di_board  # registers board routes on digital_innovation_bp
     from app.modules.digital_innovation.routes import projects as di_projects  # registers project-create route on digital_innovation_bp
     from app.modules.digital_innovation.routes import features as di_features  # registers feature routes on digital_innovation_bp
