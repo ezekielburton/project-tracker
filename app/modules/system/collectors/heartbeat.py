@@ -9,6 +9,7 @@ from datetime import datetime
 import psycopg2
 
 from config import Config
+from app.modules.system.lib.notify import HEARTBEAT, notify
 
 HEALTHZ_URL = 'http://127.0.0.1:5000/healthz'
 HEALTHY_BODY = b'ok'
@@ -27,8 +28,9 @@ def check(url=HEALTHZ_URL, timeout=TIMEOUT_SECONDS):
 
 
 def save(cur, ts, ok, ms):
-    """Write one heartbeats row with `cur`; the caller commits."""
+    """Write one heartbeats row with `cur` and ping open admin pages; the caller commits."""
     cur.execute('INSERT INTO heartbeats (ts, ok, ms) VALUES (%s, %s, %s)', (ts, ok, ms))
+    notify(cur, HEARTBEAT)
 
 
 def main():

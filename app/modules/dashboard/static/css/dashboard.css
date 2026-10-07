@@ -2987,3 +2987,543 @@ a.dash-row:hover {
         overflow: visible;
     }
 }
+
+/*  ---- Admin system pages (templates/dashboard/admin/)
+    One state colour per status, set on --state by .dash-admin--<state> and
+    used by dots, meters and severity marks. The text tokens behind them
+    already have dark values, so nothing here needs a dark override. */
+
+:root {
+    --dash-admin-green: var(--tint-3f8f3f);
+    --dash-admin-amber: var(--tint-8a6800);
+    --dash-admin-red: var(--danger-text);
+    --dash-admin-grey: var(--text-faint);
+}
+
+.dash-admin--green { --state: var(--dash-admin-green); }
+.dash-admin--amber { --state: var(--dash-admin-amber); }
+.dash-admin--red { --state: var(--dash-admin-red); }
+.dash-admin--grey { --state: var(--dash-admin-grey); }
+
+.dash-admin-text--green { color: var(--dash-admin-green); }
+.dash-admin-text--amber { color: var(--dash-admin-amber); }
+.dash-admin-text--red { color: var(--dash-admin-red); }
+.dash-admin-text--grey { color: var(--dash-admin-grey); }
+
+.dash-admin {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    container: dash-admin / inline-size;
+}
+
+.dash-admin-head {
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 0;
+}
+
+.dash-admin-lock {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.dash-admin-headline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.dash-admin-dot {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--state);
+}
+
+.dash-admin-mono {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.dash-admin-loading {
+    padding: var(--space-3) 0;
+}
+
+/* Status strip and System tiles */
+
+.dash-admin-strip {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+.dash-admin-vitals {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+}
+
+.dash-admin-st,
+.dash-admin-vt {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) * 2);
+}
+
+.dash-admin-st-label,
+.dash-admin-vt-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.dash-admin-st-value {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.dash-admin-st-sub,
+.dash-admin-vt-sub {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+}
+
+.dash-admin-vt-value {
+    font-family: var(--font-headline);
+    font-size: 2.1rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text);
+}
+
+.dash-admin-vt-value small {
+    margin-left: 1px;
+    font-size: 0.5em;
+    color: var(--text-muted);
+}
+
+.dash-admin-vt-value--none {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.dash-admin-meter {
+    display: block;
+    height: 6px;
+    margin: var(--space-1) 0;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--sandstone);
+}
+
+.dash-admin-meter i {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--state);
+}
+
+/* Card layouts: Overview is a wide list beside a column; System is a 2 x 2
+   grid. Both stretch to the footer (watchFillHeight sets --fill-height). */
+
+.dash-admin-row {
+    display: flex;
+    gap: var(--space-4);
+    min-height: var(--fill-height, 60vh);
+}
+
+.dash-admin-attention {
+    flex: 1.5;
+    min-width: 0;
+}
+
+/* Hidden when nothing needs attention: the card brings no panel. */
+.dash-admin-attention:not(:has(.dash-admin-panel)) {
+    display: none;
+}
+
+.dash-admin-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+}
+
+.dash-admin-grow {
+    flex: 1;
+    min-height: 0;
+}
+
+.dash-admin-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    grid-auto-rows: minmax(0, 1fr);
+    gap: var(--space-4);
+    min-height: var(--fill-height, 60vh);
+}
+
+.dash-admin-part {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.dash-admin-panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) * 2);
+}
+
+.dash-admin-panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.dash-admin-panel-title {
+    margin: 0;
+    font-family: var(--font-headline);
+    font-size: var(--text-base);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text);
+}
+
+.dash-admin-panel-meta {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.dash-admin-panel-body {
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-3) var(--space-4);
+}
+
+/* Cards scroll inside instead of pushing the page down. */
+.dash-admin-panel-body--scroll {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Rows */
+
+.dash-admin-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dash-admin-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.dash-admin-item:last-child,
+.dash-admin-disk:last-child {
+    border-bottom: none;
+}
+
+.dash-admin-sev {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--state);
+}
+
+.dash-admin-item-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 400;
+}
+
+.dash-admin-item-meta {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.dash-admin-go {
+    padding: 2px var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--tangerine);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.dash-admin-go:hover {
+    background: var(--surface-hover);
+}
+
+.dash-admin-disk {
+    padding: var(--space-2) 0;
+}
+
+.dash-admin-disk-line {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.dash-admin-disk-name {
+    font-weight: 600;
+}
+
+.dash-admin-kv {
+    margin: 0;
+}
+
+.dash-admin-kv > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+}
+
+.dash-admin-kv > div:last-child {
+    border-bottom: none;
+}
+
+.dash-admin-kv dt {
+    font-weight: 400;
+    color: var(--text);
+}
+
+.dash-admin-kv dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-align: right;
+}
+
+.dash-admin-subhead {
+    margin: var(--space-3) 0 var(--space-2);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--text);
+}
+
+.dash-admin-log {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dash-admin-log-line {
+    padding: 2px 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+/* Today and the charts */
+
+.dash-admin-big {
+    display: flex;
+    gap: var(--space-5);
+}
+
+.dash-admin-big-n {
+    font-family: var(--font-headline);
+    font-size: 2.1rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text);
+}
+
+.dash-admin-big-l {
+    margin-top: var(--space-1);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.dash-admin-bars {
+    display: block;
+    width: 100%;
+    height: 70px;
+    margin-top: var(--space-4);
+}
+
+.dash-admin-bars rect {
+    fill: var(--tangerine);
+}
+
+.dash-admin-lines {
+    display: block;
+    width: 100%;
+    height: 140px;
+}
+
+.dash-admin-lines polyline {
+    fill: none;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}
+
+.dash-admin-line--sent { --line: var(--tangerine); }
+.dash-admin-line--recv { --line: var(--tint-3d7da6); }
+
+.dash-admin-lines polyline {
+    stroke: var(--line);
+}
+
+.dash-admin-legend {
+    display: flex;
+    gap: var(--space-4);
+    margin-bottom: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.dash-admin-legend-item::before {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 2px;
+    margin-right: var(--space-1);
+    vertical-align: middle;
+    background: var(--line);
+}
+
+.dash-admin-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--space-1);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+
+.dash-admin-caption {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+/* The cards follow the width left beside the sidebar, pinned or not, not the window. */
+@container dash-admin (max-width: 56rem) {
+    .dash-admin-strip {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@container dash-admin (max-width: 44rem) {
+    .dash-admin-vitals {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dash-admin-row {
+        flex-direction: column;
+    }
+
+    .dash-admin-grid {
+        grid-template-columns: minmax(0, 1fr);
+        grid-auto-rows: auto;
+    }
+
+    .dash-admin-row,
+    .dash-admin-grid {
+        min-height: 0;
+    }
+
+    .dash-admin-attention {
+        flex: none;
+    }
+}
+
+@container dash-admin (max-width: 30rem) {
+    .dash-admin-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 48em) {
+    .dash-admin-headline {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    /* On phones nothing scrolls inside a card; the page scrolls. */
+    .dash-admin-panel-body--scroll {
+        overflow: visible;
+    }
+
+    /* Long attention lines wrap, with their meta and link on the line below. */
+    .dash-admin-attention .dash-admin-item {
+        flex-wrap: wrap;
+    }
+
+    .dash-admin-attention .dash-admin-item-text {
+        flex-basis: calc(100% - var(--space-5));
+        white-space: normal;
+    }
+
+    .dash-admin-big {
+        gap: var(--space-4);
+    }
+}

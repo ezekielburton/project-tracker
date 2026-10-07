@@ -1,0 +1,17 @@
+{#- The next timers to fire. #}
+{% from 'dashboard/admin/_macros.html' import panel, dot %}
+{% call panel('Next jobs') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not jobs %}<p class="dash-quiet">No timers yet</p>
+{%- else %}
+<ul class="dash-admin-list">
+    {%- for job in jobs %}
+    <li class="dash-admin-item">
+        {{ dot('red' if job.failed else 'green') }}
+        <span class="dash-admin-item-text">{{ job.label }}</span>
+        <span class="dash-admin-item-meta">{{ job.when }}</span>
+    </li>
+    {%- endfor %}
+</ul>
+{%- endif %}
+{% endcall %}

@@ -86,6 +86,8 @@ class Config:
     RUN_NOW_DIR = os.environ.get('RUN_NOW_DIR', '/var/lib/ovp/run-now')
     # The weekly restore test's own role, which can only create and drop its scratch database.
     RESTORE_DATABASE_URL = os.environ.get('RESTORE_DATABASE_URL', '')
+    # Comma-separated emails (test accounts) left out of the usage numbers; admins always are.
+    USAGE_EXCLUDED_EMAILS = os.environ.get('USAGE_EXCLUDED_EMAILS', '')
 
 
 class TestingConfig(Config):

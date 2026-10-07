@@ -32,12 +32,13 @@ def _login(client, app, db_session, tag, **org_fields):
 
 
 def test_rail_pages_need_a_login(app, client):
-    for endpoint in ('projects.index', 'projects.approvals', 'projects.admin_system'):
+    for endpoint in ('projects.index', 'projects.approvals', 'projects.admin_system',
+                     'projects.admin_overview'):
         assert client.get(_url(app, endpoint)).status_code in (302, 401)
 
 
 @pytest.mark.parametrize('tag, fields, landing', [
-    ('admin', dict(is_admin=True), 'projects.overview'),
+    ('admin', dict(is_admin=True), 'projects.admin_overview'),
     ('mgmt', dict(seniority='management'), 'projects.overview'),
     ('design-head', dict(department='design', seniority='head'), 'projects.design_workload'),
     ('design-lead', dict(department='design', seniority='manager'), 'projects.overview'),
@@ -94,6 +95,7 @@ def test_management_pages_refuse_everyone_else(app, client, db_session):
 def test_system_pages_refuse_non_admins(app, client, db_session):
     _login(client, app, db_session, 'mgmt-system', seniority='management')
     assert client.get(_url(app, 'projects.admin_system')).status_code == 403
+    assert client.get(_url(app, 'projects.admin_overview')).status_code == 403
 
 
 def test_admin_opens_system_pages_and_pages_off_its_rail(app, client, db_session):
@@ -102,7 +104,7 @@ def test_admin_opens_system_pages_and_pages_off_its_rail(app, client, db_session
     assert client.get(_url(app, 'projects.escalations')).status_code == 200
 
 
-def test_an_emulating_admin_gets_the_emulated_rail_and_keeps_system_pages(app, client, db_session):
+def test_an_emulating_admin_keeps_system_pages_with_their_own_rail(app, client, db_session):
     _login(client, app, db_session, 'emu-admin', is_admin=True)
     head = _user(db_session, 'emu-head', department='design', seniority='head')
     with client.session_transaction() as sess:
@@ -111,11 +113,41 @@ def test_an_emulating_admin_gets_the_emulated_rail_and_keeps_system_pages(app, c
     landing = client.get(_url(app, 'projects.index'))
     assert landing.headers['Location'].endswith(_url(app, 'projects.design_workload'))
 
-    page = client.get(_url(app, 'projects.admin_system'))
-    assert page.status_code == 200
-    html = page.get_data(as_text=True)
+    for endpoint in ('projects.admin_overview', 'projects.admin_system'):
+        page = client.get(_url(app, endpoint))
+        assert page.status_code == 200
+        html = page.get_data(as_text=True)
+        assert f'href="{_url(app, "projects.admin_database")}"' in html
+        assert f'href="{_url(app, "projects.assignments")}"' not in html
+
+
+def test_an_emulating_admin_sees_the_emulated_rail_on_project_pages(app, client, db_session):
+    _login(client, app, db_session, 'emu-admin-2', is_admin=True)
+    head = _user(db_session, 'emu-head-2', department='design', seniority='head')
+    with client.session_transaction() as sess:
+        sess['emulating_user_id'] = head.id
+    html = client.get(_url(app, 'projects.assignments')).get_data(as_text=True)
     assert f'href="{_url(app, "projects.assignments")}"' in html
     assert f'href="{_url(app, "projects.admin_database")}"' not in html
+
+
+def test_the_admin_rail_starts_on_the_system_overview(app, client, db_session):
+    _login(client, app, db_session, 'admin-rail', is_admin=True)
+    html = client.get(_url(app, 'projects.admin_jobs')).get_data(as_text=True)
+    assert f'href="{_url(app, "projects.admin_overview")}"' in html
+    assert f'href="{_url(app, "projects.overview")}"' not in html
+
+
+def test_the_errors_and_jobs_badges_show_on_the_admin_rail(app, client, db_session):
+    from datetime import datetime
+    from app.modules.system.models import AppLogEvent, JobRun
+    now = datetime.utcnow()
+    db_session.add(AppLogEvent(ts=now, level='error', source='app', signature='x-badge-test', message='boom'))
+    db_session.add(JobRun(job='backup', started_at=now, finished_at=now, result='failed'))
+    db_session.flush()
+    _login(client, app, db_session, 'admin-badges', is_admin=True)
+    html = client.get(_url(app, 'projects.admin_system')).get_data(as_text=True)
+    assert html.count('class="module-rail-count"') == 2
 
 
 def test_every_rail_shows_my_hub_as_soon(app, client, db_session):

@@ -1,0 +1,20 @@
+{#- OS and Python updates, the app against origin/main, certificate days left. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Updates', ('checked ' ~ updates.checked) if updates and updates.checked else None) %}
+{%- if missing or not updates %}<p class="dash-quiet">No data</p>
+{%- else %}
+<dl class="dash-admin-kv">
+    <div><dt>OS security updates</dt>
+        <dd class="dash-admin-text--{{ 'amber' if updates.os_security else 'green' }}">{{ (updates.os_security ~ ' pending') if updates.os_security else 'none' }}</dd></div>
+    <div><dt>OS updates (total)</dt><dd>{{ updates.os_total }} available</dd></div>
+    <div><dt>Python packages outdated</dt>
+        <dd class="dash-admin-text--{{ 'amber' if updates.pip_outdated else 'green' }}">{{ updates.pip_outdated if updates.pip_outdated is not none else '—' }} of {{ updates.pip_total if updates.pip_total is not none else '—' }}</dd></div>
+    <div><dt>App vs origin/main</dt>
+        <dd class="dash-admin-text--{{ 'amber' if updates.app == 'behind' else 'green' }}">{{ updates.app or 'No data' }}</dd></div>
+    {%- for cert in updates.certs %}
+    <div><dt>{{ cert.name }} certificate</dt>
+        <dd class="dash-admin-text--{{ cert.state }}">{{ (cert.days_left ~ ' days left') if cert.days_left is not none else 'No data' }}</dd></div>
+    {%- endfor %}
+</dl>
+{%- endif %}
+{% endcall %}

@@ -1,0 +1,34 @@
+{#- Uptime, CPU, memory and temperature. #}
+{% from 'dashboard/admin/_macros.html' import meter %}
+{%- if missing or not tiles %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-vitals">
+    <div class="dash-admin-vt">
+        <span class="dash-admin-vt-label">Uptime</span>
+        <span class="dash-admin-vt-value">{{ tiles.uptime_days }}<small>d</small> {{ '%02d' % tiles.uptime_hours }}<small>h</small></span>
+        <span class="dash-admin-vt-sub">Last boot {{ tiles.boot.strftime('%d %b') }}</span>
+    </div>
+    <div class="dash-admin-vt">
+        <span class="dash-admin-vt-label">CPU load</span>
+        <span class="dash-admin-vt-value">{{ tiles.cpu_pct }}<small>%</small></span>
+        {{ meter(tiles.cpu_pct, tiles.cpu_state) }}
+        <span class="dash-admin-vt-sub">load avg {{ tiles.load | join(' / ') }}</span>
+    </div>
+    <div class="dash-admin-vt">
+        <span class="dash-admin-vt-label">Memory</span>
+        <span class="dash-admin-vt-value">{{ tiles.mem_pct }}<small>%</small></span>
+        {{ meter(tiles.mem_pct, tiles.mem_state) }}
+        <span class="dash-admin-vt-sub">{{ tiles.mem_used }} / {{ tiles.mem_total }} used</span>
+    </div>
+    <div class="dash-admin-vt">
+        <span class="dash-admin-vt-label">Temp</span>
+        {%- if tiles.temp_c is none %}
+        <span class="dash-admin-vt-value dash-admin-vt-value--none">No sensor</span>
+        {%- else %}
+        <span class="dash-admin-vt-value">{{ tiles.temp_c | round | int }}<small>°C</small></span>
+        {{ meter(tiles.temp_c, tiles.temp_state) }}
+        <span class="dash-admin-vt-sub">CPU package</span>
+        {%- endif %}
+    </div>
+</div>
+{%- endif %}

@@ -14,6 +14,7 @@ from config import Config
 from app.modules.system.lib import app_log, checks, host
 from app.modules.system.lib.job_list import JOBS
 from app.modules.system.lib.nas_access import nas_app
+from app.modules.system.lib.notify import SNAPSHOT, notify
 from app.modules.system.services.jobs import job_run
 from app.modules.system.services.snapshot import parse_time, read_snapshot
 
@@ -151,6 +152,15 @@ def _restore_text(path, text):
             f.write(text)
 
 
+def _ping(conn):
+    # After the file is swapped in, so a page that reloads on the ping reads the new one.
+    try:
+        with conn, conn.cursor() as cur:
+            notify(cur, SNAPSHOT)
+    except psycopg2.Error:
+        pass
+
+
 def _connect():
     try:
         return psycopg2.connect(Config.SQLALCHEMY_DATABASE_URI, connect_timeout=5)
@@ -209,6 +219,8 @@ def main():
                 snap.setdefault('net_mark', previous.get('net_mark'))
             # Written even when the database is down: that is when the page needs it most.
             write_atomic(path, snap)
+            if conn is not None and failure is None:
+                _ping(conn)
             run.message = f'{len(events)} log events' if events else None
             if failure is not None:
                 raise failure

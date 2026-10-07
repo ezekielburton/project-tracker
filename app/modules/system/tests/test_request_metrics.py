@@ -1,5 +1,6 @@
 """Request timing: what a row holds, what is skipped, that recording runs no SQL
 and stays cheap, and that saved rows land in their tables."""
+import logging
 import time
 from datetime import datetime, timedelta
 
@@ -124,7 +125,7 @@ def test_a_silent_worker_is_dropped(db_session):
     assert db_session.get(WorkerStat, 990_002) is None
 
 
-def test_a_failed_save_keeps_the_rows_in_order(app):
+def test_a_failed_save_keeps_the_rows_in_order():
     class FailingSaver:
         was_reset = False
 
@@ -135,7 +136,7 @@ def test_a_failed_save_keeps_the_rows_in_order(app):
             FailingSaver.was_reset = True
 
     rm._BUFFER.extend(['first', 'second'])
-    rm.flush_once(FailingSaver(), app.logger)
+    rm.flush_once(FailingSaver(), logging.getLogger('test_request_metrics'))
     assert rm.drain() == ['first', 'second']
     assert FailingSaver.was_reset
 

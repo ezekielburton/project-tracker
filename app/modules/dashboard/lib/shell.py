@@ -4,12 +4,13 @@ from datetime import datetime
 from functools import wraps
 
 from flask import abort, url_for
+from flask_login import current_user
 
 from app.modules.core.shared.lib import org
 from app.modules.core.shared.lib.capabilities import effective_user
 from app.modules.dashboard.lib.project_loader import load_new_briefs
 from app.modules.dashboard.lib.rail_counts import rail_counts
-from app.modules.dashboard.lib.rails import PAGES, rail_for
+from app.modules.dashboard.lib.rails import PAGES, SYSTEM_PAGES, rail_for
 
 
 def rail_items(user):
@@ -63,9 +64,11 @@ def brief_rows(projects, today=None):
 
 
 def page_context(active):
-    """What the shell template reads for page `active`; New briefs only on the rail's landing page."""
-    user = effective_user()
-    landing = active == rail_for(user).landing
+    """What the shell template reads for page `active`; New briefs only on a project
+    rail's landing page. System pages use the real admin's rail, even while viewing as someone."""
+    system = active in SYSTEM_PAGES
+    user = current_user if system else effective_user()
+    landing = active == rail_for(user).landing and not system
     return {
         'rail_items': rail_items(user),
         'rail_active': active,

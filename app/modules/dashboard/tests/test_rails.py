@@ -13,8 +13,8 @@ def _person(department=None, seniority='none', is_admin=False):
 
 
 @pytest.mark.parametrize('person, rail, landing', [
-    (_person(is_admin=True), 'admin', 'overview'),
-    (_person('design', 'head', is_admin=True), 'admin', 'overview'),
+    (_person(is_admin=True), 'admin', 'system_overview'),
+    (_person('design', 'head', is_admin=True), 'admin', 'system_overview'),
     (_person(None, 'management'), 'management', 'overview'),
     (_person('client_servicing', 'management'), 'management', 'overview'),
     (_person('design', 'head'), 'design_head', 'design_workload'),

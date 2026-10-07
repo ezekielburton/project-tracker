@@ -2,18 +2,21 @@
 is not built yet. Each is gated by its capability and by being on the rail."""
 from datetime import date
 
-from flask import current_app, jsonify, redirect, render_template, request, url_for
+from flask import abort, current_app, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
 from app.modules.core.shared.lib.utils import log_activity
 from app.modules.core.shared.lib.month_grid import month_span, month_weeks
+from app.modules.dashboard.lib import admin_pages
 from app.modules.dashboard.lib.calendar import EVENT_KINDS, calendar_events_for, parse_day, parse_month
 from app.modules.dashboard.lib.rails import PAGES, rail_for
 from app.modules.dashboard.lib.shell import on_rail, page_context
 from app.modules.dashboard.routes.dashboard import dashboard_bp
 from app.modules.system.lib.job_list import BY_KEY as JOBS_BY_KEY
+from app.modules.system.services import health
 from app.modules.system.services.run_now import NotRunnable, request_run
+from app.modules.system.services.snapshot import read_snapshot
 
 
 def _placeholder(key):
@@ -177,11 +180,35 @@ def adoption():
 
 # ── Admin system pages: the real admin only, even while viewing as someone ─
 
+@dashboard_bp.route('/admin/overview')
+@login_required
+@require('admin_panel', real_user=True)
+def admin_overview():
+    """How OVP is doing: the status strip, what needs the admin, today's use and the
+    next jobs. Needs attention comes with the page; the other cards load after."""
+    attention = admin_pages.part_context('overview', 'attention')
+    return render_template('dashboard/admin/overview.html', **page_context('system_overview'),
+                           **attention)
+
+
 @dashboard_bp.route('/admin/system')
 @login_required
 @require('admin_panel', real_user=True)
 def admin_system():
-    return _placeholder('system')
+    """The machine: host, storage, network, updates and the application. Every card loads after the page."""
+    return render_template('dashboard/admin/system.html', **page_context('system'),
+                           headline=health.freshness(read_snapshot()))
+
+
+@dashboard_bp.route('/api/admin/<page>/<part>')
+@login_required
+@require('admin_panel', real_user=True)
+def admin_part(page, part):
+    """One card of an admin system page as HTML; the page loads and refreshes its cards here."""
+    if part not in admin_pages.PARTS.get(page, {}):
+        abort(404)
+    return render_template(f'dashboard/admin/parts/{page}_{part}.html',
+                           **admin_pages.part_context(page, part))
 
 
 @dashboard_bp.route('/admin/database')

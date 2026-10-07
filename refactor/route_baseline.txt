@@ -118,12 +118,14 @@
 /dashboard/admin/database	GET	projects.admin_database
 /dashboard/admin/errors	GET	projects.admin_errors
 /dashboard/admin/jobs	GET	projects.admin_jobs
+/dashboard/admin/overview	GET	projects.admin_overview
 /dashboard/admin/performance	GET	projects.admin_performance
 /dashboard/admin/system	GET	projects.admin_system
 /dashboard/admin/uptime	GET	projects.admin_uptime
 /dashboard/admin/usage	GET	projects.admin_usage
 /dashboard/adoption	GET	projects.adoption
 /dashboard/api/active-projects	GET	projects.api_active_projects
+/dashboard/api/admin/<page>/<part>	GET	projects.admin_part
 /dashboard/api/admin/jobs/<job_key>/run	POST	projects.admin_job_run_now
 /dashboard/api/clashes	GET	projects.api_clashes
 /dashboard/api/decisions	GET	projects.api_decisions
@@ -372,6 +374,7 @@
 /sse/friction	GET	sse.friction_stream
 /sse/notifications	GET	sse.notifications_stream
 /sse/projects/<int:project_id>	GET	sse.project_stream
+/sse/system	GET	sse.system_stream
 /time-tracking	GET	time_tracking.index
 /wiki	GET	wiki.index
 /wiki/article/<int:article_id>	GET	wiki.get_article

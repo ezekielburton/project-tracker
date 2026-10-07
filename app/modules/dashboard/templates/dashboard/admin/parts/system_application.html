@@ -1,0 +1,25 @@
+{#- The app itself: database, migrations, failures, who is on, version and recent errors. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Application', (app.version ~ ' · ' ~ app.commit) if app and app.version else None) %}
+{%- if missing or not app %}<p class="dash-quiet">No data</p>
+{%- else %}
+<dl class="dash-admin-kv">
+    <div><dt>Database size · connections</dt><dd>{{ app.db_size or '—' }} · {{ app.connections }} / {{ app.max_connections }}</dd></div>
+    <div><dt>Pending migrations</dt>
+        <dd class="dash-admin-text--{{ 'amber' if app.pending_migrations else 'green' }}">{{ app.pending_migrations if app.pending_migrations else ('none' if app.pending_migrations == 0 else '—') }}</dd></div>
+    <div><dt>Background / NAS failures (24h)</dt>
+        <dd class="dash-admin-text--{{ 'red' if app.failures_24h else 'green' }}">{{ app.failures_24h }}</dd></div>
+    <div><dt>People active · 15 min</dt><dd>{{ app.people_15min }}</dd></div>
+</dl>
+<h3 class="dash-admin-subhead">Recent errors (24h)</h3>
+{%- if app.recent_errors %}
+<ul class="dash-admin-log">
+    {%- for event in app.recent_errors %}
+    <li class="dash-admin-log-line dash-admin-text--{{ 'red' if event.level == 'error' else 'amber' }}">
+        <span class="dash-admin-mono">{{ event.time }}</span> {{ event.level | upper }} {{ event.message }}
+    </li>
+    {%- endfor %}
+</ul>
+{%- else %}<p class="dash-quiet">None in 24h</p>{% endif %}
+{%- endif %}
+{% endcall %}

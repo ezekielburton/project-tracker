@@ -1,0 +1,17 @@
+{#- Bytes out and in per 5 minutes over the last 24 hours. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Network activity', 'last 24h', scroll=False) %}
+{%- if missing or not chart %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-legend">
+    <span class="dash-admin-legend-item dash-admin-line--sent">Out</span>
+    <span class="dash-admin-legend-item dash-admin-line--recv">In</span>
+</div>
+<svg class="dash-admin-lines" viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none"
+     role="img" aria-label="Network out and in, last 24 hours">
+    <polyline class="dash-admin-line--sent" points="{{ chart.paths.sent }}"/>
+    <polyline class="dash-admin-line--recv" points="{{ chart.paths.recv }}"/>
+</svg>
+<div class="dash-admin-axis">{% for tick in ticks %}<span>{{ tick }}</span>{% endfor %}</div>
+{%- endif %}
+{% endcall %}

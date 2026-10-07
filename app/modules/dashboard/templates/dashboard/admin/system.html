@@ -1,0 +1,19 @@
+{% extends "dashboard/_shell.html" %}
+{#- The admin System page: the machine OVP runs on. Every card loads and
+    refreshes through admin_part (static/js/admin_system.js). #}
+{% from 'dashboard/admin/_macros.html' import admin_head, part %}
+{% block dash_main %}
+<div class="dash-admin" data-admin-live data-stream-url="{{ url_for('sse.system_stream') }}">
+    {{ admin_head(page_title, headline) }}
+    {{ part('system', 'tiles') }}
+    <div class="dash-admin-grid dash-admin-fill">
+        {{ part('system', 'storage') }}
+        {{ part('system', 'network') }}
+        {{ part('system', 'updates') }}
+        {{ part('system', 'application') }}
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('dashboard_assets.static', filename='js/admin_system.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

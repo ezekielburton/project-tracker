@@ -19,6 +19,8 @@ PROJECT_CHANGES_CHANNEL = 'project_changes'
 USER_NOTIFICATIONS_CHANNEL = 'user_notifications'
 DI_CHANGES_CHANNEL = 'di_changes'
 FRICTION_CHANGES_CHANNEL = 'friction_changes'
+# Sent by the system module's timers and job log (system/lib/notify.py), not by this file.
+SYSTEM_CHANGES_CHANNEL = 'system_changes'
 
 # Watched models -> the project_id each change affects. Matched by class
 # name so this file needn't import the models. A model missing here fires

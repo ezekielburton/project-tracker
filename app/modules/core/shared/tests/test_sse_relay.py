@@ -90,3 +90,11 @@ def test_an_unsubscribed_queue_hears_nothing():
 
 def test_the_friction_stream_requires_auth(client):
     assert client.get('/sse/friction').status_code in (302, 401)
+
+
+def test_the_relay_never_starts_under_tests(app, monkeypatch):
+    started = []
+    monkeypatch.setenv('GEVENT_WORKER', '1')
+    monkeypatch.setattr(sse_relay, 'spawn', lambda *args: started.append(args))
+    sse_relay.init_sse_relay(app)
+    assert started == []

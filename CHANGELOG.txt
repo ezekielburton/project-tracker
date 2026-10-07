@@ -9,7 +9,7 @@ New Features:
 
 - Dashboards have been overhauled to give you the information you need, everyday.
 - Dashboard types: Designer, Team Lead, Head of Department, Management, Admin, CS, Project Owner & Finance.
-- Weekly reports will now be sent out to all staff on OVP.
+- Reports will now be sent out to all staff on OVP, weekly and monthly.
 
 Adjustments:
 

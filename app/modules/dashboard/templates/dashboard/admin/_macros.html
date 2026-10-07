@@ -1,0 +1,41 @@
+{#- Pieces the admin system pages share: the page head, a card that loads
+    from its part URL, a status dot, a meter bar and a panel frame. #}
+{% from '_shared_macros.html' import help_button %}
+
+{% macro admin_head(title, headline) %}
+<header class="dash-page-head dash-admin-head">
+    <h1 class="dash-page-title">{{ title }}</h1>
+    <span class="dash-admin-lock">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Admin only
+    </span>
+    {{ help_button('dashboard.admin') }}
+    <span class="dash-admin-headline" data-admin-headline>
+        {%- if headline %}<span class="dash-admin-dot dash-admin--{{ headline.state }}"></span>{{ headline.text }}{% endif -%}
+    </span>
+</header>
+{% endmacro %}
+
+{#- A card the page fills from /dashboard/api/admin/<page>/<part>. `body` is
+    the first render when the page already has it; otherwise it loads. #}
+{% macro part(page, name, extra_class='') %}
+<div class="dash-admin-part {{ extra_class }}" data-admin-part="{{ name }}"
+     data-part-url="{{ url_for('projects.admin_part', page=page, part=name) }}">
+    {%- if caller %}{{ caller() }}{% else %}<p class="dash-quiet dash-admin-loading">Loading</p>{% endif -%}
+</div>
+{% endmacro %}
+
+{% macro dot(state) %}<span class="dash-admin-dot dash-admin--{{ state }}"></span>{% endmacro %}
+
+{% macro meter(pct, state) %}
+<span class="dash-admin-meter"><i class="dash-admin--{{ state }}" style="width: {{ [pct or 0, 100] | min }}%"></i></span>
+{% endmacro %}
+
+{% macro panel(title, meta=None, scroll=True) %}
+<section class="dash-admin-panel">
+    <header class="dash-admin-panel-head">
+        <h2 class="dash-admin-panel-title">{{ title }}</h2>
+        {%- if meta %}<span class="dash-admin-panel-meta">{{ meta }}</span>{% endif %}
+    </header>
+    <div class="dash-admin-panel-body{{ ' dash-admin-panel-body--scroll' if scroll else '' }}">{{ caller() }}</div>
+</section>
+{% endmacro %}

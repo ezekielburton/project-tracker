@@ -10,6 +10,7 @@ import psycopg2
 from psycopg2.extras import Json
 
 from config import Config
+from app.modules.system.lib.notify import JOBS, notify
 
 RESULT_OK = 'ok'
 RESULT_FAILED = 'failed'
@@ -23,11 +24,12 @@ _INSERT_RUN = (
 
 def insert_run(cur, job, started, finished, result, message=None, bytes_reclaimed=None,
                run_by_id=None, details=None):
-    """Write one job_runs row with `cur`; the caller commits."""
+    """Write one job_runs row with `cur` and ping open admin pages; the caller commits."""
     cur.execute(_INSERT_RUN, (job, started, finished, result,
                               message[:MESSAGE_LIMIT] if message else None,
                               bytes_reclaimed, run_by_id,
                               Json(details) if details is not None else None))
+    notify(cur, JOBS)
 
 
 def record_run(job, started, finished, result, message=None, bytes_reclaimed=None,

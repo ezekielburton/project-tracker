@@ -41,6 +41,9 @@ _PAGE_LIST = (
     Page('teams', 'Teams', 'projects.teams', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'),
     Page('clients', 'Clients', 'projects.clients', 'M3 21V7l9-4 9 4v14M9 21v-6h6v6M8 10h.01M16 10h.01'),
     Page('adoption', 'Adoption', 'projects.adoption', 'M4 19V10M9.5 19V5M15 19v-7M20.5 19v-4'),
+    # The Admin rail's own Overview: the health of OVP, not projects.
+    Page('system_overview', 'Overview', 'projects.admin_overview',
+         'M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 8h6V4h-6z'),
     Page('system', 'System', 'projects.admin_system', 'M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01'),
     Page('database', 'Database', 'projects.admin_database',
          'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6'
@@ -56,9 +59,14 @@ _PAGE_LIST = (
 )
 PAGES = {page.key: page for page in _PAGE_LIST}
 
+# The admin system pages: real admin only, and they show the admin's own rail
+# even while the admin views the app as someone else.
+SYSTEM_PAGES = frozenset({'system_overview', 'system', 'database', 'performance',
+                          'usage', 'errors', 'uptime', 'jobs'})
+
 # Every rail ends with My hub. The order is the order on screen.
 RAILS = {
-    'admin': ('overview', 'system', 'database', 'performance', 'usage', 'errors',
+    'admin': ('system_overview', 'system', 'database', 'performance', 'usage', 'errors',
               'uptime', 'jobs', 'my_hub'),
     'management': ('overview', 'escalations', 'needs_attention', 'design_workload',
                    'delivery', 'teams', 'clients', 'adoption', 'my_hub'),

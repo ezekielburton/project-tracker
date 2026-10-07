@@ -94,15 +94,16 @@ def test_notifications_older_than_90_days_go_read_or_not(db_session):
     assert Notification.query.filter_by(recipient_id=user.id).count() == 1
 
 
-def test_retention_trims_request_metrics_past_30_days(db_session):
-    for age in (31, 29):
-        db_session.add(RequestMetric(ts=NOW - timedelta(days=age), method='GET', route='/x-retention-test',
-                                     status=200, duration_ms=1))
+def test_retention_keeps_saved_changes_longer_than_page_views(db_session):
+    for age, method in ((31, 'GET'), (29, 'GET'), (31, 'POST'), (101, 'POST')):
+        db_session.add(RequestMetric(ts=NOW - timedelta(days=age), method=method, route='/x-retention-test',
+                                     status=200, duration_ms=age))
     db_session.flush()
     cur = db_session.connection().connection.cursor()
     deleted = retention.trim(cur, NOW)
     assert set(deleted) == {'request_metrics', 'heartbeats', 'job_runs'}
-    assert RequestMetric.query.filter_by(route='/x-retention-test').count() == 1
+    kept = RequestMetric.query.filter_by(route='/x-retention-test').order_by(RequestMetric.duration_ms).all()
+    assert [(row.method, row.duration_ms) for row in kept] == [('GET', 29), ('POST', 31)]
 
 
 def test_orphans_are_old_unreferenced_files_in_the_top_folder(tmp_path):
