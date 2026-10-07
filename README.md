@@ -1,4 +1,4 @@
-# Vitamin-E (Helix)
+# One Vitamin Platform (Helix)
 
 Internal operations platform for **Vitamin Dubai**. It replaces Monday.com for running creative work end to end — project briefs, deliverables, designer assignments, revision cycles, and approvals across the 2D, 3D, and Technical design teams.
 
