@@ -1,5 +1,5 @@
-# Fires a Postgres NOTIFY for every watched project, DI project and
-# notification recipient touched by the current transaction. The single
+# Fires a Postgres NOTIFY for every watched project, DI project, notification
+# recipient and Friction Log change in the current transaction. The single
 # choke point for live updates: routes never announce changes themselves.
 #
 # Two hooks, because flushed objects drop out of session.new/dirty/deleted:
@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 PROJECT_CHANGES_CHANNEL = 'project_changes'
 USER_NOTIFICATIONS_CHANNEL = 'user_notifications'
 DI_CHANGES_CHANNEL = 'di_changes'
+FRICTION_CHANGES_CHANNEL = 'friction_changes'
+# Sent by the system module's timers and job log (system/lib/notify.py), not by this file.
+SYSTEM_CHANGES_CHANNEL = 'system_changes'
 
 # Watched models -> the project_id each change affects. Matched by class
 # name so this file needn't import the models. A model missing here fires
@@ -90,6 +93,11 @@ def _before_flush(session, flush_context, instances):
     user_ids = session.info.setdefault('_touched_notification_user_ids', set())
     _collect_ids(session.new, user_ids, {'Notification': lambda obj: obj.recipient_id})
 
+    # One channel for the whole Friction Log: a post added or deleted.
+    if any(type(obj).__name__ == 'FrictionLogEntry'
+           for obj in (*session.new, *session.deleted)):
+        session.info['_friction_touched'] = True
+
 
 def _before_commit(session):
     # No-op when clean; otherwise runs _before_flush so pending changes count.
@@ -122,6 +130,12 @@ def _before_commit(session):
                 {'channel': USER_NOTIFICATIONS_CHANNEL, 'payload': str(uid)}
             )
         session.info['_touched_notification_user_ids'] = set()
+
+    if session.info.pop('_friction_touched', False):
+        session.execute(
+            text('SELECT pg_notify(:channel, :payload)'),
+            {'channel': FRICTION_CHANGES_CHANNEL, 'payload': '1'}
+        )
 
 
 def init_live_events():

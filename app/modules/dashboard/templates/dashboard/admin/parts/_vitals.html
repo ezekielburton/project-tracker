@@ -1,0 +1,20 @@
+{#- A row of vital tiles: a label, a big value with its unit, an optional meter
+    and a line under it. Each tile is built by admin_pages.common.tile. #}
+{% from 'dashboard/admin/_macros.html' import meter %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-vitals">
+    {%- for t in tiles %}
+    <div class="dash-admin-vt">
+        <span class="dash-admin-vt-label">{{ t.label }}</span>
+        {%- if t.value is none %}
+        <span class="dash-admin-vt-value dash-admin-vt-value--none">No data</span>
+        {%- else %}
+        <span class="dash-admin-vt-value{{ ' dash-admin-vt-value--text' if t.text }}">{{ t.value }}{% if t.unit %}<small>{{ t.unit }}</small>{% endif %}</span>
+        {%- if t.pct is not none %}{{ meter(t.pct, t.tone) }}{% endif %}
+        {%- endif %}
+        {%- if t.sub %}<span class="dash-admin-vt-sub{{ ' dash-admin-text--' ~ t.sub_tone if t.sub_tone }}">{{ t.sub }}</span>{% endif %}
+    </div>
+    {%- endfor %}
+</div>
+{%- endif %}

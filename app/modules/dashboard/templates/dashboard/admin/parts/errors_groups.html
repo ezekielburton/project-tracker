@@ -1,0 +1,34 @@
+{#- Errors and warnings of 7 days grouped by signature, newest first; a row opens to its latest lines. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Grouped by error', '7 days') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not groups %}<p class="dash-quiet">None in 7 days</p>
+{%- else %}
+<div class="dash-admin-groups">
+    <div class="dash-admin-group-row dash-admin-group-head">
+        <span>Error · where</span><span class="dash-admin-num">n</span><span class="dash-admin-num">First</span><span class="dash-admin-num">Last</span>
+    </div>
+    {%- for g in groups %}
+    <details class="dash-admin-group" data-key="{{ g.signature }}">
+        <summary class="dash-admin-group-row">
+            <span class="dash-admin-group-what">
+                <span class="dash-admin-sev dash-admin--{{ 'red' if g.error else 'amber' }}"></span>
+                <span class="dash-admin-group-text">{{ g.message }}{% if g.source %} <span class="dash-admin-mono">· {{ g.source }}</span>{% endif %}</span>
+            </span>
+            <span class="dash-admin-num">{{ '{:,}'.format(g.count) }}</span>
+            <span class="dash-admin-num">{{ g.first }}</span>
+            <span class="dash-admin-num">{{ g.last }}</span>
+        </summary>
+        <ul class="dash-admin-log dash-admin-group-lines">
+            {%- for line in g.lines %}
+            <li class="dash-admin-log-line dash-admin-text--{{ 'red' if line.level == 'error' else 'amber' }}">
+                <span class="dash-admin-mono">{{ line.time }}</span> {{ line.level | upper }} {{ line.message }}
+                {%- if line.detail %}<pre class="dash-admin-detail">{{ line.detail }}</pre>{% endif %}
+            </li>
+            {%- endfor %}
+        </ul>
+    </details>
+    {%- endfor %}
+</div>
+{%- endif %}
+{% endcall %}

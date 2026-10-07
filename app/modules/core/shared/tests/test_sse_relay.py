@@ -67,3 +67,34 @@ def test_listen_loop_survives_a_failed_connect(monkeypatch):
     # Reaches the back-off sleep instead of failing on an unbound connection.
     with pytest.raises(_StopLoop):
         sse_relay._listen_loop(_fake_app())
+
+
+def test_a_friction_change_rings_every_friction_subscriber():
+    first = sse_relay.subscribe_friction()
+    second = sse_relay.subscribe_friction()
+    try:
+        sse_relay._dispatch_friction_change()
+        assert first.get_nowait() == 1
+        assert second.get_nowait() == 1
+    finally:
+        sse_relay.unsubscribe_friction(first)
+        sse_relay.unsubscribe_friction(second)
+
+
+def test_an_unsubscribed_queue_hears_nothing():
+    q = sse_relay.subscribe_friction()
+    sse_relay.unsubscribe_friction(q)
+    sse_relay._dispatch_friction_change()
+    assert q.empty()
+
+
+def test_the_friction_stream_requires_auth(client):
+    assert client.get('/sse/friction').status_code in (302, 401)
+
+
+def test_the_relay_never_starts_under_tests(app, monkeypatch):
+    started = []
+    monkeypatch.setenv('GEVENT_WORKER', '1')
+    monkeypatch.setattr(sse_relay, 'spawn', lambda *args: started.append(args))
+    sse_relay.init_sse_relay(app)
+    assert started == []

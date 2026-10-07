@@ -1,0 +1,10 @@
+[Unit]
+Description=OVP Data retention
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=helixadmin
+WorkingDirectory=/home/helixadmin/project-tracker
+ExecStart=/home/helixadmin/project-tracker/venv/bin/python -m app.modules.system.jobs.retention
+SyslogIdentifier=ovp-retention

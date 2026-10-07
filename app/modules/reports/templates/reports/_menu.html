@@ -1,0 +1,12 @@
+{# The ⋯ button for one stored report. reports.js builds the menu from the
+   data- attributes. #}
+{% macro run_menu(r) %}
+<button type="button" class="reports-dots" aria-label="Actions for {{ r.report }}, {{ r.period }}"
+        data-run-menu data-download="{{ r.download_url }}" data-open="{{ r.open_url }}"
+        data-send="{{ r.send_url }}" data-send-label="{{ r.send_label }}">⋯</button>
+{% endmacro %}
+
+{% macro status(r) %}
+<span class="reports-status reports-status--{{ r.status_key }}">{{ r.status }}</span>
+{%- if r.error %} <span class="reports-error">{{ r.error }}</span>{% endif %}
+{% endmacro %}

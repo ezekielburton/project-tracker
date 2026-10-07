@@ -37,7 +37,7 @@ def _user(db_session, tag, role='cs'):
 
 
 def _project(db_session, name, lead, owner=None, install=None, value=None):
-    p = Project(name=name, cs_lead_id=lead.id, created_by_id=lead.id,
+    p = Project(name=name, cs_lead_id=lead.id, created_by_id=lead.id, job_number=name,
                 project_owner_id=owner.id if owner else None,
                 project_status='briefed', installation_date=install, value=value)
     db_session.add(p)

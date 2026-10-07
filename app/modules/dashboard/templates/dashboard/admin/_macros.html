@@ -1,0 +1,89 @@
+{#- Pieces the admin system pages share: the page head, a card that loads
+    from its part URL, a status dot, a meter bar and a panel frame. #}
+{% from '_shared_macros.html' import help_button %}
+
+{#- The page head: title, Admin only, help, and the status badge (Live, or minutes since the last update). #}
+{% macro admin_head(title, badge, help_key='dashboard.admin') %}
+<header class="dash-page-head dash-admin-head">
+    <h1 class="dash-page-title">{{ title }}</h1>
+    <span class="dash-admin-lock">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Admin only
+    </span>
+    {{ help_button(help_key) }}
+    <span class="dash-admin-live dash-admin-live--{{ badge.state }}" data-admin-badge
+          data-age="{{ badge.age if badge.age is not none else '' }}" data-day="{{ badge.day }}">
+        <span class="dash-admin-live-dot"></span><span data-badge-text>{{ badge.text }}</span>
+    </span>
+</header>
+{% endmacro %}
+
+{#- A card the page fills from /dashboard/api/admin/<page>/<part>. `body` is
+    the first render when the page already has it; otherwise it loads. #}
+{% macro part(page, name, extra_class='') %}
+<div class="dash-admin-part {{ extra_class }}" data-admin-part="{{ name }}"
+     data-part-url="{{ url_for('projects.admin_part', page=page, part=name) }}">
+    {%- if caller %}{{ caller() }}{% else %}<p class="dash-quiet dash-admin-loading">Loading</p>{% endif -%}
+</div>
+{% endmacro %}
+
+{% macro dot(state) %}<span class="dash-admin-dot dash-admin--{{ state }}"></span>{% endmacro %}
+
+{% macro meter(pct, state) %}
+<span class="dash-admin-meter"><i class="dash-admin--{{ state }}" style="width: {{ [pct or 0, 100] | min }}%"></i></span>
+{% endmacro %}
+
+{#- One label and value row of a .dash-admin-kv list, the value coloured by tone. #}
+{% macro kv(label, value, tone=None) %}<div><dt>{{ label }}</dt><dd{% if tone %} class="dash-admin-text--{{ tone }}"{% endif %}>{{ value }}</dd></div>{% endmacro %}
+
+{#- Horizontal bars: rows of {label, pct, value}. #}
+{% macro hbars(rows) %}
+<ul class="dash-admin-hbars">
+    {%- for row in rows %}
+    <li class="dash-admin-hb">
+        <span class="dash-admin-hb-label">{{ row.label }}</span>
+        <span class="dash-admin-hb-track"><i style="width: {{ row.pct }}%"></i></span>
+        <span class="dash-admin-hb-value">{{ row.value }}</span>
+    </li>
+    {%- endfor %}
+</ul>
+{% endmacro %}
+
+{#- A column chart: the value scale down the left, a hover label per column, the axis under it. #}
+{% macro columns(chart, scale, labels, label) %}
+<div class="dash-admin-plot">
+    <div class="dash-admin-scale">{% for value in scale %}<span>{{ value }}</span>{% endfor %}</div>
+    <svg class="dash-admin-bars" viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none"
+         role="img" aria-label="{{ label }}">
+        {%- for bar in chart.bars %}
+        <rect x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}" rx="3"><title>{{ bar.title }}</title></rect>
+        {%- endfor %}
+    </svg>
+    <div class="dash-admin-axis">{% for text in labels %}<span>{{ text }}</span>{% endfor %}</div>
+</div>
+{% endmacro %}
+
+{#- A line chart: the value scale down the left, a hover label per moment, the time axis under it.
+    The caller draws the polylines. #}
+{% macro plot(chart, scale, ticks, label) %}
+<div class="dash-admin-plot">
+    <div class="dash-admin-scale">{% for value in scale %}<span>{{ value }}</span>{% endfor %}</div>
+    <svg class="dash-admin-lines" viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none"
+         role="img" aria-label="{{ label }}">
+        {{- caller() }}
+        {%- for column in chart.hover %}
+        <rect class="dash-admin-hover" x="{{ column.x }}" y="0" width="{{ column.w }}" height="{{ chart.height }}"><title>{{ column.title }}</title></rect>
+        {%- endfor %}
+    </svg>
+    <div class="dash-admin-axis">{% for tick in ticks %}<span>{{ tick }}</span>{% endfor %}</div>
+</div>
+{% endmacro %}
+
+{% macro panel(title, meta=None, scroll=True) %}
+<section class="dash-admin-panel">
+    <header class="dash-admin-panel-head">
+        <h2 class="dash-admin-panel-title">{{ title }}</h2>
+        {%- if meta %}<span class="dash-admin-panel-meta">{{ meta }}</span>{% endif %}
+    </header>
+    <div class="dash-admin-panel-body{{ ' dash-admin-panel-body--scroll scroll-hold' if scroll else '' }}">{{ caller() }}</div>
+</section>
+{% endmacro %}

@@ -1,0 +1,20 @@
+{#- Routes that answered 5xx in 7 days, most first. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('500s by route', '7 days') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not rows %}<p class="dash-quiet">None in 7 days</p>
+{%- else %}
+<table class="dash-admin-table">
+    <thead><tr><th>Route</th><th class="dash-admin-num">500s</th><th class="dash-admin-num">Last</th></tr></thead>
+    <tbody>
+        {%- for row in rows %}
+        <tr>
+            <td class="dash-admin-code">{% if row.method != 'GET' %}{{ row.method }} {% endif %}{{ row.route }}</td>
+            <td class="dash-admin-num dash-admin-text--red">{{ row.count }}</td>
+            <td class="dash-admin-num">{{ row.last }}</td>
+        </tr>
+        {%- endfor %}
+    </tbody>
+</table>
+{%- endif %}
+{% endcall %}

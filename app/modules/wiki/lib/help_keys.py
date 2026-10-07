@@ -17,6 +17,9 @@ HELP_KEY_GROUPS = [
     ('Dashboard', [
         ('dashboard.overview', 'Reading your dashboard'),
         ('dashboard.cards', 'What each card means'),
+        ('dashboard.calendar', 'The dashboard calendar'),
+        ('dashboard.admin', 'The admin system pages'),
+        ('dashboard.jobs', 'Admin jobs and Run now'),
     ]),
     ('Projects', [
         ('projects.table', 'Reading the projects table'),
@@ -60,7 +63,7 @@ HELP_KEY_GROUPS = [
     ('Chat and Signal', [
         ('chat.projects', 'Project chat'),
         ('signal.report', 'Reporting a bug or an idea'),
-        ('signal.friction', 'The weekly friction log'),
+        ('signal.friction', 'The friction log'),
     ]),
     ('Wiki', [
         ('wiki.editor', 'Writing a wiki article'),
@@ -70,6 +73,9 @@ HELP_KEY_GROUPS = [
     ]),
     ('Admin', [
         ('admin.accounts', 'Accounts, departments and approvals'),
+        ('reports.generate', 'Making and sending reports'),
+        ('reports.history', 'Past reports'),
+        ('reports.recipients', 'Who gets each report'),
     ]),
 ]
 

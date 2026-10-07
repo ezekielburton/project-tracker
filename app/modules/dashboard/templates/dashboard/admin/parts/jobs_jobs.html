@@ -1,0 +1,30 @@
+{#- One row per timer: schedule, last run, duration, result, next run and Run now (two clicks). #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Scheduled jobs') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-table-wrap">
+<table class="dash-admin-table dash-admin-jobs">
+    <thead><tr><th>Job</th><th>Schedule</th><th>Last run</th><th class="dash-admin-num">Duration</th><th>Result</th><th>Next run</th><th></th></tr></thead>
+    <tbody>
+        {%- for row in rows %}
+        <tr>
+            <td>{{ row.label }}</td>
+            <td class="dash-admin-code">{{ row.schedule }}</td>
+            <td>{{ row.last or 'never' }}</td>
+            <td class="dash-admin-num">{{ row.duration or '—' }}</td>
+            <td{% if row.message %} title="{{ row.message }}"{% endif %}>
+                {%- if row.result %}<span class="dash-admin-text--{{ 'red' if row.failed else 'green' }}">{{ row.result }}</span>{% else %}<span class="dash-quiet">—</span>{% endif -%}
+            </td>
+            <td class="{{ 'dash-admin-text--amber' if row.next == 'overdue' }}">{{ row.next or '—' }}</td>
+            <td class="dash-admin-num">
+                {%- if row.run_now %}<button type="button" class="dash-admin-go" data-run-job="{{ row.key }}" data-run-url="{{ row.run_url }}">Run now</button>
+                {%- else %}<span class="dash-quiet">timer only</span>{% endif -%}
+            </td>
+        </tr>
+        {%- endfor %}
+    </tbody>
+</table>
+</div>
+{%- endif %}
+{% endcall %}

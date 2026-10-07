@@ -176,3 +176,27 @@ def test_management_can_still_edit_non_finance_cs_field(app, client, db_session)
     resp = _patch(client, app, project.id, 'priority', 'High')
     assert resp.status_code == 200
     assert resp.get_json()['value'] == 'High'
+
+
+def test_cs_only_edits_write_an_activity_line(app, client, db_session):
+    from app.modules.core.shared.models import ActivityLog
+    user = _user(db_session, 'log')
+    project = _project(db_session, 'log', user)
+    login_as(client, app, user, 'password123')
+
+    _patch(client, app, project.id, 'lpo', 'LPO-7')
+    _patch(client, app, project.id, 'cs_status', 'Installed')
+
+    rows = ActivityLog.query.filter_by(action='client_servicing_edit', entity_id=project.id).all()
+    assert len(rows) == 2
+    assert all(r.user_id == user.id and r.entity_type == 'project' for r in rows)
+
+
+def test_rejected_edit_writes_no_activity_line(app, client, db_session):
+    from app.modules.core.shared.models import ActivityLog
+    user = _user(db_session, 'nolog')
+    project = _project(db_session, 'nolog', user)
+    login_as(client, app, user, 'password123')
+
+    assert _patch(client, app, project.id, 'cs_status', 'Not a status').status_code == 400
+    assert ActivityLog.query.filter_by(action='client_servicing_edit', entity_id=project.id).count() == 0

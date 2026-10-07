@@ -1,0 +1,15 @@
+{#- Gunicorn workers, restarts, the longest request and the wait for a worker. #}
+{% from 'dashboard/admin/_macros.html' import panel, kv %}
+{% call panel('Workers') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+<dl class="dash-admin-kv">
+    {%- if w.alive is none %}{{ kv('Gunicorn workers', 'No data', 'grey') }}
+    {%- else %}{{ kv('Gunicorn workers', w.alive ~ ' / ' ~ w.total ~ ' alive', w.state) }}{% endif %}
+    {%- if w.restarts is none %}{{ kv('Worker restarts (24h)', 'No data', 'grey') }}
+    {%- else %}{{ kv('Worker restarts (24h)', w.restarts, 'amber' if w.restarts else 'green') }}{% endif %}
+    {{ kv('Longest request (24h)', (w.longest.time ~ ' · ' ~ w.longest.route) if w.longest else 'none') }}
+    {{ kv('Queue wait p95', w.queue_p95 or 'No data', None if w.queue_p95 else 'grey') }}
+</dl>
+{%- endif %}
+{% endcall %}

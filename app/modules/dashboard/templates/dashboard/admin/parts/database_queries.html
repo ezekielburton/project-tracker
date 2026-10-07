@@ -1,0 +1,22 @@
+{#- The slowest queries of the window, slowest on average first. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Slowest queries', queries.window if queries and queries.enabled else None) %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not queries.enabled %}<p class="dash-quiet">pg_stat_statements is off</p>
+{%- elif not queries.rows %}<p class="dash-quiet">No queries yet</p>
+{%- else %}
+<table class="dash-admin-table">
+    <thead><tr><th>Query</th><th class="dash-admin-num">Mean</th><th class="dash-admin-num">Calls</th><th class="dash-admin-num">Total</th></tr></thead>
+    <tbody>
+        {%- for row in queries.rows %}
+        <tr>
+            <td class="dash-admin-code">{{ row.text }}</td>
+            <td class="dash-admin-num">{{ row.mean }}</td>
+            <td class="dash-admin-num">{{ '{:,}'.format(row.calls) }}</td>
+            <td class="dash-admin-num">{{ row.total }}</td>
+        </tr>
+        {%- endfor %}
+    </tbody>
+</table>
+{%- endif %}
+{% endcall %}

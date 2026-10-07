@@ -84,11 +84,11 @@
         the same way the expanded data is shown, just have it below this
         section." See _CS_SECONDARY_METRICS in dashboard.py.
 #}
-{% extends "base.html" %}
+{% extends "dashboard/_shell.html" %}
 
 {% block title %}Dashboard{% endblock %}
 
-{% block content %}
+{% block dash_main %}
 {% from 'dashboard/_dashboard_macros.html' import dash_priority_action_row, dash_waiting_row, dash_person_chip, dash_due_today_row, dash_escalation_history_row %}
 {% from '_shared_macros.html' import help_button %}
 

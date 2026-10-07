@@ -1,0 +1,22 @@
+{#- The latest orphaned-uploads check: files in the upload folder no project points to. Report only. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Orphaned uploads', ('checked ' ~ report.when) if report else None) %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not report %}<p class="dash-quiet">Not checked yet</p>
+{%- elif report.failed %}<p class="dash-quiet dash-admin-text--red">Last check failed</p>
+{%- elif not report.count %}<p class="dash-quiet">None found</p>
+{%- else %}
+<p class="dash-admin-caption dash-admin-caption--lead">{{ report.count }} file{{ '' if report.count == 1 else 's' }} · {{ report.size }}</p>
+<div class="dash-admin-table-wrap">
+<table class="dash-admin-table">
+    <thead><tr><th>File</th><th class="dash-admin-num">Size</th><th class="dash-admin-num">Modified</th></tr></thead>
+    <tbody>
+        {%- for file in report.files %}
+        <tr><td class="dash-admin-code">{{ file.name }}</td><td class="dash-admin-num">{{ file.size }}</td><td class="dash-admin-num">{{ file.modified }}</td></tr>
+        {%- endfor %}
+    </tbody>
+</table>
+</div>
+{%- if report.count > report.files | length %}<p class="dash-admin-caption">Showing the largest {{ report.files | length }}</p>{% endif %}
+{%- endif %}
+{% endcall %}

@@ -5,14 +5,14 @@ The master copy of every help article in the in-app wiki, one file per wiki sect
 | File | Wiki section | Articles |
 |---|---|---|
 | [getting-started.md](getting-started.md) | Getting started | 1–4, `core.roadmap`, 36–40 |
-| [dashboard.md](dashboard.md) | Your dashboard | 5–6 |
+| [dashboard.md](dashboard.md) | Your dashboard | 5–6, 6a |
 | [projects.md](projects.md) | Projects | 7–15, 35 |
 | [client-servicing.md](client-servicing.md) | Client Servicing | 16–20 (incl. 19a) |
 | [digital-innovation.md](digital-innovation.md) | Digital Innovation | 21–24 |
 | [hse.md](hse.md) | HSE & Compliance | 25–30 |
 | [tools.md](tools.md) | Tools and directories | 31–34 |
 | [wiki.md](wiki.md) | Using the wiki | `wiki.editor`, `wiki.help-keys` |
-| [admin.md](admin.md) | Admin | 41 `admin.accounts` |
+| [admin.md](admin.md) | Admin | 41 `admin.accounts`, 42 `dashboard.admin`, 43 `dashboard.jobs` |
 
 ## How to use these files
 - When a module changes, update its article here **and** in the wiki editor in the same release. A wrong article is worse than a missing one.

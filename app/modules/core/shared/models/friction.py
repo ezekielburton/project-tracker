@@ -5,7 +5,7 @@ from app.modules.core.shared.extensions import db
 
 class FrictionLogEntry(db.Model):
     """One Friction Log post (what is not working for the team), grouped by
-    week. Everyone reads; can_write_friction() decides who posts."""
+    week. Everyone signed in reads and posts."""
     __tablename__ = 'friction_log_entries'
 
     id = db.Column(db.Integer, primary_key=True)

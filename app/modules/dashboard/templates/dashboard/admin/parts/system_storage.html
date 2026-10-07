@@ -1,0 +1,18 @@
+{#- Used and total space per mount, then the NAS share. #}
+{% from 'dashboard/admin/_macros.html' import panel, meter %}
+{% call panel('Storage') %}
+{%- if missing or not rows %}<p class="dash-quiet">No data</p>
+{%- else %}
+<ul class="dash-admin-list dash-admin-list--plain">
+    {%- for row in rows %}
+    <li class="dash-admin-disk">
+        <div class="dash-admin-disk-line">
+            <span class="dash-admin-disk-name">{{ row.label }}{% if row.detail %} <span class="dash-admin-mono">{{ row.detail }}</span>{% endif %}</span>
+            <span class="dash-admin-mono">{{ row.used }} / {{ row.total }}</span>
+        </div>
+        {{ meter(row.pct, row.state) }}
+    </li>
+    {%- endfor %}
+</ul>
+{%- endif %}
+{% endcall %}

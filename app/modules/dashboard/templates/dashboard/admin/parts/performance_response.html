@@ -1,0 +1,15 @@
+{#- Average and p95 response time, one point per hour over 24 hours. #}
+{% from 'dashboard/admin/_macros.html' import panel, plot %}
+{% call panel('Response time', 'last 24h', scroll=False) %}
+{%- if missing or not chart %}<p class="dash-quiet">No requests yet</p>
+{%- else %}
+<div class="dash-admin-legend">
+    <span class="dash-admin-legend-item dash-admin-line--avg">Average</span>
+    <span class="dash-admin-legend-item dash-admin-line--p95">p95</span>
+</div>
+{% call plot(chart, scale, ticks, 'Average and p95 response time per hour, last 24 hours') %}
+    <polyline class="dash-admin-line--avg" points="{{ chart.paths.avg }}"/>
+    <polyline class="dash-admin-line--p95" points="{{ chart.paths.p95 }}"/>
+{% endcall %}
+{%- endif %}
+{% endcall %}

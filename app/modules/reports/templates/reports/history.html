@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+{% from 'reports/_menu.html' import run_menu, status %}
+
+{% block title %}Reports — History{% endblock %}
+
+{% block content %}
+<div class="module-page">
+    <div class="module-shell">
+        {% include 'reports/_rail.html' %}
+        <div class="module-main reports-main" id="reports-history">
+            <div class="reports-header">
+                <h1 class="reports-title">History</h1>
+                {{ help_button('reports.history') }}
+            </div>
+
+            <div class="reports-vitals">
+                <div class="card reports-vital"><div class="reports-label">Sent this month</div><div class="reports-vital-n">{{ vitals.sent }}</div></div>
+                <div class="card reports-vital"><div class="reports-label">Made on demand</div><div class="reports-vital-n">{{ vitals.manual }}</div><div class="reports-muted">this month</div></div>
+                <div class="card reports-vital{{ ' reports-vital--bad' if vitals.failed }}"><div class="reports-label">Failed</div><div class="reports-vital-n">{{ vitals.failed }}</div><div class="reports-muted">last 30 days</div></div>
+                <div class="card reports-vital"><div class="reports-label">Stored</div><div class="reports-vital-n">{{ vitals.stored }}</div><div class="reports-muted">{{ vitals.size_mb }} MB</div></div>
+            </div>
+
+            <div class="reports-filters">
+                {% for group in chips %}
+                {% if not loop.first %}<span class="reports-filter-sep" aria-hidden="true"></span>{% endif %}
+                {% for c in group %}<a class="reports-chip{{ ' is-on' if c.on }}" href="{{ c.url }}">{{ c.label }}</a>{% endfor %}
+                {% endfor %}
+            </div>
+
+            <section class="card reports-panel reports-panel--table" aria-labelledby="reports-all-heading">
+                <h2 class="reports-panel-title" id="reports-all-heading">All reports <span class="reports-count">{{ rows|length }}</span></h2>
+                {% if rows %}
+                <div class="reports-table-box">
+                    <table class="data-table reports-table table--cards">
+                        <thead><tr><th>Period</th><th>Type</th><th>Report</th><th>Made</th><th>How</th><th>Sent to</th><th>Status</th><th aria-label="Actions"></th></tr></thead>
+                        <tbody>
+                        {% for r in rows %}
+                        <tr>
+                            <td class="reports-mono" data-label="Period">{{ r.period }}</td>
+                            <td data-label="Type">{{ r.kind }}</td>
+                            <td class="reports-strong" data-label="Report">{{ r.report }}</td>
+                            <td class="reports-mono" data-label="Made">{{ r.made }}</td>
+                            <td class="reports-mono" data-label="How">{{ r.how }}</td>
+                            <td data-label="Sent to">{% for i in r.sent_to %}<span class="reports-av">{{ i }}</span>{% else %}—{% endfor %}</td>
+                            <td data-label="Status">{{ status(r) }}</td>
+                            <td class="reports-cell-menu">{{ run_menu(r) }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-state">No matches</p>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('reports_assets.static', filename='js/reports.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

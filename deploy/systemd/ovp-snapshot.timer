@@ -1,0 +1,9 @@
+[Unit]
+Description=OVP Snapshot collector (every minute)
+
+[Timer]
+OnCalendar=minutely
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

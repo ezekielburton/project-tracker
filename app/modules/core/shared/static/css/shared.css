@@ -678,3 +678,12 @@ status pill. */
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
 }
+
+/*  ---- Scroll hold
+    A box with class "scroll-hold" sets its own overflow; scroll_hold.js adds
+    is-scrollable while its content overflows. Only then does the box keep the
+    wheel at its ends; when everything fits, the page scrolls. */
+
+.scroll-hold.is-scrollable {
+    overscroll-behavior: contain;
+}

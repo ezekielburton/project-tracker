@@ -1,9 +1,9 @@
 """Admin user tools: password reset, delete-user error naming, activity date
 filters, and the deliverable-type template upload."""
 import io
+from datetime import date
 
-from app.modules.core.shared.lib.champions import week_start_for
-from app.modules.core.shared.models import OvpChampion, User
+from app.modules.core.shared.models import FeatureRequest, FrictionLogEntry, User
 from app.modules.core.shared.testing import login_as
 
 
@@ -32,19 +32,31 @@ def test_reset_returns_a_new_random_password_each_time(app, client, db_session):
     assert client.get('/account').status_code == 200
 
 
-def test_delete_user_names_ovp_champions_as_the_blocker(app, client, db_session):
+def test_delete_user_names_the_blocking_table(app, client, db_session):
     admin, admin_pw = _user(db_session, 'del-admin@example.com', role='admin')
-    target, _ = _user(db_session, 'del-champ@example.com')
-    db_session.add(OvpChampion(user_id=target.id, department='design',
-                               week_start=week_start_for(), set_by_id=admin.id))
+    target, _ = _user(db_session, 'del-author@example.com')
+    db_session.add(FeatureRequest(title='Blocker', description='...',
+                                  submitted_by_id=target.id, status='requested'))
     db_session.commit()
     login_as(client, app, admin, admin_pw)
 
     resp = client.delete(f'/admin/api/users/{target.id}')
     assert resp.status_code == 400
     error = resp.get_json()['error']
-    assert 'ovp champions' in error
+    assert 'feature requests' in error
     assert 'unknown table' not in error
+
+
+def test_delete_user_removes_their_friction_posts(app, client, db_session):
+    admin, admin_pw = _user(db_session, 'del-friction-admin@example.com', role='admin')
+    target, _ = _user(db_session, 'del-friction-author@example.com')
+    db_session.add(FrictionLogEntry(author_id=target.id, body='too many clicks',
+                                    week_start=date.today()))
+    db_session.commit()
+    login_as(client, app, admin, admin_pw)
+
+    assert client.delete(f'/admin/api/users/{target.id}').get_json()['success'] is True
+    assert FrictionLogEntry.query.filter_by(author_id=target.id).count() == 0
 
 
 def test_activity_rejects_a_malformed_date(app, client, db_session):

@@ -112,7 +112,7 @@ def test_dashboard_query_count_does_not_scale_with_projects(app, client, db_sess
     _seed_batch(db_session, cast, 1)
     login_as(client, app, cast[role], PASSWORD)
     with app.test_request_context():
-        url = url_for('projects.index')
+        url = url_for('projects.overview')
 
     small = _dashboard_queries(client, db_session, url)
     for n in range(2, 5):

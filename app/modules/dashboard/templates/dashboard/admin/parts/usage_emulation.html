@@ -1,0 +1,16 @@
+{#- Each time an admin viewed the app as someone in 30 days, newest first. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Emulation log', '30 days') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not sessions %}<p class="dash-quiet">None in 30 days</p>
+{%- else %}
+<ul class="dash-admin-list">
+    {%- for session in sessions %}
+    <li class="dash-admin-item dash-admin-item--stack">
+        <span class="dash-admin-item-text">{{ session.name }}{% if session.who %} ({{ session.who }}){% endif %}</span>
+        <span class="dash-admin-item-meta">{{ session.when }} · {{ session.minutes }} min</span>
+    </li>
+    {%- endfor %}
+</ul>
+{%- endif %}
+{% endcall %}

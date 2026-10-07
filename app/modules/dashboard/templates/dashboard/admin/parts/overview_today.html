@@ -1,0 +1,13 @@
+{#- Today's use: active now, actions and people today, and 13 weeks of actions. #}
+{% from 'dashboard/admin/_macros.html' import panel, columns %}
+{% call panel('Today', scroll=False) %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-big">
+    <div><div class="dash-admin-big-n">{{ active_now }}</div><div class="dash-admin-big-l">Active now</div></div>
+    <div><div class="dash-admin-big-n">{{ actions_today }}</div><div class="dash-admin-big-l">Actions today</div></div>
+    <div><div class="dash-admin-big-n">{{ people_today }}</div><div class="dash-admin-big-l">People today</div></div>
+</div>
+{{ columns(chart, scale, labels, 'Actions per week, last 13 weeks') }}
+{%- endif %}
+{% endcall %}

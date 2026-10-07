@@ -1,0 +1,14 @@
+{#- The six status tiles. #}
+{% from 'dashboard/admin/_macros.html' import dot %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-strip">
+    {%- for tile in tiles %}
+    <div class="dash-admin-st">
+        <span class="dash-admin-st-label">{{ dot(tile.state) }}{{ tile.label }}</span>
+        <span class="dash-admin-st-value">{{ tile.value }}</span>
+        {%- if tile.sub %}<span class="dash-admin-st-sub">{{ tile.sub }}</span>{% endif %}
+    </div>
+    {%- endfor %}
+</div>
+{%- endif %}

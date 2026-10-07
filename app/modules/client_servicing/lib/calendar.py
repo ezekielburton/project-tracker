@@ -22,7 +22,7 @@ _RISK_MODIFIER = {
 }
 
 # Statuses at or past install: risk reads Done whatever the date.
-_DONE_STATUSES = {
+DONE_STATUSES = {
     'Installed', 'Prize Distribution', 'ED Closure',
     'Pending Invoice', 'Partial Invoicing', 'Invoiced',
 }
@@ -42,7 +42,7 @@ def _auto_risk(project, status_label, today):
     """Derived risk from effective status vs. install date."""
     if project.cancelled_at is not None:
         return 'Done'
-    if status_label in _DONE_STATUSES:
+    if status_label in DONE_STATUSES:
         return 'Done'
     if status_label in _READY_STATUSES:
         return 'On Track'

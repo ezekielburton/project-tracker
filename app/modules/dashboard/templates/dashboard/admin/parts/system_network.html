@@ -1,0 +1,15 @@
+{#- Bytes out and in per 5 minutes over the last 24 hours. #}
+{% from 'dashboard/admin/_macros.html' import panel, plot %}
+{% call panel('Network activity', 'last 24h', scroll=False) %}
+{%- if missing or not chart %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-legend">
+    <span class="dash-admin-legend-item dash-admin-line--sent">Out</span>
+    <span class="dash-admin-legend-item dash-admin-line--recv">In</span>
+</div>
+{% call plot(chart, scale, ticks, 'Network out and in per 5 minutes, last 24 hours') %}
+    <polyline class="dash-admin-line--sent" points="{{ chart.paths.sent }}"/>
+    <polyline class="dash-admin-line--recv" points="{{ chart.paths.recv }}"/>
+{% endcall %}
+{%- endif %}
+{% endcall %}

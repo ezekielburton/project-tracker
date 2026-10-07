@@ -1,0 +1,8 @@
+[Unit]
+Description=OVP NAS outbox flush (Run now)
+
+[Path]
+PathExists=/var/lib/ovp/run-now/nas-outbox-flush
+
+[Install]
+WantedBy=paths.target

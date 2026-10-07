@@ -1091,11 +1091,6 @@ body.has-sidebar:has(.sidebar.sidebar--pinned) .main-content {
 ===================== */
 
 
-/* One block per department in the admin panel's OVP Champions control. */
-.ovp-champion-row {
-    margin-bottom: 0.75rem;
-}
-
 .footer {
     background-color: var(--white);
     border-top: 1px solid var(--grey-light);
@@ -2692,7 +2687,9 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
 .account-user-info {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.5rem;
+    row-gap: 0.3rem;
     flex: 1;
     min-width: 0;
 }
@@ -2730,6 +2727,14 @@ body:has(.sidebar.sidebar--pinned) .admin-panel {
     border-radius: 2px;
     white-space: nowrap;
     flex-shrink: 0;
+}
+
+/* Department, seniority, team and admin sit on their own line under the name. */
+.account-user-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    flex-basis: 100%;
 }
 
 .account-user-actions {

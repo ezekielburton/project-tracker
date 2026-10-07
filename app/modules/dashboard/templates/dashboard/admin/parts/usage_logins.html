@@ -1,0 +1,16 @@
+{#- The latest successful logins, newest first. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Recent logins') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not logins %}<p class="dash-quiet">No logins yet</p>
+{%- else %}
+<ul class="dash-admin-list">
+    {%- for login in logins %}
+    <li class="dash-admin-item">
+        <span class="dash-admin-item-text">{{ login.name }}{% if login.who %} · {{ login.who }}{% endif %}</span>
+        <span class="dash-admin-item-meta">{{ login.ago }}</span>
+    </li>
+    {%- endfor %}
+</ul>
+{%- endif %}
+{% endcall %}

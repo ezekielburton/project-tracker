@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+
+{% block title %}Reports — Recipients{% endblock %}
+
+{% block content %}
+<div class="module-page">
+    <div class="module-shell">
+        {% include 'reports/_rail.html' %}
+        <div class="module-main reports-main" id="reports-recipients">
+            <div class="reports-header">
+                <h1 class="reports-title">Recipients</h1>
+                {{ help_button('reports.recipients') }}
+            </div>
+
+            <section class="card reports-panel reports-panel--table" aria-labelledby="reports-who-heading">
+                <h2 class="reports-panel-title" id="reports-who-heading">Who gets what</h2>
+                <div class="reports-table-box">
+                    <table class="data-table reports-table reports-recipients table--cards">
+                        <thead><tr><th>Report</th><th>Recipients</th><th class="reports-center">Weekly auto</th><th class="reports-center">Monthly auto</th></tr></thead>
+                        <tbody>
+                        {% for row in rows %}
+                        <tr>
+                            <td data-label="Report"><div class="reports-strong">{{ row.label }}</div><div class="reports-muted">{{ row.covers }}</div></td>
+                            <td data-label="Recipients">
+                                <div class="reports-people">
+                                    {% for p in row.people %}
+                                    <span class="reports-person">
+                                        <span class="reports-av">{{ p.initials }}</span>{{ p.name }}<span class="reports-muted">{{ p.meta }}</span>
+                                        <button type="button" class="reports-person-x" data-remove-recipient data-report="{{ row.key }}" data-user="{{ p.id }}"
+                                                aria-label="Remove {{ p.name }} from {{ row.label }}">×</button>
+                                    </span>
+                                    {% endfor %}
+                                    <button type="button" class="reports-add" data-add-recipient data-report="{{ row.key }}"
+                                            data-taken="{{ row.people|map(attribute='id')|join(',') }}" data-suggest="{{ row.suggest|join(',') }}">+ Add</button>
+                                </div>
+                            </td>
+                            {% for kind in ('weekly', 'monthly') %}
+                            <td class="reports-center" data-label="{{ kind|capitalize }} auto">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" data-auto-send data-report="{{ row.key }}" data-kind="{{ kind }}"{% if row[kind] %} checked{% endif %}
+                                           aria-label="{{ row.label }} {{ kind }} auto-send">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+<script type="application/json" id="reports-people">{{ people|tojson }}</script>
+<script>
+var REPORTS_URLS = {
+    recipients: "{{ url_for('reports.api_recipients') }}",
+    autoSend: "{{ url_for('reports.api_auto_send') }}"
+};
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('reports_assets.static', filename='js/reports.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

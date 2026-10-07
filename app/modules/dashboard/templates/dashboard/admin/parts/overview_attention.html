@@ -1,0 +1,17 @@
+{#- Needs attention: nothing at all when all is well (the card hides). #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif items %}
+{% call panel('Needs attention', items | length ~ (' item' if items | length == 1 else ' items')) %}
+<ul class="dash-admin-list">
+    {%- for item in items %}
+    <li class="dash-admin-item">
+        <span class="dash-admin-sev dash-admin--{{ item.severity }}"></span>
+        <span class="dash-admin-item-text">{{ item.text }}</span>
+        <span class="dash-admin-item-meta">{{ item.meta }}</span>
+        <a class="dash-admin-go" href="{{ item.link.url }}">{{ item.link.label }}</a>
+    </li>
+    {%- endfor %}
+</ul>
+{% endcall %}
+{%- endif %}

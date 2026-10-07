@@ -1,0 +1,8 @@
+[Unit]
+Description=OVP Weekly restore test (Run now)
+
+[Path]
+PathExists=/var/lib/ovp/run-now/restore-test
+
+[Install]
+WantedBy=paths.target

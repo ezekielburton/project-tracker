@@ -1,0 +1,8 @@
+[Unit]
+Description=OVP Notifications purge (90 days) (Run now)
+
+[Path]
+PathExists=/var/lib/ovp/run-now/notifications-purge
+
+[Install]
+WantedBy=paths.target

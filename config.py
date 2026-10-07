@@ -50,6 +50,10 @@ class Config:
     # e.g. NAS_WEB_URL=https://quickconnect.to/YOUR_QUICKCONNECT_ID
     # Defaults to LAN IP (https://{NAS_HOST}:{NAS_PORT}) if not set.
     NAS_WEB_URL = os.environ.get('NAS_WEB_URL')
+    # Reports: the address used for links in scheduled emails (no request to read it from),
+    # and the NAS folder that keeps a copy of every report PDF.
+    APP_BASE_URL = os.environ.get('APP_BASE_URL', '').rstrip('/')
+    NAS_REPORTS_ROOT = os.environ.get('NAS_REPORTS_ROOT', '/Admin/Reports')
 
     # Off-LAN fallback for the NAS API itself (not browse links — that's
     # NAS_WEB_URL above).
@@ -71,6 +75,20 @@ class Config:
     # NEVER set this on the production server — it exposes destructive data operations.
     DEV_TOOLS_ENABLED = os.environ.get('DEV_TOOLS_ENABLED', 'false').lower() == 'true'
 
+    # Admin dashboard collector: where it writes the snapshot (kept out of uploads/,
+    # which nginx serves), the LAN certificate file, and the public hostname to check.
+    SYSTEM_SNAPSHOT_PATH = os.environ.get('SYSTEM_SNAPSHOT_PATH', '/var/lib/ovp/snapshot.json')
+    LAN_CERT_PATH = os.environ.get('LAN_CERT_PATH', '')
+    PUBLIC_HOSTNAME = os.environ.get('PUBLIC_HOSTNAME', 'app.vitamin-e.work')
+    # Local database dumps (nightly/ and weekly/); the NAS keeps its own copies.
+    BACKUP_DIR = os.environ.get('BACKUP_DIR', os.path.expanduser('~/backups'))
+    # Run now: the web app drops a trigger file here; a systemd path unit per job watches it.
+    RUN_NOW_DIR = os.environ.get('RUN_NOW_DIR', '/var/lib/ovp/run-now')
+    # The weekly restore test's own role, which can only create and drop its scratch database.
+    RESTORE_DATABASE_URL = os.environ.get('RESTORE_DATABASE_URL', '')
+    # Comma-separated emails (test accounts) left out of the usage numbers; admins always are.
+    USAGE_EXCLUDED_EMAILS = os.environ.get('USAGE_EXCLUDED_EMAILS', '')
+
 
 class TestingConfig(Config):
     """Configuration for the pytest suite. Points at a dedicated test database
@@ -84,4 +102,6 @@ class TestingConfig(Config):
     CLIENT_SERVICING_REVIEW_ONLY = False
     # Tests never write to, or clean up, the real wiki upload folders.
     WIKI_UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), 'ovp-test-wiki-uploads')
+    SYSTEM_SNAPSHOT_PATH = os.path.join(tempfile.gettempdir(), 'ovp-test-system', 'snapshot.json')
+    RUN_NOW_DIR = os.path.join(tempfile.gettempdir(), 'ovp-test-system', 'run-now')
 

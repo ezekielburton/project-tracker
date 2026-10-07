@@ -82,6 +82,8 @@ def create_app(config=Config):
     init_live_events()
     from app.modules.core.shared.services.sse_relay import init_sse_relay
     init_sse_relay(app)  # no-op unless GEVENT_WORKER=1 — see sse_relay.py
+    from app.modules.system.lib.request_metrics import init_request_metrics
+    init_request_metrics(app)  # registered first, so the timing covers every other hook
 
     # Cache-buster for every static tag in base.html (?v=...).
     app.config['STATIC_VERSION'] = _compute_static_version()
@@ -114,9 +116,11 @@ def create_app(config=Config):
     from app.modules.profile.routes.wizard import wizard_bp
     from app.modules.file_templates.routes.file_templates import file_templates_bp
     from app.modules.core.shared.routes.sse import sse_bp  # SSE live push routes
+    from app.modules.system.routes.health import system_bp  # /healthz for the heartbeat
     from app.modules.client_directory.routes.client_directory import client_directory_bp  # Client Directory — companies + contacts
     from app.modules.roadmap.routes.roadmap import roadmap_bp  # Roadmap — what's live and coming
     from app.modules.dashboard.routes.dashboard import dashboard_bp  # role-based dashboard
+    from app.modules.dashboard.routes import pages as dashboard_pages  # registers the rail pages and the landing redirect on dashboard_bp
     from app.modules.time_tracking.routes.time_tracking import time_tracking_bp  # project/deliverable business-hours breakdown page
     from app.modules.projects.routes.project_list import project_list_bp # Projects page list
     from app.modules.projects.routes.project_overlay import project_overlay_bp # Projects detail overlay
@@ -140,6 +144,8 @@ def create_app(config=Config):
     from app.modules.hse.blueprint import hse_assets
     from app.modules.digital_innovation.models import DiProject, DiFeature, DiFeatureStep, DiStepTemplate, DiCostEntry, DiSetting, DiPeriodSnapshot, DiIntakeItem  # registers the tables with SQLAlchemy
     from app.modules.hse.models import HseEntry, HseSchedule, HseAsset, HseReference, HsePerson, HseRefCounter, HseAttachment  # registers the tables with SQLAlchemy
+    from app.modules.reports.models import ReportRun, ReportRecipient, ReportAutoSend  # registers the tables with SQLAlchemy
+    from app.modules.system.models import RequestMetric, Heartbeat, JobRun, WorkerStat, SystemIncident, DeployRun, SystemSample, AppLogEvent  # registers the tables with SQLAlchemy
     from app.modules.digital_innovation.routes import board as di_board  # registers board routes on digital_innovation_bp
     from app.modules.digital_innovation.routes import projects as di_projects  # registers project-create route on digital_innovation_bp
     from app.modules.digital_innovation.routes import features as di_features  # registers feature routes on digital_innovation_bp
@@ -170,6 +176,10 @@ def create_app(config=Config):
     from app.modules.hse.routes import performance as hse_performance  # registers My performance and its report on hse_bp
     from app.modules.hse.routes import statistics as hse_statistics  # registers the Statistics page on hse_bp
     from app.modules.hse.routes.blueprint import hse_bp
+    from app.modules.reports.routes import pages as reports_pages  # registers the Generate, History and Recipients pages on reports_bp
+    from app.modules.reports.routes import actions as reports_actions  # registers preview, generate, send, download and settings on reports_bp
+    from app.modules.reports.routes.blueprint import reports_bp
+    from app.modules.reports.blueprint import reports_assets
 
 
     app.register_blueprint(core_bp)  # shared templates + static
@@ -214,6 +224,9 @@ def create_app(config=Config):
     app.register_blueprint(client_servicing_bp)
     app.register_blueprint(hse_assets)
     app.register_blueprint(hse_bp)
+    app.register_blueprint(reports_bp)
+    app.register_blueprint(reports_assets)
+    app.register_blueprint(system_bp)
 
     @app.context_processor
     def inject_notifications():

@@ -101,3 +101,27 @@ def is_design_lead(user):
 def is_plain_designer(user):
     """A designer below lead seniority; they can only assign themselves."""
     return is_designer(user) and not is_design_lead(user)
+
+
+def is_department_head(user):
+    """Head of Department seniority, outside leadership."""
+    return not is_leadership(user) and getattr(user, 'seniority', None) == 'head'
+
+
+def department_label(user):
+    """The label of `user`'s department; "Management" for Management seniority
+    with no department; None otherwise."""
+    department = getattr(user, 'department', None)
+    if department in DEPARTMENTS:
+        return DEPARTMENTS[department]
+    if is_management(user):
+        return SENIORITY_LEVELS['management']
+    return None
+
+
+def seniority_label(user):
+    """The label of `user`'s seniority; None when they have none."""
+    seniority = getattr(user, 'seniority', None)
+    if seniority in (None, 'none'):
+        return None
+    return SENIORITY_LEVELS.get(seniority)

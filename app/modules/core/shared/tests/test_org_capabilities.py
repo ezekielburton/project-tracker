@@ -24,7 +24,8 @@ ROLE_ACCESS = {
         'start_projects', 'review_submissions', 'edit_client_directory', 'raise_flags',
         'manage_flags', 'log_site_visits', 'manage_reference_data', 'complete_preproduction',
         'manage_project_files', 'switch_dashboard_scope', 'view_team_snapshot',
-        'view_di_performance', 'view_all_di', 'view_hse', 'write_friction_log',
+        'view_department_overview', 'view_management_dashboard',
+        'view_di_performance', 'view_all_di', 'view_hse',
         'view_time_reports',
     },
     'cs': _CS,
@@ -62,11 +63,16 @@ def test_management_inside_a_department_holds_both_sets():
     assert _held(user) == ROLE_ACCESS['management'] | _DESIGN
 
 
-@pytest.mark.parametrize('seniority', ['manager', 'head'])
-def test_manager_and_head_add_nothing_yet(seniority):
+def test_manager_adds_nothing_yet():
     base = User(department='finance', seniority='none', is_admin=False)
-    senior = User(department='finance', seniority=seniority, is_admin=False)
-    assert _held(senior) == _held(base)
+    manager = User(department='finance', seniority='manager', is_admin=False)
+    assert _held(manager) == _held(base)
+
+
+def test_head_adds_only_the_department_overview():
+    base = User(department='finance', seniority='none', is_admin=False)
+    head = User(department='finance', seniority='head', is_admin=False)
+    assert _held(head) - _held(base) == {'view_department_overview'}
 
 
 def test_the_admin_switch_grants_everything_whatever_the_department():

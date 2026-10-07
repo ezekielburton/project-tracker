@@ -1,0 +1,9 @@
+[Unit]
+Description=OVP Data retention (Sun 04:15)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

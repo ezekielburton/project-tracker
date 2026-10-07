@@ -1,17 +1,14 @@
 """Signal tray boards and Friction Log.
 
-Key rule: everyone reads the Friction Log; only current champions, management
-and admin can post.
+Key rule: everyone signed in reads and posts to the Friction Log.
 """
 from datetime import timedelta
 
 from flask import url_for
 
-from app.modules.core.shared.lib.champions import CHAMPION_CARRY_OVER_WEEKS, week_start_for
-from app.modules.core.shared.models import (
-    BugReport, FeatureRequest, FrictionLogEntry, OvpChampion, User,
-)
+from app.modules.core.shared.models import BugReport, FeatureRequest, FrictionLogEntry, User
 from app.modules.core.shared.testing import login_as
+from app.modules.feedback.lib.friction import week_start_for
 
 
 def _user(db_session, tag, role='designer'):
@@ -95,85 +92,154 @@ def test_a_feature_awaiting_pickup_reads_as_queued_for_di(app, client, db_sessio
 
 # ── Friction Log ───────────────────────────────────────────────────────────
 
+def _entry(db_session, author, body='too many clicks', week_start=None):
+    entry = FrictionLogEntry(author_id=author.id, body=body,
+                             week_start=week_start or week_start_for())
+    db_session.add(entry)
+    db_session.flush()
+    return entry
+
+
+def _delete_url(app, entry_id):
+    with app.test_request_context():
+        return url_for('signal_tray.delete_friction', entry_id=entry_id)
+
+
+def _emulate(client, target):
+    with client.session_transaction() as sess:
+        sess['emulating_user_id'] = target.id
+
+
+def _entries(app, client):
+    weeks = client.get(_url(app, 'signal_tray.friction_log')).get_json()['weeks']
+    return [entry for week in weeks for entry in week['entries']]
+
+
 def test_everyone_can_read_the_friction_log(app, client, db_session):
-    author = _user(db_session, 'friction-reader')
+    login_as(client, app, _user(db_session, 'friction-reader'), 'password123')
+    assert client.get(_url(app, 'signal_tray.friction_log')).status_code == 200
+
+
+def test_a_plain_designer_can_post(app, client, db_session):
+    author = _user(db_session, 'friction-designer')
     login_as(client, app, author, 'password123')
-
-    response = client.get(_url(app, 'signal_tray.friction_log'))
+    response = client.post(_url(app, 'signal_tray.post_friction'), json={'body': 'too many clicks'})
     assert response.status_code == 200
-    assert response.get_json()['can_write'] is False
-
-
-def test_a_plain_designer_cannot_post(app, client, db_session):
-    login_as(client, app, _user(db_session, 'friction-designer'), 'password123')
-    response = client.post(_url(app, 'signal_tray.post_friction'), json={'body': 'this is broken'})
-    assert response.status_code == 403
-
-
-def test_a_champion_of_any_department_can_post(app, client, db_session):
-    champion = _user(db_session, 'friction-champion')
-    db_session.add(OvpChampion(user_id=champion.id, department='production',
-                               week_start=week_start_for()))
-    db_session.flush()
-    login_as(client, app, champion, 'password123')
-
-    assert client.get(_url(app, 'signal_tray.friction_log')).get_json()['can_write'] is True
-    assert client.post(_url(app, 'signal_tray.post_friction'),
-                       json={'body': 'the handover step is slow'}).status_code == 200
-
-
-def test_a_lapsed_champion_can_no_longer_post(app, client, db_session):
-    lapsed = _user(db_session, 'friction-lapsed')
-    stale = week_start_for() - timedelta(weeks=CHAMPION_CARRY_OVER_WEEKS + 1)
-    db_session.add(OvpChampion(user_id=lapsed.id, department='finance',
-                               week_start=stale))
-    db_session.flush()
-    login_as(client, app, lapsed, 'password123')
-
-    assert client.get(_url(app, 'signal_tray.friction_log')).get_json()['can_write'] is False
-    assert client.post(_url(app, 'signal_tray.post_friction'),
-                       json={'body': 'still here?'}).status_code == 403
-
-
-def test_management_can_post(app, client, db_session):
-    login_as(client, app, _user(db_session, 'friction-boss', 'management'), 'password123')
-    assert client.post(_url(app, 'signal_tray.post_friction'),
-                       json={'body': 'reporting takes too long'}).status_code == 200
+    assert _entries(app, client)[-1]['author'] == author.name
 
 
 def test_an_empty_post_is_refused(app, client, db_session):
-    login_as(client, app, _user(db_session, 'friction-empty', 'management'), 'password123')
+    login_as(client, app, _user(db_session, 'friction-empty'), 'password123')
     assert client.post(_url(app, 'signal_tray.post_friction'), json={'body': '   '}).status_code == 400
 
 
-def test_entries_group_by_week_newest_first(app, client, db_session):
-    boss = _user(db_session, 'friction-weeks', 'management')
+def test_a_post_over_the_limit_is_refused(app, client, db_session):
+    login_as(client, app, _user(db_session, 'friction-long'), 'password123')
+    url = _url(app, 'signal_tray.post_friction')
+    assert client.post(url, json={'body': 'x' * 501}).status_code == 400
+    assert client.post(url, json={'body': 'x' * 500}).status_code == 200
+
+
+def test_posts_read_oldest_first_with_the_newest_at_the_bottom(app, client, db_session):
+    author = _user(db_session, 'friction-order')
     this_week = week_start_for()
     last_week = this_week - timedelta(weeks=1)
-    db_session.add(FrictionLogEntry(author_id=boss.id, body='older', week_start=last_week))
-    db_session.add(FrictionLogEntry(author_id=boss.id, body='newer', week_start=this_week))
-    db_session.flush()
-    login_as(client, app, boss, 'password123')
+    _entry(db_session, author, 'older', last_week)
+    _entry(db_session, author, 'first this week', this_week)
+    _entry(db_session, author, 'latest', this_week)
+    login_as(client, app, author, 'password123')
 
     weeks = client.get(_url(app, 'signal_tray.friction_log')).get_json()['weeks']
-    assert weeks[0]['week_start'] == this_week.isoformat()
-    assert weeks[1]['week_start'] == last_week.isoformat()
+    assert [w['week_start'] for w in weeks][-2:] == [last_week.isoformat(), this_week.isoformat()]
+    assert [e['body'] for e in weeks[-1]['entries']][-2:] == ['first this week', 'latest']
 
 
-def test_an_entry_carries_its_authors_department(app, client, db_session):
-    champion = _user(db_session, 'friction-dept')
-    db_session.add(OvpChampion(user_id=champion.id, department='logistics',
-                               week_start=week_start_for()))
-    db_session.add(FrictionLogEntry(author_id=champion.id, body='vans are late',
-                                    week_start=week_start_for()))
-    db_session.flush()
-    login_as(client, app, champion, 'password123')
+def test_a_post_carries_its_authors_department(app, client, db_session):
+    designer = _user(db_session, 'friction-dept')
+    boss = _user(db_session, 'friction-boss', 'management')
+    _entry(db_session, designer, 'designer post')
+    _entry(db_session, boss, 'boss post')
+    login_as(client, app, designer, 'password123')
 
-    entry = client.get(_url(app, 'signal_tray.friction_log')).get_json()['weeks'][0]['entries'][0]
-    assert entry['department'] == 'Logistics'
+    by_body = {e['body']: e for e in _entries(app, client)}
+    assert by_body['designer post']['department'] == 'Design'
+    assert by_body['boss post']['department'] == 'Management'
+
+
+def test_only_your_own_posts_are_marked_deletable(app, client, db_session):
+    me = _user(db_session, 'friction-me')
+    other = _user(db_session, 'friction-other')
+    _entry(db_session, me, 'mine')
+    _entry(db_session, other, 'theirs')
+    login_as(client, app, me, 'password123')
+
+    by_body = {e['body']: e for e in _entries(app, client)}
+    assert by_body['mine']['can_delete'] is True
+    assert by_body['theirs']['can_delete'] is False
+
+
+def test_an_author_deletes_their_own_post(app, client, db_session):
+    author = _user(db_session, 'friction-own-delete')
+    entry = _entry(db_session, author)
+    login_as(client, app, author, 'password123')
+
+    assert client.delete(_delete_url(app, entry.id)).status_code == 200
+    assert entry.id not in [e['id'] for e in _entries(app, client)]
+
+
+def test_deleting_someone_elses_post_is_refused(app, client, db_session):
+    entry = _entry(db_session, _user(db_session, 'friction-victim'))
+    login_as(client, app, _user(db_session, 'friction-intruder'), 'password123')
+    assert client.delete(_delete_url(app, entry.id)).status_code == 403
+
+
+def test_an_admin_deletes_any_post(app, client, db_session):
+    entry = _entry(db_session, _user(db_session, 'friction-any'))
+    login_as(client, app, _user(db_session, 'friction-admin', 'admin'), 'password123')
+    assert client.delete(_delete_url(app, entry.id)).status_code == 200
+
+
+def test_deleting_an_unknown_post_is_not_found(app, client, db_session):
+    login_as(client, app, _user(db_session, 'friction-unknown', 'admin'), 'password123')
+    assert client.delete(_delete_url(app, 999999)).status_code == 404
+
+
+def test_an_emulating_admin_posts_as_the_emulated_person(app, client, db_session):
+    admin = _user(db_session, 'friction-emu-admin', 'admin')
+    target = _user(db_session, 'friction-emu-target')
+    login_as(client, app, admin, 'password123')
+    _emulate(client, target)
+
+    client.post(_url(app, 'signal_tray.post_friction'), json={'body': 'posted while emulating'})
+    by_body = {e['body']: e for e in _entries(app, client)}
+    assert by_body['posted while emulating']['author'] == target.name
+
+
+def test_an_emulating_admin_deletes_only_as_the_emulated_person(app, client, db_session):
+    admin = _user(db_session, 'friction-emu-del-admin', 'admin')
+    target = _user(db_session, 'friction-emu-del-target')
+    entry = _entry(db_session, _user(db_session, 'friction-emu-del-other'))
+    login_as(client, app, admin, 'password123')
+    _emulate(client, target)
+
+    assert client.delete(_delete_url(app, entry.id)).status_code == 403
 
 
 # ── The launcher bubble ────────────────────────────────────────────────────
+
+def test_opening_the_tray_while_emulating_marks_the_real_admin_seen(app, client, db_session):
+    admin = _user(db_session, 'seen-admin', 'admin')
+    target = _user(db_session, 'seen-target')
+    login_as(client, app, admin, 'password123')
+    _emulate(client, target)
+
+    client.post(_url(app, 'signal_tray.mark_seen'))
+
+    db_session.refresh(admin)
+    db_session.refresh(target)
+    assert admin.signal_seen_at is not None
+    assert target.signal_seen_at is None
+
 
 def test_a_never_opened_tray_shows_no_bubble(app, client, db_session):
     """A user who never opened the tray gets 0, not the whole backlog."""

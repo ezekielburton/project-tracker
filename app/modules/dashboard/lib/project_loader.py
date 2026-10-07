@@ -127,3 +127,19 @@ def open_decision_flags(project_ids):
     for flag in flags:
         newest.setdefault(flag.project_id, flag)
     return newest
+
+
+def load_new_briefs():
+    """Active projects with no deliverables yet, newest first, company-wide; one fetch per request."""
+    return list(request_memo(
+        ('new_briefs',),
+        lambda: (Project.query
+                 .filter(Project.project_status != 'draft',
+                         Project.project_status.notin_(INACTIVE_STATUSES),
+                         Project.cancelled_at.is_(None),
+                         Project.is_deleted.is_(False),
+                         ~Project.project_deliverables.any())
+                 .options(joinedload(Project.cs_lead))
+                 .order_by(Project.created_at.desc(), Project.id.desc())
+                 .all()),
+    ))

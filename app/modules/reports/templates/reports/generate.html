@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% from '_shared_macros.html' import help_button %}
+{% from 'reports/_menu.html' import run_menu, status %}
+
+{% block title %}Reports — Generate{% endblock %}
+
+{% block content %}
+<div class="module-page">
+    <div class="module-shell">
+        {% include 'reports/_rail.html' %}
+        <div class="module-main reports-main" id="reports-generate">
+            <div class="reports-header">
+                <h1 class="reports-title">Generate</h1>
+                {{ help_button('reports.generate') }}
+            </div>
+
+            <div class="reports-grid">
+                <section class="card reports-panel" aria-labelledby="reports-new-heading">
+                    <h2 class="reports-panel-title" id="reports-new-heading">New report</h2>
+
+                    <div class="reports-field">
+                        <span class="reports-label" id="reports-kind-label">Period</span>
+                        <div class="reports-seg" role="group" aria-labelledby="reports-kind-label">
+                            <button type="button" class="reports-seg-btn is-on" data-kind="weekly" aria-pressed="true">Weekly</button>
+                            <button type="button" class="reports-seg-btn" data-kind="monthly" aria-pressed="false">Monthly</button>
+                        </div>
+                    </div>
+
+                    <div class="reports-field">
+                        {% for kind, opts in options.items() %}
+                        <label class="reports-label" for="reports-period-{{ kind }}" data-period-kind="{{ kind }}"{% if kind != 'weekly' %} hidden{% endif %}>{{ 'Week' if kind == 'weekly' else 'Month' }}</label>
+                        <select class="reports-select" id="reports-period-{{ kind }}" data-period-kind="{{ kind }}"{% if kind != 'weekly' %} hidden{% endif %}>
+                            {% for o in opts %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>{% endfor %}
+                        </select>
+                        {% endfor %}
+                    </div>
+
+                    <fieldset class="reports-field reports-checks">
+                        <legend class="reports-label">Reports</legend>
+                        {% for r in reports %}
+                        <label class="reports-check">
+                            <input type="checkbox" name="report" value="{{ r.key }}" checked>
+                            <span class="reports-check-name">{{ r.label }} <span class="reports-muted">· {{ r.covers }}</span></span>
+                            <span class="reports-check-meta">{{ r.recipients }} {{ 'recipient' if r.recipients == 1 else 'recipients' }}</span>
+                        </label>
+                        {% endfor %}
+                    </fieldset>
+
+                    <div class="reports-actions">
+                        <button type="button" class="btn-secondary" data-action="preview">Preview</button>
+                        <button type="button" class="btn-secondary" data-action="generate">Generate</button>
+                        <button type="button" class="btn-primary" data-action="send">Send now</button>
+                    </div>
+                </section>
+
+                <div class="reports-side">
+                    <section class="card reports-panel" aria-labelledby="reports-schedule-heading">
+                        <h2 class="reports-panel-title" id="reports-schedule-heading">Schedule</h2>
+                        {% for s in schedule %}
+                        <div class="reports-sched">
+                            <label class="toggle-switch">
+                                <input type="checkbox" data-auto-send data-report="all" data-kind="{{ s.kind }}"{% if s.on %} checked{% endif %}
+                                       aria-label="{{ s.label }} auto-send">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="reports-sched-text">
+                                <div class="reports-sched-name">{{ s.label }}</div>
+                                <div class="reports-muted">{{ s.when }}</div>
+                            </div>
+                            <div class="reports-sched-next">{{ s.next.strftime('%a') }} {{ s.next.day }} {{ s.next.strftime('%b') }}</div>
+                        </div>
+                        {% endfor %}
+                    </section>
+
+                    <section class="card reports-panel reports-panel--table" aria-labelledby="reports-recent-heading">
+                        <h2 class="reports-panel-title" id="reports-recent-heading">Recent</h2>
+                        {% if recent %}
+                        <div class="reports-table-box">
+                            <table class="data-table reports-table">
+                                <thead><tr><th>Period</th><th>Report</th><th>How</th><th>Status</th><th aria-label="Actions"></th></tr></thead>
+                                <tbody>
+                                {% for r in recent %}
+                                <tr>
+                                    <td class="reports-mono">{{ r.period }}</td>
+                                    <td>{{ r.report }}</td>
+                                    <td class="reports-mono">{{ r.how }}</td>
+                                    <td>{{ status(r) }}</td>
+                                    <td class="reports-cell-menu">{{ run_menu(r) }}</td>
+                                </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <a class="reports-more" href="{{ url_for('reports.history_page') }}">All history →</a>
+                        {% else %}
+                        <p class="empty-state">No reports yet</p>
+                        {% endif %}
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+var REPORTS_URLS = {
+    preview: "{{ url_for('reports.preview') }}",
+    generate: "{{ url_for('reports.api_generate') }}",
+    autoSend: "{{ url_for('reports.api_auto_send') }}"
+};
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('reports_assets.static', filename='js/reports.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

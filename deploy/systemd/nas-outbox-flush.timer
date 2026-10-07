@@ -1,0 +1,9 @@
+[Unit]
+Description=OVP NAS outbox flush (every 2 min)
+
+[Timer]
+OnCalendar=*:0/2
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -287,6 +287,39 @@ def is_reachable():
         pass
     return True
 
+def share_space(share_path):
+    """{'free', 'total'} bytes of the volume holding a shared folder such as
+    '/Projects', or None when the NAS doesn't list it. Raises RuntimeError if unreachable."""
+    sid, host, port = _get_session()
+    try:
+        resp = _NAS_SESSION.get(
+            _nas_url(host, port, '/webapi/entry.cgi'),
+            params={
+                'api':        'SYNO.FileStation.List',
+                'version':    '2',
+                'method':     'list_share',
+                'additional': '["volume_status"]',
+                '_sid':       sid,
+            },
+            timeout=10
+        )
+        data = resp.json()
+    except (requests.exceptions.RequestException, ValueError) as e:
+        raise RuntimeError(f'NAS share list failed: {e}')
+    finally:
+        try:
+            _logout(host, port, sid)
+        except requests.exceptions.RequestException:
+            pass
+    if not data.get('success'):
+        return None
+    for share in data.get('data', {}).get('shares', []):
+        status = (share.get('additional') or {}).get('volume_status') or {}
+        if share.get('path') == share_path and 'totalspace' in status:
+            return {'free': int(status['freespace']), 'total': int(status['totalspace'])}
+    return None
+
+
 def upload_app_file(file_bytes, nas_folder_path, filename, _max_attempts=3):
     """
     Upload bytes to a NAS folder. Retries with exponential back-off, then

@@ -9,15 +9,12 @@ from app.modules.core.shared.extensions import db
 from app.modules.core.shared.models import (
     User, JobRole, Client, Customer, Project,
     DeliverableType, DeliverableTypeDiscipline,
-    DesignType, DesignDirection, ActivityLog, NotificationSound, OvpChampion
+    DesignType, DesignDirection, ActivityLog, NotificationSound
 )
 from app.modules.admin.lib import accounts as account_rules
 from app.modules.core.shared.lib.utils import log_activity
 from app.modules.core.shared.lib.profilepic import save_profile_pic, delete_profile_pic, AVATAR_FOLDER
 from app.modules.core.shared.lib.capabilities import can, require, require_api
-from app.modules.core.shared.lib.champions import (
-    CHAMPION_DEPARTMENTS, DEPARTMENT_LABELS, champion_for_week, current_champions, week_start_for,
-)
 from werkzeug.security import generate_password_hash
 
 DUBAI_TZ = timezone(timedelta(hours=4))
@@ -88,64 +85,6 @@ def create_user():
     log_activity('user_created', f'User "{user.name}" created ({"; ".join(changes) or "no org fields"})',
                  user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
     return jsonify({'success': True, 'user': account_rules.user_json(user)})
-
-# ── OVP champion ──────────────────────────────────────────────────────────
-# One champion per department, set weekly by an admin. The Friction Log write
-# gate (feedback/routes/signal_tray.py) reads it.
-
-@admin_bp.route('/admin/api/ovp-champion', methods=['GET'])
-@login_required
-@admin_required
-def get_ovp_champion():
-    """Every department, its current champion, and whether that was set this
-    week or carried over from an earlier week."""
-    holders = current_champions()
-    week_start = week_start_for()
-    set_this_week = champion_for_week(week_start)
-    return jsonify({
-        'week_start': week_start.isoformat(),
-        'departments': [{
-            'key': key,
-            'label': label,
-            'current': (
-                {'id': holders[key].id, 'name': holders[key].name}
-                if key in holders else None
-            ),
-            'set_this_week': key in set_this_week,
-        } for key, label in CHAMPION_DEPARTMENTS],
-    })
-
-
-@admin_bp.route('/admin/api/ovp-champion', methods=['POST'])
-@login_required
-@admin_required
-def set_ovp_champion():
-    data = request.get_json() or {}
-    department = (data.get('department') or '').strip()
-    if department not in DEPARTMENT_LABELS:
-        return jsonify({'success': False, 'error': 'Unknown department'}), 400
-
-    user = User.query.get(data.get('user_id')) if data.get('user_id') else None
-    if not user or not user.is_active:
-        return jsonify({'success': False, 'error': 'Pick an active user'}), 400
-
-    week_start = week_start_for()
-    row = OvpChampion.query.filter_by(week_start=week_start, department=department).first()
-    if row:
-        row.user_id = user.id
-        row.set_by_id = current_user.id
-    else:
-        db.session.add(OvpChampion(user_id=user.id, department=department,
-                                   week_start=week_start, set_by_id=current_user.id))
-    db.session.commit()
-    log_activity('ovp_champion_set',
-                 f'{user.name} set as {DEPARTMENT_LABELS[department]} OVP champion '
-                 f'for the week of {week_start}',
-                 user=current_user, entity_type='user', entity_name=user.name, entity_id=user.id)
-    return jsonify({'success': True, 'department': department,
-                    'user': {'id': user.id, 'name': user.name},
-                    'week_start': week_start.isoformat()})
-
 
 # Absolute (app/static/sounds) so saves don't depend on the working directory.
 SOUND_UPLOAD_FOLDER = os.path.abspath(os.path.join(
@@ -365,6 +304,8 @@ def delete_user(user_id):
         db.session.execute(t('DELETE FROM feature_request_comments WHERE user_id = :u'), {'u': uid})
         db.session.execute(t('DELETE FROM blog_comments WHERE user_id = :u'), {'u': uid})
         db.session.execute(t('DELETE FROM bug_report_comments WHERE user_id = :u'), {'u': uid})
+        # Friction posts are chat, not records; they go with their author.
+        db.session.execute(t('DELETE FROM friction_log_entries WHERE author_id = :u'), {'u': uid})
         db.session.execute(t('DELETE FROM sidebar_clicks WHERE user_id = :u'), {'u': uid})
 
         # ── Null out nullable FK references ───────────────────────────────────
@@ -393,7 +334,7 @@ def delete_user(user_id):
         for t_name in ['project_files', 'project_submissions', 'project_revisions',
                         'brief_flags', 'brief_flag_messages', 'blog_posts',
                         'feature_requests', 'bug_reports', 'deliverable_assignments',
-                        'clients', 'ovp_champions', 'chat_tray_projects',
+                        'clients', 'chat_tray_projects',
                         'decision_flags', 'decision_flag_messages',
                         'deliverable_preproduction_events', 'deliverable_status_logs',
                         'deliverables', 'friction_log_entries', 'notification_sounds',

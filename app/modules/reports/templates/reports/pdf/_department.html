@@ -1,0 +1,56 @@
+{# Client Servicing / Project Owners report body. #}
+{% from 'reports/pdf/_macros.html' import header, score_block, tile, section_head, delta, money, band, hit_rate, no_activity, vs, day %}
+<div class="page">
+  {{ header('OVP · Department report', label, period, generated, data.people ~ ' people') }}
+  {{ score_block(data, period) }}
+  <div class="tiles">
+    {{ tile('Worked on', data.worked, 'projects', data.delta.worked) }}
+    {{ tile('Closed', data.closed, 'projects', data.delta.closed) }}
+    {{ tile('Invoiced', data.invoiced, 'AED ' ~ money(data.aed), data.delta.invoiced) }}
+    {{ tile('Deadlines hit', data.hit ~ '/' ~ (data.hit + data.missed), 'installs', data.delta.hit) }}
+    {{ tile('Approvals', data.approvals, 'in OVP', data.delta.approvals) }}
+    {{ tile('Incomplete', data.incomplete, 'projects', data.delta.incomplete, invert=True) }}
+  </div>
+
+  <div class="section">
+    {{ section_head('Per person', vs(period)) }}
+    <table class="tbl">
+      <thead><tr><th>Person</th><th>Worked on</th><th>Closed</th><th>Invoiced</th><th>AED</th><th>Deadlines hit</th><th>Missed</th><th>Approvals</th><th>Incomplete</th><th>Days active /{{ data.working_days }}</th><th>Score</th></tr></thead>
+      <tbody>
+      {% for r in data.rows %}
+        <tr class="{{ 'none' if r.no_activity }}">
+          <td>{{ r.user.name }}{% if r.no_activity %}<span class="tag none">No activity</span>{% endif %}</td>
+          <td>{{ r.worked }} {{ delta(r.delta.worked) }}</td>
+          <td>{{ r.closed }} {{ delta(r.delta.closed) }}</td>
+          <td>{{ r.invoiced }} {{ delta(r.delta.invoiced) }}</td>
+          <td>{{ money(r.aed) if r.aed else '—' }}</td>
+          <td>{{ r.hit }} {{ delta(r.delta.hit) }}</td>
+          <td>{{ r.missed }}</td>
+          <td>{{ r.approvals }} {{ delta(r.delta.approvals) }}</td>
+          <td>{{ r.incomplete }}</td>
+          <td>{{ r.active }}</td>
+          <td><span class="sc {{ band(r.score) }}">{{ r.score }}</span> {{ delta(r.delta.score) }}</td>
+        </tr>
+      {% endfor %}
+        <tr class="tot"><td>Department</td><td>{{ data.worked }}</td><td>{{ data.closed }}</td><td>{{ data.invoiced }}</td><td>{{ money(data.aed) }}</td><td>{{ data.hit }}</td><td>{{ data.missed }}</td><td>{{ data.approvals }}</td><td>{{ data.incomplete }}</td><td>—</td><td><span class="sc {{ band(data.score) }}">{{ data.score }}</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="two section">
+    <div>
+      {{ section_head('Closed, not invoiced', 'days waiting') }}
+      {% for r in data.waiting_invoice %}
+      <div class="li"><span class="p">{{ r.name }}</span><span class="m">{{ names.get(r.people[0], '') }} · closed {{ day(r.closed_on) }}</span><span class="w">{{ r.days }} d</span></div>
+      {% else %}<div class="empty">Nothing waiting</div>{% endfor %}
+    </div>
+    <div>
+      {{ section_head('Incomplete projects', 'missing') }}
+      {% for r in data.incomplete_list %}
+      <div class="li"><span class="p">{{ r.name }}</span><span class="m">{{ names.get(r.people[0], '') }}</span><span class="w">{{ r.missing|join(' · ') }}</span></div>
+      {% else %}<div class="empty">All complete</div>{% endfor %}
+    </div>
+  </div>
+
+  {{ no_activity(data.no_activity) }}
+</div>

@@ -34,9 +34,9 @@
    picker for the person already being viewed. #}
 {% if can('switch_dashboard_scope') %}
 <div class="dash-view-tabs">
-    <a href="{{ url_for('projects.index', scope='my') }}"
+    <a href="{{ url_for('projects.overview', scope='my') }}"
        class="dash-tab-btn{% if scope_mode == 'my' %} active{% endif %}">My View</a>
-    <a href="{{ url_for('projects.index', scope='all') }}"
+    <a href="{{ url_for('projects.overview', scope='all') }}"
        class="dash-tab-btn{% if scope_mode == 'all' %} active{% endif %}">All Projects</a>
     {% if cs_leads %}
     <button type="button" data-action="toggle-group" data-group="cs"
@@ -51,7 +51,7 @@
 <div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('cs_')) %} hidden{% endif %}" data-group="cs">
     <div class="dash-view-tabs">
         {% for cs in cs_leads %}
-        <a href="{{ url_for('projects.index', scope='cs_' ~ cs.id) }}"
+        <a href="{{ url_for('projects.overview', scope='cs_' ~ cs.id) }}"
            class="dash-tab-btn{% if scope_mode == ('cs_' ~ cs.id|string) %} active{% endif %}">{{ cs.name }}</a>
         {% endfor %}
     </div>
@@ -61,7 +61,7 @@
 <div class="dash-view-tabs-row dash-group-tabs{% if not (scope_mode and scope_mode.startswith('designer_')) %} hidden{% endif %}" data-group="designer">
     <div class="dash-view-tabs">
         {% for designer in designers %}
-        <a href="{{ url_for('projects.index', scope='designer_' ~ designer.id) }}"
+        <a href="{{ url_for('projects.overview', scope='designer_' ~ designer.id) }}"
            class="dash-tab-btn{% if scope_mode == ('designer_' ~ designer.id|string) %} active{% endif %}">{{ designer.name }}</a>
         {% endfor %}
     </div>

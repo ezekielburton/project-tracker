@@ -3,7 +3,8 @@
 # outside the SQLAlchemy pool.
 #
 # Topics: one project, the dashboard (every project change), one user
-# (notifications), one DI project, the DI dashboard (every DI change).
+# (notifications), one DI project, the DI dashboard (every DI change), the
+# Friction Log, and the admin system pages.
 #
 # No locks on the subscriber dicts: safe only under gevent's cooperative
 # scheduling (no switch mid-mutation). NOT safe with real threads.
@@ -16,13 +17,18 @@ import psycopg2.extensions
 from gevent import spawn
 from gevent.queue import Queue
 
-from app.modules.core.shared.services.live_events import PROJECT_CHANGES_CHANNEL, USER_NOTIFICATIONS_CHANNEL, DI_CHANGES_CHANNEL
+from app.modules.core.shared.services.live_events import (
+    PROJECT_CHANGES_CHANNEL, USER_NOTIFICATIONS_CHANNEL, DI_CHANGES_CHANNEL,
+    FRICTION_CHANGES_CHANNEL, SYSTEM_CHANGES_CHANNEL,
+)
 
 _project_subscribers = {}      # project_id (int) -> set of Queue
 _dashboard_subscribers = set()  # set of Queue
 _user_subscribers = {}         # user_id (int) -> set of Queue
 _di_project_subscribers = {}   # di_project_id (int) -> set of Queue
 _di_dashboard_subscribers = set()  # set of Queue; DI screens not tied to one project
+_friction_subscribers = set()  # set of Queue; Signal trays showing the Friction Log
+_system_subscribers = set()  # set of Queue; open admin system pages
 
 
 def subscribe_project(project_id):
@@ -87,6 +93,37 @@ def unsubscribe_di_dashboard(q):
     _di_dashboard_subscribers.discard(q)
 
 
+def subscribe_friction():
+    q = Queue()
+    _friction_subscribers.add(q)
+    return q
+
+
+def unsubscribe_friction(q):
+    _friction_subscribers.discard(q)
+
+
+def subscribe_system():
+    q = Queue()
+    _system_subscribers.add(q)
+    return q
+
+
+def unsubscribe_system(q):
+    _system_subscribers.discard(q)
+
+
+def open_streams():
+    """How many SSE streams this worker holds open (one queue per stream)."""
+    return (sum(len(s) for s in _project_subscribers.values())
+            + len(_dashboard_subscribers)
+            + sum(len(s) for s in _user_subscribers.values())
+            + sum(len(s) for s in _di_project_subscribers.values())
+            + len(_di_dashboard_subscribers)
+            + len(_friction_subscribers)
+            + len(_system_subscribers))
+
+
 def _dispatch_project_change(payload):
     try:
         project_id = int(payload)
@@ -118,6 +155,17 @@ def _dispatch_di_change(payload):
         q.put(di_project_id)
 
 
+def _dispatch_friction_change():
+    for q in list(_friction_subscribers):
+        q.put(1)
+
+
+def _dispatch_system_change(payload):
+    # The payload names what changed (snapshot, heartbeat, jobs); pages only need the ping.
+    for q in list(_system_subscribers):
+        q.put(payload or 'system')
+
+
 def _listen_loop(app):
     """LISTEN and dispatch forever (one greenlet per worker). Reconnects
     after 3s if the connection drops."""
@@ -131,6 +179,8 @@ def _listen_loop(app):
             cur.execute(f'LISTEN {PROJECT_CHANGES_CHANNEL};')
             cur.execute(f'LISTEN {USER_NOTIFICATIONS_CHANNEL};')
             cur.execute(f'LISTEN {DI_CHANGES_CHANNEL};')
+            cur.execute(f'LISTEN {FRICTION_CHANGES_CHANNEL};')
+            cur.execute(f'LISTEN {SYSTEM_CHANGES_CHANNEL};')
             # .warning so it reaches journalctl: app.logger drops .info outside debug.
             app.logger.warning('SSE relay: LISTEN connection established.')
 
@@ -147,6 +197,10 @@ def _listen_loop(app):
                         _dispatch_user_notification(notify.payload)
                     elif notify.channel == DI_CHANGES_CHANNEL:
                         _dispatch_di_change(notify.payload)
+                    elif notify.channel == FRICTION_CHANGES_CHANNEL:
+                        _dispatch_friction_change()
+                    elif notify.channel == SYSTEM_CHANGES_CHANNEL:
+                        _dispatch_system_change(notify.payload)
         except Exception as e:
             app.logger.warning(f'SSE relay: LISTEN connection dropped ({e}), reconnecting in 3s.')
             # Close the dead connection so reconnects don't leak sockets.
@@ -160,7 +214,7 @@ def _listen_loop(app):
 
 def init_sse_relay(app):
     """Start this worker's LISTEN greenlet. Only when GEVENT_WORKER=1 (the
-    flag run.py uses for gevent patching); otherwise a no-op and live
-    updates don't run."""
-    if os.environ.get('GEVENT_WORKER') == '1':
+    flag run.py uses for gevent patching) and never under tests, where its
+    unpatched select would block the whole run."""
+    if os.environ.get('GEVENT_WORKER') == '1' and not app.testing:
         spawn(_listen_loop, app)

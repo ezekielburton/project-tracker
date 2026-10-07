@@ -21,6 +21,17 @@ def test_the_friction_log_requires_auth(app, client):
     assert client.get(_url(app, 'signal_tray.friction_log')).status_code in (302, 401)
 
 
+def test_posting_friction_requires_auth(app, client):
+    response = client.post(_url(app, 'signal_tray.post_friction'), json={'body': 'x'})
+    assert response.status_code in (302, 401)
+
+
+def test_deleting_friction_requires_auth(app, client):
+    with app.test_request_context():
+        url = url_for('signal_tray.delete_friction', entry_id=1)
+    assert client.delete(url).status_code in (302, 401)
+
+
 def test_the_detail_fragments_resolve(app):
     for name in ('feedback/_feature_content.html', 'feedback/_bug_content.html'):
         assert app.jinja_env.get_template(name) is not None

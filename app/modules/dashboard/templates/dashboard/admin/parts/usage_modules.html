@@ -1,0 +1,6 @@
+{#- Actions per module over 30 days, busiest first. #}
+{% from 'dashboard/admin/_macros.html' import panel, hbars %}
+{% call panel('By module', '30 days') %}
+{%- if missing or not rows %}<p class="dash-quiet">No actions yet</p>
+{%- else %}{{ hbars(rows) }}{% endif %}
+{% endcall %}

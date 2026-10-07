@@ -1,5 +1,7 @@
-modules/core/shared/lib/champions.py :: if row.department in DEPARTMENT_LABELS and row.department not in found:
 modules/core/shared/models/users.py :: (and_(cls.department == 'design', cls.seniority.in_(LEAD_SENIORITY)), 'team_lead'),
 modules/core/shared/models/users.py :: (cls.department == 'client_servicing', 'cs'),
 modules/core/shared/models/users.py :: (cls.department == 'design', 'designer'),
 modules/core/shared/models/users.py :: (cls.seniority == 'management', 'management'),
+modules/reports/lib/pages.py :: return [u.id for u in User.query.filter(User.is_active.is_(True), User.department == report,
+modules/reports/lib/pages.py :: return [u.id for u in User.query.filter(User.is_active.is_(True), User.seniority == 'management')]
+modules/reports/lib/people.py :: users = (User.query.filter(User.is_active.is_(True), User.department == report)

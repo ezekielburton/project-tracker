@@ -1,0 +1,15 @@
+{#- The latest app-log lines of any level, newest first. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Raw tail', 'last ' ~ (lines | length) ~ ' lines' if lines else None) %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not lines %}<p class="dash-quiet">Log is empty</p>
+{%- else %}
+<ul class="dash-admin-log">
+    {%- for line in lines %}
+    <li class="dash-admin-log-line{{ ' dash-admin-text--red' if line.level == 'error' else ' dash-admin-text--amber' if line.level == 'warning' }}">
+        <span class="dash-admin-mono">{{ line.time }}</span> {{ line.level | upper }} {{ line.message }}
+    </li>
+    {%- endfor %}
+</ul>
+{%- endif %}
+{% endcall %}

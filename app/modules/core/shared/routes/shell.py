@@ -1,15 +1,15 @@
 from flask import Blueprint, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
 from app.modules.core.shared.extensions import db
+from app.modules.core.shared.lib.capabilities import effective_user
+from app.modules.core.shared.lib.home import home_endpoint
 
 main = Blueprint('main', __name__)
 
 
 @main.route('/')
 def index():
-    # Land on the role-based dashboard. Its blueprint in dashboard.py is named
-    # 'projects' (not the Projects sidebar page) and picks the layout by role.
-    return redirect(url_for('projects.index'))
+    return redirect(url_for(home_endpoint(effective_user())))
 
 
 @main.route('/sidebar/track', methods=['POST'])

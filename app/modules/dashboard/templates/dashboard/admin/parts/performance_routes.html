@@ -1,0 +1,20 @@
+{#- The slowest routes of 24 hours, by average time. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Slowest routes', '24h') %}
+{%- if missing or not rows %}<p class="dash-quiet">No requests yet</p>
+{%- else %}
+<table class="dash-admin-table">
+    <thead><tr><th>Route</th><th class="dash-admin-num">Avg</th><th class="dash-admin-num">p95</th><th class="dash-admin-num">Calls</th></tr></thead>
+    <tbody>
+        {%- for row in rows %}
+        <tr>
+            <td class="dash-admin-code">{% if row.method != 'GET' %}{{ row.method }} {% endif %}{{ row.route }}</td>
+            <td class="dash-admin-num">{{ row.avg }}</td>
+            <td class="dash-admin-num">{{ row.p95 }}</td>
+            <td class="dash-admin-num">{{ '{:,}'.format(row.calls) }}</td>
+        </tr>
+        {%- endfor %}
+    </tbody>
+</table>
+{%- endif %}
+{% endcall %}
