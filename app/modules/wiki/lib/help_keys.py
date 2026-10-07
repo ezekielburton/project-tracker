@@ -19,6 +19,7 @@ HELP_KEY_GROUPS = [
         ('dashboard.cards', 'What each card means'),
         ('dashboard.calendar', 'The dashboard calendar'),
         ('dashboard.admin', 'The admin system pages'),
+        ('dashboard.jobs', 'Admin jobs and Run now'),
     ]),
     ('Projects', [
         ('projects.table', 'Reading the projects table'),

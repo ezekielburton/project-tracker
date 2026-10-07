@@ -1,0 +1,21 @@
+{#- The latest deploys from migrate.py's log, newest first. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Deploy history') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not rows %}<p class="dash-quiet">No deploys yet</p>
+{%- else %}
+<table class="dash-admin-table">
+    <thead><tr><th>Tag</th><th>When</th><th class="dash-admin-num">Migrations</th><th class="dash-admin-num">Duration</th></tr></thead>
+    <tbody>
+        {%- for row in rows %}
+        <tr>
+            <td class="dash-admin-code{{ ' dash-admin-text--red' if not row.ok }}">{{ row.tag or '—' }}{% if not row.ok %} · failed{% endif %}</td>
+            <td>{{ row.when }}</td>
+            <td class="dash-admin-num">{{ row.migrations }}</td>
+            <td class="dash-admin-num">{{ row.duration }}</td>
+        </tr>
+        {%- endfor %}
+    </tbody>
+</table>
+{%- endif %}
+{% endcall %}

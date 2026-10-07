@@ -1,0 +1,24 @@
+{% extends "dashboard/_shell.html" %}
+{#- An admin system page drawn from its layout: rows of parts, each loaded and
+    refreshed through admin_part (static/js/admin_system.js). The first row is
+    the tiles; a row holds one, two or three cards; the last row stretches to the footer. #}
+{% from 'dashboard/admin/_macros.html' import admin_head, part %}
+{% block dash_main %}
+<div class="dash-admin" data-admin-live data-stream-url="{{ url_for('sse.system_stream') }}">
+    {{ admin_head(page_title, badge, help_key) }}
+    {%- for row in layout %}
+    {%- if loop.first %}
+    {{ part(cards_page, row[0]) }}
+    {%- else %}
+    <div class="dash-admin-split{{ ' dash-admin-split--one' if row | length == 1 }}{{ ' dash-admin-split--three' if row | length == 3 }}{{ ' dash-admin-fill' if loop.last }}">
+        {%- for name in row %}
+        {{ part(cards_page, name) }}
+        {%- endfor %}
+    </div>
+    {%- endif %}
+    {%- endfor %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('dashboard_assets.static', filename='js/admin_system.js') }}?v={{ config.STATIC_VERSION }}"></script>
+{% endblock %}

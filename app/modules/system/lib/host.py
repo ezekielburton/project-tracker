@@ -70,17 +70,17 @@ def _configured_workers(cmdline):
 
 
 def workers_from(processes):
-    """{alive, total, started_at} for the app's gunicorn from process infos
-    (pid, ppid, cmdline, create_time), or None when it isn't running."""
+    """{alive, total, started_at, pids} for the app's gunicorn from process
+    infos (pid, ppid, cmdline, create_time), or None when it isn't running."""
     app = {p['pid']: p for p in processes
            if 'run:app' in (p.get('cmdline') or []) and any('gunicorn' in c for c in p['cmdline'])}
     masters = [p for p in app.values() if p['ppid'] not in app]
     if not masters:
         return None
     master = masters[0]
-    alive = sum(1 for p in app.values() if p['ppid'] == master['pid'])
-    return {'alive': alive, 'total': _configured_workers(master['cmdline']) or alive,
-            'started_at': int(master['create_time'])}
+    pids = sorted(p['pid'] for p in app.values() if p['ppid'] == master['pid'])
+    return {'alive': len(pids), 'total': _configured_workers(master['cmdline']) or len(pids),
+            'started_at': int(master['create_time']), 'pids': pids}
 
 
 def gunicorn_workers():

@@ -5,6 +5,7 @@ from datetime import date
 from flask import abort, current_app, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from app.modules.core.shared.extensions import db
 from app.modules.core.shared.lib.capabilities import effective_user, require, require_api
 from app.modules.core.shared.lib.utils import log_activity
 from app.modules.core.shared.lib.month_grid import month_span, month_weeks
@@ -14,7 +15,7 @@ from app.modules.dashboard.lib.rails import PAGES, rail_for
 from app.modules.dashboard.lib.shell import on_rail, page_context
 from app.modules.dashboard.routes.dashboard import dashboard_bp
 from app.modules.system.lib.job_list import BY_KEY as JOBS_BY_KEY
-from app.modules.system.services import health
+from app.modules.system.services import uptime
 from app.modules.system.services.run_now import NotRunnable, request_run
 from app.modules.system.services.snapshot import read_snapshot
 
@@ -186,9 +187,10 @@ def adoption():
 def admin_overview():
     """How OVP is doing: the status strip, what needs the admin, today's use and the
     next jobs. Needs attention comes with the page; the other cards load after."""
-    attention = admin_pages.part_context('overview', 'attention')
+    snapshot = read_snapshot()
+    attention = admin_pages.part_context('overview', 'attention', snapshot)
     return render_template('dashboard/admin/overview.html', **page_context('system_overview'),
-                           **attention)
+                           **attention, badge=admin_pages.badge(snapshot))
 
 
 @dashboard_bp.route('/admin/system')
@@ -197,7 +199,14 @@ def admin_overview():
 def admin_system():
     """The machine: host, storage, network, updates and the application. Every card loads after the page."""
     return render_template('dashboard/admin/system.html', **page_context('system'),
-                           headline=health.freshness(read_snapshot()))
+                           badge=admin_pages.badge())
+
+
+def _cards_page(page):
+    # The shared cards template; every card loads after the page.
+    return render_template('dashboard/admin/cards.html', **page_context(page), cards_page=page,
+                           layout=admin_pages.LAYOUTS[page], badge=admin_pages.badge(),
+                           help_key=admin_pages.HELP_KEYS[page])
 
 
 @dashboard_bp.route('/api/admin/<page>/<part>')
@@ -215,42 +224,48 @@ def admin_part(page, part):
 @login_required
 @require('admin_panel', real_user=True)
 def admin_database():
-    return _placeholder('database')
+    """Size, connections, cache, the backup, the largest tables, the slowest queries and maintenance."""
+    return _cards_page('database')
 
 
 @dashboard_bp.route('/admin/performance')
 @login_required
 @require('admin_panel', real_user=True)
 def admin_performance():
-    return _placeholder('performance')
+    """Response times, errors, page load by module, the slowest routes and the workers."""
+    return _cards_page('performance')
 
 
 @dashboard_bp.route('/admin/usage')
 @login_required
 @require('admin_panel', real_user=True)
 def admin_usage():
-    return _placeholder('usage')
+    """Who uses OVP: activity now and over time, by module and hour, logins and emulation."""
+    return _cards_page('usage')
 
 
 @dashboard_bp.route('/admin/errors')
 @login_required
 @require('admin_panel', real_user=True)
 def admin_errors():
-    return _placeholder('errors')
+    """What broke: errors and warnings grouped, 500s by route and the raw log tail."""
+    return _cards_page('errors')
 
 
 @dashboard_bp.route('/admin/uptime')
 @login_required
 @require('admin_panel', real_user=True)
 def admin_uptime():
-    return _placeholder('uptime')
+    """When OVP was down: 30 days of heartbeats, deploys and the admin's incident notes."""
+    return _cards_page('uptime')
 
 
 @dashboard_bp.route('/admin/jobs')
 @login_required
 @require('admin_panel', real_user=True)
 def admin_jobs():
-    return _placeholder('jobs')
+    """Every timer with its last and next run, Run now, and the orphaned-uploads report."""
+    return _cards_page('jobs')
 
 
 @dashboard_bp.route('/api/admin/jobs/<job_key>/run', methods=['POST'])
@@ -268,3 +283,19 @@ def admin_job_run_now(job_key):
     log_activity('job_run_now', f'Started {JOBS_BY_KEY[job_key].label} by hand',
                  user=current_user, entity_type='job', entity_name=job_key)
     return jsonify({'success': True, 'job': job_key})
+
+
+@dashboard_bp.route('/api/admin/incidents', methods=['POST'])
+@require_api('admin_panel', real_user=True)
+def admin_incident_add():
+    """Add an incident note to the Uptime page; recorded against the real admin."""
+    data = request.get_json(silent=True) or request.form
+    try:
+        incident = uptime.add_incident(data.get('title'), data.get('minutes'), data.get('note'),
+                                       data.get('happened_on'), current_user.id)
+    except uptime.IncidentError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    db.session.commit()
+    log_activity('incident_added', f'Added an incident note: {incident.title}', user=current_user,
+                 entity_type='incident', entity_id=incident.id, entity_name=incident.title)
+    return jsonify({'success': True, 'id': incident.id})

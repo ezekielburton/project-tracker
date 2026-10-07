@@ -1,0 +1,31 @@
+{#- The admin's incident notes, newest first, and the box to add one. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Incidents') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+{%- if not incidents %}<p class="dash-quiet">No notes yet</p>
+{%- else %}
+<ul class="dash-admin-list">
+    {%- for incident in incidents %}
+    <li class="dash-admin-incident">
+        <div class="dash-admin-incident-line">
+            <span class="dash-admin-incident-title">{{ incident.title }}{% if incident.minutes is not none %} <span class="dash-admin-mono">· {{ incident.minutes }} min</span>{% endif %}</span>
+            <span class="dash-admin-item-meta">{{ incident.date }}</span>
+        </div>
+        {%- if incident.note %}<p class="dash-admin-incident-note">{{ incident.note }}</p>{% endif %}
+    </li>
+    {%- endfor %}
+</ul>
+{%- endif %}
+<form class="dash-admin-incident-form" data-incident-form action="{{ add_url }}" method="post">
+    <input class="form-input" name="title" type="text" maxlength="120" placeholder="What happened" aria-label="What happened" required>
+    <textarea class="form-input" name="note" rows="2" placeholder="Add a note (optional)" aria-label="Note"></textarea>
+    <div class="dash-admin-form-row">
+        <input class="form-input dash-admin-input-minutes" name="minutes" type="number" min="0" step="1" placeholder="Min" aria-label="Minutes">
+        <input class="form-input dash-admin-input-date" name="happened_on" type="date" value="{{ today }}" max="{{ today }}" aria-label="Date">
+        <span class="dash-admin-form-error" data-form-error></span>
+        <button type="submit" class="btn-primary">Add</button>
+    </div>
+</form>
+{%- endif %}
+{% endcall %}

@@ -1,0 +1,6 @@
+{#- Server time for a whole page, median per module over 7 days, slowest first. #}
+{% from 'dashboard/admin/_macros.html' import panel, hbars %}
+{% call panel('Page load by module', '7 days') %}
+{%- if missing or not rows %}<p class="dash-quiet">No page loads yet</p>
+{%- else %}{{ hbars(rows) }}{% endif %}
+{% endcall %}

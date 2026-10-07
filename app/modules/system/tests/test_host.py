@@ -8,7 +8,8 @@ def test_workers_counts_the_masters_children_against_the_configured_total():
     processes = [{'pid': 10, 'ppid': 1, 'cmdline': _GUNICORN, 'create_time': 1_790_000_000.5}]
     processes += [{'pid': 11 + i, 'ppid': 10, 'cmdline': _GUNICORN, 'create_time': 1_790_000_001} for i in range(8)]
     processes.append({'pid': 99, 'ppid': 1, 'cmdline': ['/usr/sbin/nginx'], 'create_time': 1})
-    assert host.workers_from(processes) == {'alive': 8, 'total': 9, 'started_at': 1_790_000_000}
+    assert host.workers_from(processes) == {'alive': 8, 'total': 9, 'started_at': 1_790_000_000,
+                                            'pids': list(range(11, 19))}
 
 
 def test_no_gunicorn_means_none():

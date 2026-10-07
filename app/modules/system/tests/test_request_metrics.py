@@ -35,7 +35,7 @@ def test_a_row_holds_the_route_rule_status_queue_wait_and_who(app):
     sent = time.time() - 0.02
     row = _row_for(app, '/dashboard/calendar', headers={'X-Request-Start': f't={sent:.3f}'},
                    user_id=5, emulating_id=9)
-    _, method, route, blueprint, status, duration_ms, queue_ms, user_id, emulating_id = row
+    _, method, route, blueprint, status, duration_ms, queue_ms, user_id, emulating_id, page = row
     assert (method, route, blueprint, status) == ('GET', '/dashboard/calendar', 'projects', 200)
     assert duration_ms >= 0
     assert 15 <= queue_ms < 1000
@@ -57,6 +57,20 @@ def test_without_nginx_the_queue_wait_is_empty(app):
 def test_emulation_is_kept_only_for_a_logged_in_user(app):
     row = _row_for(app, '/dashboard/calendar', emulating_id=9)
     assert row[7] is None and row[8] is None
+
+
+def _page_flag(app, path, response, method='GET'):
+    with app.test_request_context(path, method=method):
+        rm.mark_start()
+        return rm.build_row(response)[9]
+
+
+def test_only_a_whole_html_page_counts_as_a_page(app):
+    html = Response('<p>x</p>', mimetype='text/html')
+    assert _page_flag(app, '/dashboard/calendar', html) is True
+    assert _page_flag(app, '/dashboard/api/admin/overview/strip', html) is False  # a card
+    assert _page_flag(app, '/dashboard/calendar', Response('{}', mimetype='application/json')) is False
+    assert _page_flag(app, '/dashboard/calendar', html, method='POST') is False
 
 
 def test_a_url_with_no_route_is_grouped(app):
@@ -112,8 +126,8 @@ def test_a_login_is_recorded_under_the_new_user(app, client, db_session):
 def test_saved_rows_land_in_request_metrics_and_worker_stats(db_session):
     cur = db_session.connection().connection.cursor()
     now = datetime.utcnow()
-    rm.write(cur, [(now, 'GET', '/x-metrics-test', 'projects', 200, 12, None, 5, None)], 990_001, 3, now)
-    assert RequestMetric.query.filter_by(route='/x-metrics-test').count() == 1
+    rm.write(cur, [(now, 'GET', '/x-metrics-test', 'projects', 200, 12, None, 5, None, True)], 990_001, 3, now)
+    assert RequestMetric.query.filter_by(route='/x-metrics-test').one().page is True
     assert db_session.get(WorkerStat, 990_001).sse_open == 3
 
 

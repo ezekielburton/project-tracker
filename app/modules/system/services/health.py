@@ -12,6 +12,7 @@ from app.modules.system.lib import fmt
 from app.modules.system.lib.actions import ACTION_METHODS, NOT_ACTION_BLUEPRINTS, NOT_ACTION_ROUTES
 from app.modules.system.lib.job_list import JOBS
 from app.modules.system.models import AppLogEvent, DeployRun, Heartbeat, JobRun, RequestMetric, SystemSample, WorkerStat
+from app.modules.system.services import slow_queries
 from app.modules.system.services.snapshot import STALE_AFTER, parse_time
 
 GREEN, AMBER, RED, GREY = 'green', 'amber', 'red', 'grey'
@@ -44,14 +45,14 @@ def latest_runs():
     return {row.job: row for row in rows}
 
 
-def _dubai_midnight(now):
+def dubai_midnight(now):
     """Today's Dubai midnight as naive UTC."""
     local = fmt.local(now)
     return (local.replace(hour=0, minute=0, second=0, microsecond=0)
             - local.utcoffset()).replace(tzinfo=None)
 
 
-def _connections():
+def connections():
     """(open, max) connections to this database, read live."""
     used = db.session.execute(text(
         'SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()')).scalar()
@@ -68,20 +69,20 @@ def excluded_user_ids():
     return [row.id for row in User.query.with_entities(User.id).filter(or_(*conditions))]
 
 
-def _counted(query):
+def counted(query):
     excluded = excluded_user_ids()
     query = query.filter(RequestMetric.user_id.isnot(None))
     return query.filter(RequestMetric.user_id.notin_(excluded)) if excluded else query
 
 
-def _actions(query):
+def actions(query):
     return (query.filter(RequestMetric.method.in_(ACTION_METHODS), RequestMetric.status < 400,
                          or_(RequestMetric.blueprint.is_(None), RequestMetric.blueprint.notin_(NOT_ACTION_BLUEPRINTS)),
                          RequestMetric.route.notin_(NOT_ACTION_ROUTES)))
 
 
-def _people_since(since):
-    return _counted(db.session.query(func.count(func.distinct(RequestMetric.user_id)))
+def people_since(since):
+    return counted(db.session.query(func.count(func.distinct(RequestMetric.user_id)))
                     .filter(RequestMetric.ts >= since)).scalar() or 0
 
 
@@ -94,6 +95,13 @@ def _disk_trend(mount, now):
         return None
     days = (rows[-1].ts - rows[0].ts).total_seconds() / 86400
     return (rows[-1].value - rows[0].value) / days if days >= 1 else None
+
+
+def background_failures(since):
+    """Failed job runs plus NAS errors and warnings since `since`."""
+    return (JobRun.query.filter(JobRun.result == 'failed', JobRun.started_at >= since).count()
+            + AppLogEvent.query.filter(AppLogEvent.ts >= since, AppLogEvent.level.in_(('error', 'warning')),
+                                       AppLogEvent.source.like('nas%')).count())
 
 
 def _pct(used, total):
@@ -146,7 +154,7 @@ def _app_tile(snapshot, now):
 
 
 def _database_tile():
-    used, most = _connections()
+    used, most = connections()
     state = AMBER if used >= CONNECTIONS_WARN_SHARE * most else GREEN
     return _tile('database', 'Database', state, 'Connected', f'{used} / {most} connections')
 
@@ -161,13 +169,18 @@ def _nas_tile(snapshot):
     return _tile('nas', 'NAS', GREEN, 'Reachable', f"{fmt.size(used)} / {fmt.size(nas['total'])}")
 
 
+def sse_open(now):
+    """Open SSE streams across the workers that reported in the last minute, or None."""
+    return (db.session.query(func.sum(WorkerStat.sse_open))
+            .filter(WorkerStat.updated_at >= now - WORKER_FRESH).scalar())
+
+
 def _sse_tile(now):
-    open_streams = (db.session.query(func.sum(WorkerStat.sse_open))
-                    .filter(WorkerStat.updated_at >= now - WORKER_FRESH).scalar())
+    open_streams = sse_open(now)
     if open_streams is None:
         return _tile('sse', 'SSE relay', GREY, 'No data')
     drops = AppLogEvent.query.filter(AppLogEvent.signature.like(RELAY_DROP),
-                                     AppLogEvent.ts >= _dubai_midnight(now)).count()
+                                     AppLogEvent.ts >= dubai_midnight(now)).count()
     return _tile('sse', 'SSE relay', GREEN, f'{open_streams} open',
                  f"{drops} reconnect{'' if drops == 1 else 's'} today")
 
@@ -268,6 +281,11 @@ def needs_attention(snapshot, now=None):
     if _behind_main(snapshot):
         items.append(_item(AMBER, 'Server is behind origin/main', 'version', 'system'))
 
+    queries = slow_queries.over_limit(now)
+    if queries:
+        items.append(_item(AMBER, f"{len(queries)} slow quer{'y' if len(queries) == 1 else 'ies'} "
+                                  f"(over {slow_queries.SLOW_MS // 1000} s on average)", '24h', 'database'))
+
     oldest = db.session.query(func.min(PendingNasUpload.created_at)).scalar()
     if oldest is not None and now - oldest > NAS_QUEUE_MAX_AGE:
         queued = PendingNasUpload.query.count()
@@ -281,13 +299,13 @@ def today(now=None):
     """Active now, actions today, people today and actions per week (13 weeks),
     leaving out admins and the excluded accounts."""
     now = now or datetime.utcnow()
-    midnight = _dubai_midnight(now)
-    actions_today = _actions(_counted(RequestMetric.query.filter(RequestMetric.ts >= midnight))).count()
+    midnight = dubai_midnight(now)
+    actions_today = actions(counted(RequestMetric.query.filter(RequestMetric.ts >= midnight))).count()
 
     this_week = midnight - timedelta(days=fmt.local(now).weekday())
     first_week = this_week - timedelta(weeks=WEEKS_SHOWN - 1)
     week = func.date_trunc('week', RequestMetric.ts + timedelta(hours=4))
-    counts = dict(_actions(_counted(db.session.query(week, func.count())
+    counts = dict(actions(counted(db.session.query(week, func.count())
                                      .filter(RequestMetric.ts >= first_week)))
                   .group_by(week).all())
     weeks = []
@@ -296,9 +314,9 @@ def today(now=None):
         local_start = (start + timedelta(hours=4)).replace(hour=0, minute=0, second=0, microsecond=0)
         weeks.append({'start': local_start.date(), 'actions': counts.get(local_start, 0)})
     return {
-        'active_now': _people_since(now - ACTIVE_NOW),
+        'active_now': people_since(now - ACTIVE_NOW),
         'actions_today': actions_today,
-        'people_today': _people_since(midnight),
+        'people_today': people_since(midnight),
         'weeks': weeks,
     }
 
@@ -317,27 +335,7 @@ def next_jobs(snapshot, limit=NEXT_JOBS_SHOWN):
     return sorted(upcoming, key=lambda job: job['next'])[:limit]
 
 
-def headline(snapshot, items, now=None):
-    """The line beside the page title: whether all is well and how fresh the snapshot is."""
-    now = now or datetime.utcnow()
-    taken = parse_time(snapshot.get('taken_at'))
-    fresh = f'snapshot {fmt.ago(taken, now)}' if taken else 'no snapshot yet'
-    if items:
-        count = len(items)
-        return {'state': AMBER, 'text': f"{count} need{'s' if count == 1 else ''} attention · {fresh}"}
-    return {'state': GREEN if taken else GREY, 'text': f'all systems normal · {fresh}' if taken else fresh}
-
-
 # ── System ───────────────────────────────────────────────────────────────
-
-def freshness(snapshot, now=None):
-    """How old the snapshot is, for the System page's header line."""
-    now = now or datetime.utcnow()
-    taken = parse_time(snapshot.get('taken_at'))
-    if taken is None:
-        return {'state': GREY, 'text': 'no snapshot yet'}
-    return {'state': AMBER if now - taken > STALE_AFTER else GREEN, 'text': f'snapshot {fmt.ago(taken, now)}'}
-
 
 def host_tiles(snapshot):
     """Uptime, CPU, memory and temperature, or None without a reading."""
@@ -407,18 +405,15 @@ def application(snapshot, now=None):
     """Database size and connections, migrations, failures, who is on, the version and recent errors."""
     now = now or datetime.utcnow()
     since = now - timedelta(hours=24)
-    used, most = _connections()
+    used, most = connections()
     database = snapshot.get('db') or {}
     app = snapshot.get('app') or {}
     return {
         'db_size': fmt.size(database.get('size')),
         'connections': used, 'max_connections': most,
         'pending_migrations': database.get('pending_migrations'),
-        'failures_24h': (JobRun.query.filter(JobRun.result == 'failed', JobRun.started_at >= since).count()
-                         + AppLogEvent.query.filter(AppLogEvent.ts >= since,
-                                                    AppLogEvent.level.in_(('error', 'warning')),
-                                                    AppLogEvent.source.like('nas%')).count()),
-        'people_15min': _people_since(now - ACTIVE_RECENT),
+        'failures_24h': background_failures(since),
+        'people_15min': people_since(now - ACTIVE_RECENT),
         'version': app.get('version'), 'commit': app.get('commit'),
         'recent_errors': [{'time': fmt.clock(event.ts), 'level': event.level, 'message': event.message}
                           for event in AppLogEvent.query

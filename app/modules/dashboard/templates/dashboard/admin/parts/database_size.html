@@ -1,0 +1,10 @@
+{#- The database size at the end of each day over 30 days. #}
+{% from 'dashboard/admin/_macros.html' import panel, plot %}
+{% call panel('Size over 30 days', latest if latest else None, scroll=False) %}
+{%- if missing or not chart %}<p class="dash-quiet">Needs two days</p>
+{%- else %}
+{% call plot(chart, scale, ticks, 'Database size, last 30 days') %}
+    <polyline class="dash-admin-line--size" points="{{ chart.paths.size }}"/>
+{% endcall %}
+{%- endif %}
+{% endcall %}

@@ -2,3 +2,6 @@ modules/core/shared/models/users.py :: (and_(cls.department == 'design', cls.sen
 modules/core/shared/models/users.py :: (cls.department == 'client_servicing', 'cs'),
 modules/core/shared/models/users.py :: (cls.department == 'design', 'designer'),
 modules/core/shared/models/users.py :: (cls.seniority == 'management', 'management'),
+modules/reports/lib/pages.py :: return [u.id for u in User.query.filter(User.is_active.is_(True), User.department == report,
+modules/reports/lib/pages.py :: return [u.id for u in User.query.filter(User.is_active.is_(True), User.seniority == 'management')]
+modules/reports/lib/people.py :: users = (User.query.filter(User.is_active.is_(True), User.department == report)

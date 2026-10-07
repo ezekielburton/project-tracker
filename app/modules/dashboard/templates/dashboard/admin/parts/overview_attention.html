@@ -1,7 +1,5 @@
-{#- Needs attention: nothing at all when all is well (the card hides). The
-    headline data rides along so the page header refreshes with it. #}
+{#- Needs attention: nothing at all when all is well (the card hides). #}
 {% from 'dashboard/admin/_macros.html' import panel %}
-{%- if headline %}<template data-headline-state="{{ headline.state }}" data-headline-text="{{ headline.text }}"></template>{% endif %}
 {%- if missing %}<p class="dash-quiet">No data</p>
 {%- elif items %}
 {% call panel('Needs attention', items | length ~ (' item' if items | length == 1 else ' items')) %}

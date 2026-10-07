@@ -26,7 +26,7 @@ _flusher_pid = None
 
 _INSERT_ROWS = (
     'INSERT INTO request_metrics (ts, method, route, blueprint, status, duration_ms, '
-    'queue_ms, user_id, emulating_id) VALUES %s'
+    'queue_ms, user_id, emulating_id, page) VALUES %s'
 )
 _UPSERT_WORKER = (
     'INSERT INTO worker_stats (pid, sse_open, updated_at) VALUES (%s, %s, %s) '
@@ -57,6 +57,11 @@ def _queue_ms(arrived):
     except ValueError:
         return None
     return int(wait) if 0 <= wait < 600_000 else None
+
+
+def _is_page(response, rule):
+    # Cards and fragments are HTML too, but they live under /api/.
+    return request.method == 'GET' and response.mimetype == 'text/html' and '/api/' not in rule
 
 
 def _session_user_id():
@@ -92,6 +97,7 @@ def build_row(response):
         response.status_code, int((time.perf_counter() - started) * 1000),
         _queue_ms(arrived), user_id,
         _session_int('emulating_user_id') if user_id else None,
+        _is_page(response, rule),
     )
 
 

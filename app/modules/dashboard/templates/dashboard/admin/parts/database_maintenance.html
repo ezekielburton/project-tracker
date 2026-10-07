@@ -1,0 +1,20 @@
+{#- Migrations, VACUUM, dead rows, the restore test, open transactions and the Postgres version. #}
+{% from 'dashboard/admin/_macros.html' import panel, kv %}
+{% call panel('Maintenance') %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+<dl class="dash-admin-kv">
+    {%- if m.pending_migrations is none %}{{ kv('Pending migrations', 'No data', 'grey') }}
+    {%- elif m.pending_migrations %}{{ kv('Pending migrations', m.pending_migrations, 'amber') }}
+    {%- else %}{{ kv('Pending migrations', 'none', 'green') }}{% endif %}
+    {%- if not m.vacuum %}{{ kv('Last VACUUM ANALYZE', 'not run yet', 'grey') }}
+    {%- else %}{{ kv('Last VACUUM ANALYZE', m.vacuum.when ~ (' · failed' if m.vacuum.failed else ''), 'red' if m.vacuum.failed) }}{% endif %}
+    {%- if m.dead %}{{ kv('Dead rows (most)', m.dead.table ~ ' · ' ~ m.dead.pct ~ '%', m.dead.state) }}
+    {%- else %}{{ kv('Dead rows (most)', 'none') }}{% endif %}
+    {%- if m.restore %}{{ kv('Restore test', m.restore.ago, m.restore.state) }}
+    {%- else %}{{ kv('Restore test', 'not run yet', 'grey') }}{% endif %}
+    {{ kv('Idle in transaction', m.idle_in_transaction, 'amber' if m.idle_in_transaction else 'green') }}
+    {{ kv('Postgres', m.version ~ ' · max_connections ' ~ m.max_connections) }}
+</dl>
+{%- endif %}
+{% endcall %}

@@ -1,0 +1,7 @@
+{#- Actions per Dubai day, 14 days, today last. #}
+{% from 'dashboard/admin/_macros.html' import panel, columns %}
+{% call panel('Actions per day', 'last 14 days', scroll=False) %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not total %}<p class="dash-quiet">No actions yet</p>
+{%- else %}{{ columns(chart, scale, labels, 'Actions per day, last 14 days') }}{% endif %}
+{% endcall %}

@@ -4,7 +4,7 @@
 {% from 'dashboard/admin/_macros.html' import admin_head, part %}
 {% block dash_main %}
 <div class="dash-admin" data-admin-live data-stream-url="{{ url_for('sse.system_stream') }}">
-    {{ admin_head(page_title, headline) }}
+    {{ admin_head(page_title, badge) }}
     {{ part('overview', 'strip') }}
     <div class="dash-admin-row dash-admin-fill">
         {% call part('overview', 'attention', 'dash-admin-attention') %}{% include 'dashboard/admin/parts/overview_attention.html' %}{% endcall %}

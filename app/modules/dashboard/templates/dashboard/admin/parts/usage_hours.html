@@ -1,0 +1,7 @@
+{#- Actions per Dubai hour of the day over 30 days. #}
+{% from 'dashboard/admin/_macros.html' import panel, columns %}
+{% call panel('By hour of day', '30 days', scroll=False) %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- elif not total %}<p class="dash-quiet">No actions yet</p>
+{%- else %}{{ columns(chart, scale, labels, 'Actions by hour of day, last 30 days') }}{% endif %}
+{% endcall %}

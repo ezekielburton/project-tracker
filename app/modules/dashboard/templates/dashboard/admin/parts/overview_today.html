@@ -1,6 +1,6 @@
 {#- Today's use: active now, actions and people today, and 13 weeks of actions. #}
-{% from 'dashboard/admin/_macros.html' import panel %}
-{% call panel('Today', 'live', scroll=False) %}
+{% from 'dashboard/admin/_macros.html' import panel, columns %}
+{% call panel('Today', scroll=False) %}
 {%- if missing %}<p class="dash-quiet">No data</p>
 {%- else %}
 <div class="dash-admin-big">
@@ -8,13 +8,6 @@
     <div><div class="dash-admin-big-n">{{ actions_today }}</div><div class="dash-admin-big-l">Actions today</div></div>
     <div><div class="dash-admin-big-n">{{ people_today }}</div><div class="dash-admin-big-l">People today</div></div>
 </div>
-<svg class="dash-admin-bars" viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none"
-     role="img" aria-label="Actions per week, last 13 weeks">
-    {%- for bar in chart.bars %}
-    <rect x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}" rx="3"><title>{{ bar.value }}</title></rect>
-    {%- endfor %}
-</svg>
-<div class="dash-admin-axis">{% for label in labels %}<span>{{ label }}</span>{% endfor %}</div>
-<p class="dash-admin-caption">Actions per week</p>
+{{ columns(chart, scale, labels, 'Actions per week, last 13 weeks') }}
 {%- endif %}
 {% endcall %}

@@ -56,7 +56,6 @@ def test_with_nothing_collected_the_strip_reads_no_data(db_session):
     assert [strip[key]['state'] for key in ('app', 'nas', 'sse', 'backup', 'deploy')] == ['grey'] * 5
     assert strip['database']['state'] == 'green'
     assert health.needs_attention({}, NOW) == []
-    assert health.headline({}, [], NOW) == {'state': 'grey', 'text': 'no snapshot yet'}
 
 
 def test_with_nothing_collected_the_system_page_has_empty_parts(db_session):
@@ -162,10 +161,16 @@ def test_old_backups_stale_snapshots_drift_and_a_stuck_nas_queue(db_session):
     assert any(text.endswith('waiting for the NAS') for text in texts)
 
 
-def test_all_well_reads_normal(db_session):
+def test_slow_queries_link_to_the_database_page(db_session, monkeypatch):
+    from app.modules.system.services import slow_queries
+    monkeypatch.setattr(slow_queries, 'over_limit', lambda now: [{'queryid': 1}, {'queryid': 2}])
+    items = health.needs_attention({'taken_at': NOW.isoformat()}, NOW)
+    assert [(item['text'], item['page']) for item in items] == [('2 slow queries (over 1 s on average)', 'database')]
+
+
+def test_all_well_needs_nothing(db_session):
     snapshot = {'taken_at': (NOW - timedelta(minutes=2)).isoformat()}
     assert health.needs_attention(snapshot, NOW) == []
-    assert health.headline(snapshot, [], NOW) == {'state': 'green', 'text': 'all systems normal · snapshot 2 min ago'}
 
 
 # ── Badges ───────────────────────────────────────────────────────────────
@@ -245,11 +250,3 @@ def test_the_system_page_from_a_full_snapshot(db_session):
     assert view['updates']['certs'] == [{'name': 'LAN', 'days_left': 200}, {'name': 'Cloudflare', 'days_left': None}]
     assert view['application']['db_size'] == '2.3 GB'
     assert view['application']['version'] == 'v2.7'
-
-
-def test_freshness_reads_the_snapshot_age():
-    assert health.freshness({}, NOW) == {'state': 'grey', 'text': 'no snapshot yet'}
-    fresh = {'taken_at': (NOW - timedelta(minutes=3)).isoformat()}
-    assert health.freshness(fresh, NOW) == {'state': 'green', 'text': 'snapshot 3 min ago'}
-    stale = {'taken_at': (NOW - timedelta(minutes=30)).isoformat()}
-    assert health.freshness(stale, NOW)['state'] == 'amber'

@@ -12,7 +12,7 @@ The master copy of every help article in the in-app wiki, one file per wiki sect
 | [hse.md](hse.md) | HSE & Compliance | 25–30 |
 | [tools.md](tools.md) | Tools and directories | 31–34 |
 | [wiki.md](wiki.md) | Using the wiki | `wiki.editor`, `wiki.help-keys` |
-| [admin.md](admin.md) | Admin | 41 `admin.accounts` |
+| [admin.md](admin.md) | Admin | 41 `admin.accounts`, 42 `dashboard.admin`, 43 `dashboard.jobs` |
 
 ## How to use these files
 - When a module changes, update its article here **and** in the wiki editor in the same release. A wrong article is worse than a missing one.

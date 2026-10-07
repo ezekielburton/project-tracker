@@ -5,7 +5,7 @@ from flask import url_for
 from sqlalchemy import func
 
 from app.modules.core.shared.extensions import db
-from app.modules.core.shared.lib.org import DEPARTMENTS, SENIORITY_LEVELS
+from app.modules.core.shared.lib.org import DEPARTMENTS, seniority_label
 from app.modules.core.shared.lib.timezone import local_midnight_utc, to_dubai
 from app.modules.core.shared.models import User
 from app.modules.reports.lib.people import DEPARTMENT_REPORTS, is_lead, people_for
@@ -179,9 +179,7 @@ def recipients_view():
 def _meta(user):
     if user.is_admin:
         return 'Admin'
-    if user.seniority and user.seniority != 'none':
-        return SENIORITY_LEVELS.get(user.seniority, '')
-    return DEPARTMENTS.get(user.department, '')
+    return seniority_label(user) or DEPARTMENTS.get(user.department, '')
 
 
 def _picker():

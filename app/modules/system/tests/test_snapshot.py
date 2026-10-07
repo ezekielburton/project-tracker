@@ -63,7 +63,7 @@ def _snap(sent, recv):
         'host': {'cpu_pct': 12.5, 'mem_used': 4, 'mem_total': 16, 'load': [1.2, 1.0, 0.9],
                  'net_sent': sent, 'net_recv': recv},
         'mounts': [{'mount': '/', 'used': 100, 'total': 200}],
-        'db': {'ok': True, 'size': 2048},
+        'db': {'ok': True, 'size': 2048, 'connections': 11},
     }
 
 
@@ -71,7 +71,7 @@ def test_history_rows_and_network_deltas():
     rows, mark = collector.sample_rows(NOW, _snap(1500, 900), {'sent': 1000, 'recv': 1000})
     values = {metric: value for _, metric, value in rows}
     assert values['cpu_pct'] == 12.5 and values['mem_pct'] == 25.0
-    assert values['disk_used:/'] == 100 and values['db_size'] == 2048
+    assert values['disk_used:/'] == 100 and values['db_size'] == 2048 and values['db_connections'] == 11
     assert values['net_sent'] == 500
     assert values['net_recv'] == 900  # counter restarted after a reboot
     assert mark == {'sent': 1500, 'recv': 900}
@@ -102,6 +102,18 @@ def test_collect_reads_quick_parts_and_carries_slow_ones(monkeypatch):
     assert snap['timers'] == {'ovp-backup': {'last': None, 'next': None}}
     assert snap['nas'] is previous['nas'] and snap['slow'] is previous['slow']
     json.dumps(snap)
+
+
+def test_worker_starts_count_new_pids_for_24_hours():
+    old, recent = (NOW - timedelta(hours=25)).isoformat(), (NOW - timedelta(hours=2)).isoformat()
+    previous = {'workers': {'pids': [11, 12, 13]}, 'worker_starts': [old, recent]}
+    starts = collector.worker_starts(previous, {'pids': [11, 12, 14, 15]}, NOW)
+    assert starts == [recent, NOW.isoformat(), NOW.isoformat()]
+
+
+def test_the_first_run_or_a_stopped_app_counts_no_starts():
+    assert collector.worker_starts({}, {'pids': [1, 2]}, NOW) == []
+    assert collector.worker_starts({'workers': {'pids': [1]}}, None, NOW) == []
 
 
 def test_save_writes_events_and_samples_and_drops_old_ones(db_session):

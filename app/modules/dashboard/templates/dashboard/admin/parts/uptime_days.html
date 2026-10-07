@@ -1,0 +1,19 @@
+{#- One block per Dubai day over 30 days, coloured by the worst of that day. #}
+{% from 'dashboard/admin/_macros.html' import panel %}
+{% call panel('Last 30 days', scroll=False) %}
+{%- if missing %}<p class="dash-quiet">No data</p>
+{%- else %}
+<div class="dash-admin-days" role="img" aria-label="Uptime per day, last 30 days">
+    {%- for block in blocks %}
+    <span class="dash-admin-day dash-admin--{{ block.state }}" title="{{ block.label }}{% if block.down %} · {{ block.down }} min down{% endif %}"></span>
+    {%- endfor %}
+</div>
+<div class="dash-admin-axis">{% for label in labels %}<span>{{ label }}</span>{% endfor %}</div>
+<div class="dash-admin-legend">
+    <span class="dash-admin-key dash-admin--green">Up all day</span>
+    <span class="dash-admin-key dash-admin--amber">Planned restart</span>
+    <span class="dash-admin-key dash-admin--red">Downtime</span>
+    <span class="dash-admin-key dash-admin--grey">No record</span>
+</div>
+{%- endif %}
+{% endcall %}

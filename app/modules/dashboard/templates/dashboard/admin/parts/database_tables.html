@@ -1,0 +1,6 @@
+{#- The biggest tables, indexes included. #}
+{% from 'dashboard/admin/_macros.html' import panel, hbars %}
+{% call panel('Largest tables', 'top ' ~ rows | length if rows else None) %}
+{%- if missing or not rows %}<p class="dash-quiet">No tables</p>
+{%- else %}{{ hbars(rows) }}{% endif %}
+{% endcall %}

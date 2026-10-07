@@ -25,6 +25,8 @@ class RequestMetric(db.Model):
     user_id      = db.Column(db.Integer, nullable=True)
     # Who the admin was viewing as, if anyone.
     emulating_id = db.Column(db.Integer, nullable=True)
+    # A whole HTML page, not a card, fragment or data call: what "page load" times.
+    page         = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
 
 class Heartbeat(db.Model):
@@ -69,7 +71,10 @@ class SystemIncident(db.Model):
 
     id            = db.Column(db.Integer, primary_key=True)
     happened_on   = db.Column(db.Date, nullable=False)
-    note          = db.Column(db.Text, nullable=False)
+    title         = db.Column(db.String(120), nullable=False, default='', server_default='')
+    # How long it lasted, when known.
+    minutes       = db.Column(db.Integer, nullable=True)
+    note          = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     created_at    = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
@@ -112,3 +117,15 @@ class AppLogEvent(db.Model):
     signature = db.Column(db.String(200), nullable=False)
     message   = db.Column(db.Text, nullable=False)
     detail    = db.Column(db.Text, nullable=True)
+
+
+class QueryStatSample(db.Model):
+    """Running totals for one query from pg_stat_statements, saved every hour,
+    so the Database page can subtract the totals of 24 hours ago."""
+    __tablename__ = 'query_stat_samples'
+
+    id       = db.Column(db.BigInteger, primary_key=True)
+    ts       = db.Column(db.DateTime, nullable=False, index=True)
+    queryid  = db.Column(db.BigInteger, nullable=False)
+    calls    = db.Column(db.BigInteger, nullable=False)
+    total_ms = db.Column(db.Float, nullable=False)

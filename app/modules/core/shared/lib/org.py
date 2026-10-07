@@ -117,3 +117,11 @@ def department_label(user):
     if is_management(user):
         return SENIORITY_LEVELS['management']
     return None
+
+
+def seniority_label(user):
+    """The label of `user`'s seniority; None when they have none."""
+    seniority = getattr(user, 'seniority', None)
+    if seniority in (None, 'none'):
+        return None
+    return SENIORITY_LEVELS.get(seniority)

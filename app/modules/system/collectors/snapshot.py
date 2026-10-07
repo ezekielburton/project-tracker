@@ -1,6 +1,7 @@
 """Every minute (ovp-snapshot.timer): read the machine, write snapshot.json and
-save new app-log events. NAS space and history refresh every 5 minutes, the
-slow checks every 6 hours. No Flask app: config, psycopg2 and psutil."""
+save new app-log events. NAS space and history refresh every 5 minutes, query
+totals every hour, the slow checks every 6 hours. No Flask app: config,
+psycopg2 and psutil."""
 import json
 import os
 import sys
@@ -11,7 +12,7 @@ import psycopg2
 from psycopg2.extras import execute_values
 
 from config import Config
-from app.modules.system.lib import app_log, checks, host
+from app.modules.system.lib import app_log, checks, host, query_stats
 from app.modules.system.lib.job_list import JOBS
 from app.modules.system.lib.nas_access import nas_app
 from app.modules.system.lib.notify import SNAPSHOT, notify
@@ -21,10 +22,14 @@ from app.modules.system.services.snapshot import parse_time, read_snapshot
 NAS_EVERY = timedelta(minutes=5)
 SAMPLES_EVERY = timedelta(minutes=5)
 SLOW_EVERY = timedelta(hours=6)
+QUERIES_EVERY = timedelta(hours=1)
 # A timer tick lands a little early or late; this keeps "every 5 minutes" from slipping to 6.
 _SLACK = timedelta(seconds=30)
 LOG_KEEP = timedelta(days=7)
 SAMPLES_KEEP = timedelta(days=35)
+# Long enough that a sample from 24 hours ago is always there to subtract.
+QUERIES_KEEP = timedelta(hours=27)
+WORKER_STARTS_KEEP = timedelta(hours=24)
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))))))
 
@@ -67,7 +72,8 @@ def nas_space():
 
 
 def database_reading(conn):
-    """Database size and pending migrations, or ok False when it can't be reached."""
+    """Database size, open connections and pending migrations, or ok False
+    when it can't be reached."""
     import migrate
     if conn is None:
         return {'ok': False}
@@ -75,12 +81,14 @@ def database_reading(conn):
         with conn.cursor() as cur:
             cur.execute('SELECT pg_database_size(current_database())')
             size = cur.fetchone()[0]
+            cur.execute('SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()')
+            connections = cur.fetchone()[0]
         applied = migrate.get_applied(conn)
     except psycopg2.Error:
         conn.rollback()
         return {'ok': False}
     pending = [name for name in migrate.get_all_scripts() if name not in applied]
-    return {'ok': True, 'size': size, 'pending_migrations': len(pending)}
+    return {'ok': True, 'size': size, 'connections': connections, 'pending_migrations': len(pending)}
 
 
 def sample_rows(now, snap, previous_mark):
@@ -93,6 +101,7 @@ def sample_rows(now, snap, previous_mark):
         rows.append((now, f"disk_used:{mount['mount']}", mount['used']))
     if snap['db'].get('ok'):
         rows.append((now, 'db_size', snap['db']['size']))
+        rows.append((now, 'db_connections', snap['db']['connections']))
     mark = {'sent': reading['net_sent'], 'recv': reading['net_recv']}
     if previous_mark:
         for key in ('sent', 'recv'):
@@ -100,6 +109,29 @@ def sample_rows(now, snap, previous_mark):
             # Counters restart at zero after a reboot.
             rows.append((now, f'net_{key}', delta if delta >= 0 else mark[key]))
     return rows, mark
+
+
+def worker_starts(previous, workers, now):
+    """Times a gunicorn worker started in the last 24 hours: the previous list
+    plus one entry per worker pid not seen last run. A deploy restarts them all."""
+    starts = [moment for moment in previous.get('worker_starts') or []
+              if (parse_time(moment) or now) >= now - WORKER_STARTS_KEEP]
+    before = set((previous.get('workers') or {}).get('pids') or [])
+    if before and workers:
+        starts += [iso(now)] * len(set(workers.get('pids') or []) - before)
+    return starts
+
+
+def save_query_stats(cur, now):
+    """This hour's query totals. A pg_stat_statements error skips them and
+    leaves the rest of the run's writes in place."""
+    cur.execute('SAVEPOINT query_stats')
+    try:
+        query_stats.save(cur, now, QUERIES_KEEP)
+    except psycopg2.Error:
+        cur.execute('ROLLBACK TO SAVEPOINT query_stats')
+    else:
+        cur.execute('RELEASE SAVEPOINT query_stats')
 
 
 def save(cur, events, samples, now):
@@ -170,11 +202,13 @@ def _connect():
 
 def collect(now, previous, conn):
     """This run's snapshot: quick readings every time, slower parts carried until due."""
+    workers = host.gunicorn_workers()
     return {
         'taken_at': iso(now),
         'host': host.host_reading(),
         'mounts': host.mounts(),
-        'workers': host.gunicorn_workers(),
+        'workers': workers,
+        'worker_starts': worker_starts(previous, workers, now),
         'app': checks.app_version(REPO_DIR),
         'db': database_reading(conn),
         'timers': checks.timer_states(job.unit for job in JOBS),
@@ -197,6 +231,9 @@ def main():
             if due(previous.get('samples_at'), SAMPLES_EVERY, now):
                 samples, snap['net_mark'] = sample_rows(now, snap, previous.get('net_mark'))
                 snap['samples_at'] = iso(now)
+            queries_due = due(previous.get('queries_at'), QUERIES_EVERY, now)
+            if queries_due:
+                snap['queries_at'] = iso(now)
 
             bookmark = _read_text(cursor_file)
             output = checks.run(checks.journal_command(cursor_file), timeout=60)
@@ -207,6 +244,8 @@ def main():
                 try:
                     with conn, conn.cursor() as cur:
                         save(cur, events, samples, now)
+                        if queries_due:
+                            save_query_stats(cur, now)
                 except psycopg2.Error as e:
                     failure = e
             if conn is None or failure is not None:
@@ -214,9 +253,11 @@ def main():
                 _restore_text(cursor_file, bookmark)
                 snap['samples_at'] = previous.get('samples_at')
                 snap['net_mark'] = previous.get('net_mark')
+                snap['queries_at'] = previous.get('queries_at')
             else:
                 snap.setdefault('samples_at', previous.get('samples_at'))
                 snap.setdefault('net_mark', previous.get('net_mark'))
+                snap.setdefault('queries_at', previous.get('queries_at'))
             # Written even when the database is down: that is when the page needs it most.
             write_atomic(path, snap)
             if conn is not None and failure is None:

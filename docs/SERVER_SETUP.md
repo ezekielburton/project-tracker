@@ -515,32 +515,18 @@ This path is **backup only** — day-to-day, Tailscale is faster.
 
 ---
 
-## 14. Cron: daily database backup to the NAS
+## 14. Backups: the nightly timer
 
-The daily backup runs from `helixadmin`'s crontab and calls `backup_db.py`, which pushes to the NAS using the credentials in `.env`.
+The nightly database backup is a systemd timer (`ovp-backup.timer`, 23:00), not cron. It keeps local copies in `~/backups/` and pushes a copy to the NAS (`Admin/Database/<year>/Week <n>/`) with the NAS credentials in `.env`. A weekly restore test (`ovp-restore-test.timer`, Sundays 04:00) proves the newest dump restores.
 
-```bash
-crontab -e
-```
-
-Add:
-
-```cron
-0 23 * * * cd /home/helixadmin/project-tracker && /home/helixadmin/project-tracker/venv/bin/python backup_db.py >> /var/log/vitamin-backup.log 2>&1
-```
-
-Make sure the log file is writable:
+Install every OVP timer, the backup included, with [DEPLOYMENT.md](DEPLOYMENT.md) → *Admin dashboard: server setup*. Then force a first run to sanity-check:
 
 ```bash
-sudo touch /var/log/vitamin-backup.log
-sudo chown helixadmin:helixadmin /var/log/vitamin-backup.log
+sudo systemctl start ovp-backup.service
+sudo journalctl -u ovp-backup -n 20 --no-pager
 ```
 
-Verify tomorrow at 23:00 (Asia/Dubai) that a new dump lands in `Admin/Database/daily/` on the NAS. You can force a run now to sanity-check:
-
-```bash
-cd ~/project-tracker && venv/bin/python backup_db.py
-```
+A new dump should appear in `~/backups/nightly/` and on the NAS, and Dashboard → Jobs shows the run as ok. If `crontab -l` still lists `backup_db.py`, delete that line (`crontab -e`).
 
 ---
 
@@ -574,7 +560,8 @@ Run through this end-to-end before calling it done:
 - [ ] Open a project, load its detail page — no errors
 - [ ] Upload a file on a project — lands in `~/project-tracker/uploads/`
 - [ ] Trigger an action that hits the NAS (create a project reference folder) — folder appears on NAS
-- [ ] Wait for 23:00 backup, or run `backup_db.py` manually — dump appears in `Admin/Database/daily/` on NAS
+- [ ] `sudo systemctl start ovp-backup.service` — dump appears in `~/backups/nightly/` and on the NAS
+- [ ] Dashboard → Overview (admin) — the badge reads *Live* and Needs attention is empty or explained
 
 ---
 

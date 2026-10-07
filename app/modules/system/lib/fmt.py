@@ -1,4 +1,4 @@
-"""Short labels for the admin pages: sizes, ages and Dubai times."""
+"""Short labels for the admin pages: sizes, durations, ages and Dubai times."""
 from datetime import timedelta, timezone
 
 DUBAI = timezone(timedelta(hours=4))
@@ -38,3 +38,33 @@ def local(moment):
 def clock(moment):
     """Dubai 'HH:MM' for a naive-UTC moment."""
     return local(moment).strftime('%H:%M') if moment else None
+
+
+def ms(value):
+    """640 -> '640 ms', 1820 -> '1.82 s', 75400 -> '75.4 s', 506000 -> '506 s'; None -> None."""
+    if value is None:
+        return None
+    if value < 1000:
+        return f'{value:.0f} ms'
+    seconds = value / 1000
+    return f'{seconds:.2f} s' if seconds < 10 else f'{seconds:.1f} s' if seconds < 100 else f'{seconds:,.0f} s'
+
+
+def day_time(moment, now):
+    """'today 03:10', 'yesterday 16:40', 'Mon 09:03', '12 Sep 09:03' for a past naive-UTC moment."""
+    if moment is None:
+        return None
+    then, today = local(moment), local(now).date()
+    days = (today - then.date()).days
+    if days == 0:
+        return f'today {then:%H:%M}'
+    if days == 1:
+        return f'yesterday {then:%H:%M}'
+    if days < 7:
+        return f'{then:%a %H:%M}'
+    return f'{then.day} {then:%b %H:%M}'
+
+
+def count(value):
+    """12345.6 -> '12,346'."""
+    return f'{value:,.0f}'

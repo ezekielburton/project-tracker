@@ -126,6 +126,7 @@
 /dashboard/adoption	GET	projects.adoption
 /dashboard/api/active-projects	GET	projects.api_active_projects
 /dashboard/api/admin/<page>/<part>	GET	projects.admin_part
+/dashboard/api/admin/incidents	POST	projects.admin_incident_add
 /dashboard/api/admin/jobs/<job_key>/run	POST	projects.admin_job_run_now
 /dashboard/api/clashes	GET	projects.api_clashes
 /dashboard/api/decisions	GET	projects.api_decisions
